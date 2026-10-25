@@ -29,7 +29,7 @@ public sealed class AgentActionController(IAgentInput input, bool inputEnabled, 
         Enumerable.Range('A', 26).Select(c => ((char)c).ToString())
             .Concat(Enumerable.Range(0, 10).Select(i => i.ToString()))
             .Concat(Enumerable.Range(1, 12).Select(i => $"F{i}"))
-            .Concat(["SPACE", "SHIFT", "LSHIFT", "CONTROL", "LCONTROL", "ESC", "ESCAPE", "TAB",
+            .Concat(["SPACE", "SHIFT", "LSHIFT", "RSHIFT", "CONTROL", "LCONTROL", "ESC", "ESCAPE", "TAB",
                 "LBUTTON", "RBUTTON", "MBUTTON", "UP", "DOWN", "LEFT", "RIGHT"]), StringComparer.Ordinal);
     /// <summary>Serializes proposals, lifecycle stops and input ticks.</summary>
     private readonly object _gate = new();

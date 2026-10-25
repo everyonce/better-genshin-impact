@@ -12,12 +12,14 @@ The local prototype supports launching BetterGI and Genshin inside minimized RDP
 | Endpoint repair | Applied and reviewed in the separate source11 checkout. Its expected 1,834-case C# cohort, build and deployment are still pending. |
 | Future endpoint adapter | 96 offline tests and source review passed. It remains unapplied and unbound until the new application and its result format are validated. |
 | GPU runtime | Existing PyTorch 2.7.1 + CUDA 12.8 environment on the RTX 2080 SUPER. |
+| P2P key compatibility | The primary source now admits the official Right Shift command through the existing input implementation. Independent source review passed; compilation and deployment remain pending. |
 | Action acknowledgment | A matching request ID is required before settling policy history. Unknown outcomes preserve the pending action and stop the runner. The focused candidate and caller cohorts passed 55 distinct mocked tests. |
 | Execution-aware decisions | Opt-in client snapshots and GameScaling prompt conditioning are implemented; 121 distinct inert tests passed. One live attack command returned a completed software receipt. The closed context and graph comparisons produced neutral input in both contexts and did not establish receipt-dependent behavior. |
 | Ongoing input telemetry | The corrected Python client passed independent review and 103 tests against the integrated primary files. It preserves receipt timing qualifications and prioritizes the latest reported input call. The four-file C# producer passed source review; its 26 cases remain uncompiled. R45 still exposes terminal receipts rather than ongoing call state. |
 | P2P execution-history commit | Offline CUDA comparison passed 860 byte-exact cache comparisons across 44 reference calls, 48 proposals and 43 scripted commits. A bounded RDP trial then verified live image intake, rejected-proposal rollback and cleanup; its first proposal missed the latency limit, so no action was submitted. Live receipt-authorized history commit remains unverified. |
 | Native history rollback | Offline CUDA validation and its closed-result audit passed: 44 reference calls, 48 candidate attempts, 44 acceptances, four rejections and 960 consistency checks. Live controller integration remains unverified. |
 | Growing-history graphs | Two native startup prefixes passed capture, replay and 192 independently recomputed consistency checks. All 41 prefixes, feedback composition and startup latency remain unqualified. |
+| Receipt-bound startup graphs | The first offline GPU attempt stopped during warmup on incorrect declared tensor dtypes. Its processes retired; the numerical audit rejected the incomplete result. A corrected inventory is being prepared. |
 | Model optimization | Skipping unused final decoder work passed 1,733 correctness checks across two history41 evictions. A separate 40-pair experiment reduced median prediction time from 165.30 ms to 155.07 ms; paired actions/random states and final cache checks passed. |
 | Training | Not started. Model proposals and incomplete recordings are not expert action labels. |
 
@@ -267,6 +269,24 @@ steady latency or gameplay quality. Local closed evidence is
 `artifacts/research/2026-10-24/native-p2p-r45-receipt-worker-execution-02/closed-audit-01/audit.json`
 (SHA256 `8664517b6c4645965c4eb0d4a7c8aaf1ae8ef11893c153589df4a631f620fc30`).
 
+A subsequent 640x360 observation showed the normal game world and HUD. Its first
+frame still reported `world_confirming`, so it was retained as diagnostic imagery
+with input disabled. Stream shutdown and independent process retirement were
+confirmed. Local image evidence is
+`artifacts/research/2026-10-24/r45-clean-observation-helper-02/run-001/frame.png`
+(SHA256 `e12a534d80b265dc880446bf27e896d4bc8465e12f88cca4a361dfcd52b6dfe0`).
+
+The input-contract audit found that official P2P keyboard ID19 decodes to
+`RSHIFT`, which BetterGI's allowed-key list omitted. Its existing input parser
+already supports `VK_RSHIFT`. The primary C# source now adds exactly that key;
+the hello capability and request validator use the same list. Trial-key and
+reserved-key restrictions remain effective. The ten-byte change passed
+independent source review and exact byte comparison, but is not compiled or
+deployed. It does not explain the earlier neutral proposal, whose raw key IDs
+were all zero. Local review is
+`artifacts/research/2026-10-24/agent-rshift-capability-independent-review-01/review-01.json`
+(SHA256 `524afd518a1ee47d6a9478e3c6831743d3a8349e244f3d3bc562a59d374a0f4f`).
+
 Saved timing intervals from the accepted eager correctness run give proposal
 wall median 829.20 ms across 48 calls and receipt-commit median 325.79 ms across
 43 calls. These include native computation, decoding and transaction checks;
@@ -286,8 +306,18 @@ The numerical worker, complete report fixture and independent numerical reader
 are now source-reviewed. A cleanup correction preserves pending, poisoned and
 partially constructed graph owners until process retirement, while healthy
 cleanup uses the inherited lifecycle guard; 33 focused cases passed. The corrected
-qualification source passed independent review. Runtime assembly and numerical
-execution are still pending; no split-graph numerical or latency result exists yet.
+qualification source passed independent review. Its runtime assembly passed the
+full 8,763-file check and ran once in RDP. The first attempt stopped during the
+second warmup at `observed_operand_layout`, before graph capture or proposals.
+The inventory expected FP32 for text, thinking and output-token tensors, whereas
+all 48 retained eager pending records identify those three tensors as FP16;
+the image prefix is FP32. A fresh correction preserves those actual formats.
+Parent and worker final source checks passed, and an independent query confirmed
+all three ordinary RDP processes had exited. The standalone numerical reader
+rejected the incomplete runtime envelope. No split-graph numerical pass or
+latency measurement exists yet. The failed attempt and closure remain preserved:
+`artifacts/research/2026-10-24/native-p2p-g12-execution-01-failure-summary-01.json`
+(SHA256 `daa162fe74250d883ad2daccca72b8d9dcc3e1dfe2fdbaade07d2cb8e0a035d6`).
 Local source review is
 `artifacts/research/2026-10-24/native-p2p-g12-receipt-graph-independent-review-01/review-01.json`
 (SHA256 `e945f4f103c640d9c080308248ea750fc9fc496aa18d075be0f1b1db96e26f7b`).
@@ -296,9 +326,13 @@ Next, qualify the separate prepare/commit graph pair numerically, then measure
 its complete public proposal and receipt paths before another RDP trial. The
 current pair covers only the initial prefix; later history positions still need
 qualification. Source inspection also identified repeated small pending-tensor
-copies to CPU inside the public guards. Batching those copies while preserving
-exact bytes and every check is a possible later optimization, with no measured
-speedup yet. Existing full-forward graph results do not qualify the split pair.
+copies to CPU inside the public guards. A separate batching candidate preserves
+their exact bytes and checks while using one host transfer. Its singleton-stride
+correction passed 34 guarded inert cases and independent source review. The
+actual first-prefix inventory has 13 nonempty occurrences totaling 10,464 bytes;
+the earlier all-FP32 fixture's 16,608 bytes are not an observed native inventory.
+An actual-layout fixture update and CUDA parity/performance checks remain
+pending. Existing full-forward graph results do not qualify the split pair.
 P2P remains the main path
 toward continuous gameplay while GameScaling's speed and instruction response
 are evaluated separately. Source research also found
@@ -314,6 +348,6 @@ Upstream was checked again at 08:21 UTC on 2026-10-25. Its new commit
 staged in the build worktree. That version update has been fetched but is not
 part of the frozen source11 build packet or the running R45 application.
 
-Once restore is authorized, run the complete source11 test/build checks, replace only the RDP child, and establish a fresh navigation seed before testing the repair. The latest failed owner cannot resume from an older successful proof. The separate ongoing-input telemetry candidate also needs build/test validation before deployment and live validation. Further graph/startup work and training decisions follow execution-context and actual-scene quality checks; the accepted offline numerical results alone do not qualify the new controller for live use.
+Once restore is authorized, include the reviewed Right Shift change in a fresh build packet and run the complete test/build checks, replace only the RDP child, and establish a fresh navigation seed before testing the repair. The latest failed owner cannot resume from an older successful proof. The separate ongoing-input telemetry candidate also needs build/test validation before deployment and live validation. Further graph/startup work and training decisions follow execution-context and actual-scene quality checks; the accepted offline numerical results alone do not qualify the new controller for live use.
 
 Controls and launch instructions: [RDP automation](../../tools/rdp-automation/README.md). Research scope: [first sprint](BetterGI-Agent-First-Sprint.md) and [original research](BetterGI-Agent-Research-2026-10-23.md).

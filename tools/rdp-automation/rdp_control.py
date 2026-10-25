@@ -139,11 +139,11 @@ def exchange(command, process_id, session_id, *, nonce=None, fields=None, api=No
         if fields['routeProfile'] not in ('mondstadt-city-leg-1-v1', 'mondstadt-city-two-legs-v1', 'mondstadt-city-reverse-two-legs-v1', 'mondstadt-city-courtyard-return-v1', 'mondstadt-city-courtyard-forward-v1'):
             raise ControlError('Unsupported fixed baseline route profile.')
         if (fields['routeProfile'] in ('mondstadt-city-two-legs-v1', 'mondstadt-city-reverse-two-legs-v1', 'mondstadt-city-courtyard-return-v1', 'mondstadt-city-courtyard-forward-v1')
-                and (fields.get('timingContract') != 'v4' or fields.get('capturePolicy') != 'task_owned_timer')):
-            raise ControlError('The two-leg route requires v4 and task_owned_timer.')
+                and (fields.get('timingContract') not in ('v4', 'v5') or fields.get('capturePolicy') != 'task_owned_timer')):
+            raise ControlError('The two-leg route requires explicit v4 or v5 and task_owned_timer.')
     if command == 'startNavigationBaseline' and 'timingContract' in field_names:
-        if not isinstance(fields['timingContract'], str) or fields['timingContract'] not in ('v1', 'v2', 'v3', 'v4'):
-            raise ControlError('Baseline timing contract must be exactly v1, v2, v3 or v4.')
+        if not isinstance(fields['timingContract'], str) or fields['timingContract'] not in ('v1', 'v2', 'v3', 'v4', 'v5'):
+            raise ControlError('Baseline timing contract must be exactly v1, v2, v3, v4 or v5.')
     if command in ('startNavigationBaseline', 'startNavigationReset') and 'capturePolicy' in field_names:
         if not isinstance(fields['capturePolicy'], str) or fields['capturePolicy'] not in ('shared', 'task_owned_timer'):
             raise ControlError('Navigation capture policy must be exactly shared or task_owned_timer.')
@@ -1127,8 +1127,10 @@ def _baseline_continuation_identity(link, child, current):
         raise ControlError('Continuation proof lacks its server runtime identity.') from error
 
 
-def _baseline_continuation_preflight(child, predecessor, *, requested_profile='mondstadt-city-reverse-two-legs-v1'):
+def _baseline_continuation_preflight(child, predecessor, *, requested_profile='mondstadt-city-reverse-two-legs-v1', timing_contract='v4'):
     """Read the exact opposite-direction predecessor before the one mutation; never reserve it client-side."""
+    if timing_contract not in ('v4', 'v5'):
+        raise ControlError('Continuation requires explicit v4 or v5.')
     old = child['navigationBaseline']
     host = _controller_source_policy(child) is not None
     if host:
@@ -1139,7 +1141,7 @@ def _baseline_continuation_preflight(child, predecessor, *, requested_profile='m
             or int(predecessor, 16) == 0 or old.get('runId') != predecessor
             or old.get('state') != 'completed' or not _baseline_allows_predecessor(requested_profile, old.get('profileId'))
             or type(old.get('endpointContinuationVersion')) is not int or old['endpointContinuationVersion'] not in (1, 2)
-            or old.get('timingContract') != 'v4' or old.get('capturePolicy') != 'task_owned_timer'
+            or old.get('timingContract') != timing_contract or old.get('capturePolicy') != 'task_owned_timer'
             or not host and (not _readback_capability(child)
                 or child.get('effectiveReadbackMode') not in ('blocking', 'poll_single_v1'))):
         raise ControlError('Continuation requires the exact completed opposite-direction predecessor and advertised capability.')
@@ -1148,7 +1150,7 @@ def _baseline_continuation_preflight(child, predecessor, *, requested_profile='m
             raise ControlError('This child does not advertise the exact courtyard continuation.')
     prior_status = _navigation_baseline_result(child, host_continuation=True) if host else _navigation_baseline_result(child)
     prior = prior_status['navigationBaseline']['result']
-    if (prior.get('profileId') != old['profileId'] or prior.get('timingContract') != 'v4'
+    if (prior.get('profileId') != old['profileId'] or prior.get('timingContract') != timing_contract
             or prior.get('capturePolicy') != 'task_owned_timer'
             or prior['evidence'].get('readbackMode') != child.get('effectiveReadbackMode')
             or _baseline_continuation_projection(prior.get('continuation'), old['endpointContinuationVersion'],
@@ -1242,10 +1244,10 @@ def run_navigation_baseline(child, timeout, timing_contract='v1', capture_policy
     """Execute only the fixed native leg once, waiting for that run's full cleanup and evidence."""
     require_role(child, 'ChildSession')
     source_policy = _controller_source_policy(child)
-    if source_policy is not None and (timing_contract != 'v4' or capture_policy != 'task_owned_timer'
+    if source_policy is not None and (timing_contract not in ('v4', 'v5') or capture_policy != 'task_owned_timer'
             or route_profile not in ('mondstadt-city-leg-1-v1', 'mondstadt-city-courtyard-return-v1', 'mondstadt-city-courtyard-forward-v1')
             or shadow_capture is not None):
-        raise ControlError('DesktopDc supports the v4/owned ordinary short or advertised fixed courtyard continuation without shadow capture.')
+        raise ControlError('DesktopDc supports the explicit v4/v5 owned ordinary short or advertised fixed courtyard continuation without shadow capture.')
     if not _game_runtime_ready(child):
         raise ControlError('Run start-game and wait for runtime readiness before the navigation baseline.')
     if child.get('taskRunning') is not False or child.get('agentStreamRunning') is not False:
@@ -1257,8 +1259,8 @@ def run_navigation_baseline(child, timeout, timing_contract='v1', capture_policy
         raise ControlError('This child does not advertise the supported fixed navigation-baseline result contract.')
     if previous.get('state') not in ('idle', 'completed', 'failed', 'cancelled'):
         raise ControlError('A navigation baseline is active or unknown; query status before another mutation.')
-    if not isinstance(timing_contract, str) or timing_contract not in ('v1', 'v2', 'v3', 'v4'):
-        raise ControlError('Baseline timing contract must be exactly v1, v2, v3 or v4.')
+    if not isinstance(timing_contract, str) or timing_contract not in ('v1', 'v2', 'v3', 'v4', 'v5'):
+        raise ControlError('Baseline timing contract must be exactly v1, v2, v3, v4 or v5.')
     contracts = previous.get('timingContracts')
     if 'timingContracts' in previous and (not isinstance(contracts, list)
             or any(not isinstance(value, str) for value in contracts) or timing_contract not in contracts):
@@ -1286,8 +1288,8 @@ def run_navigation_baseline(child, timeout, timing_contract='v1', capture_policy
                 or route_profile not in routes):
             raise ControlError('This child does not advertise the requested route profile.')
     if route_profile in ('mondstadt-city-two-legs-v1', 'mondstadt-city-reverse-two-legs-v1', 'mondstadt-city-courtyard-return-v1', 'mondstadt-city-courtyard-forward-v1'):
-        if routes is None or timing_contract != 'v4' or capture_policy != 'task_owned_timer':
-            raise ControlError('The two-leg route requires routeVersion1, v4 and task_owned_timer before starting.')
+        if routes is None or timing_contract not in ('v4', 'v5') or capture_policy != 'task_owned_timer':
+            raise ControlError('The two-leg route requires routeVersion1, explicit v4 or v5 and task_owned_timer before starting.')
         fields['routeProfile'] = route_profile
     if shadow_capture is not None:
         if (shadow_capture != SHADOW_CAPTURE_MODE or timing_contract != 'v4' or capture_policy != 'task_owned_timer'
@@ -1309,7 +1311,7 @@ def run_navigation_baseline(child, timeout, timing_contract='v1', capture_policy
     # the atomic retained-owner/runtime comparison; a client snapshot cannot reserve it.
     predecessor_result = None
     if route_profile in ('mondstadt-city-reverse-two-legs-v1', 'mondstadt-city-courtyard-return-v1', 'mondstadt-city-courtyard-forward-v1'):
-        predecessor_result = _baseline_continuation_preflight(child, continuation_from_run_id, requested_profile=route_profile)
+        predecessor_result = _baseline_continuation_preflight(child, continuation_from_run_id, requested_profile=route_profile, timing_contract=timing_contract)
         fields['continuationFromRunId'] = continuation_from_run_id
     elif continuation_from_run_id is not None:
         raise ControlError('A predecessor run ID is valid only with an explicit fixed continuation selector.')
@@ -1848,11 +1850,11 @@ def main():
             item.add_argument('--shadow-capture', choices=(SHADOW_CAPTURE_MODE,), default=None,
                               help='explicit capture-only RGB192 archive; requires v4/task_owned_timer')
             item.add_argument('--route-profile', choices=('mondstadt-city-leg-1-v1', 'mondstadt-city-two-legs-v1', 'mondstadt-city-reverse-two-legs-v1', 'mondstadt-city-courtyard-return-v1', 'mondstadt-city-courtyard-forward-v1'),
-                              default='mondstadt-city-leg-1-v1', help='Fixed route; two legs require v4 and task_owned_timer.')
+                              default='mondstadt-city-leg-1-v1', help='Fixed route; two legs require explicit v4 or v5 and task_owned_timer.')
             item.add_argument('--continuation-from-run-id',
                               help='Required for an explicit continuation route: exact latest completed opposite-direction run ID.')
-            item.add_argument('--timing-contract', choices=('v1', 'v2', 'v3', 'v4'), default='v1',
-                              help='v1 is unchanged; v2 permits the first W start up to 150ms; v3 permits each W start up to 150ms, with 100ms renewals and the source cap; v4 adds bounded release-and-freshness recovery')
+            item.add_argument('--timing-contract', choices=('v1', 'v2', 'v3', 'v4', 'v5'), default='v1',
+                              help='v1 is unchanged; v2 permits the first W start up to 150ms; v3 permits each W start up to 150ms, with 100ms renewals and the source cap; v4 adds bounded release-and-freshness recovery; explicit v5 uses source-anchor+250ms expiry with unchanged 150ms dispatch freshness')
             item.add_argument('--capture-policy', choices=('shared', 'task_owned_timer'), default='shared',
                               help='shared is unchanged; task_owned_timer pauses this runtime timer capture during the task')
         if command == 'exec':

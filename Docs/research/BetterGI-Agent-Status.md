@@ -6,24 +6,26 @@ The local prototype supports launching BetterGI and Genshin inside minimized RDP
 
 | Area | Latest verified state |
 |---|---|
-| Deployed application | R45; 1,770 selected C# tests and full Debug/Release validation passed before deployment. |
-| Native navigation | Four consecutive courtyard legs passed their full retrospective audits. A later reusable-command trial completed one return and then stopped on an endpoint lease-expiry failure. |
-| Reusable command | Published on the fork at `d12541e513745a4468e1e13709cbfc16744625d3`; 78 CPU/mock tests passed. It stops after a failed or unknown outcome. |
-| Endpoint repair | Applied and reviewed in the separate source11 checkout. Its expected 1,834-case C# cohort, build and deployment are still pending. |
-| Future endpoint adapter | 96 offline tests and source review passed. It remains unapplied and unbound until the new application and its result format are validated. |
+| Deployed application | R47 is running inside the existing minimized RDP session. Its 1,890 selected C# tests and Debug/Release validation passed before replacement; the same Genshin process was preserved. |
+| Native navigation | A fresh R47 reset and explicit v5 short route completed. The route took 3.82 seconds, retained 37 observations and needed zero movement recoveries. Its full audit must pass before continuation; the failed R46 seed remains ineligible. |
+| Reusable command | Bounded continuation and the reviewed schema3 envelope checker are in primary. Explicit v5 client support passed 279 Python tests; the R47 full-auditor/deployment binding and accepted seed are still required before the next continuation run. |
+| Endpoint repair | Deployed in R46 with input telemetry and Right Shift support. The latest route stopped before establishing an accepted endpoint-closure result. |
+| Native timing v5 | Explicit native timing v5 is committed at `ab136e25be0467c28ca664a825eef5a79bdeefb1` and deployed in R47. The first short route completed; full evidence audit and consecutive-leg qualification remain pending. |
 | GPU runtime | Existing PyTorch 2.7.1 + CUDA 12.8 environment on the RTX 2080 SUPER. |
-| P2P key compatibility | The primary source now admits the official Right Shift command through the existing input implementation. Independent source review passed; compilation and deployment remain pending. |
+| P2P key compatibility | The official Right Shift command is included in deployed R46 through the existing input implementation. Separate live key-delivery qualification remains pending. |
 | Action acknowledgment | A matching request ID is required before settling policy history. Unknown outcomes preserve the pending action and stop the runner. The focused candidate and caller cohorts passed 55 distinct mocked tests. |
 | Execution-aware decisions | Opt-in client snapshots and GameScaling prompt conditioning are implemented; 121 distinct inert tests passed. One live attack command returned a completed software receipt. The closed context and graph comparisons produced neutral input in both contexts and did not establish receipt-dependent behavior. |
-| Ongoing input telemetry | The corrected Python client passed independent review and 103 tests against the integrated primary files. It preserves receipt timing qualifications and prioritizes the latest reported input call. The four-file C# producer passed source review; its 26 cases remain uncompiled. R45 still exposes terminal receipts rather than ongoing call state. |
+| Ongoing input telemetry | The Python client passed independent review and 103 tests; the C# producer's 26 cases passed within R46's 1,860-test validation. The producer is deployed, but a controlled live ongoing-call test remains pending. |
 | P2P execution-history commit | Offline CUDA comparison passed 860 byte-exact cache comparisons across 44 reference calls, 48 proposals and 43 scripted commits. A bounded RDP trial then verified live image intake, rejected-proposal rollback and cleanup; its first proposal missed the latency limit, so no action was submitted. Live receipt-authorized history commit remains unverified. |
 | Native history rollback | Offline CUDA validation and its closed-result audit passed: 44 reference calls, 48 candidate attempts, 44 acceptances, four rejections and 960 consistency checks. Live controller integration remains unverified. |
 | Growing-history graphs | Two native startup prefixes passed capture, replay and 192 independently recomputed consistency checks. Full coverage of all 41 prefixes and startup latency remain unqualified. |
 | Receipt-bound startup graphs | Three consecutive native prefixes passed all 534 numerical gates with zero recorded error, including all 60 committed K/V leaves, actions, RNG and rejected proposals. The two continuation handoffs took about 4.08 and 5.09 seconds. Preloading, longer continuation and live use remain unqualified. |
 | Pending tensor transfer | A four-pair public-path comparison passed 1,368 numerical checks with zero recorded error. Packed transfer averaged about 185.73 ms versus 184.06 ms for the original path, and all four receipt calls were slower. No speedup is established; the optimization is not promoted. |
-| Preloaded history graphs | Two preloaded prefixes passed all 356 numerical gates with zero recorded error, including 40 committed K/V leaves. Preloading took 6.91 seconds and the observed handoff took 329.92 ms. Longer continuation and continuous gameplay remain unqualified. |
-| Paired Q/K arithmetic | All 47 actual operand samples passed 188 numerical checks. Sixteen checks recorded nonzero error, with a maximum of 0.001953125. Full-model parity and speed remain unqualified. |
-| Continuous input handoff | The separate step-application contract passed design review. Its protocol/ledger has 53 original and 24 focused inert cases; both review findings are corrected and independently reviewed. BetterGI bridge integration is under development; native history integration remains pending. |
+| Preloaded history graphs | Conditional graph cleanup passed all 356 numerical gates with zero recorded error across two preloaded prefixes and 40 committed K/V leaves. First/final retirement took 10.49/19.76 ms and handoff took 173.11 ms in this diagnostic run. Longer continuation and continuous gameplay remain unqualified. |
+| Paired Q/K arithmetic | Rejected by the full native four-call comparison: 33 of 224 gates failed (25 cache and eight logit/score comparisons). All 136 exact gates passed, but that does not establish numerical equivalence or permit promotion. |
+| Shared rotary values | Source and complete host fixture passed independent review: 28 archives, 817 arrays and 412 checks are represented. The real reversible installer/observer is being implemented; actual numerical equivalence and latency remain untested. |
+| Fixed attention masks | One actual G12 graph-pair qualification passed 267 numerical checks with zero observed differences. Both captured graphs and all ten masks retired; other prefixes, latency benefit and live use remain unqualified. |
+| Continuous input handoff | The separate step-application protocol/ledger and corrected BetterGI bridge passed source review. The bridge adds seven focused passing cases to its 33 retained Python cases; its C# producer remains uncompiled. Native history integration remains pending. |
 | Model optimization | Skipping unused final decoder work passed 1,733 correctness checks across two history41 evictions. A separate 40-pair experiment reduced median prediction time from 165.30 ms to 155.07 ms; paired actions/random states and final cache checks passed. |
 | Training | Not started. Model proposals and incomplete recordings are not expert action labels. |
 
@@ -499,6 +501,25 @@ eviction or continuous live gameplay. The accepted audit is
 `artifacts/research/2026-10-24/native-p2p-dormant-two-prefix-execution-02/closed-audit-01/audit.json`
 (SHA256 `0b4969c2748f6dac7631a8acf3e02f78b7c008f741a2f68d11a3aedf5a2cbdc0`).
 
+A third run changed only graph retirement's unconditional garbage collection:
+collection now runs when an original graph weak reference remains alive, while
+the existing synchronization and final retirement checks stay in place. All
+356 numerical gates again passed with zero recorded error, including all 40
+committed K/V leaves. Preloading took 7,309.44 ms, first/final graph retirement
+took 10.49/19.76 ms, and handoff took 173.11 ms. These separate instrumented runs
+had uncontrolled machine load; they do not establish a controlled speedup or
+end-to-end gameplay latency.
+
+The four required commands, closed audit and finalizer passed, and all three
+worker identities retired. The retained summary also records an initial invalid
+root CLI mode and the corrected observer starting after the parent; no numerical
+worker was repeated. The accepted audit is
+`artifacts/research/2026-10-24/native-p2p-dormant-two-prefix-execution-03/closed-audit-01/audit.json`
+(SHA256 `f74ddc258276c64367cc36ea3e9c87335ac3946f322e28a242b90b62a362e450`).
+The checked two-run summary is
+`artifacts/research/2026-10-24/native-p2p-retirement-fastpath-results-01/summary-01.json`
+(SHA256 `4396caea3dc2375bd6738e229a010108ff7cbd8a93b63c075bb498bf44d1cce3`).
+
 The first paired Q/K qualification run stopped before its first prediction:
 compiling only a class produced different Python bytecode from compiling its
 complete module. The worker's cleanup completed and all three observed worker
@@ -556,9 +577,26 @@ expectations and compares storage aliases only across overlapping lifetimes.
 The corrected plan passed review at
 `artifacts/research/2026-10-24/native-p2p-fixed-mask-qualification-plan-independent-review-02/review-01.json`
 (SHA256 `4ea4f34500a38a6dc2bea18958fad1ab667dddd733f7281a20dcf30878e40dcd`).
-The qualification worker and complete fixtures are under construction. Actual
-CUDA mask values, graph lifetime, numerical parity and latency still require
-qualification; no measured mask-reuse saving is established.
+The qualification source and complete fixtures passed independent review:
+47 distinct inert cases, 12 retained archive fixtures, 440 arrays and 267
+numerical gates. The first runtime assembly review found a missing required
+preimage file; a fresh corrected assembly passed review. The actual GPU run then
+passed all 267 numerical checks with zero observed differences, retaining 12
+archives, 440 arrays and 46 CPU/CUDA RNG arrays. It exercised three proposals,
+one local discard, one rejection and one synthetic software-receipt commit.
+Both captured graphs and all ten fixed masks retired, all three observed worker
+identities retired, and all four orchestration commands plus final capacity
+closure completed successfully. This qualifies the tested G12 case; other
+prefixes, latency benefit and live control remain unqualified. The source review is
+`artifacts/research/2026-10-24/native-p2p-fixed-mask-qualification-independent-review-01/review-01.json`
+(SHA256 `ca7c513a482ebdeb2cc5de1add7ef6c2c31038aba6836e8190fd2dbb0e70326f`).
+The accepted result summary is
+`artifacts/research/2026-10-24/native-p2p-fixed-mask-results-01/summary-01.json`
+(SHA256 `4d66201ea5c76ab7400104f9aaec6f590c80c2b5c9ce2a6501f451d40214f814`).
+Its 61 read-only GPU samples reported 87–88 C, 92–97% utilization,
+795–1,215 MHz SM clocks and active software thermal limiting. The samples cover
+only part of the parent process window and do not establish per-call causes or
+a controlled speed comparison.
 
 During the transfer trial, all 78 read-only GPU queries succeeded. They reported
 88 C, 91–97% device utilization, 1,035–1,305 MHz SM clocks and active software
@@ -571,14 +609,108 @@ no verified supported FLA installation for this unchanged Windows, SM7.5 and
 Torch 2.7.1 stack; no package change has been made. Learned task quality, constant
 gameplay and expert training labels remain unqualified.
 
-The build needs three upstream asset packages that are missing locally: `BetterGI.Assets.Map` 1.0.25, `BetterGI.Assets.Model` 1.0.39 and `BetterGI.Assets.Other` 1.0.28. The one-time restore approval for the [official NuGet source](https://api.nuget.org/v3/index.json) remains pending after automatic approval review blocked the source change.
+The newly approved one-time restore from the [official NuGet source](https://api.nuget.org/v3/index.json) passed normal approval review and completed with SDK exit code 0 at 14:32:33 UTC on October 25. `BetterGI.Assets.Map` 1.0.25, `BetterGI.Assets.Model` 1.0.39 and `BetterGI.Assets.Other` 1.0.28 are now present. Persistent NuGet configuration and all source11 pins remained unchanged.
 
-Upstream was checked again at 08:21 UTC on 2026-10-25. Its new commit
-`f154b69649fcd828a517af03d4230f6693e6832d` changes only the project version to
-`0.66.3-alpha.1`; it adds no functional changes after the upstream merge already
-staged in the build worktree. That version update has been fetched but is not
-part of the frozen source11 build packet or the running R45 application.
+An extra wrapper check initially compared the raw signed archive SHA512 to NuGet's signature-excluded content hash. That was a verifier error: the [NuGet metadata format](https://github.com/NuGet/Home/wiki/Nupkg-Metadata-File) defines different hashes. A separate read-only correction verified all three raw archive hashes, package identities, official source metadata and content-hash joins to the restored project libraries. The original outcome remains preserved; no second restore or download occurred. Corrected verification is
+`artifacts/research/2026-10-24/official-nuget-restore-20261025-01/verification-02.json`
+(SHA256 `519527206a9da686cfc723fdb7bb8a6843223c89b67005663f4b7f1d12c90fe1`).
 
-Once restore is authorized, include the reviewed Right Shift change in a fresh build packet and run the complete test/build checks, replace only the RDP child, and establish a fresh navigation seed before testing the repair. The latest failed owner cannot resume from an older successful proof. The separate ongoing-input telemetry candidate also needs build/test validation before deployment and live validation. Further graph/startup work and training decisions follow execution-context and actual-scene quality checks; the accepted offline numerical results alone do not qualify the new controller for live use.
+The fresh source12 packet then passed all 1,860 selected C# tests, including the
+26 new ongoing-input telemetry cases, and both the required Debug solution build
+and isolated self-contained Release publish. Its 1,749 source files remained
+unchanged through validation. The completed test evidence is
+`artifacts/research/2026-10-24/desktop-dc-csharp-12-validation.json`
+(SHA256 `3b03e6b8c6ab097fa1dd5bcd2805f7e13b0debd3dfeea238571f2aa86881e36b`).
+The R46 publish is at `artifacts/release-r46/BetterGI-English-win-x64`; its
+manifest SHA256 is `b428eb603216fe8d453abfcd62f0037659ced6ac743c3c37d1998e0838da9623`.
+The R46 child replacement completed at 16:02:50 UTC on October 25. The same
+Genshin process and RDP session remained alive, the host remained minimized, and
+the old child and all four deployment probe chains retired. Root acceptance is
+`artifacts/research/2026-10-24/r46-child-deployment-root-acceptance-03/acceptance-01.json`
+(SHA256 `6ac357ef587b586d3df22a73109490b5589e79a58f5a3d612dd4842b69ebb4c3`).
+A subsequent clean observation acquired the actual Mondstadt scene without
+submitting input. The native reset then succeeded, but the fresh short seed
+stopped at `recovery_limit_exceeded` after two movement recoveries. Its latest
+owner remains ineligible; no older successful owner was substituted.
+
+The approved graphics adjustment remains pending. Both attempts to activate the
+existing RDP window failed with `GetCursorPos failed: Access is denied
+(0x80070005)`. No graphics settings were changed. A subsequent read-only check
+confirmed the RDP window remained minimized. The user subsequently clarified
+that the main desktop is locked; that does not establish the RDP session's lock
+state. A source-only assessment found that current interfaces do not provide a
+complete settings read/change/verify/restore workflow. A dedicated settings
+operation would need original-value recording, recognized menu transitions and
+independent apply/restoration checks. The planning artifact is
+`artifacts/research/2026-10-24/genshin-graphics-fps-workflow-planning-01/assessment-01.json`
+(SHA256 `99f8aeebe9041fc118051fd8fd202a1659a8871af8a88015ef52fbce48d409d6`).
+No settings route has been implemented or used.
+
+A fresh upstream fetch at 16:41 UTC reached
+`39bb31b5c61a10a3474f1a53b2f1bf4807853b4f`. Its four new commits add the
+0.66.3-alpha.1 version, elemental collection configuration, guided music, and
+Training Guide domain/resin planning. These 52 changed paths need a deliberate
+port: upstream still calls global runtime APIs that this fork removed, and the
+new music capture path drops its owning frame. The source review is
+`artifacts/research/2026-10-24/upstream-39bb31b5-integration-review-01/review-01.json`.
+The port is being prepared separately; these new features are not yet integrated.
+
+The already reviewed upstream work and R46 implementation are now integrated in
+primary commit `c9ad4d0f4299ab4a50054e35a735b915db846c15`. The primary Debug build
+and 1,860-test cohort passed. Its 15 implementation payloads match the reviewed
+source12 bytes; across the full source set, 183 other files differ only in line
+endings, so the entire primary tree is not claimed to be byte-identical.
+
+The R46 seed timing analysis found that capture, recognition and the initial
+response delay outlasted the old 150 ms first grant or 100 ms renewal. The fresh
+observations still had room inside the existing source-relative 250 ms horizon.
+The explicit v5 contract now grants only that remaining horizon, preserving the
+150 ms source freshness check, identity/order checks, endpoint handling, recovery
+limits and release requirements. The model's separate 50 ms decision budget is
+unchanged. All 1,890 selected C# cases passed with 1,750 source files unchanged;
+evidence is in
+`artifacts/research/2026-10-24/native-navigation-timing-v5-root-application-01`.
+R47 was published successfully at 16:56:24 UTC and replaced the child inside the
+same minimized RDP session. Deployment closure
+`artifacts/research/2026-10-24/r47-child-deployment-run-001/closure.json`
+retains child PID 42000, its actual native birth and the unchanged game PID 27728.
+A fresh observation stream closed cleanly. The reset then completed, followed by
+v5 seed `ed35382ef54a4078a5bc61f3e8f07f67` in 3,824.52 ms with 37 observations and
+zero movement recoveries. The controller returned idle, the host stayed minimized,
+and both worker/broker chains retired. This is the collected producer result;
+the full R47 audit is still required before continuation. Evidence is in
+`artifacts/research/2026-10-24/r47-native-navigation-01`.
+
+The explicit v5 Python client passed all 279 affected regression cases with no
+source changes during the run. Two older fixtures were updated to use unknown
+`v6` instead of newly supported `v5`; disposable test files were moved into the
+workspace after the sandbox redirected temporary directory rejected atomic file
+replacement. Both earlier attempts are preserved in
+`artifacts/research/2026-10-24/native-navigation-timing-v5-client-root-application-01`.
+Existing defaults remain v1 for a single baseline and v4 for courtyard continuation.
+
+The completed full-native paired Q/K experiment retained all four calls, 22
+archives and 535 arrays, but failed 33 of 224 numerical gates. It remains
+rejected, with all worker identities retired. The failure closure is
+`artifacts/research/2026-10-24/native-p2p-full-qk-results-01/failure-closure-01.json`.
+The next candidate shares only duplicate FP32 rotary values while preserving the
+original normalization, positional-module calls and rotation arithmetic. Its
+source and complete host fixture passed review. Actual installation, observation,
+GPU equivalence and latency still require qualification; fixture results are not
+model results.
+
+A tiny Windows file-sharing fixture also completed: five disposable 33-byte files
+rejected conflicting writes/deletes while the read lease was open, and allowed
+the operations after closure. This qualifies those fixture operations only. The
+corrected checkpoint-load provenance candidate has passed source review, but its
+actual checkpoint loading and numerical integration remain unqualified.
+
+The separate eager native-history/application owner passed source review, with
+51 current methods joined to saved passing executions. Its review is
+`artifacts/research/2026-10-24/native-p2p-step-application-owner-integration-independent-review-01/review-01.json`
+(SHA256 `24ceb6d09034095f9a128f7941bc21ea75cbb7d383a307238f0c14ad75a18aaa`).
+Its separate C# step-application producer and live model-history integration are
+still pending. Further graph/startup work and training decisions depend on actual
+execution-context and scene-quality checks.
 
 Controls and launch instructions: [RDP automation](../../tools/rdp-automation/README.md). Research scope: [first sprint](BetterGI-Agent-First-Sprint.md) and [original research](BetterGI-Agent-Research-2026-10-23.md).

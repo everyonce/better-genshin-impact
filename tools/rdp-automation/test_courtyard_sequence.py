@@ -11,11 +11,12 @@ from unittest.mock import patch
 import courtyard_sequence as subject
 
 
-def status(profile=subject.FORWARD, run='a'*32, previous=None):
+def status(profile=subject.FORWARD, run='a'*32, previous=None, timing_contract='v4'):
     """A small synthetic terminal; full real artifact acceptance stays with the pinned helper."""
     evidence={'journalSha256':run*2}
     sample={'hostSnapshot':{'CaptureEpoch':'e','SnapshotId':1}}
-    result=dict(profileId=profile,verified=True,error=None,inputReleaseError=None,evidence=evidence,samples=[sample])
+    result=dict(profileId=profile,verified=True,error=None,inputReleaseError=None,evidence=evidence,samples=[sample],
+        timingContract=timing_contract,controllerMethod='native-fixed-leg-feedback-'+timing_contract)
     if previous is not None:
         prior=previous['navigationBaseline']
         result['continuation']=dict(predecessorRunId=prior['runId'],predecessorProfileId=prior['profileId'],
@@ -23,7 +24,8 @@ def status(profile=subject.FORWARD, run='a'*32, previous=None):
             hostSnapshot=prior['result']['samples'][-1]['hostSnapshot']),runtimeIdentity='r',
             gameStartedAtUtcTicks=123,childAssemblySha256='d'*64)
     return dict(processId=20928,windowsSessionId=3,instanceNonce='n'*32,taskRunning=False,policy=subject.HOST_POLICY,
-        navigationBaseline=dict(state='completed',error=None,evidenceComplete=True,runId=run,profileId=profile,result=result))
+        navigationBaseline=dict(state='completed',error=None,evidenceComplete=True,runId=run,profileId=profile,result=result,
+            timingContract=timing_contract,controllerMethod='native-fixed-leg-feedback-'+timing_contract))
 
 
 class NativeError(RuntimeError):
@@ -51,7 +53,7 @@ class FakeClient:
         if self.mode=='double':self.mutate('startNavigationBaseline',prior,**fields)
         if self.mode=='unknown':raise RuntimeError('Lost response')
         if self.mode=='old-terminal':raise NativeError('Admission response lost',prior)
-        out=status(kwargs['route_profile'],str(len(self.entries))*32,prior)
+        out=status(kwargs['route_profile'],str(len(self.entries))*32,prior,timing_contract=kwargs['timing_contract'])
         if self.mode=='failed':
             out['navigationBaseline'].update(state='failed',error='recovery_limit_exceeded')
             out['navigationBaseline']['result']['verified']=False
@@ -90,6 +92,19 @@ class SupervisorCases(unittest.TestCase):
         self.plan['legs']=subject.plan_names(2,1);self.run_batch();_,timeout,args=self.client.entries[0]
         self.assertEqual(timeout,45);self.assertEqual(args,dict(timing_contract='v4',capture_policy='task_owned_timer',
             route_profile=subject.RETURN,continuation_from_run_id='a'*32))
+    def test_explicit_v5_remains_selected_across_all_four_legs(self):
+        """A selected contract must survive every delegate and predecessor join."""
+        self.plan['timingContract']='v5';self.binding['timingContract']='v5'
+        self.previous=status(timing_contract='v5')
+        result=self.run_batch()
+        self.assertIsNone(result['error']);self.assertEqual(len(self.client.mutations),4)
+        self.assertTrue(all(fields['timingContract']=='v5' for _,_,fields in self.client.mutations))
+    def test_mixed_predecessor_contract_stops_before_any_mutation(self):
+        """An old v4 owner cannot authorize an explicitly selected v5 sequence."""
+        self.plan['timingContract']='v5';self.binding['timingContract']='v5'
+        with self.assertRaisesRegex(RuntimeError,'Predecessor timing differs'):
+            self.run_batch()
+        self.assertEqual(self.client.mutations,[])
     def test_dispatch_and_previous_summary_exist_before_next_mutation(self):
         def hook(command,child,fields):
             index=len(self.client.mutations)-1;folder=self.folder/'legs'/self.plan['legs'][index]['name']

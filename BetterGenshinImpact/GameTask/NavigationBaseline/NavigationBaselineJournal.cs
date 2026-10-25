@@ -90,34 +90,34 @@ internal sealed class NavigationBaselineJournal
     /// <summary>At most 4,096 flat poll records, without repeated nested lists.</summary>
     public required IReadOnlyList<NavigationBaselineCapturePoll> CapturePolls { get; init; }
     /// <summary>Additive v4 pause schema; all versions remain excluded from training.</summary>
-    public int RecoverySchemaVersion => TimingContract == NavigationBaselineTiming.V4 ? 3 : 1;
+    public int RecoverySchemaVersion => NavigationBaselineTiming.UsesBoundedRecovery(TimingContract) ? 3 : 1;
     /// <summary>At most four run-global release tickets, including an interrupted pause that never reached a recovery loop.</summary>
     public IReadOnlyList<NavigationBaselineRecoveryPause> RecoveryPauses { get; init; } = [];
     /// <summary>At most four complete range-joined wait/rearm/failure records.</summary>
     public IReadOnlyList<NavigationBaselineRecoveryAttempt> RecoveryAttempts { get; init; } = [];
     /// <summary>Version3 keeps the original movement allowance and adds a distinct no-held-W source allowance.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public int? MaximumMovementRecoveries => TimingContract == NavigationBaselineTiming.V4
+    public int? MaximumMovementRecoveries => NavigationBaselineTiming.UsesBoundedRecovery(TimingContract)
         ? NavigationBaselineRecovery.MaximumRecoveries : null;
     /// <summary>Stationary readiness is bounded across the complete run, not per leg.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public int? MaximumStationaryReadinessWindows => TimingContract == NavigationBaselineTiming.V4
+    public int? MaximumStationaryReadinessWindows => NavigationBaselineTiming.UsesBoundedRecovery(TimingContract)
         ? NavigationBaselineRecovery.MaximumStationaryReadiness : null;
     /// <summary>The total bound also applies to a pause that failed before entering its read loop.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public int? MaximumPauseWindows => TimingContract == NavigationBaselineTiming.V4
+    public int? MaximumPauseWindows => NavigationBaselineTiming.UsesBoundedRecovery(TimingContract)
         ? NavigationBaselineRecovery.MaximumPauseWindows : null;
     /// <summary>Ticket-derived count includes failed release admissions without inventing a completed recovery.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public int? MovementRecoveryCount => TimingContract == NavigationBaselineTiming.V4
+    public int? MovementRecoveryCount => NavigationBaselineTiming.UsesBoundedRecovery(TimingContract)
         ? RecoveryPauses.Count(pause => pause.BudgetKind == NavigationBaselineRecoveryBudgetKind.MovementRecovery) : null;
     /// <summary>Only atomically classified tickets contribute to this count; TriggerCause alone is insufficient.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public int? StationaryReadinessCount => TimingContract == NavigationBaselineTiming.V4
+    public int? StationaryReadinessCount => NavigationBaselineTiming.UsesBoundedRecovery(TimingContract)
         ? RecoveryPauses.Count(pause => pause.BudgetKind == NavigationBaselineRecoveryBudgetKind.StationarySourceReadiness) : null;
     /// <summary>V4 final-read policy is independent of movement recovery; absent on unchanged legacy runs.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public int? FinalVerificationReadinessVersion => TimingContract == NavigationBaselineTiming.V4
+    public int? FinalVerificationReadinessVersion => NavigationBaselineTiming.UsesBoundedRecovery(TimingContract)
         ? NavigationBaselineFinalVerification.Version : null;
     /// <summary>At most one terminally closed-input final window; null if travel never reached it.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

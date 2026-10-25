@@ -286,7 +286,7 @@ internal sealed record NavigationBaselineStatus
     public string CapturePolicy { get; init; } = NavigationBaselineCapturePolicy.Shared;
     /// <summary>Supported fixed contracts; older hosts omit this additive capability.</summary>
     [JsonPropertyName("timingContracts")]
-    public string[] TimingContracts => [NavigationBaselineTiming.V1, NavigationBaselineTiming.V2, NavigationBaselineTiming.V3, NavigationBaselineTiming.V4];
+    public string[] TimingContracts => [NavigationBaselineTiming.V1, NavigationBaselineTiming.V2, NavigationBaselineTiming.V3, NavigationBaselineTiming.V4, NavigationBaselineTiming.V5];
     /// <summary>Selected contract for the retained run; omitted requests use v1.</summary>
     [JsonPropertyName("timingContract")]
     public string TimingContract { get; init; } = NavigationBaselineTiming.V1;

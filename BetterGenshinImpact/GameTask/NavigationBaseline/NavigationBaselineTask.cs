@@ -132,7 +132,7 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
             await operations.PrepareAsync(ct);
             ct.ThrowIfCancellationRequested();
             currentPhase = "measuring_start"; phase(currentPhase);
-            if (timingContract == NavigationBaselineTiming.V4)
+            if (NavigationBaselineTiming.UsesBoundedRecovery(timingContract))
             {
                 observationStarted = operations.NowMs;
                 initial = await operations.ReadInitialPoseAsync(started + Timeout.TotalMilliseconds, ct);
@@ -143,7 +143,7 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
             if (continuation is not null && NavigationBaselineEndpointContinuation.StartRejection(continuation, initial, _route) is { } continuationError)
                 throw new InvalidOperationException(continuationError);
             INavigationBaselineRecoveryOperations? recovery = null;
-            if (timingContract == NavigationBaselineTiming.V4)
+            if (NavigationBaselineTiming.UsesBoundedRecovery(timingContract))
             {
                 recovery = operations as INavigationBaselineRecoveryOperations
                     ?? throw new InvalidOperationException("recovery_implementation_unavailable");
@@ -182,7 +182,7 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
                         }
                         currentPhase = "releasing"; phase(currentPhase);
                         if (operations.SourcePolicy == DesktopCapturePolicy.HostAcquisitionV1
-                            && timingContract == NavigationBaselineTiming.V4
+                            && NavigationBaselineTiming.UsesBoundedRecovery(timingContract)
                             && capturePolicy == NavigationBaselineCapturePolicy.TaskOwnedTimer && _route.SupportsHostContinuation)
                         {
                             // Retain the accepted endpoint even if its release subsequently fails. This path
@@ -233,7 +233,7 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
                 }
             }
             currentPhase = "verifying"; phase(currentPhase);
-            if (timingContract == NavigationBaselineTiming.V4)
+            if (NavigationBaselineTiming.UsesBoundedRecovery(timingContract))
             {
                 // Final evidence has its own fixed no-input window, never another movement recovery ticket.
                 var finalOperations = operations as INavigationBaselineFinalVerificationOperations
@@ -265,7 +265,7 @@ internal sealed class NavigationBaselineTask(INavigationBaselineOperations opera
                 ? exception.Message : exception.GetBaseException().Message;
             // A concurrent watchdog fault must not hide lost evidence from the completeness gate.
             // Every non-capacity error retains the existing lease-fault/cancellation priority.
-            error = timingContract == NavigationBaselineTiming.V4 && exception is not OperationCanceledException
+            error = NavigationBaselineTiming.UsesBoundedRecovery(timingContract) && exception is not OperationCanceledException
                 ? failure // A hard observed failure must not be hidden by a simultaneous lease failure.
                 : failure.Contains("capacity", StringComparison.Ordinal) ? failure
                 : operations.Fault ?? (exception is OperationCanceledException ? "baseline_cancelled" : failure);

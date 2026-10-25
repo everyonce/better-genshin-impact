@@ -122,7 +122,7 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
         lock (_gate)
         {
             ct.ThrowIfCancellationRequested();
-            if (_timingContract != NavigationBaselineTiming.V4 || !_recoveryEnabled)
+            if (!NavigationBaselineTiming.UsesBoundedRecovery(_timingContract) || !_recoveryEnabled)
                 throw new InvalidOperationException("waypoint_hold_not_available");
             if (_waypointAttempted) throw new InvalidOperationException("waypoint_hold_already_used");
             var now = CheckReady(true);
@@ -207,7 +207,7 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
     {
         lock (_gate)
         {
-            if (_timingContract != NavigationBaselineTiming.V4 || _closed || _fault is not null)
+            if (!NavigationBaselineTiming.UsesBoundedRecovery(_timingContract) || _closed || _fault is not null)
                 throw new InvalidOperationException("recovery_not_available");
             CheckReady(true);
             _recoveryEnabled = true;
@@ -219,7 +219,7 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
     {
         RequireNoWaypointHold();
         if (_pause is not null) return _pause;
-        if (!_recoveryEnabled || _closed || _timingContract != NavigationBaselineTiming.V4)
+        if (!_recoveryEnabled || _closed || !NavigationBaselineTiming.UsesBoundedRecovery(_timingContract))
             throw new InvalidOperationException("recovery_not_available");
         // Classify under the same gate BEFORE Release clears _mayHold. Existing tickets above keep their original kind.
         var heldForwardAtEntry = _mayHold;
@@ -355,7 +355,7 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
     /// <summary>Sample expiry before and after potentially delayed target checks; a late grant cannot outrun the watchdog.</summary>
     private double CheckReady(bool requireOpen)
     {
-        if (_timingContract == NavigationBaselineTiming.V4) return CheckV4(requireOpen);
+        if (NavigationBaselineTiming.UsesBoundedRecovery(_timingContract)) return CheckV4(requireOpen);
         if (_fault is not null) throw new InvalidOperationException(_fault);
         var now = ReadNow();
         if (_mayHold && now >= _expiresAt) { Fail("forward_lease_expired", now); throw new InvalidOperationException(_fault); }
@@ -374,7 +374,7 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
     /// <summary>Final source check is performed under the same gate as the actual dispatch or renewal.</summary>
     private double ValidateSource(CaptureSourceEvidence source, double now)
     {
-        if (_timingContract == NavigationBaselineTiming.V4) ValidateInputSourceIdentity(source, now);
+        if (NavigationBaselineTiming.UsesBoundedRecovery(_timingContract)) ValidateInputSourceIdentity(source, now);
         var age = NavigationBaselineTask.SourceAge(source, now);
         if (_recoveryEnabled && double.IsFinite(age) && age > NavigationBaselineTask.MaximumSourceAgeMs)
         {
@@ -402,7 +402,7 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
         {
             ct.ThrowIfCancellationRequested();
             RequireNoWaypointHold();
-            if (_timingContract == NavigationBaselineTiming.V4) ValidateInputSourceIdentity(source, ReadNow());
+            if (NavigationBaselineTiming.UsesBoundedRecovery(_timingContract)) ValidateInputSourceIdentity(source, ReadNow());
             var now = CheckReady(true);
             var age = ValidateSource(source, now);
             var changed = !_mayHold;
@@ -451,7 +451,7 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
         {
             ct.ThrowIfCancellationRequested();
             RequireNoWaypointHold();
-            if (_timingContract == NavigationBaselineTiming.V4) ValidateInputSourceIdentity(source, ReadNow());
+            if (NavigationBaselineTiming.UsesBoundedRecovery(_timingContract)) ValidateInputSourceIdentity(source, ReadNow());
             var now = CheckReady(true);
             if (_mayHold) throw new InvalidOperationException("camera_requires_forward_release");
             var age = ValidateSource(source, now);
@@ -526,7 +526,7 @@ internal sealed class NavigationBaselineInputLease : IAsyncDisposable
             _endpointCloseInProgress = true;
             try
             {
-                if (_timingContract != NavigationBaselineTiming.V4 || !_recoveryEnabled)
+                if (!NavigationBaselineTiming.UsesBoundedRecovery(_timingContract) || !_recoveryEnabled)
                     throw new InvalidOperationException("endpoint_close_not_available");
                 ct.ThrowIfCancellationRequested(); Token.ThrowIfCancellationRequested();
                 RequireNoWaypointHold();

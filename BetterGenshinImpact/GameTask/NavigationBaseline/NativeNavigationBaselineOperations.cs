@@ -130,7 +130,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
             throw new InvalidOperationException("continuation_link_required_or_unexpected");
         _continuation = continuation; _leg = _route.InitialLeg;
         // Desktop admits only the owned v4 seed and fixed courtyard directions; shadow and multileg stay unavailable.
-        if (runtime.IsDesktopCapture && (timingContract != NavigationBaselineTiming.V4
+        if (runtime.IsDesktopCapture && (!NavigationBaselineTiming.UsesBoundedRecovery(timingContract)
             || capturePolicy != NavigationBaselineCapturePolicy.TaskOwnedTimer || !_route.SupportsHostContinuation
             || shadowCapture is not null))
             throw new InvalidOperationException("desktop_capture_route_not_supported");
@@ -150,7 +150,7 @@ internal sealed class NativeNavigationBaselineOperations : INavigationBaselineOp
         if (!Guid.TryParseExact(runId, "N", out var id) || id == Guid.Empty) throw new ArgumentException("invalid_baseline_run_id", nameof(runId));
         _runtime = runtime; _runId = runId; _capturePolicy = capturePolicy;
         _readbackMode = GameCaptureSettings.GetReadbackModeName(runtime.Capture);
-        _supportsRecovery = timingContract == NavigationBaselineTiming.V4;
+        _supportsRecovery = NavigationBaselineTiming.UsesBoundedRecovery(timingContract);
         try
         {
             _gameProcessId = runtime.Window.ProcessId;

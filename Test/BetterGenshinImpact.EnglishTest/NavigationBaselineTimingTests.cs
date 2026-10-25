@@ -165,7 +165,7 @@ public sealed class NavigationBaselineTimingTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData("V2")]
-    [InlineData("v5")]
+    [InlineData("v6")]
     public void InvalidContractCannotCreateLease(string? contract)
     {
         var calls = 0;
@@ -181,8 +181,9 @@ public sealed class NavigationBaselineTimingTests
     [InlineData("startNavigationBaseline", "\"v2\"", null)]
     [InlineData("startNavigationBaseline", "\"v3\"", null)]
     [InlineData("startNavigationBaseline", "\"v4\"", null)]
+    [InlineData("startNavigationBaseline", "\"v5\"", null)]
     [InlineData("startNavigationBaseline", "null", "invalid_command_parameters")]
-    [InlineData("startNavigationBaseline", "\"v5\"", "invalid_command_parameters")]
+    [InlineData("startNavigationBaseline", "\"v6\"", "invalid_command_parameters")]
     [InlineData("startAgentStream", "\"v2\"", "unexpected_command_parameters")]
     [InlineData("status", "null", "unexpected_command_parameters")]
     public void WireSelectionIsExact(string command, string? literal, string? rejection)
@@ -213,6 +214,6 @@ public sealed class NavigationBaselineTimingTests
         Assert.Equal("failed", status.State);
         Assert.Equal(contract, status.TimingContract); Assert.Equal(contract, status.Result!.TimingContract);
         Assert.Equal($"native-fixed-leg-feedback-{contract}", status.Result.ControllerMethod);
-        Assert.Equal(new[] { "v1", "v2", "v3", "v4" }, status.TimingContracts);
+        Assert.Equal(new[] { "v1", "v2", "v3", "v4", "v5" }, status.TimingContracts);
     }
 }

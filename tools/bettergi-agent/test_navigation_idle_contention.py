@@ -178,7 +178,7 @@ class ContentionRecoveryTests(unittest.TestCase):
                         if command == 'stop':
                             return {'type': 'stopped', 'receipts': []}, b''
                         if command == 'action':
-                            return {'type': 'rejected', 'reason': 'start_deadline_expired'}, b''
+                            return {'type': 'rejected', 'requestId': kwargs['requestId'], 'reason': 'start_deadline_expired'}, b''
                         if command == 'release':
                             return {'type': 'released', 'serverNowMs': stamp, 'receipts': [],
                                     'worldReadiness': {'ready': False, 'epoch': 8}}, b''

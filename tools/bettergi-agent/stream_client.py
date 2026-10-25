@@ -649,6 +649,15 @@ def load_policy(args):
     return policy
 
 
+def action_response_accepted(response, request_id, payload=b''):
+    """Settle only a matching server admission reply; acceptance is not execution."""
+    if (not isinstance(response, dict) or type(request_id) is not str or not request_id
+            or type(response.get('requestId')) is not str or response['requestId'] != request_id
+            or response.get('type') not in ('accepted', 'rejected') or payload != b''):
+        raise RuntimeError('Unresolved action response: expected matching accepted/rejected requestId and no payload')
+    return response['type'] == 'accepted'
+
+
 def run_episode(args, policy=None, control=None):
     """Run one owned bridge lease with an optional already-loaded model and live controls."""
     if policy is not None:
@@ -1135,26 +1144,25 @@ def run_episode(args, policy=None, control=None):
                 if start_deadline:
                     result.update(start_deadline)
                 request_id = uuid.uuid4().hex
-                if archive:
-                    # A failed response is an unknown outcome, never an invitation
-                    # to replay this request on another connection or segment.
-                    report['unacknowledgedAction'] = {'requestId': request_id, 'frame': dict(frame),
-                        'steps': result['steps'], 'observedAtMs': frame['capturedAtMs'],
-                        'expiresAtMs': observed_at+700, **start_deadline}
-                result['acceptance'] = bridge.request('action', requestId=request_id,
+                # A failed or unbound response is an unknown outcome in every report,
+                # never an invitation to replay on another connection or segment.
+                report['unacknowledgedAction'] = {'requestId': request_id, 'frame': dict(frame),
+                    'steps': result['steps'], 'observedAtMs': frame['capturedAtMs'],
+                    'expiresAtMs': observed_at+700, **start_deadline}
+                result['acceptance'], response_payload = bridge.request('action', requestId=request_id,
                     frameId=frame['frameId'], observedAtMs=frame['capturedAtMs'],
                     expiresAtMs=observed_at+700, modelId=args.model,
-                    steps=result['steps'], **start_deadline)[0]
-                if archive:
-                    report.pop('unacknowledgedAction', None)
+                    steps=result['steps'], **start_deadline)
+                committed = action_response_accepted(result['acceptance'], request_id, response_payload)
+                report.pop('unacknowledgedAction', None)
             else:
                 result['acceptance'] = {'type': 'notSubmitted', 'reason': rejection}
-            if result['acceptance'].get('type') == 'accepted':
+                committed = False  # This branch proves no action request was submitted.
+            if committed:
                 report['acceptedInputActions'] += 1
                 last_accepted_at = time.perf_counter()
                 history_gap_reset = False
             if getattr(policy, 'execution_feedback', False):
-                committed = result['acceptance'].get('type') == 'accepted'
                 policy.finish_action(committed)
                 result['historyCommitted'] = committed
             report['decisions'].append(result)

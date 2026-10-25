@@ -48,7 +48,7 @@ class FreshFrameTests(unittest.TestCase):
                                     'sourceWidth': 2, 'sourceHeight': 2}, bytes([self.frame_id] * 12)
                         if command == 'action':
                             submitted.append(kwargs['frameId'])
-                            return {'type': 'accepted'}, b''
+                            return {'type': 'accepted', 'requestId': kwargs['requestId']}, b''
                         if command == 'stop':
                             return {'type': 'stopped', 'receipts': []}, b''
                         raise AssertionError(command)

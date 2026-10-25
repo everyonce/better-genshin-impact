@@ -255,7 +255,7 @@ class ScriptedBridge:
             return {'type': 'stopped', 'receipts': [{'requestId': 'synthetic-stop', 'appliedSteps': []}]}, b''
         if command != 'frame':
             index = min(self.commands.count('action') - 1, len(self.action_responses) - 1)
-            return {'type': self.action_responses[index]}, b''
+            return {'type': self.action_responses[index], 'requestId': kwargs['requestId']}, b''
         self.count += 1
         if self.before_frame:
             self.before_frame(self.count)

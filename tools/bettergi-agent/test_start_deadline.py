@@ -39,7 +39,7 @@ class StartDeadlineTests(unittest.TestCase):
                     return frame, bytes([64] * 12)
                 if command == 'action':
                     submitted.append(kwargs)
-                    return {'type': 'accepted'}, b''
+                    return {'type': 'accepted', 'requestId': kwargs['requestId']}, b''
                 if command == 'stop':
                     return {'type': 'stopped', 'receipts': []}, b''
                 raise AssertionError(command)

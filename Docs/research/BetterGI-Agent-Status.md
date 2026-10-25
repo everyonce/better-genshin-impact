@@ -21,7 +21,9 @@ The local prototype supports launching BetterGI and Genshin inside minimized RDP
 | Growing-history graphs | Two native startup prefixes passed capture, replay and 192 independently recomputed consistency checks. Full coverage of all 41 prefixes and startup latency remain unqualified. |
 | Receipt-bound startup graphs | Three consecutive native prefixes passed all 534 numerical gates with zero recorded error, including all 60 committed K/V leaves, actions, RNG and rejected proposals. The two continuation handoffs took about 4.08 and 5.09 seconds. Preloading, longer continuation and live use remain unqualified. |
 | Pending tensor transfer | A four-pair public-path comparison passed 1,368 numerical checks with zero recorded error. Packed transfer averaged about 185.73 ms versus 184.06 ms for the original path, and all four receipt calls were slower. No speedup is established; the optimization is not promoted. |
-| Continuous input handoff | Source review confirms that the new history owner waits for terminal completion, while the controller calls release before publishing that receipt. A separate step-application contract is being designed so history and input can overlap; no live continuous-model claim is established. |
+| Preloaded history graphs | Two preloaded prefixes passed all 356 numerical gates with zero recorded error, including 40 committed K/V leaves. Preloading took 6.91 seconds and the observed handoff took 329.92 ms. Longer continuation and continuous gameplay remain unqualified. |
+| Paired Q/K arithmetic | All 47 actual operand samples passed 188 numerical checks. Sixteen checks recorded nonzero error, with a maximum of 0.001953125. Full-model parity and speed remain unqualified. |
+| Continuous input handoff | The separate step-application contract passed design review. Its protocol/ledger has 53 original and 24 focused inert cases; both review findings are corrected and independently reviewed. BetterGI bridge integration is under development; native history integration remains pending. |
 | Model optimization | Skipping unused final decoder work passed 1,733 correctness checks across two history41 evictions. A separate 40-pair experiment reduced median prediction time from 165.30 ms to 155.07 ms; paired actions/random states and final cache checks passed. |
 | Training | Not started. Model proposals and incomplete recordings are not expert action labels. |
 
@@ -112,6 +114,28 @@ option permits 33–100 ms, and the server permits one to six such intervals wit
 would require an explicit resampling contract and game-quality evaluation, with
 the native action and mouse delta preserved in the evidence. These are design
 requirements, not enabled behavior or a demonstrated latency solution.
+
+The reviewed design gives complete software input-call coverage a separate,
+versioned acknowledgment. It requires exact decision/step identities, a reserved
+immutable result queue, contiguous acknowledgments, whole-batch validation and
+separate history publication. Terminal contradictions stop the owner. These
+receipts describe software calls, without claiming OS delivery or game effects.
+The existing 60 ms post-input delay also exceeds the native 50 ms interval before
+inference begins, so the initial protocol prototype is a correctness step;
+continuous timing still needs an explicit scheduling/resampling solution.
+The design review is
+`artifacts/research/2026-10-24/continuous-step-application-contract-independent-review-01/review-01.json`
+(SHA256 `d9ad5d41c3db8514b1671012adc1451184d67c378606a34fabb62c915f68cde3`).
+
+The protocol correction rejects DEL before reserving reply bytes and requires
+the exact completed-record prefix before any client mutation. Both old failure
+cases were reproduced against the prior bodies; 24 focused methods have passing
+evidence. The unchanged 53-case evidence remains source-bound. The correction
+review is
+`artifacts/research/2026-10-24/step-application-protocol-ledger-correction-independent-review-02/review-01.json`
+(SHA256 `06f494035500e726a9317a1a37188547ee7eed2894a49248d0272802b8f92e02`).
+Controller instrumentation, reliable transport acknowledgment and native-owner
+commit integration are not yet deployed.
 
 The current milestone joins each image with the controller evidence known before
 the next decision. The client now records proposals, admissions and terminal
@@ -443,12 +467,37 @@ setup/reset/close/archive times:
 `artifacts/research/2026-10-24/native-p2p-pending-materialization-latency-execution-03-summary-01/summary.json`
 (SHA256 `fbfe116ea5ccf8af55542e4eec97920a56ddcae8018f1a02f91121ac586b11c2`).
 
-All 41 growing prefixes, rolling eviction and a prebuilt graph bank remain
-unqualified. The dormant two-prefix implementation is undergoing numerical
-qualification. Its independent source review found a missing join between the
-setup state's identity and the first candidate state; a reader correction is
-being prepared before execution. Fixed attention-mask reuse is under source
-development, with no measured saving established.
+Coverage beyond the first two preloaded prefixes and rolling eviction remain
+unqualified. The dormant two-prefix reader's initial-state identity join was
+corrected before execution. Its first actual run produced all 21 expected
+archives, then failed report validation because graph-pool identities retained
+tuples where the schema requires lists. No numerical report was published or
+accepted. All three observed worker identities retired; backend cleanup was not
+published. The failed run and finalizer refusal are retained at
+`artifacts/research/2026-10-24/native-p2p-dormant-two-prefix-execution-01-failure-closure-01/failure-closure.json`
+(SHA256 `2f756b07b5587ed9566611adc33875b46f6cacf409d749277a2896a4032524e6`).
+
+The recorder now uses the same detached pool-list representation as the existing
+setup recorder. Ten focused inert cases passed, including reproduction with the
+old producer and acceptance of the corrected producer through the unchanged
+complete 21-archive, 356-gate fixture reader. The independent source review is
+`artifacts/research/2026-10-24/native-p2p-dormant-bank-identity-serialization-independent-review-01/review-01.json`
+(SHA256 `bf863047c4879c894fe9f82b23dad03159a172d52582e815afd25e1d0b46afc8`).
+The corrected second run passed all 356 numerical checks with zero recorded
+error, including 40 committed K/V leaves, six proposals, two local discards, two
+known rejections and two synthetic receipt commits. All four private graphs were
+prepared before the first candidate image. Activation added no capture/replay,
+decoding or RNG restore in the retained counters. Worker cleanup, independent
+three-role process retirement and the final output-capacity closure passed.
+
+This instrumented run recorded 6,906.60 ms of preloading and a 329.92 ms handoff.
+First-graph retirement occupied 169.39 ms and activation binding 139.46 ms.
+The six public proposals took 193.29–248.09 ms; the two receipt calls took 130.40
+and 151.18 ms. These are single-run diagnostics, not a controlled speed
+comparison. The two-prefix bank does not establish all 41 prefixes, rolling
+eviction or continuous live gameplay. The accepted audit is
+`artifacts/research/2026-10-24/native-p2p-dormant-two-prefix-execution-02/closed-audit-01/audit.json`
+(SHA256 `0b4969c2748f6dac7631a8acf3e02f78b7c008f741a2f68d11a3aedf5a2cbdc0`).
 
 The first paired Q/K qualification run stopped before its first prediction:
 compiling only a class produced different Python bytecode from compiling its
@@ -465,8 +514,51 @@ Fifteen distinct focused inert cases passed, including independent full-module
 fixtures and code-drift rejection. The independent source review is
 `artifacts/research/2026-10-24/native-p2p-paired-qk-qualification-independent-review-02/review-01.json`
 (SHA256 `f0e40c5d6197e8c901690296f52e3609e8ba25d32c44b1c42a2207cbf3f7d983`).
-A fresh execution package is being prepared; actual Q/K CUDA parity, full-model
-parity, kernel reduction and latency remain unverified.
+The second Q/K run passed that code qualification but stopped at the context
+observer: native `torch.device('cuda')` scopes push a `DeviceContext` directly,
+without updating the Python marker the observer used. The worker reported
+complete cleanup and all three observed worker identities retired. There were
+no completed comparison cases or archives. This failed run is preserved at
+`artifacts/research/2026-10-24/native-p2p-paired-qk-qualification-execution-02-failure-closure-01/failure-closure.json`
+(SHA256 `e2bd5be45aa35312a9d20ff77f3591a2f29b50e9fe2d4fd9b202cf64f40e6c38`).
+
+The corrected observer reads the effective stock native device mode while
+retaining the inference, autocast and device requirements. Twenty-four focused
+inert cases and independent source review passed. The review is
+`artifacts/research/2026-10-24/native-p2p-paired-qk-context-observation-correction-independent-review-01/review-01.json`
+(SHA256 `8a360dbcb2c0e69ca4a10dc3eb8869587be7a31f05779c5dba31cdc8aa91589f`).
+The third Q/K run passed 188 numerical gates across all 47 actual operand
+samples, with 50 retained archives and 97 RNG checkpoints. Sixteen gates had
+nonzero error; maximum absolute error was 0.001953125 and the largest fraction
+of the declared tolerance was 0.7100. This is a local component pass rather than
+bitwise equality. The original reference used one public prediction; the
+candidate helper was exercised separately. Full native prediction, accumulated
+history/action parity, kernel reduction and latency remain unverified.
+Both source scopes and profiler were restored, cleanup completed, all three
+observed worker identities retired and the final output-capacity closure passed.
+The accepted audit is
+`artifacts/research/2026-10-24/native-p2p-paired-qk-qualification-execution-03/closed-audit-01/audit.json`
+(SHA256 `fcf285992bd6a21a54d867a8848b939c4d9e953b3695b7dd6fb0d72b9ac7f603`).
+
+The combined numerical/timing summary, including both final closure pins, is
+`artifacts/research/2026-10-24/native-p2p-qk-and-dormant-results-01/summary-01.json`
+(SHA256 `f4023abdb7d11e76ec4d7364ec8f6de78fae9c30108a28eaf824ee3a5ab5fc9f`).
+
+Fixed attention-mask reuse now has a source-only integration with the actual G12
+graph pair and receipt owner. Both graphs are registered before capture, and
+their retirement precedes releasing the mask storage. Review found the same
+kind of device-observation defect in its global-default getter. The narrow
+correction passed 24 focused inert cases and independent source review at
+`artifacts/research/2026-10-24/native-p2p-fixed-mask-native-context-correction-independent-review-01/review-01.json`
+(SHA256 `2b4ad78221d3ad7b81cab7cdceacc478de4f6d3d0b36e95531528bba9bbcabb3`).
+Its numerical plan now distinguishes actual constructor-return bytes from scalar
+expectations and compares storage aliases only across overlapping lifetimes.
+The corrected plan passed review at
+`artifacts/research/2026-10-24/native-p2p-fixed-mask-qualification-plan-independent-review-02/review-01.json`
+(SHA256 `4ea4f34500a38a6dc2bea18958fad1ab667dddd733f7281a20dcf30878e40dcd`).
+The qualification worker and complete fixtures are under construction. Actual
+CUDA mask values, graph lifetime, numerical parity and latency still require
+qualification; no measured mask-reuse saving is established.
 
 During the transfer trial, all 78 read-only GPU queries succeeded. They reported
 88 C, 91–97% device utilization, 1,035–1,305 MHz SM clocks and active software

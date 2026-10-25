@@ -12,6 +12,7 @@ The local prototype supports launching BetterGI and Genshin inside minimized RDP
 | Endpoint repair | Applied and reviewed in the separate source11 checkout. Its expected 1,834-case C# cohort, build and deployment are still pending. |
 | Future endpoint adapter | 96 offline tests and source review passed. It remains unapplied and unbound until the new application and its result format are validated. |
 | GPU runtime | Existing PyTorch 2.7.1 + CUDA 12.8 environment on the RTX 2080 SUPER. |
+| Model optimization | An unused final decoder pass has passed source review. Its isolated numerical comparison is being prepared; no speedup or behavior equivalence has been established yet. |
 | Training | Not started. Model proposals and incomplete recordings are not expert action labels. |
 
 ## Latency evidence
@@ -22,11 +23,13 @@ Each row describes its own workload. Input history, execution backend, capture, 
 |---|---:|---:|
 | P2P earlier offline CUDA graph, history200 | 27.32 ms | 28.14 ms |
 | P2P earlier live shared-GPU graph phase | 55.10 ms | 73.93 ms |
-| P2P latest instrumented retained-frame run, history41 | 172.69 ms | 183.35 ms |
+| P2P completed 40-call instrumented replay, history41 | 172.69 ms | 183.35 ms |
 | GameScaling optimized offline graph, 30-token action | 494.48 ms | 531.37 ms |
 | GameScaling earlier live shared-GPU run, after validation calls | 1,850.91 ms | 2,586.24 ms |
 
-The latest P2P run completed all 40 measured predictions and passed its closed-report audit. None met the 50 ms target; the scheduler skipped 116 elapsed release slots. GPU event timing places most of the measured stream interval around model graph execution. These event intervals include scheduling effects and do not establish exclusive kernel time.
+The 40-call P2P diagnostic passed its closed-report audit. None met the 50 ms target; the scheduler skipped 116 elapsed release slots. GPU event timing places most of the measured stream interval around model graph execution. These event intervals include scheduling effects and do not establish exclusive kernel time.
+
+A later single profiled warm prediction took 169.49 ms. Its accepted trace contains 5,438 graph-linked kernels and 37 device copies; fused memory-efficient attention is already active. A few long recorded events and gaps dominate the totals, so they cannot be treated as proven optimization savings or attributed to a specific cause. The model processes exited and their retirement was independently confirmed.
 
 A separate read-only sample at 23:15:42 UTC reported active software thermal clock limiting, 88 C, a 990 MHz core clock and 96% device utilization after the model worker exited. This observation describes that sample; it does not isolate the cause of earlier prediction latency.
 
@@ -34,6 +37,6 @@ A separate read-only sample at 23:15:42 UTC reported active software thermal clo
 
 The build needs three upstream asset packages that are missing locally: `BetterGI.Assets.Map` 1.0.25, `BetterGI.Assets.Model` 1.0.39 and `BetterGI.Assets.Other` 1.0.28. The one-time restore approval for the [official NuGet source](https://api.nuget.org/v3/index.json) remains pending after automatic approval review blocked the source change.
 
-Once restore is authorized, run the complete source11 test/build checks, replace only the RDP child, and establish a fresh navigation seed before testing the repair. The latest failed owner cannot resume from an older successful proof. In parallel, use the model timing evidence to select a bounded kernel/scheduling diagnostic, then compare task success and interventions on actual game scenes before selecting a training approach.
+Once restore is authorized, run the complete source11 test/build checks, replace only the RDP child, and establish a fresh navigation seed before testing the repair. The latest failed owner cannot resume from an older successful proof. In parallel, compare the original decoder with a candidate that skips its unused final pass. Preserve all eight action samples, random-number state and complete temporal cache through two rollovers before measuring speed. Task success and interventions on actual game scenes still need comparison before selecting a training approach.
 
 Controls and launch instructions: [RDP automation](../../tools/rdp-automation/README.md). Research scope: [first sprint](BetterGI-Agent-First-Sprint.md) and [original research](BetterGI-Agent-Research-2026-10-23.md).

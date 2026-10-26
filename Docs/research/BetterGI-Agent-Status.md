@@ -1,6 +1,6 @@
 # BetterGI agent status
 
-Updated October 26, 2026, 02:41 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 26, 2026, 02:51 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
 
@@ -28,7 +28,7 @@ deferred; elapsed time alone does not resume them. Evidence is
 | Native timing v5 | Explicit native timing v5 is committed at `ab136e25be0467c28ca664a825eef5a79bdeefb1` and deployed in R47. Seed and return evidence are accepted; the next forward leg and four-leg qualification are deferred. |
 | Offline recognition replay | Eleven saved captures passed scoped CPU replay: five exploration frames, two climbing frames, the journal, one swimming-controls frame and two map screens. Eleven additional swimming-derived rows are explicitly synthetic. Five recorded positions match the production coordinate conversion; the other checks do not establish localization or current readiness. |
 | GPU runtime | Existing PyTorch 2.7.1 + CUDA 12.8 environment on the RTX 2080 SUPER. Bounded loaded-model latency runs and paired scene/goal probes completed on October 26; their fresh results are below. No environment installation was needed. |
-| P2P temperature candidate | Explicit `--p2p-temperature 0.2` is available for replay and shadow runs. It reduced unwanted movement for standing goals, but left/jump probes stayed idle across 54 frozen-image predictions each. Landmark goals changed some proposals without establishing navigation success. Forty actual API predictions exactly matched the reference; the public CUDA graph command and 100 CPU checks passed. Default sampling and the original native adapter remain unchanged. |
+| P2P temperature candidate | Explicit `--p2p-temperature 0.2` is available for replay and shadow runs. Its walk/stand improvement on bilinear pixels did not transfer to native Hamming pixels: walking stayed idle across 54 consecutive predictions. Landmark probes also mostly became idle. Forty actual API predictions matched the reference; the public CUDA graph command and 100 CPU checks passed. Default sampling remains unchanged; this is not a qualified gameplay setting. |
 | P2P key compatibility | The official Right Shift command is included in deployed R46 through the existing input implementation. Separate live key-delivery qualification remains pending. |
 | Action acknowledgment | A matching request ID is required before settling policy history. Unknown outcomes preserve the pending action and stop the runner. The focused candidate and caller cohorts passed 55 distinct mocked tests. |
 | Execution-aware decisions | Opt-in client snapshots and GameScaling prompt conditioning are implemented; 121 distinct inert tests passed. One live attack command returned a completed software receipt. The closed context and graph comparisons produced neutral input in both contexts and did not establish receipt-dependent behavior. |
@@ -319,6 +319,48 @@ Evidence:
   (4,304 bytes, SHA256 `313361103fe9eb6c6f5aa9ca1e4b8139a367501e6d3a0f4e7c1cb58d2e23c1a2`).
 - Paired predictions: `artifacts/research/2026-10-24/offline-p2p-landmarks-closure-01.json`
   (13,514 bytes, SHA256 `0215a8066890af19c2f8e057c392add550e2b17543e8a8d678037281f6225503`); 112 measured predictions, two warmups and 178 unique source/input pins verified.
+
+## Native Hamming preprocessing comparison
+
+The preceding goal probes used the ordinary adapter's bilinear resize. A second
+comparison used the unchanged production `AgentHamming192Plan` on the same
+saved native image. A standalone converter matched both coefficient axes and the
+1920x1080 analytical ramp against retained upstream Rust results. It produced
+packed RGB192 pixels without loading BetterGI or accessing a live capture.
+The native-profile adapter consumed those verified pixels without another resize.
+
+Each temperature arm ran 56 cold-history predictions. All 112 comparisons with
+the bilinear runs began with identical cache/random state and goal tensors;
+the prepared pixels differed. Both native temperature arms shared the same
+pixels and passed all 16 duplicate controls. The workers closed successfully
+with unchanged sources and inputs; 186 unique source/input pins were verified.
+
+| Instruction | No input with bilinear pixels, temperature 0.2 | No input with native Hamming pixels, temperature 0.2 |
+|---|---:|---:|
+| Walk forward | 0/8 | 8/8 |
+| Stand still | 8/8 | 8/8 |
+| Approach doorway | 3/8 | 7/8 |
+| Approach waypoint | 2/8 | 8/8 |
+| Reach road | 0/8 | 7/8 |
+| Stay near waypoint | 2/8 | 8/8 |
+
+A continuous native-Hamming walking episode then stayed idle for all 54
+predictions, including 12 measured calls after filling history 41. Its initial
+prediction exactly matched the cold control and its CUDA graph validated.
+The earlier temperature benefit therefore does not transfer even to this other
+supported pixel path. Temperature 0.2 remains experimental and the default is
+unchanged. These fixed-image proposals do not establish gameplay quality for
+either preprocessing method; future comparisons need changing observations and
+actual task progress using the exact deployed image path.
+
+Evidence:
+
+- Saved-image conversion: `artifacts/research/2026-10-24/offline-p2p-native-pixels-01/closure.json`
+  (2,833 bytes, SHA256 `3d5ea1e6b6a3a5dbcfe72f35e41afeb8ab34214a0ee1ce3bc5c5b0807da33e32`).
+- Paired native/bilinear predictions: `artifacts/research/2026-10-24/offline-p2p-native-landmarks-closure-01.json`
+  (16,650 bytes, SHA256 `5a012d6ce498960a79754aad161281661be6a4ceee5a8a66dea8b9ca772db3f9`).
+- Continuous native walking history: `artifacts/research/2026-10-24/offline-p2p-native-history-walk-closure-01.json`
+  (3,696 bytes, SHA256 `3a0806751b7b0b2ab1142cb245991df1cca25ff068512a212cdb56d8b02989bd`); 178 unique source/input pins verified.
 
 ## Default-branch integration
 

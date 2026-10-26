@@ -61,10 +61,10 @@ uses the original adapter. An override selects a separate experimental adapter
 and records its temperature in the result metadata; the value stays fixed for
 that adapter and its CUDA graphs. `--temperature` remains GameScaling's option.
 The current P2P candidate was tested with history 41 and cached text goals on
-retained screenshots. Lower temperature reduced unwanted movement under
-“Stand still” in those samples, but left/jump probes stayed idle even with full
-history. Landmark goals changed some proposals; navigation success and wider
-gameplay quality remain unverified.
+retained screenshots. Lower temperature helped the narrow walk/stand comparison
+with bilinear pixels, but walking stayed idle for all 54 predictions with native
+Hamming pixels, even after filling history. Landmark goals also mostly became
+idle on that image path. This is not a qualified gameplay setting.
 See the [current evidence](../../Docs/research/BetterGI-Agent-Status.md).
 Overrides are refused with `--enable-input` and cannot enter the existing native
 checkpoint qualification profile. They currently support offline comparison

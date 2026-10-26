@@ -1,14 +1,14 @@
 # BetterGI agent status
 
-Updated October 26, 2026, 16:08 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 26, 2026, 16:41 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
 
 Daniel explicitly resumed live testing through BetterGI RDP at 14:18 UTC on
-October 26. R54 now runs in session 3 while preserving Genshin and the minimized
+October 26. R55 now runs in session 3 while preserving Genshin and the minimized
 RDP session. The console root remains R1. Live tests include four 30-second P2P
-trials, three 90-second walk/stand/walk goal-switch trials, a GameScaling shadow trial,
-two WGC capture shadow trials,
+trials, four 90-second walk/stand/walk goal-switch trials, a GameScaling shadow trial,
+five WGC capture shadow trials,
 and a successful native seed route followed by four connected courtyard legs.
 The model/control pipeline works, but the learned policies do not yet reliably
 follow Genshin instructions. R54 removed first-dispatch expirations in the latest
@@ -21,10 +21,10 @@ transition remains historical evidence, not a current restriction.
 | Area | Latest verified state |
 |---|---|
 | Upstream integration | The default branch `refactor/20260930` is integrated through `ae4f785c`. The latest merge adds explicit inactive-affix recognition and corrects capitalization matching; the required Debug build and 10 scripted OCR cases passed. Earlier integration cohorts recorded 539 distinct UnitTest cases and 527 Agent cases across their source trees. Live feature validation remains deferred. |
-| Prepared local builds | R54 is a self-contained `win-x64` Release package from clean commit `2655d153`. The required Debug build, Release publish and launcher validation passed. Its controller/capture cohort has 731 distinct passing cases. It adds immediate first-step dispatch and capture phase diagnostics to R53's exclusive stream capture. Older packages remain intact. |
+| Prepared local builds | R55 is a self-contained `win-x64` Release package from clean commit `92b19b5b`. The required Debug build, Release publish and launcher validation passed. Its focused readback/freshness/controller cohort passed 147 cases, including 17 new retry cases. It adds bounded polling retries to R54's immediate dispatch and capture phase diagnostics. R54's earlier controller/capture cohort passed 731 distinct cases. Older packages remain intact. |
 | Root upgrade staging | Commit `5f9ad00e` adds opt-in, byte-preserving Pulonia staging for a quiescent source and inactive, exclusive target. Twenty new tests and three existing regressions passed; independent source review found no actionable issue. Live use remains deferred. |
 | Coordinated root/child upgrade | The new explicit transaction uses the existing approved launcher and a one-shot startup binding, preserves the game/session, and ends with scheduling held. Required Debug validation, 129 distinct C# cases and 91 Python cases passed. Source and saved validation evidence passed independent readback. Actual task registration, cold launch, cross-session handoff and explicit resume remain untested. |
-| Deployed application | R54 child PID 9264 in RDP session 3, instance `257157d1cc3c41d7850e61404f0926e4`, assembly SHA256 `58e9a5e7f36e1a45302d1b75d6c05743e0743b6078ff20a52fab6d1c13ece36d`. Root PID 28072 and Genshin PID 27728 were preserved. Both 90-second DesktopDc and WGC blocking runs completed with no held keys. The latter applied all 1,707 accepted actions; its worker was independently confirmed retired at 16:05 UTC. |
+| Deployed application | R55 child PID 8376 in RDP session 3, instance `d4e8166a56b7444295d6e3bb71d006e0`, assembly SHA256 `c96e3694d43ecd781af4b121a336fa2bf045d796e3241d0639ac6ce601354da3`. Root PID 28072 and Genshin PID 27728 were preserved. R54's 90-second DesktopDc and WGC blocking runs completed with no held keys. The latter applied all 1,707 accepted actions; its worker was independently confirmed retired at 16:05 UTC. R55 polling now passed a complete observation-only trial; fresh blocking/history comparisons are underway. |
 | Native navigation | A fresh R52 seed and four immediately linked courtyard legs completed with 254 position observations and no recorded recovery, recognition, release or execution faults. All 15 journal/screenshot hashes and 140 listed evidence checks passed. This is exploratory native route acceptance, not general autonomous gameplay or a rebinding of the frozen R47 proof. |
 | Reusable command | Bounded continuation and the reviewed schema3 envelope checker are in primary. Explicit v5 client support passed 279 Python tests. The separate H03 reader package remains bound to R47. Current live runs use fresh instance and predecessor identities; the direct CLI successfully validated the R52 cycle. |
 | Endpoint repair | Deployed in R46 with input telemetry and Right Shift support. Both R47 routes and the return's endpoint/continuation evidence pass their full audits. Physical input acknowledgment and training eligibility remain false. |
@@ -37,7 +37,7 @@ transition remains historical evidence, not a current restriction.
 | Execution-aware decisions | Opt-in client snapshots and GameScaling prompt conditioning are implemented; 121 distinct inert tests passed. One live attack command returned a completed software receipt. The closed context and graph comparisons produced neutral input in both contexts and did not establish receipt-dependent behavior. |
 | Ongoing input telemetry | The Python client passed independent review and 103 tests; the C# producer's 26 cases passed within R46's 1,860-test validation. The producer is deployed, but a controlled live ongoing-call test remains pending. |
 | Continuous recording replay | A separate offline preparer verifies one complete lease across resident segments and preserves original video-file/local-index addresses. One six-segment archive passed, including four windows crossing video boundaries. Forty-eight Python checks passed; these remain automated trajectories with training eligibility false. |
-| Terminal receipt timing | A saved shutdown receipt exposed a timestamp sampled before the input lock. Terminal releases now refresh a valid session clock under that lock; replacement retains its exact successor-acceptance boundary. The Debug build and 160 selected C# cases passed, including six new cases. This source change is not deployed. |
+| Terminal receipt timing | A saved shutdown receipt exposed a timestamp sampled before the input lock. Terminal releases now refresh a valid session clock under that lock; replacement retains its exact successor-acceptance boundary. The Debug build and 160 selected C# cases passed, including six new cases. This source change is included in the deployed R54/R55 builds. |
 | P2P execution-history commit | Offline CUDA comparison passed 860 byte-exact cache comparisons across 44 reference calls, 48 proposals and 43 scripted commits. A bounded RDP trial then verified live image intake, rejected-proposal rollback and cleanup; its first proposal missed the latency limit, so no action was submitted. Live receipt-authorized history commit remains unverified. |
 | Native history rollback | Offline CUDA validation and its closed-result audit passed: 44 reference calls, 48 candidate attempts, 44 acceptances, four rejections and 960 consistency checks. Live controller integration remains unverified. |
 | Growing-history graphs | Two native startup prefixes passed capture, replay and 192 independently recomputed consistency checks. Full coverage of all 41 prefixes and startup latency remain unqualified. |
@@ -163,8 +163,64 @@ waited a full capture cadence before polling again, while the client's hold
 path could release and invalidate older in-flight sources. A bounded retry
 candidate now yields 2 ms for at most eight retries within the original
 33.33 ms turn. Genuine failures, timestamps and freshness guards are unchanged.
-Its focused cohort passed all 147 tests, including 17 new retry cases; deployment
-and measurement are pending.
+Its focused cohort passed all 147 tests, including 17 new retry cases. The clean
+R55 build is deployed. Its 30-second polling shadow run delivered 841 frames and
+579 predictions, with all recorded frames world-ready. Capture/preprocessing
+median was 27.34 ms; reported source age at response was 56.23 ms. Estimated age
+after prediction was 99.70 ms median, 124.51 ms p95 and 141.66 ms maximum. The
+recording completed without drops, and no model input was enabled. This improves
+the observed polling outcome; blocking remains the lower-age candidate pending
+the fresh configuration comparison. R55's following H41 blocking shadow trial
+delivered 843 frames and 576 predictions, all recorded frames world-ready.
+Capture/preprocessing median was 16.46 ms, source age at response 29.30 ms and
+estimated age after prediction 75.65 ms median / 100.23 ms p95 / 127.85 ms max.
+Both R55 shadow recordings completed without drops. Blocking remains selected
+for live use; these sequential runs are diagnostic, not load-controlled pairs.
+
+The released P2P H200 temporal configuration was then tested without input,
+using the same R55 blocking/native192/FP16 settings and 3 GiB allocator cap.
+It produced 847 frames and 555 predictions in 30 seconds. Model evaluation
+was 50.60 ms median / 58.84 ms p95; estimated age after inference was
+85.25 ms median / 107.47 ms p95 / 122.85 ms maximum. Readiness was positive
+on 846 frames after one confirming frame, and recording completed without
+drops. Shadow history includes unexecuted predictions and omits the live
+rollback backup, so a live comparison is still necessary. Full-history cache
+storage increases by approximately 223.59 MiB for graph input/output and the
+live backup, excluding graph pools and scratch; this is source-derived, not
+a measured process-memory delta.
+
+The existing resident navigation-progress heuristic rejects the square native
+model image as `unsupportedHudAspectRatio`; its output does not measure movement
+for this profile. Live quality therefore relies on recorded visual evidence,
+separate from software movement intent. The model profile is preserved.
+
+The H200 live walk/stand/walk comparison completed with 2,536 frames, 1,610
+predictions and all 1,584 accepted actions applied. There were no first-dispatch
+expirations; median/p95 model evaluation was 46.29/61.12 ms and reported source
+age at first software dispatch was 83.29/108.56 ms, maximum 146.85 ms. Eleven
+predictions were too old, thirteen requested excluded keys, and two crossed
+goal-control epochs. Recording completed without drops and shutdown held keys
+were empty. Its worker was independently confirmed retired at 16:29 UTC.
+
+This did not improve behavior. Applied movement-key counts were 312/550,
+102/504 and 8/530. The character began climbing a building at 7.896 seconds and
+never returned to a detected normal state during the remaining 82.07 seconds.
+All three saved phase images visibly show climbing/hanging. The existing
+same-frame native motion detector reported 2,307 climb, 223 normal and six
+unknown frames; its median/p95 recognition cost was 0.641/0.849 ms. Execution
+context being off does not disable this detector. Ground-navigation intent
+currently labels recovery context; it does not gate climbing inputs or provide
+a drop/reposition action. Existing idle-history reset does not drop the character.
+
+H41 also encountered climbing in the earlier blocking WGC run: 894 of 2,542
+frames were climb, across three episodes that each returned to a detected normal
+state (approximately 14.72, 15.28 and 1.31 seconds). Thus H41 is the better current
+latency/behavior setting, but neither configuration reliably follows the ground
+constraint. Normal detection only establishes absence of the Space hint, not
+proof of standing on the ground. The native reset successfully recovered the
+H200 run to the verified waypoint at 16:30:56 UTC. Evidence:
+`motion-comparison.json`, `p2p-r55-h200-goal-switch-segments/00001.json`,
+`post-r55-h200-live-process-check.json`, and `r55-reset-after-h200.json`.
 
 The same WGC backend in blocking mode produced 853 frames and 591 predictions
 in a separate 30-second shadow run. Capture/preprocessing median was 13.27 ms,

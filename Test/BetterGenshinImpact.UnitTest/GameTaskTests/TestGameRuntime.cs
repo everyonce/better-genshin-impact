@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Core.Input;
 using BetterGenshinImpact.Core.Input.Backends.Win32;
 using BetterGenshinImpact.Core.Mask;
 using BetterGenshinImpact.GameTask.Model;
@@ -17,13 +18,14 @@ namespace BetterGenshinImpact.UnitTest.GameTaskTests
         /// 用指定的画面信息构造运行环境
         /// </summary>
         /// <param name="systemInfo">测试使用的画面信息，例如 <see cref="FakeSystemInfo"/></param>
-        public static GameRuntime Create(ISystemInfo systemInfo)
+        /// <param name="input">Optional isolated input backend for tests that must reject input access.</param>
+        public static GameRuntime Create(ISystemInfo systemInfo, IInputBackend? input = null)
         {
             return new GameRuntime(
                 GameRuntimeKind.Win32Window,
                 new FakeGameWindow(systemInfo),
                 new FakeGameCapture(),
-                new Win32InputBackend(IntPtr.Zero),
+                input ?? new Win32InputBackend(IntPtr.Zero),
                 systemInfo,
                 NullMaskWindowDrawingBoard.Instance,
                 new MaskWindowMapState());

@@ -14,11 +14,20 @@ param(
     [ValidateRange(5, 180)][int] $TimeoutSeconds = 45,
     [switch] $UseApprovedTask,
     [switch] $PreserveWindow,
-    [switch] $ValidateOnly
+    [switch] $ValidateOnly,
+    [switch] $ValidateApprovedTask,
+    # Opt-in existing-session lifetime binding; no installed task arguments are changed.
+    [ValidateRange(0, 2147483647)][int] $UpgradeSessionId = 0,
+    [ValidateRange(0, 2147483647)][int] $UpgradeGameProcessId = 0,
+    [ValidateRange(0, 9223372036854775807)][long] $UpgradeGameStartedFileTime = 0
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+$upgrade = $UpgradeSessionId -ne 0 -or $UpgradeGameProcessId -ne 0 -or $UpgradeGameStartedFileTime -ne 0
+if ($upgrade -and ($UpgradeSessionId -le 0 -or $UpgradeGameProcessId -le 0 -or $UpgradeGameStartedFileTime -le 0 -or -not $UseApprovedTask -or $PreserveWindow)) {
+    throw 'Upgrade startup requires all existing lifetime fields, the approved fixed task and a minimized root.'
+}
 if (-not $ValidateOnly) {
 
 # Refuse an administrator/high-integrity shell before importing workspace helpers.
@@ -66,6 +75,37 @@ function Invoke-HostControl {
     return $reply.value
 }
 
+# Validate the exact existing installation without installing/reconfiguring or launching anything.
+function Get-VerifiedApprovedTask {
+    param($Package)
+    Import-Module (Join-Path $PSScriptRoot 'ApprovedLauncher.psm1') -Force
+    $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    $plan = Get-ApprovedLauncherPlan -RepositoryRoot $repoRoot -UserSid $sid
+    if ($package.targetDirectory -ine (Select-VerifiedHostPackage -ArtifactsDirectory $plan.artifactsDirectory).package.targetDirectory) {
+        throw 'The fixed approved task launches the newest verified release in its registered workspace.'
+    }
+    $configPath = Join-Path $plan.installationDirectory 'approved-launcher.json'
+    if ((Get-Item -LiteralPath $configPath).Length -gt 65536) { throw 'Approved launcher configuration exceeds 64 KiB.' }
+    $installed = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+    if ($installed.version -ne 1 -or $installed.artifactsDirectory -ine $plan.artifactsDirectory) { throw 'Approved launcher configuration differs from the fixed workspace.' }
+    foreach ($name in $plan.installedFiles) {
+        $installedPath = Join-Path $plan.installationDirectory $name
+        if ((Get-Item -LiteralPath $installedPath).Length -gt 1048576 -or
+            (Get-FileHash -LiteralPath $installedPath -Algorithm SHA256).Hash -ne
+            (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot $name) -Algorithm SHA256).Hash) {
+            throw 'The installed approved helper differs from the reviewed fixed helper. No automatic installation or repair.'
+        }
+    }
+    if ($installed.userSid -ne $plan.userSid -or $installed.repositoryRoot -ine $plan.repositoryRoot) { throw 'The approved installation identifies a different account or workspace.' }
+    $scheduler = New-Object -ComObject Schedule.Service
+    $scheduler.Connect()
+    $task = $scheduler.GetFolder($plan.taskFolder).GetTask($plan.taskName)
+    if (-not $task.Enabled -or -not (Test-ApprovedTaskDefinition $task.Definition $plan)) {
+        throw 'The approved task is disabled or no longer has its fixed registered action. Review registration again.'
+    }
+    return $task
+}
+
 try {
     $selection = Select-VerifiedHostPackage -ArtifactsDirectory $ArtifactsDirectory -TargetDirectory $TargetDirectory
     $package = $selection.package
@@ -79,6 +119,11 @@ try {
     Add-Type -AssemblyName System.Windows.Forms
     if ([Windows.Forms.SystemInformation]::TerminalServerSession) { throw 'Run the primary-host launcher from the local desktop session.' }
     $session = [Diagnostics.Process]::GetCurrentProcess().SessionId
+    if ($ValidateApprovedTask) {
+        $null = Get-VerifiedApprovedTask -Package $package
+        [pscustomobject]@{ version = 1; approvedTaskVerified = $true; windowsSessionId = $session; package = $package } | ConvertTo-Json -Depth 8
+        exit 0
+    }
     $discovery = Invoke-HostControl -ControlArguments @('discover')
     $primaries = @($discovery.instances | Where-Object { $_.instanceType -eq 'Primary' })
     $compatible = @($primaries | Where-Object { Test-HostIdentity $_ $package $session })
@@ -98,24 +143,13 @@ try {
         $package = Get-VerifiedHostPackage $package.targetDirectory
         if ($UseApprovedTask) {
             # This ordinary-token caller only triggers the administrator-approved fixed action.
+            $task = Get-VerifiedApprovedTask -Package $package
             Import-Module (Join-Path $PSScriptRoot 'ApprovedLauncher.psm1') -Force
-            $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-            $plan = Get-ApprovedLauncherPlan -RepositoryRoot $repoRoot -UserSid $sid
-            if ($package.targetDirectory -ine (Select-VerifiedHostPackage -ArtifactsDirectory $plan.artifactsDirectory).package.targetDirectory) {
-                throw 'The fixed approved task launches the newest verified release in its registered workspace.'
-            }
-            $installed = Get-Content -LiteralPath (Join-Path $plan.installationDirectory 'approved-launcher.json') -Raw | ConvertFrom-Json
-            if ($installed.userSid -ne $plan.userSid -or $installed.repositoryRoot -ine $plan.repositoryRoot) { throw 'The approved installation identifies a different account or workspace.' }
-            $scheduler = New-Object -ComObject Schedule.Service
-            $scheduler.Connect()
-            $task = $scheduler.GetFolder($plan.taskFolder).GetTask($plan.taskName)
-            if (-not $task.Enabled -or -not (Test-ApprovedTaskDefinition $task.Definition $plan)) {
-                throw 'The approved task is disabled or no longer has its fixed registered action. Review registration again.'
-            }
             Invoke-ApprovedHostTask -Task $task -WindowsSessionId $session
         }
         else {
-            $launched = Start-Process -FilePath $package.executablePath -ArgumentList @('--automation', '--desktopClone') `
+            $startupArguments = @('--automation', '--desktopClone')
+            $launched = Start-Process -FilePath $package.executablePath -ArgumentList $startupArguments `
                 -WorkingDirectory $package.targetDirectory -WindowStyle Hidden -PassThru
             $launchProcessId = $launched.Id
         }
@@ -137,6 +171,11 @@ try {
             Start-Sleep -Milliseconds 500
         }
         if ($null -eq $status) { throw "Host readiness timed out: $lastFailure Query discover/status before retrying; no process was terminated." }
+    }
+    if ($upgrade -and ($action -ne 'launched' -or $status.puloniaSchedulingHeld -ne $true -or
+            $status.upgradeSessionId -ne $UpgradeSessionId -or $status.upgradeGameProcessId -ne $UpgradeGameProcessId -or
+            $status.upgradeGameStartedFileTime -ne $UpgradeGameStartedFileTime)) {
+        throw 'The new root did not retain the exact scheduling hold and existing game/session binding.'
     }
     if ($action -eq 'reused') {
         Import-Module (Join-Path $PSScriptRoot 'ApprovedLauncher.psm1') -Force

@@ -17,9 +17,30 @@ public class CommandLineOptions
     /// <summary>Explicit opt-in to local automation lifecycle commands and quiet startup.</summary>
     public const string AutomationArgument = "--automation";
 
+    /// <summary>Bind an upgrade root to one existing clone and game lifetime; normal startup leaves this null.</summary>
+    public UpgradeSessionBinding? UpgradeSession { get; private set; }
+
     private static CommandLineOptions? _instance;
 
-    public static CommandLineOptions Instance => _instance ??= Parse(Environment.GetCommandLineArgs());
+    public static CommandLineOptions Instance => _instance ??= ParseStartup();
+
+    /// <summary>Only production startup consumes the fixed root binding; the public argument parser stays file/process free.</summary>
+    private static CommandLineOptions ParseStartup()
+    {
+        var options = Parse(Environment.GetCommandLineArgs());
+        if (options.InstanceType == BetterGiInstanceType.Primary)
+        {
+            var bound = UpgradeStartupFile.Consume(AppContext.BaseDirectory,
+                options.AutomationMode && options.OpenDesktopClone && options.Action == CommandLineAction.None,
+                options.UpgradeSession is not null, () =>
+                {
+                    using var process = System.Diagnostics.Process.GetCurrentProcess();
+                    return process.SessionId;
+                }, DateTimeOffset.UtcNow);
+            if (bound is not null) options.UpgradeSession = bound;
+        }
+        return options;
+    }
 
     public CommandLineAction Action { get; }
     /// <summary>命令行指定运行的已保存计划 ID，不接受路径或任意 JSON。</summary>
@@ -85,7 +106,7 @@ public class CommandLineOptions
         bool hasExplicitInstanceType = false,
         int? restartFromProcessId = null,
         string? instanceName = null, string? puloniaPlanId = null,
-        bool openDesktopClone = false, bool automationMode = false)
+        bool openDesktopClone = false, bool automationMode = false, UpgradeSessionBinding? upgradeSession = null)
     {
         Action = action;
         OneDragonConfigName = oneDragonConfigName;
@@ -97,6 +118,7 @@ public class CommandLineOptions
         PuloniaPlanId = puloniaPlanId;
         OpenDesktopClone = openDesktopClone;
         AutomationMode = automationMode;
+        UpgradeSession = upgradeSession;
     }
 
     internal static CommandLineOptions Parse(string[] args)
@@ -109,10 +131,21 @@ public class CommandLineOptions
         var openDesktopClone = false;
         var automationMode = false;
         var commandArgs = new List<string>();
+        var upgradeValues = new Dictionary<string, long>(StringComparer.Ordinal);
 
         for (var index = 0; index < launchArgs.Length; index++)
         {
             var argument = launchArgs[index];
+            // The opt-in is all-or-nothing; duplicate, partial and cross-role upgrade arguments fail closed.
+            if (argument is "--upgrade-session" or "--upgrade-game-pid" or "--upgrade-game-start")
+            {
+                if (!TryReadNext(launchArgs, ref index, out var raw)
+                    || !long.TryParse(raw, System.Globalization.NumberStyles.None,
+                        System.Globalization.CultureInfo.InvariantCulture, out var value)
+                    || value <= 0 || !upgradeValues.TryAdd(argument, value))
+                    throw new ArgumentException("Invalid or duplicate upgrade lifetime argument.");
+                continue;
+            }
             if (argument.Equals(AutomationArgument, StringComparison.OrdinalIgnoreCase))
             {
                 automationMode = true;
@@ -207,6 +240,16 @@ public class CommandLineOptions
             string? oneDragonConfigName = null,
             string[]? groupNames = null, string? puloniaPlanId = null)
         {
+            UpgradeSessionBinding? upgrade = null;
+            if (upgradeValues.Count != 0)
+            {
+                if (upgradeValues.Count != 3 || !automationMode || !openDesktopClone
+                    || instanceType != BetterGiInstanceType.Primary || restartFromProcessId is not null
+                    || action != CommandLineAction.None || commandArgs.Count != 0)
+                    throw new ArgumentException("Upgrade startup requires an automated, task-free primary and all lifetime fields.");
+                upgrade = new UpgradeSessionBinding(checked((int)upgradeValues["--upgrade-session"]),
+                    checked((int)upgradeValues["--upgrade-game-pid"]), upgradeValues["--upgrade-game-start"]);
+            }
             return new CommandLineOptions(
                 action,
                 oneDragonConfigName,
@@ -214,7 +257,7 @@ public class CommandLineOptions
                 instanceType,
                 hasExplicitInstanceType,
                 restartFromProcessId,
-                instanceName, puloniaPlanId, openDesktopClone, automationMode);
+                instanceName, puloniaPlanId, openDesktopClone, automationMode, upgrade);
         }
     }
 

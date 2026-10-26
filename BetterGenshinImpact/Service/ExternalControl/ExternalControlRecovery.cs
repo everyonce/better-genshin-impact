@@ -34,7 +34,8 @@ internal static class ExternalControlRecovery
         return verifiedRoot.WindowsSessionId;
     }
 
-    internal static RecoveryPlan CreateValidatedRecoveryPlan(string appDirectory)
+    internal static RecoveryPlan CreateValidatedRecoveryPlan(string appDirectory,
+        string? pinnedExeSha256 = null, string? pinnedDllSha256 = null)
     {
         if (string.IsNullOrWhiteSpace(appDirectory) || !Path.IsPathFullyQualified(appDirectory)
             || appDirectory.StartsWith(@"\\", StringComparison.Ordinal))
@@ -64,6 +65,19 @@ internal static class ExternalControlRecovery
         if (!ExternalControlOptIn.TryReadAppRestart(optInPath))
             throw new InvalidOperationException("External control and app restart must both be enabled.");
 
+        // A root-upgrade retirement has independently pinned package hashes and never invokes a recovery task.
+        // Keep the existing installed-task manifest path unchanged for every ordinary recovery caller.
+        if (pinnedExeSha256 is not null || pinnedDllSha256 is not null)
+        {
+            if (pinnedExeSha256 is null || pinnedDllSha256 is null)
+                throw new InvalidOperationException("Both root-upgrade binary hashes are required.");
+            var pinnedExe = Path.Combine(app, "BetterGI.exe");
+            var pinnedDll = Path.Combine(app, "BetterGI.dll");
+            EnsureNoLinkedAncestors(app, pinnedExe);
+            EnsureNoLinkedAncestors(app, pinnedDll);
+            return new RecoveryPlan(app, pinnedExe, FixedArguments,
+                HashFile(pinnedExe, pinnedExeSha256), HashFile(pinnedDll, pinnedDllSha256));
+        }
         var manifestPath = Path.Combine(app, ManifestFileName);
         EnsureNoLinkedAncestors(app, manifestPath);
         var manifestInfo = new FileInfo(manifestPath);

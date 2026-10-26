@@ -752,3 +752,40 @@ $previousReturnRunId = '<just-completed-verified-return-run-id>'
 The client retains the same authenticated child, capture epoch, build, game and immediate predecessor. A timeout or missing reply is not permission to replay a start. After replacing the child, establish a new ordinary short-route seed; an old child's run ID cannot resume the new child. Host-policy continuation additionally advertises `hostEndpointContinuationVersion: 1` and retains its typed host-acquisition floor and application build binding.
 
 The accepted four-leg experiment demonstrates automatic continuation across this fixed corridor. Movement still pauses for endpoint verification, turnarounds and some camera corrections. See the [measured sprint results](../../Docs/research/BetterGI-Agent-Sprint-Results-2026-10-23.md) for the actual key-release-to-next-key-down gaps and limits of the model experiments.
+
+
+## Coordinated root and child upgrade (explicit, scheduling held)
+
+This opt-in path requires a build containing `rootUpgradeVersion: 1`. It has no deployment or live qualification merely because its inactive tests pass. Keep the current root/child/game unchanged until live work is authorized.
+
+1. Publish two distinct, verified sibling releases with the same new binaries: an endpoint-only bootstrap and the final root package. Reuse the existing **idle-only, endpoint-only** child replacement into the bootstrap; never interrupt a task. The original root stays connected/minimized and its game/session stays alive.
+2. Gather the actual fresh bootstrap PID/session/nonce and protected game PID/native creation FILETIME. Require idle/detached input and runtime, the original connected root and explicit restart opt-ins. Do not infer these identities from old logs or another session's access denial.
+3. Invoke the new bounded transaction, replacing every placeholder with those actual values:
+
+```powershell
+python tools/rdp-automation/rdp_control.py upgrade-root-child `
+  --process-id <bootstrap-pid> --windows-session-id <clone-session> `
+  --instance-nonce <bootstrap-nonce> --game-process-id <game-pid> `
+  --game-started-file-time <native-filetime> `
+  --target-directory <final-release-directory> --job-dir <new-evidence-directory> --timeout 180
+```
+
+Before retiring anything, the client verifies the actual existing approved task definition, enabled state, user/repository/artifacts binding and installed fixed-helper bytes through `start-host.ps1 -ValidateApprovedTask`. This neither installs nor repairs a task. Historical failed registration or a successful warm-host reuse proves nothing about this cold-launch prerequisite. Failure stops before retirement.
+
+The bootstrap server retains the verified root's native process handle, reserves its own idle task/runtime admission, then attempts root-only termination. It never runs normal root disposal/logoff. The irreversible reservation stays latched even after an uncertain termination/reply; the bootstrap exits afterward. The client independently observes the original root and bootstrap exit using owned handles before staging. No game process is terminated or restarted.
+
+The existing preservation stager copies the original root's configuration and opaque `User/Pulonia` files into the inactive final package. Shipped `User` defaults survive; conflicting runtime configuration/store files are refused. Original child config/source bytes remain untouched, and only their hash difference is reported. Copy/process handoff success is explicitly **not** proof of legacy multi-file store coherence or runnable plans.
+
+A bounded package-local `root-upgrade-startup.json` binds final binary hashes, the original root session, protected game lifetime and a maximum five-minute expiry. The unchanged approved launcher still receives only its fixed `--automation --desktopClone` arguments. The new primary consumes this file once into `.consumed.json`; it connects only to the preserved existing session/game, starts the final endpoint-only child from the same root-staged package, and holds Pulonia initialization/execution. Every reconnect and manual child launch retains this guard. No child configuration is staged over the final root package.
+
+Successful upgrade ends with `schedulingHeld: true`, `workResumed: false` and `legacyStoreCoherenceVerified: false`. The root control endpoint remains usable. Initialization and scheduling resume only through a separate explicit command after fresh checks:
+
+```powershell
+python tools/rdp-automation/rdp_control.py resume-upgrade `
+  --process-id <new-root-pid> --windows-session-id <original-root-session> `
+  --instance-nonce <new-root-nonce>
+```
+
+Resume uses the existing registered Pulonia coordinator, retains its normal incompatible-state refusal, rechecks the protected game and connected final child, and rechecks root admission immediately before release. A successful release publishes `.completed.json`, then releases the initialization/execution hold and endpoint-only startup restriction. Later normal launches of that package can use ordinary defaults; a consumed-but-uncompleted marker blocks automatic retries. The upgrade transaction never invokes resume itself.
+
+Each transaction has a 30–300 second total deadline, separate retained launcher output (64 KiB per stream acceptance bound), a 4 KiB startup record and a 64 KiB result acceptance bound. Oversized or failed evidence is retained and never silently truncated/retried. There is no automatic rollback/restart after a retirement attempt: preserve originals, partial target and markers, inspect the last phase, and choose any recovery explicitly. No promise is made that a replacement will succeed after the old root exits.

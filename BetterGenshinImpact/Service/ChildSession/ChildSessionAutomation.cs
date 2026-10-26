@@ -43,6 +43,8 @@ public sealed partial class ChildSessionService
         if (!CommandLineOptions.Instance.AutomationMode || !_instanceService.Context.IsRoot)
             throw new InvalidOperationException("RDP automation requires an explicitly automated primary instance.");
         var mode = startupMode ?? ChildSessionStartupOperation.GameRuntime;
+        if (CommandLineOptions.Instance.UpgradeSession is { IsReleased: false } && mode != ChildSessionStartupOperation.ControlEndpoint)
+            throw new InvalidOperationException("An upgrade root may start only the existing session's control endpoint.");
         if (!ChildSessionStartupOperation.IsSupported(mode)) throw new ArgumentException("Unsupported child startup mode.");
         if (_automationStartTask is { IsCompleted: false })
         {

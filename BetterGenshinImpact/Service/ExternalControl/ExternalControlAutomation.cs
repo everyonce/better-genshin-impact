@@ -42,7 +42,7 @@ public sealed partial class ExternalControlService
     {
         if (!enabled) return "automation_disabled";
         var rootCommand = command is "startChildSession" or "cancelChildStart" or "minimizeChildSession"
-            or "showChildSession" or "launchChildCommand";
+            or "showChildSession" or "launchChildCommand" or "resumeRootAfterUpgrade";
         return rootCommand ? isRoot ? null : "primary_required" : isRemoteChild ? null : "rdp_child_required";
     }
 
@@ -74,6 +74,8 @@ public sealed partial class ExternalControlService
         if (AutomationTargetError(request.Command!, CommandLineOptions.Instance.AutomationMode,
                 _instances.Context.IsRoot, IsRemoteChildTarget()) is { } error)
             return ExternalControlResponse.Failure(request.RequestId, error, "The automation mode or instance role does not permit this command.");
+        if (request.Command == "resumeRootAfterUpgrade")
+            return await ResumeRootAfterUpgradeAsync(request, token).ConfigureAwait(false);
         var dispatcher = Application.Current?.Dispatcher;
         if (dispatcher is null || dispatcher.HasShutdownStarted)
             return ExternalControlResponse.Failure(request.RequestId, "ui_unavailable", "The lifecycle dispatcher is unavailable.");

@@ -24,12 +24,16 @@ public sealed partial class PuloniaTaskService
     /// </summary>
     private readonly bool _isCoordinator;
 
+    /// <summary>Root-upgrade initialization and admission share the same explicit scheduling hold.</summary>
+    private readonly PuloniaStartupHold _startupHold;
+
     /// <summary>
     /// 子实例不运行 Pulonia 计划
     /// </summary>
     /// <exception cref="InvalidOperationException">当前不是协调器</exception>
     private void ThrowIfNotCoordinator()
     {
+        _startupHold.RequireReleased();
         if (!_isCoordinator)
             throw new InvalidOperationException("子实例不能直接运行 Pulonia 计划，请在主实例的新一条龙页面选择本实例运行。");
     }

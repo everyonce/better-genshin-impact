@@ -321,6 +321,7 @@ public sealed partial class ExternalControlService : BackgroundService
             "restartApp" => await RestartApplicationAsync(request.RequestId, request.IdleRestart, cancellationToken).ConfigureAwait(false),
             "installRecoveryLauncher" => await InstallRecoveryLauncherAsync(request.RequestId, cancellationToken).ConfigureAwait(false),
             "restartHost" => await RestartHostAsync(request.RequestId, cancellationToken).ConfigureAwait(false),
+            "retireRootForUpgrade" => await RetireRootForUpgradeAsync(request, cancellationToken).ConfigureAwait(false),
             "shutdownApp" => await ShutdownChildApplicationAsync(request.RequestId, cancellationToken).ConfigureAwait(false),
             "navigationResetDiagnostics" => await ReadNavigationResetDiagnosticsAsync(request, cancellationToken).ConfigureAwait(false),
             "navigationBaselineResult" => await ReadNavigationBaselineResultAsync(request, cancellationToken).ConfigureAwait(false),
@@ -790,6 +791,11 @@ public sealed partial class ExternalControlService : BackgroundService
         return AddAutomationStatusAsync(new ExternalControlStatus
         {
             AppDirectory = AppContext.BaseDirectory,
+            RootUpgradeVersion = CommandLineOptions.Instance.AutomationMode && _instances.Context.InstanceType == BetterGiInstanceType.ChildSession ? 1 : 0,
+            PuloniaSchedulingHeld = _serviceProvider.GetService<BetterGenshinImpact.Pulonia.Services.PuloniaStartupHold>()?.IsHeld == true,
+            UpgradeSessionId = CommandLineOptions.Instance.UpgradeSession?.SessionId,
+            UpgradeGameProcessId = CommandLineOptions.Instance.UpgradeSession?.GameProcessId,
+            UpgradeGameStartedFileTime = CommandLineOptions.Instance.UpgradeSession?.GameStartedFileTime,
             CaptureStorageVersion = 1,
             ProcessId = _instances.Context.ProcessId,
             WindowsSessionId = _instances.Context.WindowsSessionId,

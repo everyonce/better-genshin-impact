@@ -1,6 +1,6 @@
 # BetterGI agent status
 
-Updated October 26, 2026, 03:24 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 26, 2026, 03:37 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
 
@@ -20,7 +20,8 @@ deferred; elapsed time alone does not resume them. Evidence is
 |---|---|
 | Upstream integration | The default branch `refactor/20260930` is integrated through `86d2a413`, adding 30 commits beyond the previously merged refactor checkpoint. The final Debug build passed; selected CPU/offscreen cohorts passed 539 distinct UnitTest cases and 527 Agent cases across their recorded source trees. Application replacement and live feature validation remain deferred. |
 | Prepared local build | R48 is a verified self-contained `win-x64` Release package from clean commit `4c99cad1`, available at `artifacts/release-r48/BetterGI-English-win-x64`. All 2,703 package files are inventoried and hashed; its 154 shipped User files match the clean source. It has not been launched or deployed. |
-| Root upgrade staging | Commit `5f9ad00e` adds opt-in, byte-preserving Pulonia staging for a quiescent source and inactive, exclusive target. Twenty new tests and three existing regressions passed; independent source review found no actionable issue. Coordinated root retirement/restart and live compatibility checks remain deferred. |
+| Root upgrade staging | Commit `5f9ad00e` adds opt-in, byte-preserving Pulonia staging for a quiescent source and inactive, exclusive target. Twenty new tests and three existing regressions passed; independent source review found no actionable issue. Live use remains deferred. |
+| Coordinated root/child upgrade | The new explicit transaction uses the existing approved launcher and a one-shot startup binding, preserves the game/session, and ends with scheduling held. The required Debug build, 51 C# cases and 91 Python cases passed. Source and saved validation evidence passed independent readback. Actual task registration, cold launch, cross-session handoff and explicit resume remain untested. |
 | Deployed application | Last verified at 17:45 UTC: R47 inside the existing minimized RDP session. Its 1,890 selected C# tests and Debug/Release validation passed before replacement; the same Genshin process was preserved. No new deployment or live check has occurred during the offline hold. |
 | Native navigation | Both saved R47 routes now pass the full audit: seed 3.82 seconds/37 observations and return 5.07 seconds/44 observations. The return's immediate predecessor link is accepted. This does not establish sustained gameplay. |
 | Reusable command | Bounded continuation and the reviewed schema3 envelope checker are in primary. Explicit v5 client support passed 279 Python tests. The separate H03 reader package and corrected return proof are accepted; future live continuation requires user readiness and fresh runtime checks. |
@@ -47,6 +48,41 @@ deferred; elapsed time alone does not resume them. Evidence is
 | GameScaling device-greedy decoding | A loaded-model run completed four setup calls and four balanced pairs. Saved records pass exact token/action checks and 236 exact recorded common-state comparisons; both graphs fit with 2,580 MiB peak PyTorch reservation. The candidate saved only 8.66–53.04 ms (0.19–1.42%) under heavy GPU load. Independent process verification was blocked, so full qualification and promotion remain withheld. |
 | Model optimization | Skipping unused final decoder work passed 1,733 correctness checks across two history41 evictions. A separate 40-pair experiment reduced median prediction time from 165.30 ms to 155.07 ms; paired actions/random states and final cache checks passed. |
 | Training | Not started. The pinned public P2P metadata has no Genshin labels; local demonstrations remain needed. The current recorder captures automated receipts, not human input. Model proposals and incomplete recordings are not expert action labels. |
+
+## Coordinated application upgrade
+
+The new `upgrade-root-child` command retires only the verified original root
+and idle bootstrap child, then stages the root's settings and opaque Pulonia
+files into a separate final package. It preflights conflicting destination data
+and the existing fixed launcher before retirement. The final root and child use
+the same build, reconnect to the protected game/session, and keep scheduling
+paused. A separate `resume-upgrade` command initializes saved state, retains
+existing compatibility checks, rechecks admission and identity, then completes
+the startup record and releases queued work. The transaction never resumes work
+automatically.
+
+The final source passed the required Debug solution build. Its 51 passing C#
+cases include 34 new startup/upgrade cases and 17 existing recovery cases; all
+91 Python cases passed, including 14 new transaction cases. An earlier test
+invocation selected an old x64 assembly and is explicitly excluded. The accepted
+C# receipt uses the newly built `bin/Debug` assembly. Independent readback
+verified all 25 changed source files against their retained copies and checked
+63 evidence files; review found no remaining actionable source issue.
+
+This is source and offline validation, not a live deployment. The existing
+approved task must still pass its actual preflight. Root absence permits opaque
+copying but does not prove historical multi-file coherence. Failed or uncertain
+handoffs retain their evidence and startup markers without automatic retry,
+rollback or scheduling release. Operational details are in
+[the RDP command guide](../../tools/rdp-automation/README.md#coordinated-root-and-child-upgrade-explicit-scheduling-held).
+
+Evidence: `artifacts/research/2026-10-24/root-child-upgrade-root-review-01/review.json`
+(17,391 bytes, SHA256
+`deb1ca9853d94cb33c6516bc48c93d7cf44de1c92a720ade33804899c4ab9d0e`).
+The frozen source handoff is
+`artifacts/research/2026-10-24/root-child-upgrade-candidate-01/source-handoff-01.json`
+(4,859 bytes, SHA256
+`8d3ae670b34556aedfbc3f7205fe7881aa7ef1e9a847117d0cde67144cb67cc8`).
 
 ## GameScaling token-selection comparison
 

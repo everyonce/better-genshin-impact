@@ -312,6 +312,7 @@ public partial class App : Application
                     sp.GetService<IPuloniaGenshinAccountSwitcher>()));
                 // 只有主实例是协调器：子实例不读写共享的 User/Pulonia/state.json，也不消费队列。
                 // 调度宿主与页面都依赖接口，只注册这一份单例；容器关闭时释放它（IAsyncDisposable）。
+                services.AddSingleton(new PuloniaStartupHold(CommandLineOptions.Instance.UpgradeSession is not null));
                 services.AddSingleton<IPuloniaTaskService>(sp => new PuloniaTaskService(
                     sp.GetRequiredService<PuloniaTaskStore>(),
                     sp.GetRequiredService<PuloniaTaskBuilder>(),
@@ -322,7 +323,8 @@ public partial class App : Application
                     sp.GetService<IPuloniaGenshinAccountSwitcher>(),
                     sp.GetRequiredService<IPuloniaRemoteNodeDispatcher>(),
                     sp.GetRequiredService<InstanceBootstrap>().Context.IsRoot,
-                    sp.GetRequiredService<ILogger<PuloniaTaskService>>()));
+                    sp.GetRequiredService<ILogger<PuloniaTaskService>>(),
+                    sp.GetRequiredService<PuloniaStartupHold>()));
                 services.AddSingleton(TimeProvider.System);
                 services.AddSingleton<PuloniaTaskTriggerHost>();
                 services.AddHostedService(sp => sp.GetRequiredService<PuloniaTaskTriggerHost>());

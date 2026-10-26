@@ -51,6 +51,8 @@ COMMAND_FIELDS = {
     'status': set(), 'startChildSession': {'childStartupMode'}, 'minimizeChildSession': set(),
     'showChildSession': set(), 'cancelChildStart': set(), 'startChildGame': set(),
     'stopAutomationTasks': set(), 'restartApp': set(),
+    'retireRootForUpgrade': {'rootUpgrade'},
+    'resumeRootAfterUpgrade': set(),
     'startAgentStream': {'enableInput', 'observationProfile', 'experimentalQueuedStepApplications'}, 'stopAgentStream': set(),
     'setCaptureMode': {'captureMode', 'readbackMode', 'sourceRetention', 'conversion', 'desktopDcSourcePolicy'},
     'startNavigationReset': {'targetYawDegrees', 'capturePolicy'},
@@ -98,6 +100,9 @@ def exchange(command, process_id, session_id, *, nonce=None, fields=None, api=No
                          and field_names <= COMMAND_FIELDS[command])
                 and not (command == 'restartApp' and field_names == {'idleRestart'}))):
         raise ControlError('Unsupported command or command fields.')
+    if command == 'retireRootForUpgrade':
+        from root_upgrade import validate_root_expectation
+        validate_root_expectation(fields.get('rootUpgrade'), ControlError)
     if command == 'startChildSession' and field_names and fields['childStartupMode'] not in ('controlEndpoint', 'gameRuntime'):
         raise ControlError('Child startup mode must be exactly controlEndpoint or gameRuntime.')
     if command == 'restartApp' and field_names:
@@ -254,7 +259,7 @@ def require_role(status, role):
 
 def mutate(command, status, **fields):
     """Pin the mutation to the exact status identity; never retry an uncertain outcome."""
-    role = 'ChildSession' if command in ('stopAutomationTasks', 'restartApp', 'startChildGame',
+    role = 'ChildSession' if command in ('stopAutomationTasks', 'restartApp', 'retireRootForUpgrade', 'startChildGame',
                                        'startAgentStream', 'stopAgentStream', 'setCaptureMode',
                                        'startNavigationReset', 'startNavigationBaseline') else 'Primary'
     require_role(status, role)
@@ -1966,10 +1971,21 @@ def main():
                          help='preserve all opaque User/Pulonia data for a root-host upgrade; requires --source-quiescent')
     staging.add_argument('--source-quiescent', action='store_true',
                          help='assert all source-store writers are stopped/quiescent and target remains inactive/exclusive')
-    for command in ('status', 'start', 'ensure-child', 'cancel-start', 'start-game', 'start-agent', 'stop-agent', 'set-capture-mode', 'reset-navigation', 'run-navigation-baseline', 'minimize', 'show', 'exec', 'hot-replace'):
+    upgrade = sub.add_parser('upgrade-root-child', help='retire a verified root and idle bootstrap child, preserve root data, and start both held')
+    upgrade.add_argument('--process-id', type=int, required=True)
+    upgrade.add_argument('--windows-session-id', type=int, required=True)
+    upgrade.add_argument('--instance-nonce', required=True)
+    upgrade.add_argument('--target-directory', required=True)
+    upgrade.add_argument('--game-process-id', type=int, required=True)
+    upgrade.add_argument('--game-started-file-time', type=int, required=True)
+    upgrade.add_argument('--job-dir', required=True)
+    upgrade.add_argument('--timeout', type=int, default=180)
+    for command in ('status', 'resume-upgrade', 'start', 'ensure-child', 'cancel-start', 'start-game', 'start-agent', 'stop-agent', 'set-capture-mode', 'reset-navigation', 'run-navigation-baseline', 'minimize', 'show', 'exec', 'hot-replace'):
         item = sub.add_parser(command)
-        item.add_argument('--process-id', type=int)
-        item.add_argument('--windows-session-id', type=int)
+        item.add_argument('--process-id', type=int, required=command == 'resume-upgrade')
+        item.add_argument('--windows-session-id', type=int, required=command == 'resume-upgrade')
+        if command == 'resume-upgrade':
+            item.add_argument('--instance-nonce', required=True)
         item.add_argument('--timeout', type=int, default=45 if command == 'run-navigation-baseline' else 120)
         if command in ('start', 'ensure-child'):
             item.add_argument('--preserve-window', action='store_true',
@@ -2028,6 +2044,9 @@ def main():
             raise ControlError('--experimental-queued-step-applications requires --enable-input.')
         if args.command == 'discover':
             result = discover()
+        elif args.command == 'upgrade-root-child':
+            from root_upgrade import upgrade_root_child
+            result = upgrade_root_child(sys.modules[__name__], args)
         elif args.command == 'stage-config':
             options = ({'preserve_pulonia': args.preserve_pulonia, 'source_quiescent': args.source_quiescent}
                        if args.preserve_pulonia or args.source_quiescent else {})
@@ -2057,6 +2076,9 @@ def main():
                 result = ensure_child(sys.modules[__name__], status, args.target_directory,
                                       args.exe_sha256, args.dll_sha256, args.instance_nonce,
                                       args.timeout, args.preserve_window, args.start_game)
+            elif args.command == 'resume-upgrade':
+                from root_upgrade import resume_root
+                result = resume_root(sys.modules[__name__], status, args.instance_nonce)
             elif args.command == 'cancel-start':
                 result = mutate('cancelChildStart', status)
             elif args.command == 'start-game':

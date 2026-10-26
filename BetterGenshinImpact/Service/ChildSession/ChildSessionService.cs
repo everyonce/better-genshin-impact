@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
 using BetterGenshinImpact.Core.Config;
+using BetterGenshinImpact.Helpers;
 using BetterGenshinImpact.View.Windows;
 using BetterGenshinImpact.Service.Instance;
 using BetterGenshinImpact.Service.Interface;
@@ -559,6 +560,7 @@ public sealed partial class ChildSessionService : IDisposable
     private void ConnectCore(string operationMessage, ChildSessionStartupOperation? startup = null)
     {
         var existingSessionId = ChildSessionNativeMethods.TryGetChildSessionId();
+        if (CommandLineOptions.Instance.UpgradeSession is { IsReleased: false } binding) binding.VerifyExisting(existingSessionId);
         var window = EnsureDesktopWindow();
         ShowDesktopWindow(window);
 
@@ -577,6 +579,13 @@ public sealed partial class ChildSessionService : IDisposable
         RefreshState(operationMessage);
     }
 
+    /// <summary>Retain the game/session boundary through delayed and manual connection paths until explicit resume.</summary>
+    private void VerifyUpgradeSession()
+    {
+        if (CommandLineOptions.Instance.UpgradeSession is { IsReleased: false } binding)
+            binding.VerifyExisting(ChildSessionNativeMethods.TryGetChildSessionId());
+    }
+
     private ChildSessionWindow EnsureDesktopWindow()
     {
         if (_desktopWindow is not null)
@@ -585,6 +594,7 @@ public sealed partial class ChildSessionService : IDisposable
         }
 
         _desktopWindow = _serviceProvider.GetRequiredService<ChildSessionWindow>();
+        _desktopWindow.RdpHost.BeforeConnect = VerifyUpgradeSession;
         _desktopWindow.StateChanged += OnAutomationWindowStateChanged;
         _desktopWindow.IsVisibleChanged += OnDesktopWindowVisibilityChanged;
         _desktopWindow.RdpHost.ConnectionFailed += OnRdpConnectionFailed;
@@ -670,6 +680,7 @@ public sealed partial class ChildSessionService : IDisposable
             if (startup is not null && ConnectedState != 1)
                 throw new InvalidOperationException("The RDP connection is no longer active.");
             var childSessionId = GetRequiredChildSessionId();
+            if (CommandLineOptions.Instance.UpgradeSession is { IsReleased: false } upgrade) upgrade.VerifyExisting(childSessionId);
 
             // A manual/startup recovery request can race the login callback's automatic launch.
             // Let the pending automatic launch own that session instead of scheduling another copy.
@@ -701,7 +712,13 @@ public sealed partial class ChildSessionService : IDisposable
                 _autoLaunchBetterGiStarted = true;
             }
 
-            await ChildSessionProcessLauncher.LaunchBetterGiAsync(childSessionId, startup?.Mode, startup?.CancellationToken ?? CancellationToken.None);
+            var launchMode = startup?.Mode;
+            if (CommandLineOptions.Instance.UpgradeSession is { IsReleased: false } binding)
+            {
+                binding.VerifyExisting(childSessionId);
+                launchMode = binding.SelectStartupMode(launchMode);
+            }
+            await ChildSessionProcessLauncher.LaunchBetterGiAsync(childSessionId, launchMode, startup?.CancellationToken ?? CancellationToken.None);
             RefreshState(
                 string.Format(T("已在桌面分身（会话 {0}）中以管理员权限启动 BetterGI"), childSessionId));
     }

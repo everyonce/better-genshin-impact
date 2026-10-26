@@ -18,7 +18,8 @@ namespace BetterGenshinImpact.Pulonia.Services;
 /// <summary>主实例的唯一异步调度循环，负责程序内定时、两种快捷键与手动命令行入口。</summary>
 public sealed class PuloniaTaskTriggerHost(PuloniaTaskStore store, IPuloniaTaskService tasks,
     InstanceService instances,
-    ILogger<PuloniaTaskTriggerHost> logger, TimeProvider clock, IConfigService? configService = null) : BackgroundService
+    ILogger<PuloniaTaskTriggerHost> logger, TimeProvider clock, IConfigService? configService = null,
+    PuloniaStartupHold? startupHold = null) : BackgroundService
 {
     /// <summary>检查计划文件修改标记、重试失败热键注册的周期。</summary>
     private static readonly TimeSpan PlanPollInterval = TimeSpan.FromSeconds(30);
@@ -50,6 +51,12 @@ public sealed class PuloniaTaskTriggerHost(PuloniaTaskStore store, IPuloniaTaskS
             Status = "自动触发仅在主实例中生效，子实例不会重复调度。";
             Changed?.Invoke(this, EventArgs.Empty);
             return;
+        }
+        if (startupHold?.IsHeld == true)
+        {
+            Status = "Pulonia scheduling is held after upgrade; explicit verified resume is required.";
+            Changed?.Invoke(this, EventArgs.Empty);
+            await startupHold.WaitAsync(stoppingToken).ConfigureAwait(false);
         }
         var dispatcher = _dispatcher;
         if (dispatcher is null)

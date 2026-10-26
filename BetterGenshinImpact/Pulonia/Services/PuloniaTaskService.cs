@@ -133,13 +133,15 @@ public sealed partial class PuloniaTaskService : IPuloniaTaskService, IAsyncDisp
     /// <param name="remoteDispatcher">把节点交给子实例执行的入口；为空时只能本地执行</param>
     /// <param name="isCoordinator">是否为唯一协调器；子实例传 false，不读写共享状态文件</param>
     /// <param name="logger">日志；为空时不记录</param>
+    /// <param name="startupHold">Opt-in upgrade hold; ordinary callers retain immediate initialization.</param>
     public PuloniaTaskService(PuloniaTaskStore store, PuloniaTaskBuilder builder,
         IEnumerable<IPuloniaTaskExecutor> executors, PuloniaGameTaskCoordinator gameTaskCoordinator,
         TaskStopService taskStopService, TimeProvider? timeProvider = null,
         IPuloniaGenshinAccountSwitcher? accountSwitcher = null,
         IPuloniaRemoteNodeDispatcher? remoteDispatcher = null, bool isCoordinator = true,
-        ILogger<PuloniaTaskService>? logger = null)
+        ILogger<PuloniaTaskService>? logger = null, PuloniaStartupHold? startupHold = null)
     {
+        _startupHold = startupHold ?? new PuloniaStartupHold(false);
         _store = store;
         _builder = builder;
         _runState = new PuloniaTaskRunStateStore(store);
@@ -427,6 +429,14 @@ public sealed partial class PuloniaTaskService : IPuloniaTaskService, IAsyncDisp
         return _runState.Current.Ledger.AsReadOnly();
     }
 
+    /// <summary>Explicitly initialize retained state under the independent execution hold; propagate existing failure.</summary>
+    internal async Task PrepareUpgradeResumeAsync(CancellationToken cancellationToken)
+    {
+        _startupHold.AllowInitialization();
+        await _initialization.WaitAsync(cancellationToken).ConfigureAwait(false);
+        _runState.ThrowIfFailed();
+    }
+
     /// <summary>
     /// 恢复当前状态、未完成队列和不可变历史；遗留活动运行不会自动重放。
     /// 损坏的历史文件与无法归档的运行只跳过并提示，不阻止启动。
@@ -434,6 +444,7 @@ public sealed partial class PuloniaTaskService : IPuloniaTaskService, IAsyncDisp
     private async Task InitializePersistentStateAsync()
     {
         var ct = _shutdown.Token;
+        await _startupHold.WaitForInitializationAsync(ct).ConfigureAwait(false);
         var notices = new List<string>();
         // 每条提示立即生效：页面可能在初始化完成前读取恢复提示。
         void Notify(string notice)
@@ -576,6 +587,7 @@ public sealed partial class PuloniaTaskService : IPuloniaTaskService, IAsyncDisp
         try
         {
             await _initialization.ConfigureAwait(false);
+            await _startupHold.WaitAsync(_shutdown.Token).ConfigureAwait(false);
             if (_runState.Failure is not null) return;
             while (true)
             {

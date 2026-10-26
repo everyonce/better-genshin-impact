@@ -10,7 +10,7 @@ internal sealed class ExternalControlRestartReservation(Func<SemaphoreSlim> task
     /// <summary>Allow isolated tests to supply a semaphore without initializing application task logging.</summary>
     internal ExternalControlRestartReservation(SemaphoreSlim semaphore) : this(() => semaphore) { }
 
-    /// <summary>Zero is idle, one is preparing a launch, and two is an irreversible successful launch.</summary>
+    /// <summary>Zero is idle, one is preparing a launch, and two is a committed launch or attempted irreversible retirement.</summary>
     private int _state;
 
     /// <summary>Block other admissions while checking or after launching a replacement.</summary>
@@ -21,7 +21,7 @@ internal sealed class ExternalControlRestartReservation(Func<SemaphoreSlim> task
 
     /// <summary>Run synchronously on the UI dispatcher, keeping both gates after a non-null launch result.</summary>
     internal T? TryLaunch<T>(Func<bool> reserveRuntime, Action releaseRuntime, Func<bool> hasOtherWork,
-        Func<T?> launch) where T : class
+        Func<T?> launch, bool commitBeforeLaunch = false) where T : class
     {
         if (Interlocked.CompareExchange(ref _state, 1, 0) != 0) return null;
         SemaphoreSlim? tasks = null;
@@ -35,6 +35,9 @@ internal sealed class ExternalControlRestartReservation(Func<SemaphoreSlim> task
             if (!taskReserved) return null;
             runtimeReserved = reserveRuntime();
             if (!runtimeReserved || hasOtherWork()) return null;
+            // Retirement is irreversible as soon as Kill is attempted, even if the native call throws.
+            // Ordinary restart keeps its existing non-null-launch commitment boundary.
+            if (commitBeforeLaunch) Volatile.Write(ref _state, 2);
             var replacement = launch();
             if (replacement is null) return null;
             // No await, status read, response serialization, or Process.Dispose precedes this latch.

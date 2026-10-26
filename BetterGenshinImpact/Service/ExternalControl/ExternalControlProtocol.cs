@@ -99,6 +99,10 @@ internal static class ExternalControlProtocol
             return "unexpected_command_parameters";
         if (request.HasChildStartupMode && !ChildSessionStartupOperation.IsSupported(request.ChildStartupMode))
             return "invalid_command_parameters";
+        if (request.Command != "retireRootForUpgrade" && request.HasRootUpgrade)
+            return "unexpected_command_parameters";
+        if (request.Command == "retireRootForUpgrade" && (!request.HasRootUpgrade || request.RootUpgrade?.IsValid() != true))
+            return "invalid_command_parameters";
         if (request.Command != "restartApp" && request.HasIdleRestart)
             return "unexpected_command_parameters";
         if (request.HasIdleRestart && (request.IdleRestart is null || !ExternalControlRestart.IsValidExpectation(request.IdleRestart)))
@@ -199,7 +203,7 @@ internal static class ExternalControlProtocol
                 : "unexpected_target";
         }
 
-        if (request.Command is not ("startPilot" or "stopPilot" or "restartApp" or "installRecoveryLauncher" or "restartHost" or "shutdownApp" or "navigationResetDiagnostics" or "navigationBaselineResult")
+        if (request.Command is not ("startPilot" or "stopPilot" or "restartApp" or "installRecoveryLauncher" or "restartHost" or "retireRootForUpgrade" or "shutdownApp" or "navigationResetDiagnostics" or "navigationBaselineResult")
             && !IsAutomationCommand(request.Command))
         {
             return "unsupported_command";
@@ -216,7 +220,7 @@ internal static class ExternalControlProtocol
 
     /// <summary>Explicit lifecycle allowlist; arbitrary command parameters belong only to the standard-token launcher.</summary>
     internal static bool IsAutomationCommand(string? command) => command is "startChildSession"
-        or "cancelChildStart" or "minimizeChildSession" or "showChildSession" or "launchChildCommand"
+        or "cancelChildStart" or "minimizeChildSession" or "showChildSession" or "launchChildCommand" or "resumeRootAfterUpgrade"
         or "startChildGame" or "stopAutomationTasks" or "startAgentStream" or "stopAgentStream" or "setCaptureMode"
         or "startNavigationReset" or "startNavigationBaseline";
 
@@ -293,6 +297,19 @@ internal sealed record ExternalControlRequest
     [JsonIgnore]
     internal bool HasCapturePolicy { get; private set; }
     /// <summary>Track explicit null so the restart-only option cannot appear on another command.</summary>
+    /// <summary>Explicit native root preconditions; null is never interpreted as a legacy request.</summary>
+    private RootUpgradeExpectation? _rootUpgrade;
+    /// <summary>Used only by the authenticated bootstrap child's one-shot retirement command.</summary>
+    [JsonPropertyName("rootUpgrade")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public RootUpgradeExpectation? RootUpgrade
+    {
+        get => _rootUpgrade;
+        init { _rootUpgrade = value; HasRootUpgrade = true; }
+    }
+    /// <summary>Distinguish omitted from explicitly malformed retirement data.</summary>
+    [JsonIgnore] internal bool HasRootUpgrade { get; private set; }
+
     private ExternalControlIdleRestart? _idleRestart;
 
     /// <summary>Optional atomic idle-only restart with exact target pins; omission preserves direct legacy behavior.</summary>
@@ -509,6 +526,16 @@ internal sealed record ExternalControlStatus
     /// <summary>Highest supported idle-restart contract: version one reserves admission/pins; version two adds explicit startup intent.</summary>
     [JsonPropertyName("idleRestartVersion")]
     public int IdleRestartVersion { get; init; }
+    /// <summary>One means this explicitly automated child supports retained root retirement.</summary>
+    [JsonPropertyName("rootUpgradeVersion")] public int RootUpgradeVersion { get; init; }
+    /// <summary>The new root has not resumed persistent queues or trigger scheduling.</summary>
+    [JsonPropertyName("puloniaSchedulingHeld")] public bool PuloniaSchedulingHeld { get; init; }
+    /// <summary>Existing-session-only startup binding; null on ordinary sessions.</summary>
+    [JsonPropertyName("upgradeSessionId")] public int? UpgradeSessionId { get; init; }
+    /// <summary>Protected game PID retained by the opt-in startup binding.</summary>
+    [JsonPropertyName("upgradeGameProcessId")] public int? UpgradeGameProcessId { get; init; }
+    /// <summary>Protected game native UTC creation identity.</summary>
+    [JsonPropertyName("upgradeGameStartedFileTime")] public long? UpgradeGameStartedFileTime { get; init; }
     /// <summary>Compact fixed-leg owner state; complete evidence is available only through its pinned result query.</summary>
     [JsonPropertyName("navigationBaseline")]
     public NavigationBaselineStatus NavigationBaseline { get; init; } = new();

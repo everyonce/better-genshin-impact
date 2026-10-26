@@ -66,6 +66,10 @@ internal sealed class RdpActiveXHost : AxHost
         }
     }
 
+    /// <summary>Service-owned lifetime guard, also invoked by delayed/manual reconnects.</summary>
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    internal Action? BeforeConnect { get; set; }
+
     internal void ConnectToChildSession(DrawingSize desktopSize)
     {
         if (ConnectedState != 0)
@@ -73,6 +77,7 @@ internal sealed class RdpActiveXHost : AxHost
             return;
         }
 
+        BeforeConnect?.Invoke();
         ChildSessionNativeMethods.ClearRdpInputWindowCache(Handle);
         var client = GetRequiredOcx();
         var width = Math.Clamp(desktopSize.Width, 200, 8192);

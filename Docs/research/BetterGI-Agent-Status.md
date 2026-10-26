@@ -1,6 +1,6 @@
 # BetterGI agent status
 
-Updated October 26, 2026, 03:56 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 26, 2026, 04:06 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
 
@@ -423,6 +423,17 @@ saved native image. A standalone converter matched both coefficient axes and the
 1920x1080 analytical ramp against retained upstream Rust results. It produced
 packed RGB192 pixels without loading BetterGI or accessing a live capture.
 The native-profile adapter consumed those verified pixels without another resize.
+
+An October 26 source recheck confirmed that the pinned reference uses
+[`fast_image_resize` Hamming interpolation with RGB bytes](https://github.com/elefant-ai/open-p2p/blob/a329d98cbe62119679a254d71bea6446773541bc/elefant_rust/src/resize.rs).
+Our native adapter leaves normalization to the unchanged upstream model.
+The default 20 policy decisions per second and raw 50 ms actions agree with the
+reference rescaling path's nominal 20 FPS; explicit controller overrides and
+missed deadlines still require measurement. No native preprocessing defect was
+identified. This does not qualify gameplay or justify replacing Hamming with
+bilinear based on frozen-image outputs. The file-only review is saved in
+`artifacts/research/2026-10-24/p2p-preprocessing-source-check-01/review.json`
+(3,949 bytes, SHA256 `c9fdfff44242ce3e0c71b12af5138775123c8674c043750751223445b3715738`).
 
 Each temperature arm ran 56 cold-history predictions. All 112 comparisons with
 the bilinear runs began with identical cache/random state and goal tensors;

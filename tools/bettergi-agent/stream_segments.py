@@ -41,7 +41,8 @@ class StreamSegments:
     arbitrary writers, reports or native encoder processes.
     """
     LISTS = ('decisions', 'receipts', 'controlTransitions', 'goalChanges',
-             'navigationProgress', 'navigationIdleRecoveryEvents')
+             'navigationProgress', 'navigationIdleRecoveryEvents',
+             'navigationClimbRecoveryEvents', 'navigationClimbActions')
     COUNTERS = ('framesReceived', 'acceptedInputActions', 'unappliedAcceptedActions', 'receiptHistoryResets')
     MAX_SEGMENTS = 4096
     MAX_CONTEXT = 256
@@ -92,7 +93,8 @@ class StreamSegments:
         if self.headers:
             ids.add(next(reversed(self.headers)))
         return {'previousReport': previous, 'sameBridgeLease': previous is not None,
-                'pendingProposals': proposals,
+                'pendingProposals': [item for item in proposals if item.get('type') == 'proposal'],
+                'pendingRecoveryActions': [item for item in proposals if item.get('type') == 'navigationClimbAction'],
                 'sourceFrames': [copy.deepcopy(self.headers[key]) for key in ids if key in self.headers],
                 'join': 'sessionId + ownerEpoch + requestId; frameId refers to the same lease clock'}
 
@@ -113,7 +115,7 @@ class StreamSegments:
     def event(self, event):
         with self.lock:
             acceptance = event.get('acceptance', {})
-            if event.get('type') == 'proposal' and acceptance.get('type') == 'accepted':
+            if event.get('type') in ('proposal', 'navigationClimbAction') and acceptance.get('type') == 'accepted':
                 request = acceptance.get('requestId')
                 if not request:
                     raise RuntimeError('Accepted proposal lacks requestId for segment evidence joins')
@@ -274,7 +276,10 @@ class StreamSegments:
                     'error': self.error, 'evidenceError': self._error,
                     'acceptedInputActions': report['acceptedInputActions'], 'framesReceived': report['framesReceived'],
                     'unacknowledgedAction': report.get('unacknowledgedAction', {}).get('requestId'),
-                    'endReason': report['endReason']}
+                    'endReason': report['endReason'],
+                    **({'navigationClimbRecovery': copy.deepcopy(report['navigationClimbRecovery']),
+                        'unacknowledgedRecoveryAction': report.get('unacknowledgedRecoveryAction', {}).get('requestId')}
+                       if 'navigationClimbRecovery' in report else {})}
         path = Path(self.args.lease_output)
         try:
             path.parent.mkdir(parents=True, exist_ok=True)

@@ -25,16 +25,35 @@ from navigation_idle_recovery import (GOAL_INTENTS, NavigationIdleRecovery, Reco
                                       capture_context, eligible_frame, fresh_frame)
 from observation_profiles import LEGACY, P2P_NATIVE, PROFILES, validate_model_profile, verify_hello, verify_frame
 from p2p_startup import validate_startup_options
+from bridge_transport import forbid_reconnect, is_transport_failure, transport_origin
 
 
 class Bridge:
     """Serialize request/response pairs on the same-user local named pipe."""
+    @staticmethod
+    def _pipe_io(operation, call, *args, **kwargs):
+        """Keep transport provenance at the actual pipe call, including AST-only fixtures."""
+        from bridge_transport import pipe_io
+        return pipe_io(operation, call, *args, **kwargs)
+
+    @staticmethod
+    def _pipe_eof(message):
+        """Preserve EOF type while identifying the owned pipe as its source."""
+        from bridge_transport import pipe_eof
+        return pipe_eof(message)
+
+    @staticmethod
+    def _terminal_transport_error(error):
+        """Experimental ownership failures never authorize a new ordinary lease."""
+        from bridge_transport import forbid_reconnect
+        forbid_reconnect(error, "experimentalChannelFailure")
+
     def __init__(self, name):
         if not re.fullmatch(r'BetterGI\.Agent\.[A-Za-z0-9_.-]{1,100}', name):
             raise ValueError('Use a local pipe name beginning BetterGI.Agent.')
         if os.name != 'nt':
             raise RuntimeError('The BetterGI bridge requires Windows')
-        self.handle = open('\\\\.\\pipe\\' + name, 'r+b', buffering=0)
+        self.handle = self._pipe_io('open', open, '\\\\.\\pipe\\' + name, 'r+b', buffering=0)
         self.lock = threading.Lock()
         # Keep only the original hello bytes and this connection's original owner.
         self._hello_handle = self.handle
@@ -55,9 +74,9 @@ class Bridge:
     def _exact(self, length):
         chunks = bytearray()
         while len(chunks) < length:
-            chunk = self.handle.read(length-len(chunks))
+            chunk = self._pipe_io('read', self.handle.read, length-len(chunks))
             if not chunk:
-                raise EOFError('BetterGI disconnected; input owner must release held input')
+                raise self._pipe_eof('BetterGI disconnected; input owner must release held input')
             chunks.extend(chunk)
         return bytes(chunks)
 
@@ -103,11 +122,11 @@ class Bridge:
         chunks = bytearray()
         while len(chunks) < length:
             owned = self._experimental_connection() if owned_handle is None else owned_handle
-            chunk = owned.read(length-len(chunks))
+            chunk = self._pipe_io('read', owned.read, length-len(chunks))
             if owned_handle is None:
                 self._experimental_connection()
             if not chunk:
-                raise EOFError('BetterGI disconnected; input owner must release held input')
+                raise self._pipe_eof('BetterGI disconnected; input owner must release held input')
             chunks.extend(chunk)
         return bytes(chunks)
 
@@ -188,7 +207,7 @@ class Bridge:
                 encoded = p.canonical(request,65536)
                 packet = memoryview(struct.pack('<I',len(encoded))+encoded)
                 while packet:
-                    written = owned.write(packet)
+                    written = self._pipe_io('write', owned.write, packet)
                     p.require(type(written) is int and 0 < written <= len(packet), 'experimental_enable_write')
                     packet = packet[written:]
                 original_connection()
@@ -230,6 +249,7 @@ class Bridge:
                 self._step_application_intake = candidate
                 return candidate
             except BaseException as error:
+                self._terminal_transport_error(error)
                 self._experimental_enable_failed = True
                 self._experimental_enable_error = error
                 # A repeat retires the negotiated owner, never a substituted public intake.
@@ -264,9 +284,9 @@ class Bridge:
                     raise ValueError('Request exceeds the server JSON limit')
                 packet = memoryview(struct.pack('<I', len(encoded)) + encoded)
                 while packet:
-                    written = self.handle.write(packet)
+                    written = self._pipe_io('write', self.handle.write, packet)
                     if not written:
-                        raise EOFError('BetterGI disconnected while sending a request')
+                        raise self._pipe_eof('BetterGI disconnected while sending a request')
                     packet = packet[written:]
                 return self._read()
             # Explicit experimental negotiation installs only a transport intake.
@@ -289,10 +309,10 @@ class Bridge:
                 while packet:
                     owned = self._experimental_connection()
                     write_attempted = True
-                    written = (self.handle if owned is None else owned).write(packet)
+                    written = self._pipe_io('write', (self.handle if owned is None else owned).write, packet)
                     self._experimental_connection()
                     if not written:
-                        raise EOFError('BetterGI disconnected while sending a request')
+                        raise self._pipe_eof('BetterGI disconnected while sending a request')
                     packet = packet[written:]
                 response, pixels = self._read()
                 observed_client_ns = time.perf_counter_ns()
@@ -300,6 +320,7 @@ class Bridge:
                 intake.receive(payload, response, observed_client_ns=observed_client_ns)
                 return response, pixels
             except BaseException as error:
+                self._terminal_transport_error(error)
                 if not getattr(self, '_experimental_enable_failed', False):
                     self._experimental_connection(prior_error=error)
                 if getattr(self, '_experimental_enable_failed', False):
@@ -750,6 +771,206 @@ def validate_p2p_temperature_options(args):
     return float(temperature)
 
 
+def validate_navigation_climb_options(args):
+    """Authorize only the explicit standard-channel P2P recovery combination."""
+    if not getattr(args, 'navigation_climb_recovery', False):
+        return
+    if (not args.resident or args.model != 'open-p2p' or not args.enable_input
+            or not args.p2p_fast_start or not args.p2p_execution_feedback):
+        raise ValueError('navigation-climb-recovery requires resident Open P2P, input, fast-start, and feedback')
+    if args.execution_context != 'off':
+        raise ValueError('navigation-climb-recovery currently requires execution-context off')
+
+
+class ClimbRecoveryStream:
+    """Serial integration of pure recovery intents with the existing standard bridge.
+
+    The caller holds its ingestion lock while tick runs. No model prediction or
+    feedback commit occurs here. The capture worker only appends receipt facts.
+    """
+    def __init__(self, args, bridge, policy, control, report, recorder, *, collect, reset, clear, released):
+        """Pin the owned connection and carry the resident's finite budget across clean leases."""
+        from navigation_climb_recovery import NavigationClimbRecovery
+        validate_navigation_climb_options(args)
+        if not getattr(args, 'navigation_climb_recovery', False):
+            raise RuntimeError('Climb recovery requires its explicit opt-in')
+        if control is None or not policy.execution_feedback or not callable(getattr(policy, 'reset', None)):
+            raise RuntimeError('Climb recovery requires a resident control and resettable feedback policy')
+        previous = getattr(control, 'navigation_climb_recovery', None)
+        if previous is not None and previous.blocks_model:
+            raise RuntimeError('Previous climb recovery lease remains unresolved; reconnect refused')
+        if getattr(bridge, '_step_application_intake', None) is not None:
+            raise RuntimeError('Climb recovery requires the standard terminal-receipt channel')
+        self.helper = NavigationClimbRecovery(bridge.hello, enabled=True, input_requested=args.enable_input,
+            x_authorized=True, initial_attempts=previous.attempts if previous else 0,
+            initial_cooldown_until_ns=previous.cooldown_until_ns if previous else 0)
+        control.navigation_climb_recovery = self.helper
+        self.bridge, self.handle, self.hello = bridge, bridge.handle, bridge.hello
+        self.hello_value = copy.deepcopy(bridge.hello)
+        self.control, self.report, self.recorder = control, report, recorder
+        self.collect, self.reset, self.clear, self.released = collect, reset, clear, released
+        self.token = None
+        self.first_error = None
+        self.cleanup_attempted = False
+        report['navigationClimbRecoveryEvents'] = []
+        report['navigationClimbActions'] = []
+        self.publish()
+
+    def context(self):
+        """Sample the actual resident authority, without extending the model key allowlist."""
+        return dict(sessionId=self.bridge.hello.get('sessionId'), ownerEpoch=self.bridge.hello.get('ownerEpoch'),
+            controlToken=self.control.prediction_token(), goalIntent=self.control.goal_identity().get('goalIntent'),
+            inputEnabled=self.bridge.hello.get('inputEnabled') is True, xAuthorized=True,
+            standardChannel=getattr(self.bridge, '_step_application_intake', None) is None)
+
+    def identity_matches(self):
+        """A replaced public handle or hello cannot inherit this recovery authority."""
+        return (self.bridge.handle is self.handle and self.bridge.hello is self.hello
+                and self.bridge.hello == self.hello_value
+                and getattr(self.bridge, '_step_application_intake', None) is None)
+
+    def record(self, event):
+        """Keep recovery evidence separate from decisions and sampled-history commits."""
+        row = dict(event, type=event.get('type', 'navigationClimbRecovery'),
+                   clientTimeNs=time.perf_counter_ns(), sessionId=self.hello_value['sessionId'],
+                   ownerEpoch=self.hello_value['ownerEpoch'], modelHistoryCommitted=False)
+        self.report['navigationClimbRecoveryEvents'].append(row)
+        if self.recorder:
+            self.recorder.event(row)
+
+    def publish(self):
+        """Replace a scalar snapshot so an earlier segment never shares mutable state."""
+        state = dict(enabled=True, phase=self.helper.phase, attempts=self.helper.attempts,
+                     maxAttempts=self.helper.max_attempts, cooldownUntilClientNs=self.helper.cooldown_until_ns,
+                     blocksModel=self.helper.blocks_model, failure=self.helper.failure,
+                     origin='navigation-climb-drop-v1', normalIsGroundedProof=False)
+        self.report['navigationClimbRecovery'] = state
+        self.control.publish(navigationClimbRecovery=state)
+
+    def terminate(self, reason, error=None, *, cleanup_allowed=True):
+        """Preserve first failure, attempt cleanup once, and return a non-reconnectable error."""
+        if self.first_error is None:
+            self.first_error = dict(reason=reason, errorType=type(error).__name__ if error else None,
+                                    error=str(error) if error else None)
+            self.report['navigationClimbFailure'] = self.first_error
+        event = self.helper.fail(reason)
+        try:
+            self.record(event)
+        except Exception as evidence_error:
+            self.report.setdefault('navigationClimbEvidenceError', str(evidence_error))
+        if not self.cleanup_attempted:
+            self.cleanup_attempted = True
+            try:
+                if not cleanup_allowed:
+                    raise RuntimeError('Reader did not retire; skip another pipe request and close the original handle')
+                if not self.identity_matches():
+                    raise RuntimeError('Original bridge changed; release not sent through substituted connection')
+                reply, payload = self.bridge.request('release')
+                self.collect(reply)
+                if payload or reply.get('type') != 'released':
+                    raise RuntimeError('Recovery cleanup release was not acknowledged')
+                self.report['navigationClimbFailureCleanup'] = dict(released=True, response=copy.deepcopy(reply))
+            except Exception as cleanup_error:
+                self.report['navigationClimbFailureCleanup'] = dict(released=False,
+                    errorType=type(cleanup_error).__name__, error=str(cleanup_error))
+        self.publish()
+        self.report.setdefault('error', 'Navigation climb recovery: ' + self.first_error['reason'])
+        return RuntimeError(self.report['error'])
+
+    def check_control(self):
+        """Run before goal mutation or generic pause handling can release a pending X."""
+        if not self.identity_matches():
+            raise self.terminate('connection_identity_changed')
+        if self.helper.blocks_model and self.token is not None and self.control.prediction_token() != self.token:
+            raise self.terminate('resident_control_changed')
+
+    def execute(self, event, frame, status, status_received_ns):
+        """Consume a bounded intent chain; only matching terminal completion releases X normally."""
+        while event is not None:
+            self.record(event)
+            kind = event['kind']
+            if kind == 'hold':
+                raise self.terminate(event['reason'])
+            self.check_control()
+            if kind == 'release':
+                reply, payload = self.bridge.request('release')
+                self.record(dict(kind='release_returned', origin=event['origin'], attempt=event['attempt'],
+                                 response=copy.deepcopy(reply), payloadBytes=len(payload)))
+                self.collect(reply)
+                if payload:
+                    raise RuntimeError('Unexpected release payload')
+                event = self.helper.released(reply, self.context(), now_ns=time.perf_counter_ns())
+                if event and event['kind'] == 'reset_history':
+                    self.released(reply)
+                continue
+            if kind == 'reset_history':
+                self.clear()
+                self.reset()
+                event = self.helper.history_reset_done(self.context(), now_ns=time.perf_counter_ns())
+                if event is None:
+                    self.record(dict(kind='history_reset_completed', origin='navigation-climb-drop-v1',
+                                     attempt=self.helper.attempts))
+                continue
+            if kind == 'drop_ready':
+                event = self.helper.claim_action(frame, status, self.context(), uuid.uuid4().hex,
+                    status_received_ns=status_received_ns, now_ns=time.perf_counter_ns())
+                continue
+            if kind == 'action':
+                arguments = event['arguments']
+                def submit_recovery():
+                    """Only evidence retention and owned bridge I/O; never re-enter control methods."""
+                    self.report['unacknowledgedRecoveryAction'] = copy.deepcopy(arguments)
+                    return self.bridge.request('action', **arguments)
+                # The monitor cannot change the token between this final check and the write.
+                # Interpret/refuse/clean up only after the plain control lock is released.
+                submitted, result = self.control.guarded_submit(self.token, submit_recovery)
+                if not submitted:
+                    self.record(dict(kind='submission_refused', origin=event['origin'], attempt=event['attempt'],
+                                     requestId=arguments['requestId'], transmissionAttempted=False,
+                                     reason='resident_control_changed_before_submit'))
+                    raise self.terminate('resident_control_changed_before_submit')
+                reply, payload = result
+                next_event = self.helper.admitted(reply, self.context(), now_ns=time.perf_counter_ns(),
+                                                 payload_bytes=len(payload))
+                row = dict(type='navigationClimbAction', origin=event['origin'], attempt=event['attempt'],
+                           frameId=arguments['frameId'], requestId=arguments['requestId'],
+                           arguments=copy.deepcopy(arguments), acceptance=copy.deepcopy(reply),
+                           controlToken=self.token, modelHistoryCommitted=False)
+                self.report['navigationClimbActions'].append(row)
+                self.record(row)
+                # Record admission before consuming any terminal returned in the same reply.
+                self.collect(reply)
+                if next_event is None or next_event.get('reason') == 'drop_rejected':
+                    self.report.pop('unacknowledgedRecoveryAction', None)
+                event = next_event
+                continue
+            if kind == 'resume':
+                self.token = None
+            event = None
+
+    def tick(self, frame, status, status_received_ns, receipts, dropped_receipts):
+        """Process facts on the policy thread, heartbeat deadlines, and report whether to skip predict."""
+        was_blocked = self.helper.blocks_model
+        try:
+            self.check_control()
+            if dropped_receipts:
+                raise self.terminate('receipt_loss')
+            for receipt in receipts:
+                self.execute(self.helper.receipt(receipt, self.context(), now_ns=time.perf_counter_ns(),
+                    dropped_receipts=dropped_receipts), frame, status, status_received_ns)
+            event = self.helper.observe(frame, status, self.context(), status_received_ns=status_received_ns,
+                                        now_ns=time.perf_counter_ns())
+            if self.helper.blocks_model and self.token is None:
+                self.token = self.control.prediction_token()
+            elif not self.helper.blocks_model:
+                self.token = None  # A disproved initial hint must not pin an obsolete goal token.
+            self.execute(event, frame, status, status_received_ns)
+            self.publish()
+            return was_blocked or self.helper.blocks_model or event is not None
+        except Exception as error:
+            raise self.terminate('recovery_failed', error) from error
+
+
 def parse_arguments(argv=None):
     """Validate the shared one-shot/resident options before loading any GPU weights."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -823,6 +1044,8 @@ def parse_arguments(argv=None):
                         help='Record minimap stall evidence against actual applied movement receipts')
     parser.add_argument('--navigation-idle-reset-seconds', type=float,
                         help='Opt-in one-shot history reset after accepted navigation no-ops; disabled by default, trial value 8')
+    parser.add_argument('--navigation-climb-recovery', action='store_true',
+                        help='Opt-in bounded native climb-drop X recovery; resident P2P input only')
     parser.add_argument('--readiness-snapshots', action='store_true',
                         help='Opt into bounded native screenshots on visual readiness changes in the RDP BetterGI app')
     parser.add_argument('--output', required=True)
@@ -893,6 +1116,10 @@ def parse_arguments(argv=None):
         if args.model != 'open-p2p' or not args.p2p_execution_feedback:
             parser.error('navigation-idle-reset-seconds requires Open P2P with input, fast-start, and execution feedback')
         args.require_world_ready = True
+    try:
+        validate_navigation_climb_options(args)
+    except ValueError as error:
+        parser.error(str(error))
     if args.fresh_frame_at_decision is None:
         args.fresh_frame_at_decision = args.resident
     if args.model != 'observe' and (not args.source or not args.checkpoint):
@@ -942,6 +1169,7 @@ def action_response_accepted(response, request_id, payload=b''):
 def run_episode(args, policy=None, control=None):
     """Run one owned bridge lease with an optional already-loaded model and live controls."""
     execution_mode = validate_execution_context_options(args)
+    validate_navigation_climb_options(args)
     if policy is not None:
         from PIL import Image
     bridge = Bridge(args.pipe)
@@ -1026,6 +1254,8 @@ def run_episode(args, policy=None, control=None):
     report['navigationIdleRecoveryEvents'] = []
     report['navigationIdleRecovery'] = idle_recovery.snapshot()
     report['motionEvidenceCapability'] = motion_capability
+    climb = None
+    terminal_climb_error = None
     try:
         if idle_recovery.threshold is not None and (bridge.hello.get('supportsRelease') is not True
                 or not getattr(policy, 'execution_feedback', False) or not callable(getattr(policy, 'reset', None))):
@@ -1041,6 +1271,10 @@ def run_episode(args, policy=None, control=None):
         configured_keys, effective_keys = resolve_input_keys(args.input_keys, server_keys)
         report['configuredInputKeys'] = configured_keys
         report['effectiveInputKeys'] = sorted(effective_keys)
+        if getattr(args, 'navigation_climb_recovery', False):
+            climb = ClimbRecoveryStream(args, bridge, policy, control, report, None,
+                collect=lambda value: collect_receipts(value), reset=lambda: reset_for_climb(),
+                clear=lambda: latest.clear(), released=lambda value: climb_released(value))
         archive = None
         if getattr(args, 'lease_output', None):
             from stream_segments import StreamSegments
@@ -1049,6 +1283,8 @@ def run_episode(args, policy=None, control=None):
         else:
             recorder = AsyncVideoRecorder(args.record_dir, args.ffmpeg, args.fps, args.record_max_mib*2**20,
                                           preview=args.preview) if args.record_dir else None
+        if climb:
+            climb.recorder = recorder
     except Exception:
         bridge.handle.close()
         raise
@@ -1082,6 +1318,7 @@ def run_episode(args, policy=None, control=None):
                         'observationAgeClock': report['observationAgeClock'],
                         'firstInputDeadlinePolicy': report['firstInputDeadlinePolicy'],
                         'navigationIdleRecovery': report['navigationIdleRecovery'],
+                        **({'navigationClimbRecovery': report['navigationClimbRecovery']} if climb else {}),
                         'motionEvidenceCapability': motion_capability,
                         'model': args.model, 'inputRequested': args.enable_input,
                         'configuredInputKeys': configured_keys, 'effectiveInputKeys': sorted(effective_keys),
@@ -1163,6 +1400,9 @@ def run_episode(args, policy=None, control=None):
                     recorder.put(metadata, pixels)
                 received_frame_id = metadata['frameId']
 
+    # Keep one actual reader failure; strings alone cannot authorize another lease.
+    receive_failure = []
+
     def receive():
         capture_cadence = DecisionCadence(args.fps, time.perf_counter())
         try:
@@ -1172,6 +1412,7 @@ def run_episode(args, policy=None, control=None):
                 poll_frame()
                 capture_cadence.advance(time.perf_counter())
         except Exception as exc:
+            receive_failure.append(exc)
             report['streamError'] = str(exc)
             stopped.set()
 
@@ -1249,6 +1490,21 @@ def run_episode(args, policy=None, control=None):
         if progress:
             progress.reset()
 
+    def climb_released(value):
+        """Own release epochs must not trigger a second generic release during X recovery."""
+        nonlocal server_snapshot, last_readiness_epoch
+        server_snapshot = (time.perf_counter(), value)
+        last_readiness_epoch = value['worldReadiness']['epoch']
+
+    def reset_for_climb():
+        """Reset settled history once per acknowledged recovery release, retaining loaded weights."""
+        nonlocal seen_unapplied_receipts, last_accepted_at, history_gap_reset, hold_reason
+        reset_for_recovery()
+        seen_unapplied_receipts = unapplied_receipt_sequence
+        last_accepted_at, history_gap_reset = None, False
+        hold_reason = 'navigationClimbRecovery'
+        idle_recovery.interrupt('navigationClimbRecovery')
+
     def latest_recovery_eligible(now_ns):
         """Observe current pixels independently of an older prediction's timing failure."""
         status_received_at, status = server_snapshot
@@ -1257,6 +1513,8 @@ def run_episode(args, policy=None, control=None):
                 and eligible_frame(item[0], status, status_received_at, now_ns,
                                    args.max_observation_age_ms, motion_capability))
 
+    episode_failure = None
+    stop_failure = None
     try:
         while time.perf_counter() < deadline and not stopped.is_set():
             if recorder and recorder.error and not recording_error_reported:
@@ -1273,6 +1531,10 @@ def run_episode(args, policy=None, control=None):
                     archive.rotate(report, time.perf_counter())
                 if control:
                     control.publish(segment=archive.number)
+            if climb:
+                # A pending recovery is terminally interrupted before goal/pause code can release it.
+                with receive_lock:
+                    climb.check_control()
             # Goal mutation stays on this thread, after the old action transaction has ended.
             # The monitor already invalidated its epoch, so no old-goal result can be reused.
             if control:
@@ -1314,7 +1576,7 @@ def run_episode(args, policy=None, control=None):
                 cadence.advance(time.perf_counter())
                 continue
             # Control and goal changes are settled before selecting the next world observation.
-            if observed_receipt_sequence != seen_unapplied_receipts:
+            if observed_receipt_sequence != seen_unapplied_receipts and not (climb and climb.helper.blocks_model):
                 policy.reset()
                 reset_checked_at = time.perf_counter_ns()
                 idle_recovery.history_reset(noop_history_reset, reset_checked_at / 1e9,
@@ -1326,6 +1588,16 @@ def run_episode(args, policy=None, control=None):
                 refresh_started = time.perf_counter_ns()
                 poll_frame()
                 refresh_ms = (time.perf_counter_ns()-refresh_started)/1e6
+            if climb:
+                with receive_lock:
+                    received_at, current_status = server_snapshot
+                    item = latest.newer_than(None)
+                    consumed = climb.tick(item[0] if item else None, current_status, round(received_at*1e9),
+                                          pending_receipts, report['serverDroppedReceipts'])
+                if consumed:
+                    # Includes release reconfirmation and pending X; do not call generic hold().
+                    cadence.advance(time.perf_counter())
+                    continue
             received_at, current_status = server_snapshot
             if capability.get('requiredForInput') and current_status:
                 gate = current_status.get('worldReadiness', {})
@@ -1380,7 +1652,11 @@ def run_episode(args, policy=None, control=None):
                 history_gap_reset = True
             image = Image.frombytes('RGB', (frame['width'], frame['height']), pixels)
             if progress:
-                metric = progress.observe(image, frame['capturedAtMs'])
+                # Progress is diagnostic only; restore HUD geometry without changing policy pixels.
+                metric = progress.observe(image, frame['capturedAtMs'],
+                    observation_profile=profile_contract['profile'],
+                    source_size=(frame.get('sourceWidth'), frame.get('sourceHeight'))
+                    if profile_contract['profile'] == P2P_NATIVE else None)
                 if metric:
                     event = dict(metric, type='navigationProgress', frameId=frame['frameId'],
                                  capturedAtMs=frame['capturedAtMs'])
@@ -1545,11 +1821,16 @@ def run_episode(args, policy=None, control=None):
                     control.publish(navigationIdleRecovery=report['navigationIdleRecovery'])
             cadence.advance(time.perf_counter())
     except Exception as exc:
+        episode_failure = exc
         report['error'] = str(exc)
+        if climb and climb.helper.blocks_model:
+            raise climb.terminate('episode_failed_during_recovery', exc) from exc
         raise
     finally:
         stopped.set()
         producer.join(timeout=3)
+        if climb and climb.helper.blocks_model:
+            terminal_climb_error = climb.terminate('lease_ended_during_recovery', cleanup_allowed=not producer.is_alive())
         if not producer.is_alive():
             try:
                 if args.readiness_snapshots:
@@ -1559,8 +1840,17 @@ def run_episode(args, policy=None, control=None):
                 report['stop'] = bridge.request('stop')[0]
                 collect_receipts(report['stop'])
             except Exception as exc:
+                stop_failure = exc
                 report['stopError'] = str(exc)
-        bridge.handle.close()
+        if climb:
+            try:
+                climb.handle.close()  # Never close a substituted public handle.
+            except Exception as close_error:
+                report['navigationClimbHandleCloseError'] = str(close_error)
+                report.setdefault('error', 'Recovery handle close failed')
+                terminal_climb_error = terminal_climb_error or RuntimeError(report['error'])
+        else:
+            bridge.handle.close()
         producer.join(timeout=1)
         if producer.is_alive():
             report['streamError'] = 'Frame reader did not stop after disconnection'
@@ -1593,6 +1883,26 @@ def run_episode(args, policy=None, control=None):
                     report['executionContextFinalError'] = str(exc)
             elif producer.is_alive():
                 report['executionContextFinalError'] = 'Frame reader is still running; final evidence is incomplete'
+        failure = episode_failure or (receive_failure[0] if receive_failure else None)
+        if failure is None and stop_failure is not None:
+            # An intended end must not reconnect merely because its stop/receipt cleanup failed.
+            failure = stop_failure
+            forbid_reconnect(failure, 'stopOnlyFailure')
+            report.setdefault('error', str(failure) or type(failure).__name__)
+        if failure is not None:
+            # A pipe loss never overrides concurrent non-transport or ownership failures.
+            if receive_failure and not is_transport_failure(receive_failure[0]):
+                forbid_reconnect(failure, 'frameProcessingFailure')
+            if stop_failure is not None and not is_transport_failure(stop_failure):
+                forbid_reconnect(failure, 'stopProcessingFailure')
+            if producer.is_alive():
+                forbid_reconnect(failure, 'readerNotRetired')
+            if report.get('unacknowledgedAction'):
+                forbid_reconnect(failure, 'actionOutcomeUnknown')
+            if recorder and recorder.error:
+                forbid_reconnect(failure, 'recordingFailure')
+            report['episodeFailure'] = dict(type=type(failure).__name__,
+                transportOperation=transport_origin(failure))
         if recorder:
             recorder.event({'type': 'captureQualitySummary', 'captureQuality': dict(report['captureQuality']),
                             'captureError': report.get('captureError')})
@@ -1604,12 +1914,21 @@ def run_episode(args, policy=None, control=None):
                 report['status'] = manifest['status']
             else:
                 report['recording'] = recorder.close()
+            # A late encoder/finalizer failure also vetoes a previously identified pipe loss.
+            if failure is not None and (recorder.error or report.get('recording', {}).get('error')):
+                forbid_reconnect(failure, 'recordingFailure')
         if not archive:
             report['status'] = 'failed' if (report.get('error') or report.get('streamError') or
                                             report.get('recording', {}).get('error')) else 'completed'
             target = Path(args.output)
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(json.dumps(report, indent=2), encoding='utf-8')
+    if terminal_climb_error is not None:
+        # An unresolved recovery remains terminal even when its underlying cause was pipe loss.
+        raise terminal_climb_error
+    if failure is not None:
+        # Teardown and evidence finish first; preserve the actual reader or stop-only exception.
+        raise failure
     return 1 if report['status'] == 'failed' else 0
 
 

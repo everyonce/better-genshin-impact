@@ -222,7 +222,8 @@ class ResidentTests(unittest.TestCase):
                 runtime.atomic_json(segment.output, {'framesReceived': 3, 'acceptedInputActions': 1,
                     'endReason': 'streamError' if counts['segments'] == 1 else 'maxInputActions'})
                 if counts['segments'] == 1:
-                    raise EOFError('simulated hot replacement')
+                    from bridge_transport import pipe_eof
+                    raise pipe_eof('simulated hot replacement')
                 return 0
             lifecycle = SimpleNamespace(discover=lambda: {'instances': [child()]},
                                         start_agent=lambda entry, timeout, enable_input, observation_profile: entry)

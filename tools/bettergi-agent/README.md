@@ -80,13 +80,24 @@ For pretrained Open P2P inference, replace `--model observe` with:
 --model open-p2p --source artifacts/agent/sources/open-p2p --checkpoint artifacts/agent/models/open-p2p-150M/150M/checkpoint-step=00500000.ckpt --history 200 --cuda-graph --p2p-fast-start
 ```
 
+The current local live candidate uses `--history 41 --p2p-prewarm
+--action-hold-ms 100 --fps 30 --decision-hz 20 --max-observation-age-ms 150`
+with the native Hamming RGB192 profile and blocking Windows Graphics Capture.
+The shorter history changes temporal context. In the latest 90-second H41 run,
+median/p95 model evaluation was 38.70/47.48 ms and reported source age at first
+software dispatch was 74.16/96.45 ms. All 1,707 accepted actions were applied.
+The H200 comparison also met the input deadline but remained climbing a wall
+for most of its run; neither result establishes reliable Genshin navigation.
+See the [current live evidence and limitations](../../Docs/research/BetterGI-Agent-Status.md).
+
 The optional `--p2p-prewarm` flag prepares the masked CUDA graph during policy
 loading, before the bridge connects. It uses a temporary zero-valued RGB192
 image with the normal prediction layout, then restores empty history. It emits
 no controller input. Preparation time is recorded separately in
 `policyMetadata.startupGraphPreparation`; the work moves into loading rather
 than disappearing. The flag requires Open P2P, `--cuda-graph` and
-`--p2p-fast-start`, and remains disabled by default pending live verification.
+`--p2p-fast-start`, and remains opt-in. Both history configurations have now
+completed live RDP trials with prewarming enabled.
 Saved-image checks matched actions, cached state and random-generator state at
 41 and 200 history frames, including a goal change and rejected-action rollback.
 

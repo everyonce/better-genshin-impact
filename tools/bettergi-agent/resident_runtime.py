@@ -13,6 +13,7 @@ import uuid
 
 from navigation_idle_recovery import GOAL_INTENTS
 from stream_segments import EvidencePublicationError
+from bridge_transport import is_transport_failure
 
 
 def atomic_json(path, value):
@@ -134,6 +135,20 @@ class ResidentControl:
         """Bind a prediction to the observed control generation and applied policy goal."""
         with self._lock:
             return self._epoch, self._goal_version, self._applied_goal_id, self._effective_command()
+
+    def guarded_submit(self, expected_token, submit):
+        """Check authority and perform only the supplied submission under the control lock.
+
+        The callback must not call control methods: this is the existing plain
+        Lock. It may retain request evidence and invoke its owned bridge only.
+        A changed or paused token returns a proven pre-write refusal. Exceptions
+        propagate after releasing the lock; reply interpretation stays outside.
+        """
+        with self._lock:
+            current = self._epoch, self._goal_version, self._applied_goal_id, self._effective_command()
+            if current != expected_token or current[3] != 'run':
+                return False, None
+            return True, submit()
 
     def begin_goal(self):
         """Claim a goal only on the serial policy thread, never in the monitor."""
@@ -396,14 +411,18 @@ def run_resident(args, load_policy, run_episode):
             segment = {'number': number, 'processId': child['processId'], 'instanceNonce': child['instanceNonce'],
                        'report': segment_args.output}
             lease = None
+            episode_error = None
             try:
                 segment['exitCode'] = run_episode(segment_args, policy, control)
             except EvidencePublicationError as error:
                 # Keep every accepted action/byte and unknown outcome from the
                 # unpublished manifest. Never fall back to just the first part.
                 lease = error.manifest
+                episode_error = error
                 segment.update(error=str(error), exitCode=1)
-            except (OSError, EOFError) as error:
+            except Exception as error:
+                # Account the failed lease before deciding whether this exact failure permits retry.
+                episode_error = error
                 segment['error'] = str(error)
                 segment['exitCode'] = 1
             if lease is None and Path(segment_args.lease_output).exists():
@@ -442,6 +461,14 @@ def run_resident(args, load_policy, run_episode):
                 summary['recordedBytes'] += sum(path.stat().st_size for path in Path(segment_args.record_dir).iterdir()
                                                 if path.is_file())
             atomic_json(output, summary)
+            if episode_error is not None and not is_transport_failure(episode_error):
+                raise episode_error
+            lease_failed = (segment['exitCode'] or (lease is not None and
+                (lease.get('status') == 'failed' or any(part.get('exitCode') for part in lease['segments']))))
+            if lease_failed and episode_error is None:
+                # A generic failed result is not evidence of a recoverable pipe disconnect.
+                summary['endReason'] = segment.get('endReason') or 'error'
+                break
             if args.max_input_actions is not None and summary['acceptedInputActions'] >= args.max_input_actions:
                 summary['endReason'] = 'maxInputActions'
                 break

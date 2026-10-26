@@ -10,6 +10,8 @@ import threading
 import numpy as np
 from PIL import Image
 
+from observation_profiles import LEGACY, P2P_NATIVE
+
 
 class NavigationProgress:
     """Compare map surroundings over three seconds of receipt-confirmed movement."""
@@ -59,21 +61,40 @@ class NavigationProgress:
                 self._movement.popleft()
             return sum(max(0, min(end, finish)-max(start, begin)) for begin, finish in self._movement)
 
-    def observe(self, image, captured_at_ms):
-        """Return at most five small metrics per second; no controller actions are emitted."""
+    def observe(self, image, captured_at_ms, *, observation_profile=LEGACY, source_size=None):
+        """Compare a known full-frame HUD transform; this never produces pose or input authority."""
         if self.last_sample_at is not None and captured_at_ms-self.last_sample_at < 200:
             return None
         self.last_sample_at = captured_at_ms
-        if abs(image.width/image.height-16/9) > .02:
+        # Legacy callers retain the aspect-preserving image contract. Only the verified native
+        # profile may recover the original HUD coordinate plane from a stretched square image.
+        if observation_profile not in (LEGACY, P2P_NATIVE):
+            return {'state': 'unavailable', 'reason': 'unsupportedObservationProfile'}
+        native = observation_profile == P2P_NATIVE
+        if source_size is not None or native:
+            if (not isinstance(source_size, (tuple, list)) or len(source_size) != 2
+                    or any(type(value) is not int or value <= 0 for value in source_size)
+                    or native and any(value > 8192 for value in source_size)):
+                return {'state': 'unavailable', 'reason': 'invalidSourceGeometry'}
+            # Integer form of abs(width/height - 16/9) > .02 avoids untrusted float conversion.
+            if abs(9*source_size[0]-16*source_size[1])*50 > 9*source_size[1]:
+                return {'state': 'unavailable', 'reason': 'unsupportedHudAspectRatio'}
+        if native and (image.mode != 'RGB' or image.size != (192, 192)):
+            return {'state': 'unavailable', 'reason': 'invalidNativePayloadGeometry'}
+        if not native and abs(image.width/image.height-16/9) > .02:
             return {'state': 'unavailable', 'reason': 'unsupportedHudAspectRatio'}
+        # The original ROI has only about 19x34 source samples in RGB192. Aspect restoration
+        # adds no detail: keep the old thresholds, and label this as a low-detail heuristic.
+        detail = ({'evidenceKind': 'low-detail-hud-difference', 'observationProfile': P2P_NATIVE,
+                   'sourceWidth': source_size[0], 'sourceHeight': source_size[1]} if native else {})
         normalized = image if image.size == (640, 360) else image.resize((640, 360), Image.Resampling.BILINEAR)
         patch = np.asarray(normalized.convert('L').crop((26, 6, 90, 70)), dtype=np.float32)
         values = patch[self.mask]
         if values.std() < 4:
-            return {'state': 'unavailable', 'reason': 'insufficientMinimapTexture'}
+            return {'state': 'unavailable', 'reason': 'insufficientMinimapTexture', **detail}
         if self.reference is None:
             self.reference, self.reference_at = values.copy(), captured_at_ms
-            return {'state': 'collecting', 'windowMs': 0, 'executedMovementMs': 0, 'minimapDifference': 0}
+            return {'state': 'collecting', 'windowMs': 0, 'executedMovementMs': 0, 'minimapDifference': 0, **detail}
         difference = float(np.abs(values-self.reference).mean())
         elapsed = captured_at_ms-self.reference_at
         movement = self.movement_between(self.reference_at, captured_at_ms)
@@ -81,7 +102,7 @@ class NavigationProgress:
                  'stalled' if elapsed >= self.window_ms and movement >= self.min_movement_ms else
                  'insufficientExecutedMovement' if elapsed >= self.window_ms else 'collecting')
         result = {'state': state, 'windowMs': elapsed, 'executedMovementMs': movement,
-                  'minimapDifference': difference, 'differenceThreshold': self.difference_threshold}
+                  'minimapDifference': difference, 'differenceThreshold': self.difference_threshold, **detail}
         if state in ('moving', 'stalled', 'insufficientExecutedMovement'):
             self.reference, self.reference_at = values.copy(), captured_at_ms
         return result

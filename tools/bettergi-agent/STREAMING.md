@@ -117,10 +117,12 @@ plan creation. Reports separate the server's declared preprocessing from the
 adapter's expected stream contract; standalone offline images have no capture
 provenance implied by that expectation.
 
-The existing minimap progress heuristic requires a 16:9 image, so native RGB192
-returns `unsupportedHudAspectRatio`. That heuristic is unavailable for this profile
-and must not be used as a cross-profile quality metric. Native readiness and motion
-checks remain unchanged.
+The minimap progress heuristic restores its existing HUD coordinate plane from
+the verified native RGB192 profile and original 16:9 source dimensions. Missing
+or invalid source geometry remains unavailable. This diagnostic resize does not
+change the model's pixels. Its small minimap region has only about 19x34 effective
+samples; `low-detail-hud-difference` labels distinguish it from localization or
+physical movement. It is not a calibrated cross-profile quality metric.
 
 CPU conformance tests compare exact bytes and coefficients with the actual pinned
 Rust oracle, including padded rows and RGB/BGR/RGBA/BGRA. This establishes parity
@@ -312,6 +314,48 @@ the triggering motion evidence, release/reset outcome, `postResetAcceptedNoops`,
 and `navigationIdleRearmed` with release-to-movement dispatch timing. Use these
 to distinguish a policy that resumes directional input from one that stays idle.
 
+Native climb-drop recovery is a separate opt-in: add `--navigation-climb-recovery`
+to a resident Open P2P input run using fast-start/feedback and `--execution-context off`.
+The flag independently authorizes only recovery X; it does **not** add X to the
+model's `--input-keys`. Only `ground-navigation` goals qualify. Same-frame native
+Space+X climb hints must occur on distinct fresh sources at least 60 ms apart.
+World readiness, authenticated lease and the current resident control token
+remain required. The client releases prior movement, resets settled history,
+waits for a fresh post-release source (60 ms settling), and submits one 100 ms X
+step with strict 150 ms first-start freshness and 250 ms source expiry.
+
+The serial policy thread keeps receiving frames/receipts but makes no model
+prediction or feedback commit during recovery. It waits for the matching complete
+software terminal before cleanup release/reset and two fresh normal-hint samples.
+Normal hints are **not groundedness, successful escape or physical input proof**.
+Pause, stop and goal changes interrupt immediately. Uncertain I/O, receipt loss,
+invalid/expired evidence or two exhausted attempts hold model input and terminate
+the resident run; they never cause blind reconnect/retry. A clean reconnect carries
+both the two-attempt budget and the five-second monotonic cooldown. Within one
+unresolved incident only, confirmed still-climbing evidence can request the
+second attempt at least 750 ms after successful terminal cleanup/history reset.
+A normal-hint exit cancels that retry clock; a separate incident still observes
+the five-second cooldown measured from the last attempt's initial release.
+There is no third attempt or retry of an unknown/uncompleted X.
+
+`navigationClimbRecoveryEvents` and `navigationClimbActions` retain recovery origin,
+request IDs, actual admissions and cleanup failures separately from model decisions
+and sampled history. Receipts retain their ordinary recorder path. Segments transfer
+these lists and carry unresolved X in `continuity.pendingRecoveryActions`, never
+`pendingProposals`. `acceptedInputActions` remains the model-proposal count. A lost
+X admission remains `unacknowledgedRecoveryAction`. The two-attempt prototype has
+no automatic rearm and no queued-v2 or execution-context observer integration.
+The final recovery submit rechecks the exact resident token while holding the
+existing control lock through the owned bridge call. A pause/goal change already
+committed to that lock refuses before transmission; changes arriving during the
+call are processed afterward. The callback never re-enters control methods.
+
+The existing `prepare_replay.py` does not support recovery-containing episodes:
+its model-only receipt counts/joins reject them (`missing_terminal_receipts` or
+`orphan_or_duplicate_receipt`). Keep the recovery evidence intact; do not relabel
+X as a model proposal or omit its receipt to make that preparer accept it. A
+future replay update must understand the separate recovery provenance first.
+
 Resident input automatically enables `--p2p-execution-feedback`: rejected
 predictions restore the previous K/V state exactly instead of inserting an action
 that was withheld. Receipt-confirmed unapplied acceptances and interruptions clear
@@ -400,7 +444,9 @@ heading marker, with actual movement intervals from execution receipts. It is
 enabled in resident mode and records `moving`, `stalled`, or insufficient-evidence
 metrics. The current heuristic assumes the default 16:9 HUD and does not issue
 recovery inputs or establish path/task success. Compare it with recordings before
-using it as an autonomous recovery trigger.
+using it as an autonomous recovery trigger. Native RGB192 requires its verified
+full-frame profile and original geometry; legacy images keep their existing
+aspect-ratio check, including older frame headers without original dimensions.
 
 ## Text goals without per-frame encoding
 

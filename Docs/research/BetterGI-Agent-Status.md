@@ -1,14 +1,16 @@
 # BetterGI agent status
 
-Updated October 26, 2026, 16:41 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 26, 2026, 18:49 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
 
 Daniel explicitly resumed live testing through BetterGI RDP at 14:18 UTC on
-October 26. R55 now runs in session 3 while preserving Genshin and the minimized
+October 26. R56 now runs in session 3 while preserving Genshin and the minimized
 RDP session. The console root remains R1. Live tests include four 30-second P2P
 trials, four 90-second walk/stand/walk goal-switch trials, a GameScaling shadow trial,
-five WGC capture shadow trials,
+five WGC capture shadow trials, a 45-second H41 monitoring trial, a
+30-second H200 climb-recovery trial, an H41 trial stopped by its recovery budget,
+a successful 45-second H41 trial with shorter retry and a 20-second positive-goal trial,
 and a successful native seed route followed by four connected courtyard legs.
 The model/control pipeline works, but the learned policies do not yet reliably
 follow Genshin instructions. R54 removed first-dispatch expirations in the latest
@@ -21,11 +23,13 @@ transition remains historical evidence, not a current restriction.
 | Area | Latest verified state |
 |---|---|
 | Upstream integration | The default branch `refactor/20260930` is integrated through `ae4f785c`. The latest merge adds explicit inactive-affix recognition and corrects capitalization matching; the required Debug build and 10 scripted OCR cases passed. Earlier integration cohorts recorded 539 distinct UnitTest cases and 527 Agent cases across their source trees. Live feature validation remains deferred. |
-| Prepared local builds | R55 is a self-contained `win-x64` Release package from clean commit `92b19b5b`. The required Debug build, Release publish and launcher validation passed. Its focused readback/freshness/controller cohort passed 147 cases, including 17 new retry cases. It adds bounded polling retries to R54's immediate dispatch and capture phase diagnostics. R54's earlier controller/capture cohort passed 731 distinct cases. Older packages remain intact. |
+| Prepared local builds | R56 is a self-contained `win-x64` Release package from `1d501ac5`, with dirty-tree provenance recording the concurrent documentation/Python work. Its compiled native source matches R55. Required Debug build, Release publish and launcher validation passed. R55's focused readback/freshness/controller cohort passed 147 cases, including 17 new retry cases. R54's earlier controller/capture cohort passed 731 distinct cases. Older packages remain intact. |
 | Root upgrade staging | Commit `5f9ad00e` adds opt-in, byte-preserving Pulonia staging for a quiescent source and inactive, exclusive target. Twenty new tests and three existing regressions passed; independent source review found no actionable issue. Live use remains deferred. |
-| Coordinated root/child upgrade | The new explicit transaction uses the existing approved launcher and a one-shot startup binding, preserves the game/session, and ends with scheduling held. Required Debug validation, 129 distinct C# cases and 91 Python cases passed. Source and saved validation evidence passed independent readback. Actual task registration, cold launch, cross-session handoff and explicit resume remain untested. |
-| Deployed application | R55 child PID 8376 in RDP session 3, instance `d4e8166a56b7444295d6e3bb71d006e0`, assembly SHA256 `c96e3694d43ecd781af4b121a336fa2bf045d796e3241d0639ac6ce601354da3`. Root PID 28072 and Genshin PID 27728 were preserved. R54's 90-second DesktopDc and WGC blocking runs completed with no held keys. The latter applied all 1,707 accepted actions; its worker was independently confirmed retired at 16:05 UTC. R55 polling now passed a complete observation-only trial; fresh blocking/history comparisons are underway. |
+| Coordinated root/child upgrade | The explicit transaction uses the approved launcher and a one-shot startup binding, preserves the game/session, and ends with scheduling held. Earlier validation passed the Debug build, 129 C# cases and 91 Python cases. The approved task/helper now pass actual launcher preflight after a process-local PowerShell utility-module fix. A verified-package exception handles R1's omitted stream-status field; 17 new admission cases and 14 existing fake transaction cases pass on primary, and the actual R1 read-only admission passes. Cold launch, handoff and explicit resume remain untested. Host access to child/game query/synchronize handles remains blocked; no root retirement was attempted. |
+| Deployed application | R56 child PID 58188 in RDP session 3, instance `dcc56e3913414257a64479af4a08926e`, assembly SHA256 `0bd78a568fe314a8d97312f0d5c7a2375e93e4325e288ac50d4953946b26ec62`. Root PID 28072 and Genshin PID 27728 were preserved. The selected capture path is blocking WGC with source retention and CPU conversion. R54's H41 WGC run applied all 1,707 accepted actions; R55's H200 run applied all 1,584 but remained climbing for most of the trial. H200 is not promoted. |
+| Resident child replacement | An observation-only R55→R56 probe retained worker PID 35228, its native birth, resident run ID and one model load. Saved frame/readiness joins independently reconstructed 17 fresh predictions before and 14 after replacement. The replacement command took 17.872 seconds. The original lease's disconnect, failed aggregate and exit code 1 remain preserved; recording bytes were complete with zero drops. This verifies weight/process continuity with history resets, not seamless input or root cold launch. The worker retired; a separate process check found only the original game in session 3. Evidence: `continuity-run-002` and `continuity-run-002-audit-01`. The first attempt's artifact-sharing failure remains in `continuity-run-001`; a bounded logger correction passed nine distinct inert cases before the fresh run. |
 | Native navigation | A fresh R52 seed and four immediately linked courtyard legs completed with 254 position observations and no recorded recovery, recognition, release or execution faults. All 15 journal/screenshot hashes and 140 listed evidence checks passed. This is exploratory native route acceptance, not general autonomous gameplay or a rebinding of the frozen R47 proof. |
+| Native WGC image reference | R56 completed a v4 short route with passive same-source RGB capture: 5.139 seconds, 56 poses and 128 intact RGB images. The archive is complete and retired with zero loss. The 945-check file/contract audit passed, including journal/manifest/image hashes and source joins. Recognized displacement was 8.889 coordinate units; endpoint distance fell from 9.823 to 0.972. Scripted controller intent remains explicitly ineligible as expert training data. |
 | Reusable command | Bounded continuation and the reviewed schema3 envelope checker are in primary. Explicit v5 client support passed 279 Python tests. The separate H03 reader package remains bound to R47. Current live runs use fresh instance and predecessor identities; the direct CLI successfully validated the R52 cycle. |
 | Endpoint repair | Deployed in R46 with input telemetry and Right Shift support. Both R47 routes and the return's endpoint/continuation evidence pass their full audits. Physical input acknowledgment and training eligibility remain false. |
 | Native timing v5 | The fresh R52 cycle used `task_owned_timer` and the supported single-leg seed/advertised courtyard continuations. The four continuation legs took 24.83 seconds wall time, including approximately 0.28–0.31 second handoffs. Recorded source ages had median 62.17 ms, p95 74.83 ms and maximum 84.96 ms. |
@@ -52,6 +56,128 @@ transition remains historical evidence, not a current restriction.
 | GameScaling device-greedy decoding | A loaded-model run completed four setup calls and four balanced pairs. Saved records pass exact token/action checks and 236 exact recorded common-state comparisons; both graphs fit with 2,580 MiB peak PyTorch reservation. The candidate saved only 8.66–53.04 ms (0.19–1.42%) under heavy GPU load. Independent process verification was blocked, so full qualification and promotion remain withheld. |
 | Model optimization | Skipping unused final decoder work passed 1,733 correctness checks across two history41 evictions. A separate 40-pair experiment reduced median prediction time from 165.30 ms to 155.07 ms; paired actions/random states and final cache checks passed. |
 | Training | Not started. The pinned public P2P metadata has no Genshin labels; local demonstrations remain needed. The current recorder captures automated receipts, not human input. Model proposals and incomplete recordings are not expert action labels. |
+
+## Live climb-recovery prototype
+
+The composed transport-origin, opt-in climb-recovery and shorter retry changes
+passed 199 inert tests together. The required Debug build passed with the
+installed .NET 10 SDK; the later timing correction changes only Python.
+Recovery requests use a separate origin and X authorization. They do
+not become model proposals or model history. Unknown action outcomes and
+unfinished recovery are terminal; ordinary pipe reconnect cannot re-arm them.
+
+R56's 45-second H41 run (`p2p-r56-climb-03`) completed with 1,250 captured
+frames, 849 predictions and 824 accepted/applied model actions. Saved motion
+hints were 1,246 normal and four unknown, with no climb, so this checks normal
+monitoring rather than recovery efficacy. Model medians across the three
+segments were 38.80–39.81 ms; first-dispatch source-age medians were
+74.27–76.54 ms. Four stale predictions were refused. Recording completed
+without drops and final tracked held keys were empty.
+
+After a fresh waypoint/heading reset, the 30-second H200 diagnostic
+(`p2p-r56-climb-04`) completed with 408 accepted model actions and two separately
+recorded X attempts. This was **one recovery episode**, not two successful
+recoveries: the first X receipt completed but subsequent hints remained climb.
+The second attempt began after the five-second cooldown; fresh normal hints
+then allowed model control to resume. X software intervals were
+22,133.0428–22,246.0151 ms and 27,200.4370–27,314.7402 ms. The first resumed model
+action began at 27,644.8927 ms. The saved audit passed 35 joins, including
+terminal receipts, cleanup/history resets, exit frames and the resumed model
+request; all 28 pinned inputs remained unchanged. Complete recording and empty
+tracked held keys were retained. These are software receipts and absence of
+climb hints, not physical-input acknowledgment or proof of groundedness.
+
+An intended 90-second H41 run (`p2p-r56-climb-05`) subsequently stopped after
+about 24.4 seconds with `attempt_budget_exhausted`. It retained 680 frames and
+341 accepted model actions. The first episode again required two X attempts;
+only the second was followed by model resumption. A later climb exhausted the
+two-attempt lifetime budget. The aggregate remains failed with
+`evidenceComplete=false`; final tracked held keys were empty. The worker exited,
+and a separate native-handle check inside RDP confirmed the original child and
+game births. The original root was also confirmed. This separate check was
+needed because the initial worker wrapper skipped its final lifetime check on
+an exception; the wrapper now performs that check in cleanup on either outcome.
+
+A fresh 45-second H41 trial (`p2p-r56-climb-06`) qualified the shorter retry in
+one observed climb episode. It completed with 1,256 frames, 812 predictions and
+788 accepted/applied model actions; all accepted requests had exactly one matching
+receipt. The second initial release followed the first cleanup/history reset by
+794.19 ms. The two X starts were 1,050.12 ms apart, and model control resumed only
+after the second attempt and two fresh normal hints. Both X receipts completed;
+this again establishes one recovered episode, not two successful recoveries.
+Model evaluation was 42.71 ms median / 55.20 ms p95. First-dispatch source age
+was 79.39 / 104.51 ms, with a 127.79 ms maximum. All recording segments completed
+without drops; final tracked keys were empty and the original root, child and
+game lifetimes were preserved. The independent audit is
+`p2p-r56-climb-06-independent-audit-01/audit-02.json`.
+
+The policy waits at least 750 ms after successful terminal cleanup/history reset
+within one unresolved incident. Separate incidents retain a five-second
+release-based cooldown and the resident's two-attempt lifetime limit. H41 remains
+preferred. This shorter retry does not solve repeated-wall behavior. Source
+inspection found the X key in the native release path, including its key-up and
+fallback check; the software telemetry does not establish physical key release
+or explain why the first attempt left the climb hint active.
+
+A subsequent 20-second H41 run (`p2p-r56-left-01`) used the independently encoded
+positive instruction “Turn left and walk along the street.” All 555 captured
+frames had normal motion hints; 373 of 374 predictions were accepted/applied,
+with no detected climb or recovery. Model evaluation was 38.47 ms median /
+48.29 ms p95; first-dispatch source age was 72.65 / 94.74 ms. Recording and cleanup
+completed and original process lifetimes were preserved. This demonstrates short
+movement, not reliable left-turn instruction following: decoded horizontal mouse
+movement summed positive, and the trajectories are not a controlled paired
+comparison. Quality requires independent visual/position evidence.
+
+The progress monitor previously rejected every native square image despite
+receiving its original widescreen dimensions. It now restores only its diagnostic
+HUD coordinate plane from the verified native profile; model pixels are unchanged.
+The 199 composed tests and 15 synthetic progress tests pass on the final primary
+source. Legacy headers without original dimensions remain supported.
+
+The subsequent 30-second live run (`p2p-r56-progress-01`) completed with 827 frames,
+553 predictions and 538 accepted/applied model actions, all with unique matching
+receipts. Every motion hint was normal. It retained 127 progress events—five
+collecting and 122 moving—with no geometry rejection, all explicitly labeled
+`low-detail-hud-difference`. This confirms metric availability, not physical
+displacement or reliable wall detection. Model median/p95 was 41.88/52.52 ms;
+first-dispatch source age was 77.59/100.77 ms, maximum 134.31 ms. Recording,
+empty-key cleanup and original process lifetimes were preserved. Shared load
+and trajectories were not controlled, so this does not isolate metric overhead.
+
+## Native image reference and GameScaling decoding probe
+
+R56's v4 native short route completed under blocking WGC with passive Hamming
+RGB192 recording (`r56-native-shadow-v4-02`). The published 5.139 seconds includes
+about 308 ms after the journal's 4.831-second workflow. Its 128 unique frames
+were selected from 316 capture polls; the other 188 offers were duplicates,
+not lost images. The archive writer retired with zero losses or rejected frames.
+The independent audit verified 945 file/scalar joins, all RGB/PNG/journal/manifest
+hashes, pose/source joins and v4 expiry arithmetic. It retained 56 pose samples,
+52 controller intents and 23 input transitions. Observation source age was
+33.48 ms median / 52.30 ms p95; active-input intent source age was 34.55/43.43 ms.
+These are software/recognition measurements and scripted intent, not physical
+input acknowledgment or expert training labels. Audit:
+`r56-native-shadow-v4-02-independent-audit-01/audit-01.json`.
+
+The first attempt remains separately failed at `measuring_start` with
+`route_corridor_exceeded`, zero pose/input rows and one passive image. A baseline
+does not teleport implicitly; the successful attempt used an explicit reset first.
+
+The successful route's initial and final PNGs then supplied four offline
+GameScaling calls: greedy and unfiltered temperature-1 sampling on the same two
+images, FP16/eager, history zero and no thinking. Both greedy outputs and sampled
+initial output were neutral. Sampled final output pressed F for its first 33 ms
+step, then became neutral. The image visibly contains an F/Mikhail prompt, which
+contextualizes the output without proving causality. All four complete 30-token
+outputs parsed, but **none obeyed the W-only instruction**: zero W keys in 24 steps.
+The local path can emit controls; changing decoding alone did not fix this task.
+
+Both separately supervised workers retired successfully, source hashes were
+unchanged, and peak reserved GPU memory was 2,420/2,442 MiB within the 3,072 MiB
+limit. No game input was sent. These four cold eager calls are a behavior probe,
+not a latency comparison with the graph-enabled live run or official BF16/vLLM
+deployment. Audit: `gamescaling-native-route-probe-audit-01/audit.json`.
 
 ## Resumed live testing in BetterGI RDP
 

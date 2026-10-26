@@ -1,6 +1,6 @@
 # BetterGI agent status
 
-Updated October 26, 2026, 08:44 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 26, 2026, 09:29 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
 
@@ -34,6 +34,8 @@ deferred; elapsed time alone does not resume them. Evidence is
 | Action acknowledgment | A matching request ID is required before settling policy history. Unknown outcomes preserve the pending action and stop the runner. The focused candidate and caller cohorts passed 55 distinct mocked tests. |
 | Execution-aware decisions | Opt-in client snapshots and GameScaling prompt conditioning are implemented; 121 distinct inert tests passed. One live attack command returned a completed software receipt. The closed context and graph comparisons produced neutral input in both contexts and did not establish receipt-dependent behavior. |
 | Ongoing input telemetry | The Python client passed independent review and 103 tests; the C# producer's 26 cases passed within R46's 1,860-test validation. The producer is deployed, but a controlled live ongoing-call test remains pending. |
+| Continuous recording replay | A separate offline preparer verifies one complete lease across resident segments and preserves original video-file/local-index addresses. One six-segment archive passed, including four windows crossing video boundaries. Forty-eight Python checks passed; these remain automated trajectories with training eligibility false. |
+| Terminal receipt timing | A saved shutdown receipt exposed a timestamp sampled before the input lock. Terminal releases now refresh a valid session clock under that lock; replacement retains its exact successor-acceptance boundary. The Debug build and 160 selected C# cases passed, including six new cases. This source change is not deployed. |
 | P2P execution-history commit | Offline CUDA comparison passed 860 byte-exact cache comparisons across 44 reference calls, 48 proposals and 43 scripted commits. A bounded RDP trial then verified live image intake, rejected-proposal rollback and cleanup; its first proposal missed the latency limit, so no action was submitted. Live receipt-authorized history commit remains unverified. |
 | Native history rollback | Offline CUDA validation and its closed-result audit passed: 44 reference calls, 48 candidate attempts, 44 acceptances, four rejections and 960 consistency checks. Live controller integration remains unverified. |
 | Growing-history graphs | Two native startup prefixes passed capture, replay and 192 independently recomputed consistency checks. Full coverage of all 41 prefixes and startup latency remain unqualified. |
@@ -48,6 +50,56 @@ deferred; elapsed time alone does not resume them. Evidence is
 | GameScaling device-greedy decoding | A loaded-model run completed four setup calls and four balanced pairs. Saved records pass exact token/action checks and 236 exact recorded common-state comparisons; both graphs fit with 2,580 MiB peak PyTorch reservation. The candidate saved only 8.66–53.04 ms (0.19–1.42%) under heavy GPU load. Independent process verification was blocked, so full qualification and promotion remain withheld. |
 | Model optimization | Skipping unused final decoder work passed 1,733 correctness checks across two history41 evictions. A separate 40-pair experiment reduced median prediction time from 165.30 ms to 155.07 ms; paired actions/random states and final cache checks passed. |
 | Training | Not started. The pinned public P2P metadata has no Genshin labels; local demonstrations remain needed. The current recorder captures automated receipts, not human input. Model proposals and incomplete recordings are not expert action labels. |
+
+## Continuous evidence and demonstration readiness
+
+A file-only inventory found 47 archived recording segments declaring 82,656
+encoded frames. It did not decode videos or establish visual task success. The
+older replay preparer rejected the newer resident format because carry-over
+headers are not new observations and segment boundaries are not episode
+boundaries. The new `prepare_replay_session.py` verifies a complete, single-lease
+chain before applying the existing frame, receipt, reset and goal checks.
+Original source files remain unchanged; every output frame points to its actual
+video file and local encoded index.
+
+The six r16 segments contain 3,328 observations and 1,807 terminal receipts.
+Four explicitly selected windows cross recording boundaries and retain 40
+history frames each. A fifth probe was excluded for a policy-history reset.
+The initial r16 rejection was a validator defect: the saved
+`navigationIdleRearmed` event was present, but the older check counted only
+`navigationIdleRecovery`. Both event types must now match their report entries,
+and both remain interruption boundaries.
+
+The six r17 segments still fail the strict audit. One `client_stop` receipt ends
+0.2208 ms before its last applied step. Its original timestamp has not been
+rewritten. The current controller had the same race: callers could sample time
+before waiting for the input lock. Normal and queued terminal releases now
+refresh a valid session clock while holding that lock, before release. Failed
+optional clocks cannot prevent cleanup. Replacement does not resample its
+shared old-end/new-acceptance timestamp. This improves software timing evidence;
+it does not establish physical key delivery or game acknowledgement.
+
+The required Debug solution build passed using the existing repository package
+cache. All 160 selected C# cases and 48 portable Python cases passed with no
+skips. The Python checks imported no model runtime. Their file-link test required
+ordinary filesystem access outside the sandbox and used disposable workspace
+fixtures. No live status, capture, input, application replacement or GPU inference
+was performed for this work. R49/R50 remain unchanged and do not contain the new
+terminal-clock change.
+
+Evidence under `artifacts/research/2026-10-24`:
+
+- `replay-session-validation-02/completion.json`: SHA256 `07b8945b0bb0d23b21f1346bd89f0b1127a0afc1dff98ddc0c692fff1b0dd6c9`.
+- `replay-continuous-r16-boundaries-01.json`: SHA256 `60aed0dc597feb01b336e731c3ccd930f3cd33322cd5318c01e0815e9d5a1179`.
+- `replay-continuous-r17-02.json`: SHA256 `5ddee510fef50067850a3f8efcb4544c81229db5e3b9198a7ba5f5113a2d60f8`.
+
+Human demonstrations still require a separate synchronized input ledger. The
+existing macro recorder retains relative wall-clock times, merges nearby mouse
+movements and omits the shared stream-clock anchor and input provenance needed
+for training. Its keyboard hooks and relative-mouse monitor lifecycle are useful
+building blocks. Future collection should run inside the RDP child and preserve
+unmerged events, held-state transitions, source identity and loss markers on the
+frame clock. No human-input recording or training has started.
 
 ## GameScaling literal-key control
 

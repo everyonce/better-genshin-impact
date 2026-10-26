@@ -163,9 +163,10 @@ def _complete(report, recording, observations, frames, events):
             'profile_mismatch')
     require(hello.get('clockFrequency') == 1000 and starts[0].get('clockFrequency') == 1000, 'unsupported_session_clock')
     require(ends[0].get('acceptedInputActions') == report.get('acceptedInputActions'), 'episode_action_count_mismatch')
-    for report_key, event_type in (('controlTransitions', 'controlTransition'), ('goalChanges', 'policyGoalChange'),
-                                   ('navigationIdleRecoveryEvents', 'navigationIdleRecovery')):
-        require(report.get(report_key, []) == [e for e in events if e.get('type') == event_type],
+    for report_key, event_types in (('controlTransitions', ('controlTransition',)),
+                                    ('goalChanges', ('policyGoalChange',)),
+                                    ('navigationIdleRecoveryEvents', ('navigationIdleRecovery', 'navigationIdleRearmed'))):
+        require(report.get(report_key, []) == [e for e in events if e.get('type') in event_types],
                 'missing_or_contradictory_boundary_events:' + report_key)
 
 

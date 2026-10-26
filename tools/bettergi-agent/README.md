@@ -24,6 +24,36 @@ The [streaming guide](STREAMING.md) documents input opt-in, text goals, pause/re
 
 An observation session sends a bounded queue of RGB frames to FFmpeg independently of capture and inference. The resulting H.264 video is lossy, with synthetic fixed-rate playback timestamps. `frames.jsonl` maps actual encoded indices to source metadata; `observations.jsonl` separately retains received headers even when the video queue drops an image. Use native source clocks and execution receipts for analysis, and reject affected training windows after metadata, receipt or video loss. Model-generated trajectories are not expert demonstrations, and these recordings do not establish physical-input or game-render timing.
 
+`prepare_replay_session.py` prepares offline P2P comparisons from one **complete,
+closed bridge lease** split across resident recording segments. It verifies the
+session/owner, contiguous report chain, original carry-over frames, pending
+proposals, terminal receipts, local video indices and loss counters before using
+the existing replay-window checks. No model, GPU, encoder or game connection is
+started. For example, from the repository root:
+
+```powershell
+python tools/bettergi-agent/prepare_replay_session.py `
+  --reports-dir artifacts/agent/benchmarks/navigation-r16-continuity-01-segments `
+  --recordings-dir artifacts/agent/recordings/navigation-r16-continuity-01 `
+  --history-frames 40 --max-windows 6 `
+  --output artifacts/agent/replays/continuous-session.json
+```
+
+Use `--first-segment` and `--last-segment` together when a directory contains
+multiple leases; the selected range must contain one whole lease. Optional
+`--probe-frame-id` values select specific recorded decisions. The command limits
+one preparation to 128 segments and 128 MiB of JSON metadata. It hashes every
+input, including video, and rejects changes observed during preparation.
+
+The distinct output kind is `p2p-offline-continuous-history-candidates`. Every
+image reference includes its original `videoFile`, `recordingSegment`, local
+`videoFrameIndex` and local `videoPtsSeconds`; consumers must understand those
+multiple-video addresses. Videos are neither concatenated nor decoded, and
+carry-over headers do not create extra images. `trainingEligible` and
+`expertDemonstrations` remain false. The existing macro recorder also lacks the
+shared frame-clock anchor and unmerged input ledger needed for human training
+demonstrations.
+
 For pretrained Open P2P inference, replace `--model observe` with:
 
 ```text

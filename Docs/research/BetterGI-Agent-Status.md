@@ -1,6 +1,6 @@
 # BetterGI agent status
 
-Updated October 26, 2026, 00:22 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 26, 2026, 00:28 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
 
@@ -82,6 +82,17 @@ Package verification and the full file inventory are recorded in
 `artifacts/research/2026-10-24/upstream-r48-package-verification-01/verification.json`
 (SHA256 `d1346623b9d0c24d8bf5cb3167e7e0841e5595a2419bcafc7ea0b32484b0bd28`).
 RDP replacement and fresh runtime checks await explicit machine readiness.
+
+The source comparison with the R47 checkpoint preserves IPC version 2, five
+instance contract files and eight child-replacement helper functions. It does
+not establish compatibility with the running binaries: the archived R1 host and
+R47 child manifests both record dirty source checkouts, and no live check was
+performed. R48's new `pulonia.node.*` commands require a compatible root
+coordinator as well as the child. The existing configuration stager does not
+copy `User/Pulonia`; a full root upgrade must explicitly preserve that store
+before claiming migration or history continuity. Source assessment:
+`artifacts/research/2026-10-24/upstream-r48-host-compatibility-01/assessment.json`
+(SHA256 `9de82008d96770a346b701e66d1b9e0dc58c8901e129ff60706c92b82c35b744`).
 
 ## Latency evidence
 

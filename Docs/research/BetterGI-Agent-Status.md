@@ -1,6 +1,6 @@
 # BetterGI agent status
 
-Updated October 26, 2026, 11:23 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 26, 2026, 12:23 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
 
@@ -18,8 +18,8 @@ deferred; elapsed time alone does not resume them. Evidence is
 
 | Area | Latest verified state |
 |---|---|
-| Upstream integration | The default branch `refactor/20260930` is integrated through `86d2a413`, adding 30 commits beyond the previously merged refactor checkpoint. The final Debug build passed; selected CPU/offscreen cohorts passed 539 distinct UnitTest cases and 527 Agent cases across their recorded source trees. Application replacement and live feature validation remain deferred. |
-| Prepared local builds | R51 is a verified, inactive self-contained `win-x64` Release package from clean commit `f938b51e`, including the terminal timestamp fix. Its 2,703 files were inventoried, all 154 shipped User files match source, and the production launcher's file-only validation passed. R49 (bootstrap) and R50 remain intact. No package was launched or deployed during this work. |
+| Upstream integration | The default branch `refactor/20260930` is integrated through `ae4f785c`. The latest merge adds explicit inactive-affix recognition and corrects capitalization matching; the required Debug build and 10 scripted OCR cases passed. Earlier integration cohorts recorded 539 distinct UnitTest cases and 527 Agent cases across their source trees. Live feature validation remains deferred. |
+| Prepared local builds | R52 is a verified, inactive self-contained `win-x64` Release package from clean commit `bd552493`, including the terminal timestamp and latest artifact-recognition fixes. Its 2,703 files were inventoried, all 154 shipped User files match source, and the production launcher's file-only validation passed. R49 (bootstrap), R50 and R51 remain intact. No package was launched or deployed during this work. |
 | Root upgrade staging | Commit `5f9ad00e` adds opt-in, byte-preserving Pulonia staging for a quiescent source and inactive, exclusive target. Twenty new tests and three existing regressions passed; independent source review found no actionable issue. Live use remains deferred. |
 | Coordinated root/child upgrade | The new explicit transaction uses the existing approved launcher and a one-shot startup binding, preserves the game/session, and ends with scheduling held. Required Debug validation, 129 distinct C# cases and 91 Python cases passed. Source and saved validation evidence passed independent readback. Actual task registration, cold launch, cross-session handoff and explicit resume remain untested. |
 | Deployed application | Last verified October 25 at 17:45 UTC: R47 inside the existing minimized RDP session. Its 1,890 selected C# tests and Debug/Release validation passed before replacement; the same Genshin process was preserved. No new deployment or live check has occurred during the offline hold. |
@@ -50,6 +50,28 @@ deferred; elapsed time alone does not resume them. Evidence is
 | GameScaling device-greedy decoding | A loaded-model run completed four setup calls and four balanced pairs. Saved records pass exact token/action checks and 236 exact recorded common-state comparisons; both graphs fit with 2,580 MiB peak PyTorch reservation. The candidate saved only 8.66–53.04 ms (0.19–1.42%) under heavy GPU load. Independent process verification was blocked, so full qualification and promotion remain withheld. |
 | Model optimization | Skipping unused final decoder work passed 1,733 correctness checks across two history41 evictions. A separate 40-pair experiment reduced median prediction time from 165.30 ms to 155.07 ms; paired actions/random states and final cache checks passed. |
 | Training | Not started. The pinned public P2P metadata has no Genshin labels; local demonstrations remain needed. The current recorder captures automated receipts, not human input. Model proposals and incomplete recordings are not expert action labels. |
+
+## Latest upstream merge and R52 package
+
+The upstream default branch advanced by one commit, `ae4f785c`, adding localized
+inactive-substat markers to artifact recognition. The fork includes it in merge
+`bd552493`. A new test calls the public recognition path using scripted OCR,
+synthetic card pixels and an input backend that rejects keyboard/mouse access.
+The upstream implementation passed seven cases but failed three capitalization
+variants. Ordinal case-insensitive marker matching passes all ten cases with no
+skips, including the existing fourth-substat grayscale fallback. No OCR model,
+real screenshot or salvage operation was used. The required Debug solution
+build passed with the installed SDK and package cache.
+
+R52 was then built and published from clean `bd552493`. Its 2,703 files total
+925,980,125 bytes; all 154 User files match source. The production launcher's
+`-ValidateOnly` path passed. Its managed assembly SHA256 is
+`9adfccce383b25726799b319b51254121b0c59429cc852787c26ffec2fceea53`.
+The package is at `artifacts/release-r52/BetterGI-English-win-x64`; application
+launch, replacement and live validation remain deferred. The combined source,
+package and launcher proof is
+`artifacts/research/2026-10-24/r52-local-completion-01.json`
+(SHA256 `6fa1f7c5a42ec1b326651eb0f5e9c0930c9be86fbfe1ae336e5a9cf1ca11fd27`).
 
 ## Optional startup preparation and recorded idle intervals
 

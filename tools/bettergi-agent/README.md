@@ -54,6 +54,26 @@ carry-over headers do not create extra images. `trainingEligible` and
 shared frame-clock anchor and unmerged input ledger needed for human training
 demonstrations.
 
+To decode a prepared continuous plan with the existing Python environment and
+installed FFmpeg/FFprobe, run:
+
+```powershell
+.\artifacts\agent\envs\gamescaling\Scripts\python.exe tools/bettergi-agent/experiments/continuous_replay_pixels.py `
+  --plan artifacts/agent/replays/continuous-session.json `
+  --output artifacts/agent/replays/continuous-decoded
+```
+
+The output directory must be new. Use `--ffmpeg` and `--ffprobe` to select existing
+decoder binaries explicitly when they are not on PATH. This CPU-only reader
+reconstructs the full plan and action labels from pinned source files, verifies
+each video's frame count and selected PTS/index pairs, and exports PNGs with a
+`manifest.json`. A 40-step window includes 42 images: its anchor, 40 history
+samples and separate probe. Shared references use one exported image. The PNGs
+preserve decoded RGB values; the source video's lossy compression limits fidelity
+to the original observations. A verified manifest remains non-expert and
+ineligible for training, and the command never loads a policy or connects to a
+running application.
+
 For pretrained Open P2P inference, replace `--model observe` with:
 
 ```text

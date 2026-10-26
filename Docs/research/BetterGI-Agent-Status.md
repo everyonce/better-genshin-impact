@@ -1,6 +1,6 @@
 # BetterGI agent status
 
-Updated October 26, 2026, 10:04 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 26, 2026, 10:34 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
 
@@ -92,12 +92,26 @@ bytes; all 154 shipped User files match source. The production launcher's
 assembly SHA256 is `c54b60d6b6031f2a09951c0c6c981b24e6ccd63e2388283e583f63138668a93f`.
 Live deployment and qualification remain deferred.
 
+The CPU-only `experiments/continuous_replay_pixels.py` reader now reconstructs
+the entire prepared plan from the original sidecars before decoding. It verified
+2,783 video-frame records across five original r16 videos and exported 168 PNGs
+for the four accepted windows. Each 40-step window retains an anchor and separate
+probe, giving 42 images; both action-label variants address the same image files.
+Selected video PTS/index pairs and PNG RGB round trips passed. All eight focused
+checks passed, and the real rejected r17 plan stopped before any source-video
+inspection or output-directory creation. The final export matches every decoded
+RGB hash from the earlier reader version. No policy, Torch or Transformers runtime
+loaded. H.264 compression still limits fidelity to original live RGB, and the
+software action receipts remain non-expert evidence rather than training labels.
+
 Evidence under `artifacts/research/2026-10-24`:
 
 - `replay-session-validation-02/completion.json`: SHA256 `07b8945b0bb0d23b21f1346bd89f0b1127a0afc1dff98ddc0c692fff1b0dd6c9`.
 - `replay-continuous-r16-boundaries-01.json`: SHA256 `60aed0dc597feb01b336e731c3ccd930f3cd33322cd5318c01e0815e9d5a1179`.
 - `replay-continuous-r17-02.json`: SHA256 `5ddee510fef50067850a3f8efcb4544c81229db5e3b9198a7ba5f5113a2d60f8`.
 - `r51-local-completion-01.json`: SHA256 `ff8a3be3c7382b2a7dc78300781a2d7cf53bef8d2fd875daa736d9d866593950`.
+- `continuous-pixel-validation-01/completion.json`: SHA256 `099fe1eb5036683a093f071ebe0358dec66eb91420436b4c15d40129dc2136fe`.
+- `replay-continuous-decoded-r16-02/manifest.json`: SHA256 `9bb0da0b23043f1ce017d1533e3d9b9b24b81b63e921135ccb5f5cc599f543f4`.
 
 Human demonstrations still require a separate synchronized input ledger. The
 existing macro recorder retains relative wall-clock times, merges nearby mouse

@@ -5,6 +5,7 @@ using BetterGenshinImpact.Core.Pipes;
 using BetterGenshinImpact.GameTask.Runtime;
 using BetterGenshinImpact.Service.Instance;
 using Fischless.GameCapture;
+using Fischless.GameCapture.DesktopDc;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
@@ -168,6 +169,9 @@ public sealed class AgentStreamSession
             // Desktop evidence is required even for passive publication; absence never uses the old receipt-time fallback.
             var hostSnapshot = MapHostEvidence(captured, _runtime.IsDesktopCapture, _runtime.DesktopDcSourcePolicy,
                 _clockOrigin, Stopwatch.Frequency, NowMs);
+            // Snapshot diagnostics now: another capture may replace the provider's latest record before transport reads this frame.
+            var captureTiming = captured.HostSnapshotInfo is { } exactHost &&
+                _runtime.Capture is IDesktopDcCaptureDiagnostics diagnostics ? diagnostics.GetTiming(exactHost) : null;
             // Known WGC sources retain their original identity and time when the backend returns cached pixels.
             if (captured!.SourceInfo is not null && !Stopwatch.IsHighResolution)
             {
@@ -198,7 +202,8 @@ public sealed class AgentStreamSession
             {
                 next = new CapturedFrame(observation, width, height, bytes, payloadBytes,
                     NowMs - capturedAt, readiness, motion)
-                { ObservationResizeMs = Stopwatch.GetElapsedTime(resizeStarted).TotalMilliseconds };
+                { ObservationResizeMs = Stopwatch.GetElapsedTime(resizeStarted).TotalMilliseconds,
+                    DesktopDcTiming = captureTiming };
             }
             catch { ArrayPool<byte>.Shared.Return(bytes); throw; }
             lock (_frameGate)
@@ -350,7 +355,7 @@ public sealed class AgentStreamSession
                                     ? (double?)(frameNow - reportedTiming.CapturedAtMs) : null,
                                 serverNowMs = frameNow, executionContext,
                                 receipts = controller.DrainReceipts(), droppedReceipts = controller.DroppedReceipts },
-                                frame.Observation.HostSnapshot, frameNow),
+                                frame.Observation.HostSnapshot, frameNow, frame.DesktopDcTiming),
                                 frame.Bytes.AsMemory(0, frame.PayloadBytes), ct);
                     }
                     finally { frame?.Release(); }
@@ -363,6 +368,9 @@ public sealed class AgentStreamSession
                     }
                     var now = NowMs;
                     var reason = controller.Submit(request, now, out var acceptedAtMs);
+                    // Standard actions need not spend their first-input deadline waiting for the periodic tick.
+                    // Acceptance remains admission only; the controller rechecks freshness/readiness before input.
+                    if (reason is null) controller.TickFirstStandardStep(request.RequestId, NowMs);
                     var reply = new { type = reason is null ? "accepted" : "rejected", request.RequestId,
                         reason, receivedAtMs = now, acceptedAtMs = reason is null ? acceptedAtMs : (double?)null };
                     var admission = reason is null ? controller.QueuedAdmission(request.RequestId) : null;
@@ -499,7 +507,8 @@ public sealed class AgentStreamSession
     }
 
     /// <summary>Add host-only wire fields without changing existing backend header objects or null-field behavior.</summary>
-    internal object WithDesktopEvidence(object header, AgentHostSnapshot? snapshot = null, double? now = null)
+    internal object WithDesktopEvidence(object header, AgentHostSnapshot? snapshot = null, double? now = null,
+        DesktopDcCaptureTiming? timing = null)
     {
         if (!_runtime.IsDesktopCapture) return header;
         var value = JObject.FromObject(header, JsonSerializer.Create(_json));
@@ -514,6 +523,10 @@ public sealed class AgentStreamSession
             value["hostSnapshot"] = JObject.FromObject(snapshot, JsonSerializer.Create(_json));
             value["hostAcquisitionAgeMs"] = now.Value - snapshot.StartedAtMs;
             value["hostAcquisitionIntervalMs"] = snapshot.CompletedAtMs - snapshot.StartedAtMs;
+            // Timings are optional diagnostics. A missing/foreign record cannot change this frame's authority or clocks.
+            if (timing is not null && timing.CaptureEpoch == snapshot.CaptureEpoch &&
+                timing.SnapshotId == snapshot.SnapshotId)
+                value["desktopDcCaptureTiming"] = JObject.FromObject(timing, JsonSerializer.Create(_json));
         }
         if (value["type"]?.Value<string>() == "hello")
         {
@@ -635,6 +648,8 @@ public sealed class AgentStreamSession
         public double CaptureMs { get; } = captureMs;
         /// <summary>Profile conversion plus any plan creation, excluding native world/motion recognition.</summary>
         public double ObservationResizeMs { get; init; }
+        /// <summary>Immutable diagnostics selected for this acquisition; never fetched again from mutable backend state.</summary>
+        public DesktopDcCaptureTiming? DesktopDcTiming { get; init; }
         /// <summary>Readiness derived from precisely this image, distinct from the current input gate.</summary>
         public AgentWorldReadiness Readiness { get; } = readiness;
         /// <summary>Keyboard-hint evidence derived from this publication's native source before downsampling.</summary>

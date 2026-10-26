@@ -1,28 +1,30 @@
 # BetterGI agent status
 
-Updated October 26, 2026, 14:30 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 26, 2026, 15:32 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
 
 Daniel explicitly resumed live testing through BetterGI RDP at 14:18 UTC on
-October 26. R52 has replaced the idle R47 child in session 3 while preserving
-Genshin and the minimized RDP session. The console root remains R1. A 12-second
-observation run and a bounded 30-second P2P input trial completed; capture
-freshness and readiness interruptions are being measured before longer runs.
+October 26. R53 now runs in session 3 while preserving Genshin and the minimized
+RDP session. The console root remains R1. Live tests include four 30-second P2P
+trials, a 90-second walk/stand/walk goal-switch trial, a GameScaling shadow trial,
+and a successful native seed route followed by four connected courtyard legs.
+The model/control pipeline works, but the learned policies do not yet reliably
+follow Genshin instructions. Capture and first-dispatch delays remain under investigation.
 Evidence is under `artifacts/live/2026-10-26-r52`. The earlier offline-only
 transition remains historical evidence, not a current restriction.
 
 | Area | Latest verified state |
 |---|---|
 | Upstream integration | The default branch `refactor/20260930` is integrated through `ae4f785c`. The latest merge adds explicit inactive-affix recognition and corrects capitalization matching; the required Debug build and 10 scripted OCR cases passed. Earlier integration cohorts recorded 539 distinct UnitTest cases and 527 Agent cases across their source trees. Live feature validation remains deferred. |
-| Prepared local builds | R52 is a verified self-contained `win-x64` Release package from clean commit `bd552493`, including the terminal timestamp and latest artifact-recognition fixes. Its predeployment inventory contained 2,703 files, all 154 shipped User files matched source, and launcher validation passed. R52 is now deployed as the RDP child; older packages remain intact. |
+| Prepared local builds | R53 is a self-contained `win-x64` Release package from clean commit `70f8dd8f`. The required Debug build, Release publish, launcher validation and 87 focused capture/stream/readiness/freshness tests passed. It gives the live stream exclusive capture while retaining timer housekeeping. Older packages remain intact. |
 | Root upgrade staging | Commit `5f9ad00e` adds opt-in, byte-preserving Pulonia staging for a quiescent source and inactive, exclusive target. Twenty new tests and three existing regressions passed; independent source review found no actionable issue. Live use remains deferred. |
 | Coordinated root/child upgrade | The new explicit transaction uses the existing approved launcher and a one-shot startup binding, preserves the game/session, and ends with scheduling held. Required Debug validation, 129 distinct C# cases and 91 Python cases passed. Source and saved validation evidence passed independent readback. Actual task registration, cold launch, cross-session handoff and explicit resume remain untested. |
-| Deployed application | Verified October 26: R52 child PID 61460 in RDP session 3, assembly SHA256 `9adfccce383b25726799b319b51254121b0c59429cc852787c26ffec2fceea53`. Root PID 28072 and Genshin PID 27728 were preserved. The first observation recorded 186 usable frames without drops; the first P2P trial completed and its owned workers retired. |
-| Native navigation | Both saved R47 routes now pass the full audit: seed 3.82 seconds/37 observations and return 5.07 seconds/44 observations. The return's immediate predecessor link is accepted. This does not establish sustained gameplay. |
-| Reusable command | Bounded continuation and the reviewed schema3 envelope checker are in primary. Explicit v5 client support passed 279 Python tests. The separate H03 reader package and corrected return proof are accepted. User readiness is now explicit; new runs must bind to the current R52 instance and fresh route evidence. |
+| Deployed application | R53 child PID 56788 in RDP session 3, instance `1d3be77cf2384d2db368b0789e2f166b`, assembly SHA256 `abc7e96d77f7e894fd8fb33d0f21d99991367cff3987b40c9811f6ca5cbe65ca`. Root PID 28072 and Genshin PID 27728 were preserved. At 15:15 UTC, all owned live-model workers were independently confirmed retired and the same game remained in session 3. |
+| Native navigation | A fresh R52 seed and four immediately linked courtyard legs completed with 254 position observations and no recorded recovery, recognition, release or execution faults. All 15 journal/screenshot hashes and 140 listed evidence checks passed. This is exploratory native route acceptance, not general autonomous gameplay or a rebinding of the frozen R47 proof. |
+| Reusable command | Bounded continuation and the reviewed schema3 envelope checker are in primary. Explicit v5 client support passed 279 Python tests. The separate H03 reader package remains bound to R47. Current live runs use fresh instance and predecessor identities; the direct CLI successfully validated the R52 cycle. |
 | Endpoint repair | Deployed in R46 with input telemetry and Right Shift support. Both R47 routes and the return's endpoint/continuation evidence pass their full audits. Physical input acknowledgment and training eligibility remain false. |
-| Native timing v5 | Explicit native timing v5 is committed at `ab136e25be0467c28ca664a825eef5a79bdeefb1` and deployed in R47. Seed and return evidence are accepted; the next forward leg and four-leg qualification are deferred. |
+| Native timing v5 | The fresh R52 cycle used `task_owned_timer` and the supported single-leg seed/advertised courtyard continuations. The four continuation legs took 24.83 seconds wall time, including approximately 0.28–0.31 second handoffs. Recorded source ages had median 62.17 ms, p95 74.83 ms and maximum 84.96 ms. |
 | Offline recognition replay | Eleven saved captures passed scoped CPU replay: five exploration frames, two climbing frames, the journal, one swimming-controls frame and two map screens. Eleven additional swimming-derived rows are explicitly synthetic. Five recorded positions match the production coordinate conversion; the other checks do not establish localization or current readiness. |
 | GPU runtime | Existing PyTorch 2.7.1 + CUDA 12.8 environment on the RTX 2080 SUPER. Bounded loaded-model latency runs and paired scene/goal probes completed on October 26; their fresh results are below. No environment installation was needed. |
 | P2P temperature candidate | Explicit `--p2p-temperature 0.2` is available for replay and shadow runs. Its walk/stand improvement on bilinear pixels did not transfer to native Hamming pixels: walking stayed idle across 54 consecutive predictions. Landmark probes also mostly became idle. Forty actual API predictions matched the reference; the public CUDA graph command and 100 CPU checks passed. Default sampling remains unchanged; this is not a qualified gameplay setting. |
@@ -49,7 +51,7 @@ transition remains historical evidence, not a current restriction.
 
 ## Resumed live testing in BetterGI RDP
 
-Two 30-second trials used the live R52 child, native Hamming RGB192 images,
+Four 30-second trials used the live R52/R53 children, native Hamming RGB192 images,
 P2P history41, cached ground-navigation text, CUDA graph prewarming, one CPU
 thread and a 3 GiB PyTorch allocator limit. Both retained the 150 ms first-input
 freshness bound, 100 ms action hold and restricted movement-key list. Each trial
@@ -60,20 +62,75 @@ load and in-game trajectories were not controlled, so these are diagnostic runs.
 |---|---|---:|---:|---:|---:|
 | Detailed execution context | 45.04 / 59.29 ms | 367 | 217 / 190 | 104 | 89.91 MiB |
 | Context off, native snapshots off | 43.29 / 54.07 ms | 404 | 371 / 361 | 18 | 45.35 MiB |
+| R53 exclusive capture, context/snapshots off | 38.53 / 45.88 ms | 467 | 397 / 368 | 34 | 53.96 MiB |
+| R53, decision rate reduced to 15 Hz | 39.07 / 47.69 ms | 439 | 317 / 284 | 95 | 54.22 MiB |
 
 The first trial prepared its graph during loading in 2,071.82 ms and evaluated
 its first real image in 30.97 ms, without graph preparation in the input loop.
-Both recordings completed without frame/event/observation drops, and both
+These recordings completed without frame/event/observation drops and
 returned stopped controllers with empty tracked held-key sets. These are
 software dispatch receipts, not physical-input acknowledgments or task-success
-labels. The first trial's owned Python workers were independently confirmed
-retired. Recordings and reports are under `artifacts/live/2026-10-26-r52`.
+labels. The owned live-model workers were independently confirmed retired
+after the GameScaling trial. Recordings and reports are under
+`artifacts/live/2026-10-26-r52`.
 
 Source inspection found that the normal trigger timer still captured while the
 agent ran its independent capture loop. `RunAgentWithResultAsync` now acquires
 the existing task-owned timer pause, preserving window/liveness housekeeping
-and the existing cancellation/cleanup scope. Build and live comparison of this
-change are pending; the deployed child is still R52 at this checkpoint.
+and the existing cancellation/cleanup scope. This change is deployed in R53.
+Across all recorded frames, median capture-request-to-authoritative-start time
+fell from 21.305 ms to 0.002 ms. The complete capture/preprocessing interval was
+62.35 versus 61.04 ms; the inner host acquisition interval rose from 32.02 to
+51.78 ms. These are distinct boundaries, and uncontrolled load prevents a
+causal interpretation of the inner-interval change. Hamming conversion is
+below 1 ms. Reducing decisions to 15 Hz increased receipt-to-prediction waiting
+and deadline rejection, so 20 Hz remains the current diagnostic setting.
+
+The 90-second R53 goal-switch run recorded 1,593 frames without drops and made
+1,511 predictions, with 1,315 accepted and 1,239 applied actions. One model load
+served walk/stand/walk goals. The status observer saw matching goal-application
+acknowledgments 188 and 140 ms after the corresponding control CLI returned
+(50 ms observation polling). Tracked held keys were empty after stop.
+During the stationary phase, 206 of 415 applied proposals contained movement
+keys, versus 202/392 and 283/432 in the two walking phases. The saved video also
+shows movement during the stationary phase. Correct command acknowledgment
+therefore does not establish instruction compliance. A separate H41 diagnostic
+ran six graph/eager pairs using two saved 192-pixel video frames in an A/B/A
+goal sequence. Its NumPy-only readback passed 374 checks over the retained
+arrays, including copied goal values, cache resets, stable graph addresses,
+paired sampling and full cache comparisons at the existing tolerances.
+Both paths chose S in all six predictions, including the stationary phase.
+This excludes the tested graph/goal-buffer mismatch on these inputs; it does
+not establish general instruction compliance. All diagnostic workers were
+confirmed retired at 15:32 UTC, preserving the same Genshin process in RDP.
+Evidence: `p2p-distinct-goal-parity/independent-summary-001.json` under the live
+artifact directory.
+
+All 76 accepted-but-unapplied actions in that run expired before their first
+dispatch. Their remaining deadline slack at acceptance had median 3.84 ms;
+applied actions waited median 4.51 ms and p95 14.30 ms from acceptance to first
+software dispatch. The next package immediately dispatches the first eligible
+standard step after acceptance, through the existing guarded controller path.
+A shared failure latch prevents retrying partially failed input. The 150 ms
+limit and experimental queued scheduler are unchanged. Additive DesktopDc
+phase timings retain the exact captured snapshot identity and authoritative
+clock boundaries, making capture costs measurable without changing input
+eligibility. These changes are validated but not yet deployed.
+
+The combined controller/capture cohort has 731 distinct passing tests across
+the initial run and a permissions-aware rerun. The initial sandbox blocked
+three named-pipe label cases and one atomic snapshot write; all four passed
+with normal Windows permissions, along with all 18 immediate-dispatch cases.
+The scalar recorder-only microbenchmark averaged 0.854 microseconds and 312
+allocated bytes per call over 10,000 samples; this excludes GDI and pixels.
+
+GameScaling's live observation-only trial used the validated greedy graph,
+history0 and image width384. It recorded 337 frames and generated 14 valid but
+entirely neutral action chunks for an explicit six-step W-only instruction.
+Full-action median was 940.28 ms; the first action took 5,018.97 ms including
+setup. Both required graph validation actions passed. No model input was
+enabled, accepted or applied. `observeMode` is not a freshness pass, and these
+results do not support using this path as the real-time controller.
 
 The approved `StartHost` task and protected helper installation passed read-only
 validation at 14:26 UTC. No registration was needed. The coordinated root

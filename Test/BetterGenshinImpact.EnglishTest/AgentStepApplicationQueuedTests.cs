@@ -58,6 +58,27 @@ public sealed class AgentStepApplicationQueuedTests
         Assert.Equal(0, f.Input.HeldEvaluations);
     }
 
+    /// <summary>The standard-action fast path cannot dispatch either queued-v2 P or Q, even at its fixed boundary.</summary>
+    [Fact]
+    public void ImmediateStandardTickDoesNotAdvanceQueuedSchedule()
+    {
+        var f = new Fixture(); var p = f.Request("p", null);
+        Assert.Null(f.Controller.Submit(p, f.Now));
+        f.Controller.TickFirstStandardStep("p", f.Now);
+        Assert.Equal(0, f.Input.HeldEvaluations);
+        Assert.Empty(f.Applications());
+        f.At(130);
+        f.QueueQ();
+        f.Now = 180;
+        f.Controller.TickFirstStandardStep("q", f.Now);
+        Assert.Equal(1, f.Input.HeldEvaluations);
+        Assert.Empty(f.Terminals());
+        Assert.Equal(230.0, (double)f.Controller.QueuedAdmission("q")!["scheduledEndMs"]!);
+        f.At(180);
+        Assert.Equal(2, f.Input.HeldEvaluations);
+        Assert.Equal("horizon_handoff", (string?)Assert.Single(f.Terminals())["reason"]);
+    }
+
     /// <summary>Exactly one successor is retained; a third request cannot overwrite either original owner.</summary>
     [Fact]
     public void QueuedAdmissionDoesNotReplacePOrAcceptAThird()

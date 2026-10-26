@@ -88,6 +88,85 @@ public sealed class AgentHostWireTests
         Assert.True(System.Text.Encoding.UTF8.GetByteCount(value.ToString(Formatting.None)) < 4096);
     }
 
+    /// <summary>The optional timing extension preserves every old authority field and the exact raw wire payload.</summary>
+    [Fact]
+    public async Task DesktopPhaseTimingIsAdditiveThroughTheMemoryWire()
+    {
+        using var runtime = Runtime(DesktopCapturePolicy.HostAcquisitionV1, true);
+        var capture = Assert.IsType<DesktopDcCapture>(runtime.Capture);
+        using var captured = capture.Capture();
+        var timing = Assert.IsType<DesktopDcCaptureTiming>(capture.GetTiming(captured!.HostSnapshotInfo!));
+        var host = AgentStreamSession.MapHostEvidence(captured, true, DesktopCapturePolicy.HostAcquisitionV1,
+            AgentHostSnapshotTests.Origin, Stopwatch.Frequency, 130)!;
+        var session = new AgentStreamSession(runtime);
+        var original = new { type = "frame", payloadBytes = 3, inputAvailable = false,
+            observationProfile = "p2p-native-hamming-192-v1", sourceFrame = (object?)null, sourceTimestampKind = "unknown" };
+        var without = Assert.IsType<JObject>(session.WithDesktopEvidence(original, host, 130));
+        var withTiming = Assert.IsType<JObject>(session.WithDesktopEvidence(original, host, 130, timing));
+        var diagnostic = Assert.IsType<JObject>(withTiming["desktopDcCaptureTiming"]);
+        Assert.True(diagnostic["diagnosticOnly"]!.Value<bool>());
+        Assert.Equal(host.CaptureEpoch, diagnostic["captureEpoch"]!.Value<string>());
+        Assert.Equal(host.SnapshotId, diagnostic["snapshotId"]!.Value<long>());
+        var oldFields = (JObject)withTiming.DeepClone();
+        oldFields.Remove("desktopDcCaptureTiming");
+        Assert.True(JToken.DeepEquals(without, oldFields));
+        Assert.True(System.Text.Encoding.UTF8.GetByteCount(diagnostic.ToString(Formatting.None)) < 2048);
+
+        // Invoke the actual codec over an owned memory stream, without a pipe, capture loop or input owner.
+        await using var stream = new MemoryStream();
+        var pixels = new byte[] { 12, 34, 56 };
+        var write = typeof(AgentStreamSession).GetMethod("WriteAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        await (Task)write.Invoke(session, [stream, withTiming, new ReadOnlyMemory<byte>(pixels), CancellationToken.None])!;
+        var wire = stream.ToArray();
+        var length = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(wire);
+        Assert.Equal(pixels, wire.AsSpan(4 + length).ToArray());
+        var header = JObject.Parse(System.Text.Encoding.UTF8.GetString(wire, 4, length));
+        Assert.True(JToken.DeepEquals(withTiming, header));
+    }
+
+    /// <summary>A timing record from another acquisition is omitted instead of renewing or invalidating frame authority.</summary>
+    [Fact]
+    public void ForeignDesktopPhaseTimingIsOmitted()
+    {
+        using var runtime = Runtime(DesktopCapturePolicy.HostAcquisitionV1, true);
+        var capture = Assert.IsType<DesktopDcCapture>(runtime.Capture);
+        using var first = capture.Capture();
+        var host = AgentStreamSession.MapHostEvidence(first!, true, DesktopCapturePolicy.HostAcquisitionV1,
+            AgentHostSnapshotTests.Origin, Stopwatch.Frequency, 130)!;
+        using var second = capture.Capture();
+        var foreign = Assert.IsType<DesktopDcCaptureTiming>(capture.GetTiming(second!.HostSnapshotInfo!));
+        var session = new AgentStreamSession(runtime);
+        var header = new { type = "frame", inputAvailable = false };
+        var original = Assert.IsType<JObject>(session.WithDesktopEvidence(header, host, 130));
+        var guarded = Assert.IsType<JObject>(session.WithDesktopEvidence(header, host, 130, foreign));
+        Assert.True(JToken.DeepEquals(original, guarded));
+        Assert.Null(guarded["desktopDcCaptureTiming"]);
+    }
+
+    /// <summary>Retained frame diagnostics survive provider retirement without mutating clocks or affecting another backend.</summary>
+    [Fact]
+    public void RetainedDesktopPhaseTimingDoesNotLeakIntoOtherFramesOrBackends()
+    {
+        using var runtime = Runtime(DesktopCapturePolicy.HostAcquisitionV1, true);
+        var capture = Assert.IsType<DesktopDcCapture>(runtime.Capture);
+        using var frame = capture.Capture();
+        var timing = Assert.IsType<DesktopDcCaptureTiming>(capture.GetTiming(frame!.HostSnapshotInfo!));
+        var host = AgentStreamSession.MapHostEvidence(frame, true, DesktopCapturePolicy.HostAcquisitionV1,
+            AgentHostSnapshotTests.Origin, Stopwatch.Frequency, 130)!;
+        var session = new AgentStreamSession(runtime);
+        var original = new { type = "frame", inputAvailable = false };
+        var before = Assert.IsType<JObject>(session.WithDesktopEvidence(original, host, 130, timing));
+        capture.Stop();
+        Assert.Null(capture.GetTiming(frame.HostSnapshotInfo!));
+        var after = Assert.IsType<JObject>(session.WithDesktopEvidence(original, host, 130, timing));
+        Assert.True(JToken.DeepEquals(before, after));
+        Assert.Null(((JObject)session.WithDesktopEvidence(new { type = "status" }, timing: timing))["desktopDcCaptureTiming"]);
+
+        using var legacy = TestGameRuntime.Create(new FakeSystemInfo(new RECT(0, 0, 1920, 1080), 1), new ForbiddenInput());
+        var legacySession = new AgentStreamSession(legacy);
+        Assert.Same(original, legacySession.WithDesktopEvidence(original, host, 130, timing));
+    }
+
     /// <summary>The final publication helper rejects absent/mismatched/future host evidence, without altering pixels.</summary>
     [Theory]
     [InlineData(0)] [InlineData(1)] [InlineData(2)]

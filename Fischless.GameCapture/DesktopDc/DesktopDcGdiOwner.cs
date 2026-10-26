@@ -61,14 +61,18 @@ internal sealed class DesktopDcGdiOwner : IDisposable
     }
 
     /// <summary>One SRCCOPY and flush; no retry, cached frame or Pending result is available.</summary>
-    internal void Copy(int left, int top)
+    internal void Copy(int left, int top, DesktopDcCapturePhaseRecorder? timing = null)
     {
         CheckThread();
         if (_disposed || !_initialized) throw new InvalidOperationException("GDI owner is unavailable.");
         _pixelsValid = false;
+        timing?.Begin(DesktopDcCapturePhase.BitBlt);
         if (!_native.Copy(_memory, _screen, left, top, Width, Height))
             throw new InvalidOperationException("Desktop SRCCOPY failed.");
+        timing?.End(DesktopDcCapturePhase.BitBlt);
+        timing?.Begin(DesktopDcCapturePhase.FirstFlush);
         if (!_native.Flush()) throw new InvalidOperationException("Desktop copy GdiFlush failed.");
+        timing?.End(DesktopDcCapturePhase.FirstFlush);
         _pixelsValid = true;
     }
 

@@ -63,6 +63,8 @@ public sealed partial class AgentActionController(IAgentInput input, bool inputE
     private double _nextStepAt;
     /// <summary>Whether this session can accept further proposals.</summary>
     private bool _stopped;
+    /// <summary>A failed standard dispatch cannot be retried by another tick; Stop still owns release and receipts.</summary>
+    private bool _dispatchFaulted;
     /// <summary>Count of dropped receipts, exposed so incomplete recordings can be rejected.</summary>
     private long _droppedReceipts;
     /// <summary>Last observed viewport size; changing it invalidates coordinate-dependent proposals.</summary>
@@ -77,7 +79,7 @@ public sealed partial class AgentActionController(IAgentInput input, bool inputE
     {
         lock (_gate)
         {
-            AgentStepApplicationWire.Require(_stepApplications is null && _active is null && !_stopped && input is IAgentApplicationInput, "application_idle_input");
+            AgentStepApplicationWire.Require(_stepApplications is null && _active is null && !_stopped && !_dispatchFaulted && input is IAgentApplicationInput, "application_idle_input");
             if ((long?)config["version"] == 2)
                 AgentStepApplicationWire.Require(inputEnabled && desktopDcSourcePolicy != DesktopCapturePolicy.ObserveOnly && monotonicClock is not null && TryReadStartClock(0, out var enableAt) && GetWorldReadiness(enableAt).Ready, "queued_enable_readiness");
             var actual = (IAgentApplicationInput)input;
@@ -325,6 +327,7 @@ public sealed partial class AgentActionController(IAgentInput input, bool inputE
         lock (_gate)
         {
             if (_stopped) return "session_stopped";
+            if (_dispatchFaulted) return "input_dispatch_failed";
             if (request.HasQueueAfter && _stepApplications?.IsQueuedMode != true) return "queue_version_unavailable";
             if (desktopDcSourcePolicy == DesktopCapturePolicy.ObserveOnly) return "capture_policy_observe_only";
             if (!inputEnabled) return "input_disabled";
@@ -405,11 +408,24 @@ public sealed partial class AgentActionController(IAgentInput input, bool inputE
         }
     }
 
+    /// <summary>Try the accepted standard request's first step before replying, without advancing an existing or queued schedule.</summary>
+    internal void TickFirstStandardStep(string requestId, double now)
+    {
+        lock (_gate)
+        {
+            if (_stopped || _dispatchFaulted || _stepApplications is not null ||
+                _active?.RequestId != requestId || _stepIndex != 0) return;
+            // Reentrant locking keeps the request/index check and the unchanged final dispatch gates atomic.
+            Tick(now);
+        }
+    }
+
     /// <summary>Advance input independently of model/network work; callers tick approximately every 10 ms.</summary>
     public void Tick(double now)
     {
         lock (_gate)
         {
+            if (_stopped || _dispatchFaulted) return;
             if (_stepApplications?.IsQueuedMode == true) { TickQueued(now); return; }
             if (!GetWorldReadiness(now).Ready) return;
             if (_active is null) return;
@@ -496,7 +512,14 @@ public sealed partial class AgentActionController(IAgentInput input, bool inputE
                 _nextStepAt += step.DurationMs;
                 _lastDispatchOutcome = "returned";
             }
-            catch (Exception) { _lastDispatchOutcome = "failed"; throw; }
+            catch (Exception)
+            {
+                // Input can have partially returned before an exception. Latch under the same gate so
+                // the timer/transport caller cannot repeat that step while session cleanup is pending.
+                _dispatchFaulted = true;
+                _lastDispatchOutcome = "failed";
+                throw;
+            }
             finally { _inputOrigin = priorOrigin; }
         }
     }

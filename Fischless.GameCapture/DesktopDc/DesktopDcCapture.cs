@@ -5,7 +5,7 @@ using OpenCvSharp;
 namespace Fischless.GameCapture.DesktopDc;
 
 /// <summary>Synchronous desktop-client capture with one serialized transaction and no GDI resources retained between calls.</summary>
-public sealed class DesktopDcCapture : IGameCapture
+public sealed class DesktopDcCapture : IGameCapture, IDesktopDcCaptureDiagnostics
 {
     /// <summary>Serializes Start/Capture/Stop; input release must never depend on this gate.</summary>
     private readonly object _gate = new();
@@ -21,6 +21,12 @@ public sealed class DesktopDcCapture : IGameCapture
     private readonly long _frequency;
     /// <summary>Enter a caller-local PMv2 scope and restore it before publication; no process configuration changes.</summary>
     private readonly Func<IDisposable> _enterDpiScope;
+    /// <summary>Small scalar diagnostics use a separate clock so authoritative host endpoints retain their exact reads.</summary>
+    private readonly Func<long> _diagnosticTimestamp;
+    /// <summary>Scale of the diagnostic clock; never substituted for host-snapshot frequency.</summary>
+    private readonly long _diagnosticFrequency;
+    /// <summary>At most one complete successful timing record, selected by exact snapshot object identity.</summary>
+    private DesktopDcCaptureTiming? _lastTiming;
     /// <summary>Immutable target/geometry snapshot admitted by the current Start.</summary>
     private DesktopDcTargetSnapshot? _target;
     /// <summary>Generation and strictly increasing successful snapshot identities.</summary>
@@ -45,7 +51,8 @@ public sealed class DesktopDcCapture : IGameCapture
     /// <summary>Use the actual transaction/ownership implementation with fake native functions and controlled pixels in tests.</summary>
     internal DesktopDcCapture(Func<nint, DesktopDcTargetSnapshot> readTarget, IDesktopDcGdi gdi,
         Func<DesktopDcGdiOwner, Mat> clonePixels, Func<long> timestamp, long frequency,
-        Func<IDisposable>? enterDpiScope = null)
+        Func<IDisposable>? enterDpiScope = null, Func<long>? diagnosticTimestamp = null,
+        long diagnosticFrequency = 0)
     {
         ArgumentNullException.ThrowIfNull(readTarget);
         ArgumentNullException.ThrowIfNull(gdi);
@@ -58,16 +65,26 @@ public sealed class DesktopDcCapture : IGameCapture
         _timestamp = timestamp;
         _frequency = frequency;
         _enterDpiScope = enterDpiScope ?? DesktopDcThreadDpiScope.Enter;
+        _diagnosticTimestamp = diagnosticTimestamp ?? Stopwatch.GetTimestamp;
+        _diagnosticFrequency = diagnosticFrequency == 0 ? Stopwatch.Frequency : diagnosticFrequency;
     }
 
     /// <summary>Managed lifecycle metadata only; it grants no capture freshness or input authority.</summary>
     public bool IsCapturing => _capturing;
+
+    /// <inheritdoc />
+    public DesktopDcCaptureTiming? GetTiming(GameCaptureHostSnapshotInfo snapshot)
+    {
+        var timing = Volatile.Read(ref _lastTiming);
+        return timing is not null && timing.IsFor(snapshot) ? timing : null;
+    }
 
     /// <summary>Pin a valid already-foreground target; settings are deliberately inert for this backend.</summary>
     public void Start(nint hWnd, Dictionary<string, object>? settings = null)
     {
         lock (_gate)
         {
+            Volatile.Write(ref _lastTiming, null);
             CheckAvailable();
             if (_capturing || _captureActive) throw new InvalidOperationException("Stop the current desktop capture before starting another generation.");
             try
@@ -101,19 +118,25 @@ public sealed class DesktopDcCapture : IGameCapture
     /// <summary>Return only a new independent Mat after the exact target and all owned cleanup have succeeded.</summary>
     public GameCaptureFrame? Capture()
     {
+        // Twenty-one scalar clock reads and fixed-size records add no native call or pixel copy.
+        var timing = new DesktopDcCapturePhaseRecorder(_diagnosticTimestamp, _diagnosticFrequency);
+        timing.Begin(DesktopDcCapturePhase.GateWait);
         lock (_gate)
         {
+            timing.End(DesktopDcCapturePhase.GateWait);
+            Volatile.Write(ref _lastTiming, null);
             CheckAvailable();
             if (!_capturing || _target is null) return null;
             if (_captureActive) throw new InvalidOperationException("A desktop capture is already active on this caller.");
             _captureActive = true;
-            try { return CaptureUnderGate(_target, _epoch); }
+            try { return CaptureUnderGate(_target, _epoch, timing); }
             finally { _captureActive = false; }
         }
     }
 
     /// <summary>Keep one target/generation throughout the call, including any reentrant Stop request.</summary>
-    private GameCaptureFrame CaptureUnderGate(DesktopDcTargetSnapshot target, Guid epoch)
+    private GameCaptureFrame CaptureUnderGate(DesktopDcTargetSnapshot target, Guid epoch,
+        DesktopDcCapturePhaseRecorder timing)
     {
         var started = _timestamp(); // Deliberately excludes queue time, includes all guards and GDI acquisition.
         if (started <= 0 || started < _lastCompleted)
@@ -124,17 +147,28 @@ public sealed class DesktopDcCapture : IGameCapture
         Exception? failure = null;
         try
         {
+            timing.Begin(DesktopDcCapturePhase.DpiSetup);
             dpiScope = _enterDpiScope() ?? throw new InvalidOperationException("Desktop DPI scope was not created.");
+            timing.End(DesktopDcCapturePhase.DpiSetup);
+            timing.Begin(DesktopDcCapturePhase.PreTargetCheck);
             CheckTarget(target, epoch);
+            timing.End(DesktopDcCapturePhase.PreTargetCheck);
+            timing.Begin(DesktopDcCapturePhase.Allocation);
             owner.Initialize();
-            owner.Copy(target.ScreenRect.left, target.ScreenRect.top);
+            timing.End(DesktopDcCapturePhase.Allocation);
+            owner.Copy(target.ScreenRect.left, target.ScreenRect.top, timing);
+            timing.Begin(DesktopDcCapturePhase.PostTargetCheck);
             CheckTarget(target, epoch);
+            timing.End(DesktopDcCapturePhase.PostTargetCheck);
+            timing.Begin(DesktopDcCapturePhase.Clone);
             image = _clonePixels(owner);
             if (image is null) throw new InvalidOperationException("Desktop clone returned no pixels.");
+            timing.End(DesktopDcCapturePhase.Clone);
         }
         catch (Exception error) { failure = error; }
         finally
         {
+            timing.Begin(DesktopDcCapturePhase.Cleanup);
             try { owner.Dispose(); }
             catch (Exception error)
             {
@@ -144,8 +178,11 @@ public sealed class DesktopDcCapture : IGameCapture
             if (!owner.CleanupSucceeded)
                 failure = DesktopDcCleanupException.Combine(failure,
                     new DesktopDcCleanupException("Desktop GDI cleanup incomplete: " + string.Join("; ", owner.CleanupFailures)));
+            timing.End(DesktopDcCapturePhase.Cleanup);
             // Borrowed pixels and GDI resources retire before restoring caller DPI; completion includes both.
+            timing.Begin(DesktopDcCapturePhase.DpiRestore);
             RestoreDpi(dpiScope, ref failure);
+            timing.End(DesktopDcCapturePhase.DpiRestore);
         }
 
         try
@@ -160,6 +197,7 @@ public sealed class DesktopDcCapture : IGameCapture
             _snapshotId = nextId;
             _lastCompleted = completed;
             image = null; // Ownership transfers only after cleanup and frame construction succeed.
+            Volatile.Write(ref _lastTiming, timing.Complete(host));
             return frame;
         }
         catch (Exception error)
@@ -194,6 +232,7 @@ public sealed class DesktopDcCapture : IGameCapture
     {
         lock (_gate)
         {
+            Volatile.Write(ref _lastTiming, null);
             _capturing = false;
             _target = null;
             _epoch = Guid.Empty;

@@ -1,6 +1,6 @@
 # BetterGI agent status
 
-Updated October 26, 2026, 03:37 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 26, 2026, 03:56 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
 
@@ -19,9 +19,9 @@ deferred; elapsed time alone does not resume them. Evidence is
 | Area | Latest verified state |
 |---|---|
 | Upstream integration | The default branch `refactor/20260930` is integrated through `86d2a413`, adding 30 commits beyond the previously merged refactor checkpoint. The final Debug build passed; selected CPU/offscreen cohorts passed 539 distinct UnitTest cases and 527 Agent cases across their recorded source trees. Application replacement and live feature validation remain deferred. |
-| Prepared local build | R48 is a verified self-contained `win-x64` Release package from clean commit `4c99cad1`, available at `artifacts/release-r48/BetterGI-English-win-x64`. All 2,703 package files are inventoried and hashed; its 154 shipped User files match the clean source. It has not been launched or deployed. |
+| Prepared local builds | R49 (bootstrap) and R50 (final) are verified self-contained `win-x64` Release packages from one clean build of commit `65474cce`, under `artifacts/release-r49` and `artifacts/release-r50`. All 2,703 application files match byte for byte, and their 154 shipped User files match the source. Both passed the production launcher's file validation; neither package has been launched or deployed. |
 | Root upgrade staging | Commit `5f9ad00e` adds opt-in, byte-preserving Pulonia staging for a quiescent source and inactive, exclusive target. Twenty new tests and three existing regressions passed; independent source review found no actionable issue. Live use remains deferred. |
-| Coordinated root/child upgrade | The new explicit transaction uses the existing approved launcher and a one-shot startup binding, preserves the game/session, and ends with scheduling held. The required Debug build, 51 C# cases and 91 Python cases passed. Source and saved validation evidence passed independent readback. Actual task registration, cold launch, cross-session handoff and explicit resume remain untested. |
+| Coordinated root/child upgrade | The new explicit transaction uses the existing approved launcher and a one-shot startup binding, preserves the game/session, and ends with scheduling held. Required Debug validation, 129 distinct C# cases and 91 Python cases passed. Source and saved validation evidence passed independent readback. Actual task registration, cold launch, cross-session handoff and explicit resume remain untested. |
 | Deployed application | Last verified at 17:45 UTC: R47 inside the existing minimized RDP session. Its 1,890 selected C# tests and Debug/Release validation passed before replacement; the same Genshin process was preserved. No new deployment or live check has occurred during the offline hold. |
 | Native navigation | Both saved R47 routes now pass the full audit: seed 3.82 seconds/37 observations and return 5.07 seconds/44 observations. The return's immediate predecessor link is accepted. This does not establish sustained gameplay. |
 | Reusable command | Bounded continuation and the reviewed schema3 envelope checker are in primary. Explicit v5 client support passed 279 Python tests. The separate H03 reader package and corrected return proof are accepted; future live continuation requires user readiness and fresh runtime checks. |
@@ -68,6 +68,20 @@ invocation selected an old x64 assembly and is explicitly excluded. The accepted
 C# receipt uses the newly built `bin/Debug` assembly. Independent readback
 verified all 25 changed source files against their retained copies and checked
 63 evidence files; review found no remaining actionable source issue.
+
+The clean managed checkout then passed another required Debug build and a
+self-contained Release publish. R49 contains 2,703 files totaling 925,975,225
+bytes; all 154 User files match clean source. R50 is an exact separate copy of
+those application files, with its own manifest identifying its final directory.
+The production launcher's file validator accepts both packages. A further 78
+existing state-compatibility, trigger, shutdown and remote-ownership cases passed
+against the clean checkout's new Debug assembly, bringing the distinct C# total
+to 129. Neither package has been launched or deployed.
+
+The package and regression receipt is
+`artifacts/research/2026-10-24/root-child-upgrade-local-completion-01.json`
+(2,621 bytes, SHA256
+`97a8c9738b1ed64f7808bbe5926a9d2a611cef531a2515845a860b38f149ddd8`).
 
 This is source and offline validation, not a live deployment. The existing
 approved task must still pass its actual preflight. Root absence permits opaque

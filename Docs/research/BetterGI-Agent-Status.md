@@ -1,14 +1,17 @@
 # BetterGI agent status
 
-Updated October 26, 2026, 00:28 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 26, 2026, 01:05 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
 
 Current work uses recorded screenshots and synthetic data until Daniel explicitly
-says the machine is ready for game and model work again. At 17:45:41 UTC, two
+says the machine is ready for live game work again. Bounded offline model and
+latency tests remain authorized within the available shared-machine resources.
+The earlier blanket deferral of GPU qualification overstated that instruction;
+this interpretation was corrected on October 26. At 17:45:41 UTC, two
 read-only status requests confirmed an idle child, disabled input, no running
 task or stream, and the minimized RDP host. No cleanup action was needed. Live
-observations, game tests, application replacement and GPU qualification are
+observations, game tests and application replacement are
 deferred; elapsed time alone does not resume them. Evidence is
 `artifacts/research/2026-10-24/offline-only-transition-01/status-01.json`
 (SHA256 `8d55acacc93791e365228d45b8a4046ff896c2344f7244a2309485d97fe48f39`).
@@ -23,7 +26,7 @@ deferred; elapsed time alone does not resume them. Evidence is
 | Endpoint repair | Deployed in R46 with input telemetry and Right Shift support. Both R47 routes and the return's endpoint/continuation evidence pass their full audits. Physical input acknowledgment and training eligibility remain false. |
 | Native timing v5 | Explicit native timing v5 is committed at `ab136e25be0467c28ca664a825eef5a79bdeefb1` and deployed in R47. Seed and return evidence are accepted; the next forward leg and four-leg qualification are deferred. |
 | Offline recognition replay | Eleven saved captures passed scoped CPU replay: five exploration frames, two climbing frames, the journal, one swimming-controls frame and two map screens. Eleven additional swimming-derived rows are explicitly synthetic. Five recorded positions match the production coordinate conversion; the other checks do not establish localization or current readiness. |
-| GPU runtime | Existing PyTorch 2.7.1 + CUDA 12.8 environment on the RTX 2080 SUPER. |
+| GPU runtime | Existing PyTorch 2.7.1 + CUDA 12.8 environment on the RTX 2080 SUPER. Three bounded saved-image model runs completed on October 26; their fresh results are below. No environment installation was needed. |
 | P2P key compatibility | The official Right Shift command is included in deployed R46 through the existing input implementation. Separate live key-delivery qualification remains pending. |
 | Action acknowledgment | A matching request ID is required before settling policy history. Unknown outcomes preserve the pending action and stop the runner. The focused candidate and caller cohorts passed 55 distinct mocked tests. |
 | Execution-aware decisions | Opt-in client snapshots and GameScaling prompt conditioning are implemented; 121 distinct inert tests passed. One live attack command returned a completed software receipt. The closed context and graph comparisons produced neutral input in both contexts and did not establish receipt-dependent behavior. |
@@ -42,6 +45,57 @@ deferred; elapsed time alone does not resume them. Evidence is
 | GameScaling device-greedy decoding | The disabled candidate passed 19 fake decoder tests. Its two-owner comparison executor passed 16 guarded CPU tests, and a further complete producer-to-reader fixture passed. The prepared experiment compares four pairs on saved images with original full-action validation; CUDA equivalence, simultaneous memory fit and speed remain untested. |
 | Model optimization | Skipping unused final decoder work passed 1,733 correctness checks across two history41 evictions. A separate 40-pair experiment reduced median prediction time from 165.30 ms to 155.07 ms; paired actions/random states and final cache checks passed. |
 | Training | Not started. Model proposals and incomplete recordings are not expert action labels. |
+
+## Fresh saved-image model runs
+
+Three actual loaded-model runs completed between 00:52 and 01:01 UTC on
+October 26. Each owned worker exited successfully and its job was closed.
+The closure independently recomputed the summaries, joined the CUDA and NVML
+device identities, and verified all 185 unique source/input pins. These are
+ordinary adapter measurements; the separate execution-aware native qualification
+and disabled optimization candidates remain unqualified.
+
+| Model path | Measured calls | Full action median / p95 | Replay publication to action median / p95 | Peak PyTorch allocated memory |
+|---|---:|---:|---:|---:|
+| P2P eager, history 41 | 12 | 205.00 / 235.90 ms | 218.89 / 266.02 ms | 416.85 MiB |
+| P2P CUDA graph, history 41 | 12 | 35.82 / 46.21 ms | 54.03 / 68.86 ms | 463.52 MiB |
+| GameScaling CUDA graph, history 0, width 384 | 8 | 938.59 / 1,018.31 ms | 951.48 / 1,046.64 ms | 2,369.09 MiB |
+
+All 12 measured P2P graph calls used an already prepared graph and finished
+their full-action calculation below 50 ms. Replay queue age still pushed its
+publication-to-action p95 above 50 ms. P2P's eager and graph runs used different
+warmup/capture work and independently initialized random state; this is not a
+matched numerical-equivalence experiment or a controlled speedup estimate.
+
+All actions parsed and passed the software protocol checks. All eight
+GameScaling outputs were the same complete 30-token neutral action despite the
+walking instruction. That observation is a behavior gap on this test image,
+not a task-quality score. GameScaling's median first-token latency was 330.85 ms.
+
+The retained street image was captured on October 25 at 17:13:29 UTC. P2P
+directly resized its 1920x1080 pixels to 192x192 using PIL bilinear resampling;
+the adapter's legacy profile name does not imply that a 640x360 stream resize
+occurred. The cached goal embedding was loaded without timing the encoder.
+P2P's accumulated actions are synthetic proposals, not executed-action or
+expert labels. Repeating one frozen image cannot establish navigation ability,
+live capture/input latency, or continuous gameplay.
+
+Each worker used one CPU thread, a 3,072 MiB PyTorch allocator cap and a 180-second
+worker limit. Admission required 3,584 MiB free GPU memory and 6,144 MiB available
+RAM. Device-wide thermal slowdown was active; telemetry covers loading, warmup
+and inference together and does not attribute work to another process. The
+allocator cap excludes CUDA context and other driver allocations.
+
+GameScaling reported reference fallbacks for gated-delta-rule and causal-conv1d
+kernels. The current [FLA CUDA dependencies](https://github.com/fla-org/flash-linear-attention/blob/main/pyproject.toml)
+require Triton 3.3 or newer, while the standard [Triton Windows support table](https://github.com/triton-lang/triton-windows)
+lists this Turing GPU under Triton 3.2. A separately mentioned Turing fork has not
+been installed or qualified here. The existing environment remains unchanged.
+
+Evidence: `artifacts/research/2026-10-24/offline-model-reference-closure-01.json`
+(13,028 bytes, SHA256
+`c595ffcfbae6f67d8b2f9ddcd887bca691a27d78784fb2fcb749f9cba44f6094`).
+It pins all three plans, benchmark reports, worker supervision and logs.
 
 ## Default-branch integration
 

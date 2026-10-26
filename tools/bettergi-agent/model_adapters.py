@@ -70,11 +70,13 @@ class FirstTokenClock:
 
 
 class GameScalingAdapter:
-    """Use the checkpoint template and original action-only prompt on Windows."""
+    """Use the checkpoint template, with action-only output by default on Windows."""
     def __init__(self, checkpoint, source, history=0, max_new_tokens=96,
                  image_width=384, dtype='float16', cuda_graph=False, instruction=None,
                  sampling='greedy', temperature=1.0, top_k=0, top_p=1.0,
-                 gamescaling_prefix_cache=False, **kwargs):
+                 gamescaling_prefix_cache=False, gamescaling_reasoning=False, **kwargs):
+        if type(gamescaling_reasoning) is not bool:
+            raise ValueError('gamescaling-reasoning must be a boolean')
         if gamescaling_prefix_cache and (history != 0 or not cuda_graph):
             raise ValueError('gamescaling-prefix-cache requires GameScaling, history=0, and cuda-graph')
         if instruction is not None and (not isinstance(instruction, str) or not instruction.strip() or len(instruction) > 2000):
@@ -93,6 +95,8 @@ class GameScalingAdapter:
         self.instruction = instruction.strip() if instruction is not None else (
             'Explore the open world, follow the current objective, avoid hazards, and interact with nearby objectives.')
         self.rules = self.instruction + ' Do not spend resources or open purchases.'
+        # Both prefills follow upstream PolicyConfig; the benchmark alone exposes this opt-in.
+        self._assistant_prefill = '<think>' if gamescaling_reasoning else '<think>\n\n</think>'
         self.system = build_system_prompt('Genshin Impact',
             rules=self.rules,
             key_bindings={'W': 'Move forward', 'A': 'Move left', 'S': 'Move backward', 'D': 'Move right',
@@ -105,7 +109,7 @@ class GameScalingAdapter:
         self.dtype = getattr(torch, dtype)
         self.metadata = {'implementation': 'transformers-native-sdpa', 'precision': dtype,
                          'historyFrames': history, 'maxNewTokens': max_new_tokens,
-                         'imageWidth': image_width, 'reasoning': False,
+                         'imageWidth': image_width, 'reasoning': gamescaling_reasoning,
                          'sampling': self.sampling or {'do_sample': False},
                          'imageEncoding': 'RGB pixels; no JPEG round-trip',
                          'instruction': self.instruction, 'rules': self.rules,
@@ -151,7 +155,7 @@ class GameScalingAdapter:
         if context_text is not None:
             # Keep report data in this user turn, separate from assistant action labels.
             current_user['content'].insert(1, {'type': 'text', 'text': context_text})
-        messages.extend([current_user, {'role': 'assistant', 'content': '<think>\n\n</think>'}])
+        messages.extend([current_user, {'role': 'assistant', 'content': self._assistant_prefill}])
         inputs = self.processor.apply_chat_template(messages, tokenize=True, return_dict=True,
             return_tensors='pt', add_generation_prompt=False, continue_final_message=True)
         inputs = {key: value.to('cuda', dtype=self.dtype) if torch.is_floating_point(value)
@@ -172,7 +176,8 @@ class GameScalingAdapter:
                 output = self.decode_graph.generate(inputs, self.max_new_tokens, eos, clock)
         torch.cuda.synchronize()
         text = self.processor.tokenizer.decode(output[0, inputs['input_ids'].shape[-1]:], skip_special_tokens=False)
-        action = self.parse_action('<think>\n\n</think>' + text)
+        # Strict upstream parsing rejects an unclosed thought, including any action inside it.
+        action = self.parse_action(self._assistant_prefill + text)
         # Require a complete tagged chunk; do not treat budget-truncated output as valid.
         valid = complete_gamescaling_action(text, action)
         if valid:
@@ -422,6 +427,8 @@ def make_adapter(name, **kwargs):
     validate_model_profile(kwargs.get('observation_profile', LEGACY), name)
     if kwargs.get('gamescaling_prefix_cache') and name != 'gamescaling':
         raise ValueError('gamescaling-prefix-cache requires the GameScaling model')
+    if kwargs.get('gamescaling_reasoning') and name != 'gamescaling':
+        raise ValueError('gamescaling-reasoning requires the GameScaling model')
     if not torch.cuda.is_available():
         raise RuntimeError('A CUDA-enabled PyTorch build and accessible GPU are required')
     return (GameScalingAdapter if name == 'gamescaling' else OpenP2PAdapter)(**kwargs)

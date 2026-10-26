@@ -1,6 +1,6 @@
 # BetterGI agent status
 
-Updated October 26, 2026, 05:47 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 26, 2026, 08:05 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
 
@@ -48,6 +48,51 @@ deferred; elapsed time alone does not resume them. Evidence is
 | GameScaling device-greedy decoding | A loaded-model run completed four setup calls and four balanced pairs. Saved records pass exact token/action checks and 236 exact recorded common-state comparisons; both graphs fit with 2,580 MiB peak PyTorch reservation. The candidate saved only 8.66–53.04 ms (0.19–1.42%) under heavy GPU load. Independent process verification was blocked, so full qualification and promotion remain withheld. |
 | Model optimization | Skipping unused final decoder work passed 1,733 correctness checks across two history41 evictions. A separate 40-pair experiment reduced median prediction time from 165.30 ms to 155.07 ms; paired actions/random states and final cache checks passed. |
 | Training | Not started. The pinned public P2P metadata has no Genshin labels; local demonstrations remain needed. The current recorder captures automated receipts, not human input. Model proposals and incomplete recordings are not expert action labels. |
+
+## GameScaling literal-key control
+
+A finite saved-image diagnostic completed 12 cold greedy calls: two archived
+frames, two repeats and three instructions. The frames differ in whether a
+contextual F prompt is visible. All 12 outputs were the same valid, complete
+200 ms neutral action; all six repeated arm/frame pairs matched exactly.
+
+| Instruction | Whole-chunk rubric passes | Cases requiring F | Cases emitting F |
+|---|---:|---:|---:|
+| Press F now, with no other controls | 0/4 | 4 | 0 |
+| Press F only when its prompt is visible | 2/4 | 2 | 0 |
+| Stand still | 4/4 | 0 | 0 |
+
+The combined 6/12 score only matches the always-neutral baseline. Removing the
+visibility condition did not elicit F in this configuration. This narrows the
+next investigation but does not identify a cause: history zero, reduced image
+size, disabled reasoning and model task coverage remain unresolved factors.
+The original eager generation path used FP16, width 384, a 64-token limit and
+no warmups. Its cold call times are not a latency comparison.
+
+All 105 source pins, both input copies, checkpoint bytes and retained reports
+passed readback. Each original tool execution returned zero. No independent
+process identity or retirement check was attempted; the local watchdog is not
+independent supervision. Lifetime, live-quality and training qualification
+remain false. The earlier fully qualified execution plan remains unready.
+The limited diagnostic receipt is
+`artifacts/research/2026-10-24/offline-gamescaling-literal-f-direct-01/review.json`
+(11,124 bytes, SHA256
+`1aa0e40dd1d53b061ff1ea56c14160af109e7ac08968f3901c236d66e6c2175f`).
+
+The offline benchmark now has an explicit `--gamescaling-reasoning` switch for
+a controlled follow-up. Its open-thought prefill and strict parser follow the
+pinned upstream implementation; the live stream CLI does not expose the switch.
+All 50 focused CPU regression cases passed, including seven new cases. Actual
+CPU processor checks confirm identical image tensors and prompt content except
+for the assistant suffix (842 versus 840 tokens). Four actual upstream parser
+checks also passed, including rejecting an action inside unfinished reasoning
+and ignoring an example action inside a completed thought. No model predictions
+or CUDA initialization occurred in those CPU checks. Evidence is under
+`artifacts/research/2026-10-24/gamescaling-reasoning-cpu-01/` and
+`artifacts/research/2026-10-24/gamescaling-reasoning-inputs-01/review.json`
+(22,330 bytes, SHA256
+`91ed0bf44273271538a358646efbbf352dc027b9734404ac4599a38a9dc9d282`).
+The corresponding GPU reasoning comparison has not yet run.
 
 ## Coordinated application upgrade
 

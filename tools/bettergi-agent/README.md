@@ -134,6 +134,14 @@ use explicit LF Git attributes because their admission guards check exact bytes.
 
 `--cuda-graph` also supports GameScaling. Original multimodal prefill feeds Transformers' static hybrid cache, followed by one captured whole-token decode step. The adapter validates logits and every mutated cache tensor against eager execution, and checks its first two complete greedy outputs token-for-token against original `generate()`. These checks increase startup cost and are included in warmup time. A changed prompt capacity triggers graph recapture; the live gate keeps slow startup/capture actions from reaching the controller.
 
+For saved-image quality diagnostics, `benchmark.py --model gamescaling` accepts
+`--gamescaling-reasoning`. It uses upstream's open `<think>` prefill; the default
+uses `<think>\n\n</think>`. Thinking and action tokens share `--max-new-tokens`.
+An unfinished thought or incomplete action produces no accepted steps. Compare
+the same images, goal, sampling and token budget in both modes. The live stream
+CLI does not expose this experimental switch, and offline results do not qualify
+gameplay quality or controller latency.
+
 P2P evaluates the original FP32 rotary-position formula directly on the GPU. This prevents FP16 position overflow and removes the finite-cache reset/pause; temporal K/V history still rolls at 200 frames. Tests compare exact values against the original FP32 cache, including positions beyond 65504. `--position-offset` exercises large positions in an offline diagnostic; it does not create prior gameplay experience.
 
 ```powershell

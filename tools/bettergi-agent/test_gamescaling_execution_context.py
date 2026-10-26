@@ -83,6 +83,7 @@ def make_adapter(path=SOURCE, history=0, prefix=False, graph=False, valid=True):
     obj.image_width = 384
     obj.history = deque(maxlen=history)
     obj.system = 'original system rules'
+    obj._assistant_prefill = '<think>\n\n</think>'
     obj.dtype = 'float16'
     obj.max_new_tokens = 96
     obj.sampling = {'do_sample': True, 'temperature': 0.7}

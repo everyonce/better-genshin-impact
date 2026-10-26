@@ -92,6 +92,8 @@ def arguments():
     parser.add_argument('--history', type=int, default=None)
     parser.add_argument('--image-width', type=int, default=384)
     parser.add_argument('--max-new-tokens', type=int, default=64)
+    parser.add_argument('--gamescaling-reasoning', action='store_true',
+                        help='Offline GameScaling comparison: allow thinking within max-new-tokens before a complete action')
     parser.add_argument('--sampling', choices=['greedy', 'sample'], default='greedy', help='GameScaling token selection; defaults to the validated greedy path')
     parser.add_argument('--temperature', type=float, default=1.0, help='GameScaling sampling temperature; requires --sampling sample for overrides')
     parser.add_argument('--top-k', type=int, default=0, help='GameScaling sampling top-k; 0 explicitly disables filtering')
@@ -110,6 +112,8 @@ def arguments():
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--game-running', action='store_true', help='Operator attestation, not automatically detected')
     args = parser.parse_args()
+    if args.gamescaling_reasoning and args.model != 'gamescaling':
+        parser.error('gamescaling-reasoning requires gamescaling')
     if args.gamescaling_prefix_cache and (args.model != 'gamescaling' or not args.cuda_graph or args.history not in (None, 0)):
         parser.error('gamescaling-prefix-cache requires gamescaling, history 0, and cuda-graph')
     if args.p2p_mouse_sampling is not None and args.model != 'open-p2p':
@@ -186,7 +190,8 @@ def main():
             goal_embedding=args.goal_embedding, instruction=args.instruction,
             sampling=args.sampling, temperature=args.temperature, top_k=args.top_k, top_p=args.top_p,
             cuda_graph=args.cuda_graph, fast_start=args.p2p_fast_start, p2p_mouse_sampling=args.p2p_mouse_sampling,
-            gamescaling_prefix_cache=args.gamescaling_prefix_cache, **temperature_options)
+            gamescaling_prefix_cache=args.gamescaling_prefix_cache,
+            gamescaling_reasoning=args.gamescaling_reasoning, **temperature_options)
         torch.cuda.synchronize()
         report['loadSeconds'] = time.perf_counter() - start_load
         report['adapter'] = policy.metadata

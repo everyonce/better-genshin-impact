@@ -550,6 +550,9 @@ public sealed partial class AgentActionController(IAgentInput input, bool inputE
     private void Finish(string status, string reason, double now, bool release = true)
     {
         if (_stepApplications?.IsQueuedMode == true) { FinishQueued(status, reason, now); return; }
+        // Stop/release callers can sample before waiting for a dispatch that holds _gate.
+        // Keep replacement's exact successor-acceptance boundary; refresh only terminal release.
+        if (release && monotonicClock is not null && TryReadStartClock(now, out var terminalAt)) now = terminalAt;
         var priorOrigin = _inputOrigin;
         _inputOrigin = "release:" + reason;
         var releaseOutcome = release ? "unknown" : "not_requested";

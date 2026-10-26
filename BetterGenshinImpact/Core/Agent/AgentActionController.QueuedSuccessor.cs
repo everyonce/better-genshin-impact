@@ -206,6 +206,9 @@ public sealed partial class AgentActionController
         var box = _stepApplications!; box.CloseQueued();
         if (_queuedCleanupAttempted) return;
         _queuedCleanupAttempted = true;
+        // A queued dispatch can finish while stop waits for _gate; timestamp the terminal operation here.
+        // Clock failure must never prevent the already-required input release.
+        if (monotonicClock is not null && TryReadStartClock(now, out var terminalAt)) now = terminalAt;
         var active = _active; var queued = _queued;
         _queuedClosedRequests = new[] { active, queued }.Where(v => v is not null).Cast<AgentRequest>().ToArray();
         var priorOrigin = _inputOrigin; _inputOrigin = "release:" + reason;

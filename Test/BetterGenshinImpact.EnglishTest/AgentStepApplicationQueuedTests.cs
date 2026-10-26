@@ -212,6 +212,20 @@ public sealed class AgentStepApplicationQueuedTests
         Assert.Equal(2, f.Terminals().Count); Assert.Empty((JArray)f.Terminals().Single(t => (string?)t["binding"]!["requestId"] == "q")["applicationSequences"]!);
     }
 
+    /// <summary>A stop sampled before queued admission cannot timestamp either terminal before its owner existed.</summary>
+    [Fact]
+    public void QueuedStopRefreshesStaleCallerTime()
+    {
+        var f = new Fixture(); f.StartP(); f.QueueQ(); f.Now = 150;
+        f.Controller.Stop(125, "client_stop");
+        var receipts = f.Controller.DrainReceipts();
+        Assert.Equal(2, receipts.Length);
+        Assert.All(receipts, receipt => Assert.Equal(150, receipt.EndedAtMs));
+        Assert.Single(receipts.Single(receipt => receipt.RequestId == "p").AppliedSteps);
+        Assert.Empty(receipts.Single(receipt => receipt.RequestId == "q").AppliedSteps);
+        Assert.Equal(1, f.Input.Releases);
+    }
+
     /// <summary>An earlier ReleaseAll latches unknown software state and prevents first v2 configuration.</summary>
     [Fact]
     public void FirstEnableCannotLaunderReleaseUncertainty()

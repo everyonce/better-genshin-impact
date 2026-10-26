@@ -11,6 +11,7 @@ import shutil
 import stat
 import struct
 import sys
+import tempfile
 import time
 import uuid
 
@@ -1547,7 +1548,7 @@ def run_command(root, argv, work_dir, python_exe, timeout, job_dir, output_limit
 def _no_links(path):
     """Match the restart server's requirement for a physical local staging tree."""
     for item in (path, *path.parents):
-        attributes = item.stat()
+        attributes = item.lstat()
         if item.is_symlink() or getattr(attributes, 'st_file_attributes', 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT:
             raise ControlError('Replacement paths must not contain filesystem links.')
 
@@ -1558,14 +1559,143 @@ def _sha256(path):
         return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
-def stage_configuration(source, target):
-    """Copy local settings and missing custom profiles without replacing shipped assets."""
+# Root-store staging remains bounded even when a directory has only empty subdirectories.
+PULONIA_ENTRY_LIMIT = 8192
+PULONIA_FILE_LIMIT = 4096
+PULONIA_FILE_BYTES = 16 * 1024 * 1024
+PULONIA_TOTAL_BYTES = 256 * 1024 * 1024
+
+
+def _pulonia_file(path, expected, destination=None):
+    """Hash/copy one bounded owned stream; reject growth, replacement or mutation seen during the read."""
+    _no_links(path)
+    digest = hashlib.sha256()
+    remaining = expected.st_size
+    # The optional destination is an exclusively created file inside our private staging directory.
+    with path.open('rb') as original:
+        initial = os.fstat(original.fileno())
+        identity = lambda value: (value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns)
+        if identity(initial) != identity(expected):
+            raise ControlError('Pulonia source changed before a bounded read.')
+        while remaining:
+            chunk = original.read(min(65536, remaining))
+            if not chunk:
+                raise ControlError('Pulonia source shortened during a bounded read.')
+            digest.update(chunk)
+            if destination is not None:
+                destination.write(chunk)
+            remaining -= len(chunk)
+        if original.read(1) or identity(os.fstat(original.fileno())) != identity(expected):
+            raise ControlError('Pulonia source changed during a bounded read.')
+    _no_links(path)
+    if identity(path.lstat()) != identity(expected):
+        raise ControlError('Pulonia source was replaced during a bounded read.')
+    return digest.hexdigest()
+
+
+def _pulonia_inventory(root):
+    """Inspect opaque files without parsing/migrating state; this is not a snapshot of an active writer."""
+    ancestor = root
+    while not os.path.lexists(ancestor):
+        ancestor = ancestor.parent
+    _no_links(ancestor)
+    if not os.path.lexists(root):
+        return {'present': False, 'directories': [], 'files': [], 'totalBytes': 0}, {}
+    _no_links(root)
+    if not root.is_dir():
+        raise ControlError('User/Pulonia must be a physical directory.')
+    pending, directories, files, observed = [root], [], [], {}
+    entries, total = 0, 0
+    while pending:
+        directory = pending.pop()
+        _no_links(directory)
+        with os.scandir(directory) as children:
+            for child in children:
+                entries += 1
+                if entries > PULONIA_ENTRY_LIMIT:
+                    raise ControlError('Pulonia staging exceeds the 8192-entry limit.')
+                path = Path(child.path)
+                _no_links(path)
+                info = path.lstat()
+                relative = path.relative_to(root).as_posix()
+                if len(relative.encode('utf-8')) > 1024:
+                    raise ControlError('A Pulonia relative path exceeds the 1024-byte limit.')
+                if stat.S_ISDIR(info.st_mode):
+                    directories.append(relative)
+                    pending.append(path)
+                elif stat.S_ISREG(info.st_mode):
+                    if len(files) >= PULONIA_FILE_LIMIT or info.st_size > PULONIA_FILE_BYTES:
+                        raise ControlError('Pulonia staging exceeds the 4096-file or 16 MiB/file limit.')
+                    total += info.st_size
+                    if total > PULONIA_TOTAL_BYTES:
+                        raise ControlError('Pulonia staging exceeds the 256 MiB total limit.')
+                    files.append({'path': relative, 'bytes': info.st_size, 'sha256': _pulonia_file(path, info)})
+                    observed[relative] = info
+                else:
+                    raise ControlError('Pulonia staging accepts only ordinary files and directories.')
+    names = directories + [row['path'] for row in files]
+    if len({name.casefold() for name in names}) != len(names):
+        raise ControlError('Pulonia paths collide under case-insensitive comparison.')
+    return {'present': True, 'directories': sorted(directories),
+            'files': sorted(files, key=lambda row: row['path']), 'totalBytes': total}, observed
+
+
+def _stage_pulonia(source, target, inventory, observed):
+    """Publish one complete verified tree or retain an identical tree; never merge or replace another store."""
+    if os.path.lexists(target):
+        if _pulonia_inventory(target)[0] != inventory:
+            raise ControlError('Target already has different User/Pulonia; select a fresh published release.')
+        outcome = 'retained-identical'
+    elif not inventory['present']:
+        outcome = 'source-absent'
+    else:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        _no_links(target.parent)
+        # Only this newly created private directory is cleaned on failure. Original and final stores are untouched.
+        with tempfile.TemporaryDirectory(prefix='.pulonia-stage-', dir=target.parent) as temporary:
+            staged = Path(temporary) / 'Pulonia'
+            staged.mkdir()
+            for relative in inventory['directories']:
+                (staged / relative).mkdir(parents=True, exist_ok=True)
+            for row in inventory['files']:
+                destination = staged / row['path']
+                with destination.open('xb') as replacement:
+                    actual = _pulonia_file(source / row['path'], observed[row['path']], replacement)
+                if actual != row['sha256']:
+                    raise ControlError('Pulonia source bytes changed after preflight.')
+            if _pulonia_inventory(staged)[0] != inventory or _pulonia_inventory(source)[0] != inventory:
+                raise ControlError('Pulonia inventory changed; staged data was not published.')
+            if os.path.lexists(target):
+                raise ControlError('Target User/Pulonia appeared during staging; no store was replaced.')
+            # Windows directory rename refuses an existing destination; the target must remain inactive/exclusive.
+            staged.rename(target)
+        outcome = 'copied'
+    if _pulonia_inventory(source)[0] != inventory or _pulonia_inventory(target)[0] != inventory:
+        raise ControlError('Pulonia final verification changed; do not launch the target or reuse an older staging report.')
+    return {'version': 1, 'outcome': outcome, 'sourceQuiescentAsserted': True,
+            'activeWriterSnapshotProven': False, **inventory}
+
+
+def stage_configuration(source, target, *, preserve_pulonia=False, source_quiescent=False):
+    """Copy settings/profiles; explicitly selected root upgrades preserve an already-quiescent opaque Pulonia store."""
+    if type(preserve_pulonia) is not bool or type(source_quiescent) is not bool:
+        raise ControlError('Pulonia staging options must be explicit booleans.')
+    if preserve_pulonia != source_quiescent:
+        raise ControlError('Root-store staging requires both preserve_pulonia and source_quiescent; quiescence is a technical prerequisite.')
     source = local_absolute(source)
     target = local_absolute(target)
     _no_links(source)
     _no_links(target)
     if source.resolve() == target.resolve() or not (target / 'BetterGI.exe').is_file():
         raise ControlError('Choose a different, already published BetterGI target directory.')
+    pulonia = None
+    if preserve_pulonia:
+        if (not source.is_dir() or source.resolve().is_relative_to(target.resolve())
+                or target.resolve().is_relative_to(source.resolve())):
+            raise ControlError('Root-store staging requires distinct, non-nested installation directories.')
+        pulonia, observed = _pulonia_inventory(source / 'User/Pulonia')
+        if os.path.lexists(target / 'User/Pulonia') and _pulonia_inventory(target / 'User/Pulonia')[0] != pulonia:
+            raise ControlError('Target already has different User/Pulonia; select a fresh published release.')
     selected = []
     for relative in ('User/config.json', 'User/ExternalControl/enable-quest-control.json'):
         candidate = source / relative
@@ -1579,7 +1709,7 @@ def stage_configuration(source, target):
             _no_links(profile_root)
             selected.extend(item for item in profile_root.rglob('*')
                             if item.is_file() and item.suffix.lower() in ('.json', '.txt', '.yaml', '.yml'))
-    if len(selected) > 4096:
+    if len(selected) + (len(pulonia['files']) if pulonia is not None else 0) > 4096:
         raise ControlError('Configuration staging exceeds the 4096-file limit.')
     copied, retained = [], []
     planned = []
@@ -1608,6 +1738,8 @@ def stage_configuration(source, target):
         copied.append(relative.as_posix())
     report = {'version': 1, 'sourceDirectory': str(source), 'targetDirectory': str(target),
               'copied': copied, 'retainedFromTarget': retained}
+    if pulonia is not None:
+        report['pulonia'] = _stage_pulonia(source / 'User/Pulonia', target / 'User/Pulonia', pulonia, observed)
     report_path = target / 'configuration-staging.json'
     atomic_json(report_path, report)
     return {**report, 'reportFile': str(report_path)}
@@ -1830,6 +1962,10 @@ def main():
     staging = sub.add_parser('stage-config', help='copy local settings and missing custom profiles into a published release')
     staging.add_argument('--source-directory', required=True)
     staging.add_argument('--target-directory', required=True)
+    staging.add_argument('--preserve-pulonia', action='store_true',
+                         help='preserve all opaque User/Pulonia data for a root-host upgrade; requires --source-quiescent')
+    staging.add_argument('--source-quiescent', action='store_true',
+                         help='assert all source-store writers are stopped/quiescent and target remains inactive/exclusive')
     for command in ('status', 'start', 'ensure-child', 'cancel-start', 'start-game', 'start-agent', 'stop-agent', 'set-capture-mode', 'reset-navigation', 'run-navigation-baseline', 'minimize', 'show', 'exec', 'hot-replace'):
         item = sub.add_parser(command)
         item.add_argument('--process-id', type=int)
@@ -1893,7 +2029,9 @@ def main():
         if args.command == 'discover':
             result = discover()
         elif args.command == 'stage-config':
-            result = stage_configuration(args.source_directory, args.target_directory)
+            options = ({'preserve_pulonia': args.preserve_pulonia, 'source_quiescent': args.source_quiescent}
+                       if args.preserve_pulonia or args.source_quiescent else {})
+            result = stage_configuration(args.source_directory, args.target_directory, **options)
         else:
             if not 1 <= args.timeout <= 3600:
                 raise ControlError('--timeout must be between 1 and 3600 seconds.')

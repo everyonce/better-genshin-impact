@@ -247,6 +247,55 @@ Copy the current local settings separately into the new package:
 
 This copies `User/config.json`, the existing external-control marker, and missing custom definitions in ScriptGroup, AutoFight, AutoGeniusInvokation and AutoPathing. It preserves files already shipped at those profile paths, skips JS/I18n/default assets and recorded data, and reports copied paths without printing settings. A different main config or marker already in the target causes a failure so an existing installation is not silently overwritten. `configuration-staging.json` records the result.
 
+### Preserve the coordinator store when preparing a root-host upgrade
+
+The default `stage-config` and child-only replacement paths still omit `User/Pulonia`.
+A child update does not update the root coordinator. For a coordinated root-host
+upgrade, first stop or otherwise establish quiescence of **all** source-store
+writers, and keep the target installation inactive and exclusive throughout
+staging. This is a technical precondition supplied by the upgrade workflow;
+the stager does not query an endpoint, stop an application, or infer quiescence
+from an idle task count. Do not use this mode against an actively written store.
+
+```powershell
+& $py tools/rdp-automation/rdp_control.py stage-config `
+  --source-directory 'D:/path/to/retired-root/BetterGI-English-win-x64' `
+  --target-directory 'D:/path/to/fresh-release/BetterGI-English-win-x64' `
+  --preserve-pulonia --source-quiescent
+```
+
+Both flags are required together. They preserve every ordinary file and empty
+directory under `User/Pulonia`, including original state, backups, retained
+schema-2 bytes, plans, history, account-image bytes, and unknown/partial files.
+No JSON is converted, uncertainty resolved, credential accessed, or image decoded.
+The new runtime's legacy-state scheduling hold remains in force. File contents
+are copied byte-for-byte; this is not an ACL or timestamp migration.
+
+The existing 4,096-file combined configuration limit and 16 MiB/file ceiling
+remain. Pulonia additionally has an 8,192-entry limit (including directories),
+a 256 MiB aggregate byte limit, and a 1,024-byte relative-path limit. Oversized,
+non-ordinary, reparse/link, case-colliding, or conflicting target trees are
+refused without silently skipping data. A target Pulonia store must be absent
+or completely byte-identical, including its file/directory inventory; stores
+are never merged or overwritten. A complete private copy is hash-checked before
+its directory is published. Only that newly owned private staging directory
+is cleaned on failure; source and published stores are retained.
+
+The staging report records the original relative paths, lengths and SHA-256s,
+source presence, copy/retention outcome and caller-asserted quiescence. Repeated
+inventory/hash checks detect observed changes but **do not prove a coherent
+multi-file snapshot while a writer is active**. If any check fails, do not launch
+the target or reuse an older successful staging report. Existing configuration
+copies or a fully published Pulonia tree may remain after a late failure; the
+whole configuration operation is not a cross-directory transaction.
+
+Live root retirement/restart, exact new root and child identity/build checks,
+coordinator compatibility, and verification that no old writer resumes remain
+separate deployment steps after user readiness. These flags provide no restart,
+RDP, navigation, model or input authority. The focused offline fixture command is
+`python -B -m unittest -v test_pulonia_staging` from `tools/rdp-automation`; it uses
+only owned temporary directories and traps live/native entry points.
+
 ```powershell
 & $py tools/rdp-automation/rdp_control.py hot-replace `
   --process-id 5678 --windows-session-id 3 --timeout 120 `

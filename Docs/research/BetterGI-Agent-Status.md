@@ -1,6 +1,6 @@
 # BetterGI agent status
 
-Updated October 26, 2026, 01:26 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 26, 2026, 02:10 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
 
@@ -28,6 +28,7 @@ deferred; elapsed time alone does not resume them. Evidence is
 | Native timing v5 | Explicit native timing v5 is committed at `ab136e25be0467c28ca664a825eef5a79bdeefb1` and deployed in R47. Seed and return evidence are accepted; the next forward leg and four-leg qualification are deferred. |
 | Offline recognition replay | Eleven saved captures passed scoped CPU replay: five exploration frames, two climbing frames, the journal, one swimming-controls frame and two map screens. Eleven additional swimming-derived rows are explicitly synthetic. Five recorded positions match the production coordinate conversion; the other checks do not establish localization or current readiness. |
 | GPU runtime | Existing PyTorch 2.7.1 + CUDA 12.8 environment on the RTX 2080 SUPER. Bounded loaded-model latency runs and paired scene/goal probes completed on October 26; their fresh results are below. No environment installation was needed. |
+| P2P temperature candidate | Explicit `--p2p-temperature 0.2` is available for replay and shadow runs. It reduced unwanted movement in paired saved-image probes; 40 actual API predictions exactly matched the reference, and the public CUDA graph command passed. One hundred CPU checks passed. Default sampling and the original native adapter remain unchanged; wider task quality and live control remain unqualified. |
 | P2P key compatibility | The official Right Shift command is included in deployed R46 through the existing input implementation. Separate live key-delivery qualification remains pending. |
 | Action acknowledgment | A matching request ID is required before settling policy history. Unknown outcomes preserve the pending action and stop the runner. The focused candidate and caller cohorts passed 55 distinct mocked tests. |
 | Execution-aware decisions | Opt-in client snapshots and GameScaling prompt conditioning are implemented; 121 distinct inert tests passed. One live attack command returned a completed software receipt. The closed context and graph comparisons produced neutral input in both contexts and did not establish receipt-dependent behavior. |
@@ -150,6 +151,81 @@ summaries, compared all paired outputs and verified 117 unique source/input pins
 These small samples expose instruction-response limitations; they do not rank
 gameplay quality, prove text-independent logits, qualify live control or create
 expert training labels. No actions were sent to the game.
+
+## P2P temperature candidate
+
+A second 160-call cold-history probe changed only the original P2P model's
+explicit sampling temperature from 1 to 0.2. All paired calls started with the
+same image, goal tensor, cache and random state. The original mouse decoder was
+retained, and all 32 duplicate-image controls matched exactly.
+
+| Instruction / retained image | Movement at temperature 1 | Movement at temperature 0.2 |
+|---|---:|---:|
+| Walk / initial | 27/32 | 32/32 |
+| Walk / final | 27/32 | 31/32 |
+| Stand still / initial | 17/32 | 0/32 |
+| Stand still / final | 15/32 | 1/32 |
+
+Movement means a proposed W/A/S/D key. This is evidence for a useful sampling
+setting on these two images, not a general instruction-following or navigation
+score. It does not require training a new model.
+
+Five completed full-history episodes then used seed 9001, 42 warmup calls and
+12 measured CUDA graph calls each. Walking produced movement on all 12 measured
+calls for either image; standing produced no input on all 12 for either image.
+The repeated initial-image walking episode matched all 54 token/raw/controller
+actions and its terminal cache/random state exactly. There were 270 predictions
+in total, including 60 measured graph calls; 12 measured calls belong to the
+repeat control. History was filled with unexecuted proposals on an unchanged
+image, so these correlated sequences do not establish real gameplay quality.
+
+Two earlier workers reached their 180-second limits and closed their own jobs;
+their failed supervision and logs remain retained and are excluded from passing
+results. A preparation failure and a free-memory refusal also remain recorded.
+The successful single-episode probes used a 768 MiB PyTorch allocator cap,
+required 2,048 MiB free GPU memory and 6,144 MiB available RAM, and used one CPU
+thread. CUDA context/driver allocations are outside that allocator cap.
+
+The reusable implementation lives in `tools/bettergi-agent/p2p_sampling.py`.
+The default temperature 1 delegates to the original factory without extra
+arguments; explicit overrides select a separate class and record the scalar in
+metadata. The original `model_adapters.py` bytes remain unchanged. Overrides are
+accepted by the benchmark and shadow client, refused with `--enable-input`, and
+excluded from the existing native checkpoint qualification profile. The scalar
+stays fixed for the adapter's lifetime, including captured CUDA graphs.
+
+The actual new API then ran 40 cold-history predictions across eight paired
+seeds and five conditions. Every token, raw action, controller step, before/after
+cache and random-state hash matched the retained temperature-0.2 reference.
+The public benchmark command separately completed 42 warmup and 12 measured
+calls using `--p2p-temperature 0.2 --cuda-graph --history 41`. Its graph capture
+passed the original action-exact/cache-tolerance checks, and every measured call
+used the prepared graph and proposed movement. Full-action median/p95 was
+174.72/184.36 ms; replay publication-to-action was 192.84/219.76 ms. Peak allocated
+memory was 463.52 MiB. Device-wide utilization was 97–98% during that worker,
+with a median graphics clock of 1,095 MHz. These shared-device samples do not
+attribute competing work, and this run is not a controlled comparison with the
+earlier 35.82 ms median. The full-history diagnostic episodes likewise had
+variable latency.
+
+The final CPU cohort passed all 100 tests with no skips and no CUDA
+initialization. It covers original factory behavior, the upstream sampling
+argument, CLI routing, invalid settings, direct programmatic loading, the live
+input boundary, actual native class admission, and existing stream/action/
+GameScaling regressions. Retained source copies match the tested bytes.
+
+Independently closed evidence:
+
+- Cold temperature comparison: `artifacts/research/2026-10-24/offline-p2p-temperature-020-01/closure.json`
+  (5,760 bytes, SHA256 `18f7c7579ef9e12b6ffea8f5b60063ea6a486f3efa6991778c7f6e6a56f95077`).
+- Full-history episodes and repeat: `artifacts/research/2026-10-24/offline-p2p-temperature-history-closure-01.json`
+  (19,260 bytes, SHA256 `dabcbd4bfae6a93a0e4fe8ca85fcc5eed9c1935d117a058fe99522b9f26f7bc3`); 178 unique source/input pins were verified, including the frozen original source archive.
+- New API parity: `artifacts/research/2026-10-24/offline-p2p-temperature-api-01/closure.json`
+  (4,914 bytes, SHA256 `3e2f3617da757cbdb575a64028207857766cce31e4d5114640fe1d95753942ac`).
+- Public CUDA graph command: `artifacts/research/2026-10-24/offline-p2p-temperature-cli-01/graph-01/closure.json`
+  (3,707 bytes, SHA256 `41ca9af6d84c3cf6ec6d818f821d64854a31ae785849466be236bed152fce44e`).
+- Final CPU validation: `artifacts/research/2026-10-24/p2p-temperature-option-validation-02/result.json`
+  (2,757 bytes, SHA256 `ade07a05ae2c9837678aa82369c8ceaa772622c34d4b7a1b375a3e5dc5244a72`).
 
 ## Default-branch integration
 

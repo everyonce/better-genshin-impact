@@ -56,6 +56,18 @@ In the original offline benchmark on this RTX 2080 SUPER, the corrected 200-fram
 
 GameScaling's 20-action median improved from 2012.31ms to 494.48ms using its whole-token graph; p95 improved from 2443.05ms to 531.37ms. It still misses its 200ms action horizon. All GameScaling replay outputs were no-op chunks. Parsing and static protocol compatibility therefore establish neither useful behavior nor actual execution. See `Docs/research/BetterGI-Agent-Sprint-Results-2026-10-23.md` for the combined sprint results and remaining live qualification.
 
+P2P replay and shadow runs also accept `--p2p-temperature 0.2`. The default `1`
+uses the original adapter. An override selects a separate experimental adapter
+and records its temperature in the result metadata; the value stays fixed for
+that adapter and its CUDA graphs. `--temperature` remains GameScaling's option.
+The current P2P candidate was tested with history 41 and cached text goals on
+retained screenshots. Lower temperature reduced unwanted movement under
+“Stand still” in those samples; wider gameplay quality remains unverified.
+See the [current evidence](../../Docs/research/BetterGI-Agent-Status.md).
+Overrides are refused with `--enable-input` and cannot enter the existing native
+checkpoint qualification profile. They currently support offline comparison
+and shadow observation only.
+
 ## Native compatibility changes
 
 - **GameScaling:** Uses its official prompt, original checkpoint chat template, special action tokens, and action-only prefix. Native Transformers SDPA runs in FP16 on Turing. Qwen3.5's linear-attention/convolution reference kernels work without native Linux extensions but are slow. Only complete, finite action chunks are accepted. Mouse deltas are per-mille of source dimensions and are applied once per chunk. Number-key and function-key capitalization stays distinct. Scrolling is recognized but not submitted because the first bridge does not support it.

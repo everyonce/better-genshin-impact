@@ -737,6 +737,18 @@ def validate_execution_context_options(args):
     return mode
 
 
+def validate_p2p_temperature_options(args):
+    """Limit experimental sampling to P2P replay/shadow before model or pipe work."""
+    temperature = getattr(args, 'p2p_temperature', 1.0)
+    if type(temperature) not in (int, float) or not math.isfinite(temperature) or temperature <= 0:
+        raise ValueError('p2p-temperature must be finite and positive')
+    if temperature != 1.0 and args.model != 'open-p2p':
+        raise ValueError('p2p-temperature requires open-p2p')
+    if temperature != 1.0 and getattr(args, 'enable_input', False):
+        raise ValueError('p2p-temperature overrides currently support replay and shadow runs only')
+    return float(temperature)
+
+
 def parse_arguments(argv=None):
     """Validate the shared one-shot/resident options before loading any GPU weights."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -771,6 +783,8 @@ def parse_arguments(argv=None):
                         help='Use masked empty fixed-capacity P2P history; requires --cuda-graph')
     parser.add_argument('--p2p-mouse-sampling', choices=['mean', 'conservative', 'truncated_normal'],
                         help='Override the P2P checkpoint mouse decoder; mean reproduces older comparisons')
+    parser.add_argument('--p2p-temperature', type=float, default=1.0,
+                        help='Experimental P2P temperature for shadow runs; live input keeps temperature 1')
     parser.add_argument('--p2p-execution-feedback', action='store_true',
                         help='Roll back rejected P2P predictions instead of storing unexecuted actions in history')
     parser.add_argument('--soft-cadence', action='store_true',
@@ -845,6 +859,10 @@ def parse_arguments(argv=None):
         parser.error('p2p-fast-start requires the open-p2p model and cuda-graph')
     if args.p2p_mouse_sampling is not None and args.model != 'open-p2p':
         parser.error('p2p-mouse-sampling requires open-p2p')
+    try:
+        validate_p2p_temperature_options(args)
+    except ValueError as error:
+        parser.error(str(error))
     if args.action_hold_ms is not None and (args.model != 'open-p2p' or not 33 <= args.action_hold_ms <= 100):
         parser.error('action-hold-ms requires open-p2p and must be between 33 and 100')
     if args.resident:
@@ -878,9 +896,15 @@ def parse_arguments(argv=None):
 def load_policy(args):
     """Load a real checkpoint once; a resident caller reuses this object for every episode."""
     validate_execution_context_options(args)
+    p2p_temperature = validate_p2p_temperature_options(args)
     policy = None
     if args.model != 'observe':
         from model_adapters import make_adapter
+        temperature_options = {}
+        if p2p_temperature != 1.0:
+            # Explicit overrides use a separate experimental adapter class.
+            from p2p_sampling import make_adapter
+            temperature_options['p2p_temperature'] = p2p_temperature
         policy = make_adapter(args.model, source=args.source, checkpoint=args.checkpoint,
                               cache_root=args.cache_root, history=args.history if args.history is not None else (0 if args.model == 'gamescaling' else 200),
                               image_width=args.image_width, max_new_tokens=args.max_new_tokens,
@@ -891,7 +915,7 @@ def load_policy(args):
                               instruction=args.instruction,
                               sampling=args.sampling, temperature=args.temperature,
                               top_k=args.top_k, top_p=args.top_p,
-                              gamescaling_prefix_cache=args.gamescaling_prefix_cache)
+                              gamescaling_prefix_cache=args.gamescaling_prefix_cache, **temperature_options)
     return policy
 
 

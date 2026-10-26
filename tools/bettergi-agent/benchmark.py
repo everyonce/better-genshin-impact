@@ -103,6 +103,8 @@ def arguments():
     parser.add_argument('--p2p-fast-start', action='store_true', help='Start P2P graph inference with correctly masked empty history')
     parser.add_argument('--p2p-mouse-sampling', choices=['mean', 'conservative', 'truncated_normal'],
                         help='Override the P2P checkpoint mouse decoder; mean reproduces older benchmarks')
+    parser.add_argument('--p2p-temperature', type=float, default=1.0,
+                        help='Experimental P2P sampling temperature; 1 preserves the original adapter')
     parser.add_argument('--keep-warmup-context', action='store_true', help='Retain populated temporal state for a steady-state eager comparison')
     parser.add_argument('--position-offset', type=int, default=0, help='Diagnostic OpenP2P step offset; does not simulate prior gameplay')
     parser.add_argument('--seed', type=int, default=42)
@@ -112,6 +114,10 @@ def arguments():
         parser.error('gamescaling-prefix-cache requires gamescaling, history 0, and cuda-graph')
     if args.p2p_mouse_sampling is not None and args.model != 'open-p2p':
         parser.error('p2p-mouse-sampling requires open-p2p')
+    if not math.isfinite(args.p2p_temperature) or args.p2p_temperature <= 0:
+        parser.error('p2p-temperature must be finite and positive')
+    if args.p2p_temperature != 1.0 and args.model != 'open-p2p':
+        parser.error('p2p-temperature requires open-p2p')
     return args
 
 
@@ -141,6 +147,11 @@ def main():
         import numpy as np
         import torch
         from model_adapters import make_adapter
+        temperature_options = {}
+        if args.p2p_temperature != 1.0:
+            # Explicit overrides use a separate experimental adapter class.
+            from p2p_sampling import make_adapter
+            temperature_options['p2p_temperature'] = args.p2p_temperature
         if args.model == 'gamescaling':
             from gamescaling_decode import sampling_options
             sampling_options(args.sampling, args.temperature, args.top_k, args.top_p)
@@ -175,7 +186,7 @@ def main():
             goal_embedding=args.goal_embedding, instruction=args.instruction,
             sampling=args.sampling, temperature=args.temperature, top_k=args.top_k, top_p=args.top_p,
             cuda_graph=args.cuda_graph, fast_start=args.p2p_fast_start, p2p_mouse_sampling=args.p2p_mouse_sampling,
-            gamescaling_prefix_cache=args.gamescaling_prefix_cache)
+            gamescaling_prefix_cache=args.gamescaling_prefix_cache, **temperature_options)
         torch.cuda.synchronize()
         report['loadSeconds'] = time.perf_counter() - start_load
         report['adapter'] = policy.metadata

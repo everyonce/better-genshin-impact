@@ -23,8 +23,15 @@ Rebuild in PowerShell 7 with Git, Node.js/npm and the .NET 10 SDK:
 This machine's downloaded toolchain and package caches are inside the workspace.
 Existing portable directories are never overwritten. For another build, choose
 an empty output directory explicitly:
-  .\Build\Scripts\build-local.ps1 -OutputDirectory .\artifacts\BetterGI-new
+  .\Build\Scripts\build-local.ps1 -OutputDirectory .\artifacts\release-r57\BetterGI-English-win-x64
 Use -RebuildWeb to rebuild both pinned embedded web interfaces too.
+Choose a new, unused release number for each build. Numbered publishes and staged
+runtimes automatically retain R1, R55, R56 and the two newest successful builds.
+In-use and incomplete builds are preserved. Superseded program files are removed;
+settings, recordings, test results and other retained data move to
+artifacts\release-evidence\release-rN. Each archive's release-retirement.json maps
+original paths to archive paths. Build\release-retention.json controls the policy.
+Preview cleanup with .\Build\Scripts\manage-release-retention.ps1 -Action Plan.
 
 Validation logs and TRX results are under artifacts and artifacts\test-results.
 The English C# suite passes 137 tests. The targeted upstream integration suite

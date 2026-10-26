@@ -5,7 +5,6 @@ param(
 )
 $ErrorActionPreference='Stop'
 $taskRepo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
-& (Join-Path $PSScriptRoot 'check-storage-headroom.ps1') -Repository $taskRepo
 $taskSource=(Resolve-Path -LiteralPath $SourceRuntime).Path
 $taskTested=(Resolve-Path -LiteralPath $TestedOutput).Path
 $taskDestination=[IO.Path]::GetFullPath($Destination)
@@ -18,6 +17,10 @@ $taskPackages=@($taskOldDeps.libraries.PSObject.Properties | Where-Object {$_.Va
 foreach($taskPackage in $taskNewDeps.libraries.PSObject.Properties | Where-Object {$_.Value.type -eq 'package'}) {
     if($taskPackage.Name -notin $taskPackages){throw "Portable dependency differs from tested package graph: $($taskPackage.Name)"}
 }
+# Protect the source until staging finishes, then register and retain the new build.
+$taskRetentionScript=Join-Path $taskRepo 'Build/Scripts/manage-release-retention.ps1'
+& $taskRetentionScript -Repository $taskRepo -Action Apply -PublishDirectory $taskSource
+& (Join-Path $PSScriptRoot 'check-storage-headroom.ps1') -Repository $taskRepo
 function Copy-OrdinaryFile([string]$Source,[string]$Target) {
     $taskItem=Get-Item -LiteralPath $Source -Force
     if($taskItem.Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Linked source file rejected'}
@@ -26,7 +29,7 @@ function Copy-OrdinaryFile([string]$Source,[string]$Target) {
 }
 foreach($taskFile in Get-ChildItem -LiteralPath $taskSource -Recurse -File) {
     $taskChild=[IO.Path]::GetRelativePath($taskSource,$taskFile.FullName)
-    if($taskChild -match '^(User|Logs?)(\\|$)'){continue}
+    if($taskChild -match '^(User|Logs?)(\\|$)' -or $taskChild -eq 'Portable-File-Manifest.json'){continue}
     Copy-OrdinaryFile $taskFile.FullName (Join-Path $taskDestination $taskChild)
 }
 # Retain compatible self-contained runtime/deps files, but install the exact tested
@@ -59,3 +62,5 @@ if((Get-FileHash -LiteralPath (Join-Path $taskDestination 'BetterGI.dll')).Hash 
     supervisedInputEnabled=$false;historicalCapturesCopied=$false} | ConvertTo-Json |
     Set-Content -LiteralPath (Join-Path $taskRepo 'artifacts/retention-r16-staging.json') -Encoding utf8
 Get-Content -LiteralPath (Join-Path $taskRepo 'artifacts/retention-r16-staging.json')
+& $taskRetentionScript -Repository $taskRepo -Action Register -PublishDirectory $taskDestination
+& $taskRetentionScript -Repository $taskRepo -Action Apply -PublishDirectory $taskDestination

@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "pinnedReleases": ["release-r1", "release-r55", "release-r56"],
+  "keepRecentReleases": 2,
+  "minimumFreeBytes": 4294967296,
+  "maximumProgramBytes": 6442450944
+}

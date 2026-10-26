@@ -6,7 +6,6 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
-& (Join-Path $repo 'tools\quest-pilot\check-storage-headroom.ps1') -Repository $repo
 if (!$OutputDirectory) { $OutputDirectory = Join-Path $repo 'artifacts\BetterGI-English-win-x64' }
 if (!$WebAssetsRoot) { $WebAssetsRoot = Join-Path $repo 'Build\EnglishWeb\dist' }
 $OutputDirectory = [IO.Path]::GetFullPath($OutputDirectory)
@@ -18,6 +17,11 @@ foreach ($asset in @('Map\Editor\index.html', 'Web\ScriptRepo\index.html')) {
         throw "Missing English web asset: $asset. Run Build/EnglishWeb/build.ps1 first."
     }
 }
+# Retire superseded releases before allocating another portable runtime. The policy
+# pins the user's retained builds and preserves evidence through same-volume moves.
+$retentionScript = Join-Path $PSScriptRoot 'manage-release-retention.ps1'
+& $retentionScript -Repository $repo -Action Apply -PublishDirectory $OutputDirectory
+& (Join-Path $repo 'tools\quest-pilot\check-storage-headroom.ps1') -Repository $repo
 & $DotNet run --project (Join-Path $repo 'Build\BetterGenshinImpact.I18nSync') -p:UseSharedCompilation=false -p:RestoreSources=https://api.nuget.org/v3/index.json -- --project (Join-Path $repo 'BetterGenshinImpact') --check-english
 if ($LASTEXITCODE) { throw 'English coverage check failed.' }
 if (!$SkipTests) {
@@ -51,4 +55,11 @@ $sourceCommit = & git -C $repo rev-parse HEAD
 if ($LASTEXITCODE) { throw 'Could not record the source commit.' }
 @{ sourceCommit = $sourceCommit; sdk = (& $DotNet --version); runtime = 'win-x64'; selfContained = $true } |
     ConvertTo-Json | Set-Content -LiteralPath (Join-Path $OutputDirectory 'Build-Source.json') -Encoding utf8
+# Record generated files while the publish is clean. Later user files and modified
+# program files are excluded from automatic retirement by this manifest.
+$artifactsRoot = (Join-Path $repo 'artifacts').TrimEnd('\') + '\'
+if ($OutputDirectory.StartsWith($artifactsRoot, [StringComparison]::OrdinalIgnoreCase)) {
+    & $retentionScript -Repository $repo -Action Register -PublishDirectory $OutputDirectory
+}
+& $retentionScript -Repository $repo -Action Apply -PublishDirectory $OutputDirectory
 Write-Output "English portable build: $OutputDirectory"

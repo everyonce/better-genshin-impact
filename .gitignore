@@ -20,6 +20,8 @@ Build/Scripts/*
 !Build/Scripts/check-english.ps1
 !Build/Scripts/publish-english.ps1
 !Build/Scripts/build-local.ps1
+!Build/Scripts/manage-release-retention.ps1
+!Build/release-retention.json
 !Build/EnglishWeb/
 !Build/EnglishWeb/**
 Build/EnglishWeb/dist/

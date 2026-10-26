@@ -3867,5 +3867,15 @@
   "原始确认效果": "Original confirmed effects",
   "原始节点尝试": "Original node attempts",
   "原始完成地址": "Original completed addresses",
-  "原始快照文本（不执行）": "Original snapshot text (never executed)"
+  "原始快照文本（不执行）": "Original snapshot text (never executed)",
+  "控制模式": "Control Mode",
+  "观看模式": "Watch Mode",
+  "退出观看模式": "Exit Watch Mode and restore mouse and keyboard control.",
+  "桌面分身画面仅可观看，键鼠不会生效": "View the virtual desktop without sending mouse or keyboard input.",
+  "观看模式已开启": "Watch Mode enabled",
+  "观看模式已关闭": "Watch Mode disabled",
+  "本机键鼠不会对分身生效，但控制中心的组合键仍然生效。": "Local mouse and keyboard input is disabled for the virtual desktop. Control Center shortcuts still work.",
+  "本机键鼠恢复操作桌面分身。": "Mouse and keyboard control of the virtual desktop has been restored.",
+  "已进入观看模式，本机鼠标和键盘不会进入桌面分身": "Watch Mode is on. Local mouse and keyboard input is disabled for the virtual desktop.",
+  "已退出观看模式，可以操作桌面分身": "Watch Mode is off. You can control the virtual desktop."
 }

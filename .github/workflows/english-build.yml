@@ -7,6 +7,10 @@ on:
       - 'BetterGenshinImpact/**'
       - 'Build/**'
       - 'Test/BetterGenshinImpact.EnglishTest/**'
+      - 'Test/test-release-retention.ps1'
+      - 'Test/test-storage-cleanup.ps1'
+      - 'tools/quest-pilot/*storage*.ps1'
+      - 'tools/quest-pilot/stage-tested-runtime.ps1'
       - '.github/workflows/english-build.yml'
 
 permissions:
@@ -24,6 +28,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - name: Verify release retention and evidence preservation
+        shell: pwsh
+        run: |
+          ./Test/test-release-retention.ps1
+          ./Test/test-storage-cleanup.ps1
       - name: Build pinned English web interfaces
         shell: pwsh
         run: ./Build/EnglishWeb/build.ps1

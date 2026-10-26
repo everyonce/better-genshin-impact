@@ -58,11 +58,11 @@ try {
         try { & (Join-Path $taskRepo 'tools/quest-pilot/check-storage-headroom.ps1') -Repository $taskGateRepo | ForEach-Object {$taskGateOutput.Add([string]$_)} }
         catch { } # The real C: free-space floor may independently block this disposable fixture.
         $taskGateRecord=($taskGateOutput -join "`n") | ConvertFrom-Json
-        $taskExpectedPending=if($taskState -eq 'completed'){0}else{1}
-        if(@($taskGateRecord.pendingRetirementCheckpoints).Count -ne $taskExpectedPending){throw 'Publish gate ignored retirement checkpoint state'}
+        if($taskGateRecord.buildBytes -ne ([IO.FileInfo]::new($taskAssembly)).Length){throw 'Publish gate miscounted retained program bytes'}
+        if($taskGateRecord.PSObject.Properties.Name -contains 'pendingRetirementCheckpoints'){throw 'Storage admission must not require historical gameplay checkpoints'}
     }
     "Cleanup routine: $taskRejected unsafe scenarios and 1 mismatched checkpoint rejected; 1 approved deletion and checkpoint completion verified; preserved copy intact."
-    'Publish gate: pending retirement blocks the next version; matching completed retirement clears that gate.'
+    'Publish gate: retained program bytes are counted independently of historical gameplay checkpoints.'
     $taskHistoryRoot=Join-Path $taskRoot 'release-r99/BetterGI-English-win-x64/User/JsScript/ActOnePilot'
     $taskFrames=Join-Path $taskHistoryRoot 'observations/session'
     $taskReports=Join-Path $taskHistoryRoot 'reports'

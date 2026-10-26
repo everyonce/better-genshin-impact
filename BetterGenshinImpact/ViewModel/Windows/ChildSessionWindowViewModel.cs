@@ -145,11 +145,11 @@ public partial class ChildSessionWindowViewModel : ViewModel
         ? I18nService.Instance.Translate("将桌面分身窗口还原至默认大小")
         : I18nService.Instance.Translate("将桌面分身窗口缩放至宽 750，并按 16:9 比例同步缩小高度");
 
-    public string WatchModeMenuHeader => IsWatchModeEnabled ? "控制模式" : "观看模式";
+    public string WatchModeMenuHeader => I18nService.Instance.Translate(IsWatchModeEnabled ? "控制模式" : "观看模式");
 
     public string WatchModeMenuToolTip => IsWatchModeEnabled
-        ? "退出观看模式"
-        : "桌面分身画面仅可观看，键鼠不会生效";
+        ? I18nService.Instance.Translate("退出观看模式")
+        : I18nService.Instance.Translate("桌面分身画面仅可观看，键鼠不会生效");
 
     public double WindowResizeTargetWidth => IsSmallWindowMode
         ? SmallWindowWidth
@@ -492,10 +492,10 @@ public partial class ChildSessionWindowViewModel : ViewModel
 
         IsWatchModeEnabled = _childSessionService.WatchModeEnabled;
         ShowNotification(
-            enabled ? "观看模式已开启" : "观看模式已关闭",
+            I18nService.Instance.Translate(enabled ? "观看模式已开启" : "观看模式已关闭"),
             enabled
-                ? "本机键鼠不会对分身生效，但控制中心的组合键仍然生效。"
-                : "本机键鼠恢复操作桌面分身。",
+                ? I18nService.Instance.Translate("本机键鼠不会对分身生效，但控制中心的组合键仍然生效。")
+                : I18nService.Instance.Translate("本机键鼠恢复操作桌面分身。"),
             enabled ? InfoBarSeverity.Informational : InfoBarSeverity.Success);
     }
 

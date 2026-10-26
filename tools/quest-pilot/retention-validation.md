@@ -34,54 +34,68 @@ successful pause result.
 The listener requires native `captureStorageVersion=1` before focusing or capturing.
 A JavaScript-only update into an older application is not a valid deployment.
 
-## Cleanup and replacement workflow
+## Automatic release retention
 
-1. Inventory exact duplicate build files with `storage-cleanup.py`. For historical
-   captures, `plan-historical-captures.py` proposes the same bounded tail plus a
-   small representative evidence set. It preserves observation JSON, reports,
-   settings and concrete validation references. Indispensable images exceeding
-   the evidence cap stop planning instead of enlarging the cap.
-2. Obtain action-time approval for exact candidate paths and hashes. Use
-   `apply-storage-cleanup.ps1` for initial cleanup and subsequent retirement.
-   It rechecks hashes, containment, links, locks and preserved witnesses.
-   Historical mode additionally requires verified stopped writers; it removes
-   only approved PNGs and preserves metadata/reports. Never bypass an owner or
-   permission denial, or copy large screenshot trees onto a nearly-full drive.
-3. Run source tests and `check-storage-headroom.ps1`. Publishing requires at least
-   4 GiB free and no more than 4 GiB of managed portable build files.
-   Preserve the active host and one known rollback.
-4. Stage one runtime. `stage-tested-runtime.ps1` can reuse a compatible portable
-   runtime only when every tested package/version exists in its dependency graph.
-   It installs the exact tested project assemblies, preserves settings, copies
-   tracked controller code, excludes historical captures and disables supervised
-   gameplay input for validation. Otherwise perform a fresh portable publish.
-5. Use the supported pinned-PID/session restart endpoint. Every managed portable
-   application's startup writes a directory/DLL-bound retirement checkpoint.
-   A new build or copied version needs fresh verification; the next publish is
-   blocked until the checkpoint completes.
-6. Run `validate-installed-retention.py` with input disabled and the Food inventory
-   already open. It submits only bounded observation requests, checks the PNG cap
-   after each one, rejects gameplay input and reports retained file identities and
-   bytes. A fresh image is required; a heartbeat alone is insufficient.
-7. Run `verify-runtime-installation.py` against the exact tested DLL hash and live
-   pinned endpoint, declaring every active/rollback directory with `--protect`.
-   This records installed identity and produces the retirement manifest.
-   `--cleanup-manifest` reuses a reviewed manifest only if its complete candidate
-   paths, sizes and hashes match the fresh inventory.
-8. Apply the approved retirement with `-CompleteRuntimeCheckpoint` pointing to
-   the installed `User/ExternalControl/retention-checkpoint.json`. The same cleanup
-   routine completes the checkpoint only after the approved batch succeeds.
-   Superseded builds cannot be retired without this verification checkpoint.
-9. Verify cleanup/headroom before push and merge. Stop the validation controller,
-   verify ownership release, and coordinate the gameplay handoff separately.
+`Build/release-retention.json` pins **R1, R55 and R56** and keeps the two newest
+successful numbered releases in addition to those pins. `publish-english.ps1`
+and `stage-tested-runtime.ps1` run `Build/Scripts/manage-release-retention.ps1`
+before and after producing a runtime. Staging protects its source until copying
+finishes. An executable that is in use or inaccessible preserves its whole release.
+Incomplete/unregistered builds are also preserved and remain visible to the
+storage gate instead of silently displacing successful builds.
+
+The retention script supports `-Action Plan`, `Apply`, `Register` and `Status`.
+It only retires immediate `artifacts/release-rN` directories. New publishes record
+generated files in `Portable-File-Manifest.json`; retirement removes entries only
+when their size and modification time still match. Historical releases without
+that manifest use recognized root binaries and generated paths also present in a
+retained build. Unknown files are preserved. This is metadata inspection, not a
+bulk content-hash or duplicate scan.
+
+All `User`, cache, log, recording, screenshot, report and test-result trees are
+preserved, along with source snapshots and build manifests. After generated files
+are removed, the remaining release moves on the same volume to
+`artifacts/release-evidence/release-rN`. Each archive contains
+`release-retirement.json`, recording its original path, archive path and removed
+program files. Existing receipts are not rewritten: when reading an old absolute
+path, replace its recorded `originalPath` prefix with `archivePath`. Relative
+paths within a release remain unchanged. The latest batch summary is
+`artifacts/release-evidence/latest-retention-run.json`.
+
+Containment is checked before mutation; linked paths are not traversed. Existing
+archives are never overwritten. A partial operation stops the batch and writes an
+audit in the original or archived release, preserving remaining data for recovery.
+Pins and data archives are never automatically pruned.
+
+`check-storage-headroom.ps1` requires at least **4 GiB free** and at most **6 GiB**
+of managed portable program files, as configured in the policy. Historical gameplay
+verification checkpoints remain evidence and do not block release retirement or
+publishing. Runtime qualification and any gameplay handoff remain separate from
+storage admission; cleanup does not launch, stop or reconnect an application.
+
+## Historical capture cleanup and runtime qualification
+
+Historical screenshots are not deleted by automatic release retention. If a
+separate capture cleanup is requested, `plan-historical-captures.py` proposes a
+bounded tail and representative evidence, preserving metadata and validation
+references. `apply-storage-cleanup.ps1` retains its exact manifest-hash approval,
+stopped-writer, containment, lock and preservation checks for that separate action.
+
+For an authorized live replacement, `stage-tested-runtime.ps1` checks package
+compatibility, installs tested assemblies, preserves settings, excludes historical
+captures and disables supervised gameplay input. The existing installed-retention
+and runtime-identity validators remain available for qualification. Their results
+do not substitute for source tests or authorize starting the elevated application.
 
 ## Validation
 
 Native cases cover disk-low admission, immutable images, identical/changed frames,
 restart quotas, path safety, changed/locked/historical preservation, continuous
 priority pinning, per-write count/byte caps, log rotation and replacement checkpoints.
-PowerShell fixtures cover rejected unsafe deletions, checkpoint-gated retirement,
-historical metadata preservation and the publish gate. Python fixtures cover exact
+PowerShell fixtures cover release pins, recent successful builds, changed and
+locked files, evidence preservation, rejected paths, archive collisions and the
+storage gate. The legacy cleanup fixtures still cover approved manifest deletion,
+checkpoint completion and historical metadata preservation. Python fixtures cover exact
 duplicate planning and bounded historical evidence. JavaScript tests cover long
 stalls, frozen clocks, storage failure, outer-watchdog propagation and native-version
 startup enforcement.

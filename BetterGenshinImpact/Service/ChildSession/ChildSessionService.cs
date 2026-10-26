@@ -361,8 +361,8 @@ public sealed partial class ChildSessionService : IDisposable
         _config.WatchModeEnabled = enabled;
         _desktopWindow?.RdpHost.SetInputBlocked(enabled);
         RefreshState(enabled
-            ? "已进入观看模式，本机鼠标和键盘不会进入桌面分身"
-            : "已退出观看模式，可以操作桌面分身");
+            ? T("已进入观看模式，本机鼠标和键盘不会进入桌面分身")
+            : T("已退出观看模式，可以操作桌面分身"));
     }
 
     public Task LaunchBetterGiAsync()

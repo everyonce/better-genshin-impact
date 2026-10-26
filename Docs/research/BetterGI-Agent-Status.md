@@ -1,6 +1,6 @@
 # BetterGI agent status
 
-Updated October 26, 2026, 04:06 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 26, 2026, 05:47 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
 
@@ -426,14 +426,27 @@ The native-profile adapter consumed those verified pixels without another resize
 
 An October 26 source recheck confirmed that the pinned reference uses
 [`fast_image_resize` Hamming interpolation with RGB bytes](https://github.com/elefant-ai/open-p2p/blob/a329d98cbe62119679a254d71bea6446773541bc/elefant_rust/src/resize.rs).
-Our native adapter leaves normalization to the unchanged upstream model.
+The native adapter leaves normalization inside the generated compatibility model.
+Its loader replaces upstream BF16 with the selected runtime precision, FP16 here,
+while retaining the cast from uint8 and divide-by-255 formula.
 The default 20 policy decisions per second and raw 50 ms actions agree with the
 reference rescaling path's nominal 20 FPS; explicit controller overrides and
-missed deadlines still require measurement. No native preprocessing defect was
-identified. This does not qualify gameplay or justify replacing Hamming with
-bilinear based on frozen-image outputs. The file-only review is saved in
+missed deadlines still require measurement. No extra native resize or channel
+mismatch was identified. This does not qualify gameplay or justify replacing
+Hamming with bilinear based on frozen-image outputs. The first file-only review is
 `artifacts/research/2026-10-24/p2p-preprocessing-source-check-01/review.json`
 (3,949 bytes, SHA256 `c9fdfff44242ce3e0c71b12af5138775123c8674c043750751223445b3715738`).
+
+**Correction:** that first review omitted the loader's dtype rewrite when calling
+normalization unchanged. A CPU check of all 256 byte values through the extracted
+source arithmetic found 224 differing normalized values, with maximum absolute
+difference 0.001953125; zero and one remain exact. This does not establish a cause
+for idle outputs or full-model BF16/FP16 equivalence. The superseding review is
+`artifacts/research/2026-10-24/p2p-normalization-source-correction-01/review.json`
+(3,148 bytes, SHA256 `b217715edb4559d344c2a122b605554858fe72237ae48392c779356dfc1e3ca5`).
+Preprocessing metadata now names the runtime dtype explicitly in its formula;
+all eight existing profile tests passed. Runtime precision, pixels and sampling
+behavior were not changed, and the CPU diagnostic did not initialize CUDA.
 
 Each temperature arm ran 56 cold-history predictions. All 112 comparisons with
 the bilinear runs began with identical cache/random state and goal tensors;

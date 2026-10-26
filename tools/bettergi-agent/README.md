@@ -77,6 +77,11 @@ and shadow observation only.
 - **Image profiles:** The legacy default uses native→640×360 OpenCV Area→192×192 Pillow Bilinear. The opt-in `p2p-native-hamming-192-v1` profile performs direct native→RGB192 interpolation matching the pinned upstream Rust Hamming reference and skips the second resize. Profile/dimension checks precede inference. Native world/motion checks still inspect the original capture; the old 16:9 client minimap heuristic is unavailable for square payloads.
 - **CUDA graphs:** Open P2P graph capture verifies actions and cached state against eager inference with identical input and sampling values. `--p2p-fast-start` uses fixed-capacity storage with a validity mask, so unused entries are not treated as gameplay history; a history reset retains the validated graph. The older growing-history path and offline benchmarks retain their declared warmup context. A short `--history 32` configuration changes temporal context with unverified effects on gameplay quality; the released configuration uses 200.
 
+P2P's generated FP16 copy also normalizes RGB bytes in FP16. It preserves the
+cast from uint8 and divide-by-255 formula, but changes upstream BF16 rounding. Pixel
+resize parity and CUDA graph parity within this port do not establish full-model
+BF16/FP16 equivalence.
+
 ## Verification
 
 The experimental step-application bridge, queued successor, native history owner

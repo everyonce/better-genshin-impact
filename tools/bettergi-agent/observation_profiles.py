@@ -54,12 +54,12 @@ def verify_frame(frame, pixels, contract):
 
 
 def p2p_preprocessing(profile):
-    """Record actual pixel processing separately from unchanged model normalization."""
+    """Record pixel processing and model normalization with its runtime precision."""
     validate_model_profile(profile, 'open-p2p')
     return {'observationProfile': profile,
             'adapterResize': 'none-verified-rgb192' if profile == P2P_NATIVE else 'pillow-bilinear-192x192',
             'expectedStreamResize': 'native-fir-5.1.4-interpolation-hamming' if profile == P2P_NATIVE else 'legacy-area-cap-640x360',
-            'inputType': 'rgb-uint8', 'normalization': 'unchanged-upstream-model',
+            'inputType': 'rgb-uint8', 'normalization': 'uint8-to-runtime-dtype-divide-255',
             'requiresVerifiedProfile': profile == P2P_NATIVE}
 
 

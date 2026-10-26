@@ -1,30 +1,26 @@
 # BetterGI agent status
 
-Updated October 26, 2026, 12:23 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 26, 2026, 14:30 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
 
-Current work uses recorded screenshots and synthetic data until Daniel explicitly
-says the machine is ready for live game work again. Bounded offline model and
-latency tests remain authorized within the available shared-machine resources.
-The earlier blanket deferral of GPU qualification overstated that instruction;
-this interpretation was corrected on October 26. At 17:45:41 UTC on October 25, two
-read-only status requests confirmed an idle child, disabled input, no running
-task or stream, and the minimized RDP host. No cleanup action was needed. Live
-observations, game tests and application replacement are
-deferred; elapsed time alone does not resume them. Evidence is
-`artifacts/research/2026-10-24/offline-only-transition-01/status-01.json`
-(SHA256 `8d55acacc93791e365228d45b8a4046ff896c2344f7244a2309485d97fe48f39`).
+Daniel explicitly resumed live testing through BetterGI RDP at 14:18 UTC on
+October 26. R52 has replaced the idle R47 child in session 3 while preserving
+Genshin and the minimized RDP session. The console root remains R1. A 12-second
+observation run and a bounded 30-second P2P input trial completed; capture
+freshness and readiness interruptions are being measured before longer runs.
+Evidence is under `artifacts/live/2026-10-26-r52`. The earlier offline-only
+transition remains historical evidence, not a current restriction.
 
 | Area | Latest verified state |
 |---|---|
 | Upstream integration | The default branch `refactor/20260930` is integrated through `ae4f785c`. The latest merge adds explicit inactive-affix recognition and corrects capitalization matching; the required Debug build and 10 scripted OCR cases passed. Earlier integration cohorts recorded 539 distinct UnitTest cases and 527 Agent cases across their source trees. Live feature validation remains deferred. |
-| Prepared local builds | R52 is a verified, inactive self-contained `win-x64` Release package from clean commit `bd552493`, including the terminal timestamp and latest artifact-recognition fixes. Its 2,703 files were inventoried, all 154 shipped User files match source, and the production launcher's file-only validation passed. R49 (bootstrap), R50 and R51 remain intact. No package was launched or deployed during this work. |
+| Prepared local builds | R52 is a verified self-contained `win-x64` Release package from clean commit `bd552493`, including the terminal timestamp and latest artifact-recognition fixes. Its predeployment inventory contained 2,703 files, all 154 shipped User files matched source, and launcher validation passed. R52 is now deployed as the RDP child; older packages remain intact. |
 | Root upgrade staging | Commit `5f9ad00e` adds opt-in, byte-preserving Pulonia staging for a quiescent source and inactive, exclusive target. Twenty new tests and three existing regressions passed; independent source review found no actionable issue. Live use remains deferred. |
 | Coordinated root/child upgrade | The new explicit transaction uses the existing approved launcher and a one-shot startup binding, preserves the game/session, and ends with scheduling held. Required Debug validation, 129 distinct C# cases and 91 Python cases passed. Source and saved validation evidence passed independent readback. Actual task registration, cold launch, cross-session handoff and explicit resume remain untested. |
-| Deployed application | Last verified October 25 at 17:45 UTC: R47 inside the existing minimized RDP session. Its 1,890 selected C# tests and Debug/Release validation passed before replacement; the same Genshin process was preserved. No new deployment or live check has occurred during the offline hold. |
+| Deployed application | Verified October 26: R52 child PID 61460 in RDP session 3, assembly SHA256 `9adfccce383b25726799b319b51254121b0c59429cc852787c26ffec2fceea53`. Root PID 28072 and Genshin PID 27728 were preserved. The first observation recorded 186 usable frames without drops; the first P2P trial completed and its owned workers retired. |
 | Native navigation | Both saved R47 routes now pass the full audit: seed 3.82 seconds/37 observations and return 5.07 seconds/44 observations. The return's immediate predecessor link is accepted. This does not establish sustained gameplay. |
-| Reusable command | Bounded continuation and the reviewed schema3 envelope checker are in primary. Explicit v5 client support passed 279 Python tests. The separate H03 reader package and corrected return proof are accepted; future live continuation requires user readiness and fresh runtime checks. |
+| Reusable command | Bounded continuation and the reviewed schema3 envelope checker are in primary. Explicit v5 client support passed 279 Python tests. The separate H03 reader package and corrected return proof are accepted. User readiness is now explicit; new runs must bind to the current R52 instance and fresh route evidence. |
 | Endpoint repair | Deployed in R46 with input telemetry and Right Shift support. Both R47 routes and the return's endpoint/continuation evidence pass their full audits. Physical input acknowledgment and training eligibility remain false. |
 | Native timing v5 | Explicit native timing v5 is committed at `ab136e25be0467c28ca664a825eef5a79bdeefb1` and deployed in R47. Seed and return evidence are accepted; the next forward leg and four-leg qualification are deferred. |
 | Offline recognition replay | Eleven saved captures passed scoped CPU replay: five exploration frames, two climbing frames, the journal, one swimming-controls frame and two map screens. Eleven additional swimming-derived rows are explicitly synthetic. Five recorded positions match the production coordinate conversion; the other checks do not establish localization or current readiness. |
@@ -51,6 +47,38 @@ deferred; elapsed time alone does not resume them. Evidence is
 | Model optimization | Skipping unused final decoder work passed 1,733 correctness checks across two history41 evictions. A separate 40-pair experiment reduced median prediction time from 165.30 ms to 155.07 ms; paired actions/random states and final cache checks passed. |
 | Training | Not started. The pinned public P2P metadata has no Genshin labels; local demonstrations remain needed. The current recorder captures automated receipts, not human input. Model proposals and incomplete recordings are not expert action labels. |
 
+## Resumed live testing in BetterGI RDP
+
+Two 30-second trials used the live R52 child, native Hamming RGB192 images,
+P2P history41, cached ground-navigation text, CUDA graph prewarming, one CPU
+thread and a 3 GiB PyTorch allocator limit. Both retained the 150 ms first-input
+freshness bound, 100 ms action hold and restricted movement-key list. Each trial
+started after a verified reset to the same Mondstadt waypoint. Shared-machine
+load and in-game trajectories were not controlled, so these are diagnostic runs.
+
+| Live setting | Model median / p95 | Predicted actions | Accepted / applied | Too-old predictions | Recorded data |
+|---|---|---:|---:|---:|---:|
+| Detailed execution context | 45.04 / 59.29 ms | 367 | 217 / 190 | 104 | 89.91 MiB |
+| Context off, native snapshots off | 43.29 / 54.07 ms | 404 | 371 / 361 | 18 | 45.35 MiB |
+
+The first trial prepared its graph during loading in 2,071.82 ms and evaluated
+its first real image in 30.97 ms, without graph preparation in the input loop.
+Both recordings completed without frame/event/observation drops, and both
+returned stopped controllers with empty tracked held-key sets. These are
+software dispatch receipts, not physical-input acknowledgments or task-success
+labels. The first trial's owned Python workers were independently confirmed
+retired. Recordings and reports are under `artifacts/live/2026-10-26-r52`.
+
+Source inspection found that the normal trigger timer still captured while the
+agent ran its independent capture loop. `RunAgentWithResultAsync` now acquires
+the existing task-owned timer pause, preserving window/liveness housekeeping
+and the existing cancellation/cleanup scope. Build and live comparison of this
+change are pending; the deployed child is still R52 at this checkpoint.
+
+The approved `StartHost` task and protected helper installation passed read-only
+validation at 14:26 UTC. No registration was needed. The coordinated root
+upgrade and cold launch remain separate, untested operations.
+
 ## Latest upstream merge and R52 package
 
 The upstream default branch advanced by one commit, `ae4f785c`, adding localized
@@ -67,8 +95,8 @@ R52 was then built and published from clean `bd552493`. Its 2,703 files total
 925,980,125 bytes; all 154 User files match source. The production launcher's
 `-ValidateOnly` path passed. Its managed assembly SHA256 is
 `9adfccce383b25726799b319b51254121b0c59429cc852787c26ffec2fceea53`.
-The package is at `artifacts/release-r52/BetterGI-English-win-x64`; application
-launch, replacement and live validation remain deferred. The combined source,
+The package is at `artifacts/release-r52/BetterGI-English-win-x64`. It was
+deployed to the existing RDP child after live testing resumed. The combined source,
 package and launcher proof is
 `artifacts/research/2026-10-24/r52-local-completion-01.json`
 (SHA256 `6fa1f7c5a42ec1b326651eb0f5e9c0930c9be86fbfe1ae336e5a9cf1ca11fd27`).

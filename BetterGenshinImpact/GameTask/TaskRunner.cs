@@ -114,12 +114,13 @@ public class TaskRunner
             taskName, requestToken, pauseTimerCapture, requiredRuntime: requiredRuntime, desktopController: true,
             strictCleanup: strictCleanup);
 
-    /// <summary>The native agent may observe a pinned desktop without granting its denied input channel.</summary>
+    /// <summary>The native agent owns capture while observing a pinned desktop, without granting its denied input channel.</summary>
     internal Task<SoloTaskRunResult> RunAgentWithResultAsync(
         Func<GameRuntime, CancellationToken, Task> action, CancellationToken requestToken,
         GameRuntime requiredRuntime, bool enableInput) =>
         RunCoreAsync(async (runtime, ct, _) => { await action(runtime, ct); return null; }, false,
-            "Local Agent Stream", requestToken, requiredRuntime: requiredRuntime,
+            // The stream already captures independently; drain competing timer captures for this task's lifetime.
+            "Local Agent Stream", requestToken, pauseTimerCapture: true, requiredRuntime: requiredRuntime,
             desktopController: enableInput, desktopObservation: !enableInput);
 
     /// <summary>Reset retains its phase-specific timer pause while admitting the same typed desktop policy.</summary>

@@ -1,7 +1,7 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
-using static BetterGenshinImpact.GameTask.Common.TaskControl;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace BetterGenshinImpact.GameTask.AutoFight.Script;
 
@@ -81,8 +81,13 @@ public class Method
         Alias = alias;
     }
 
-    public static Method GetEnumByCode(string method)
+    /// <summary>Resolve an action name without application logging or service initialization.</summary>
+    public static Method GetEnumByCode(string method) => GetEnumByCode(method, NullLogger.Instance);
+
+    /// <summary>Resolve an action name and report failures through the caller-owned logger.</summary>
+    public static Method GetEnumByCode(string method, ILogger logger)
     {
+        ArgumentNullException.ThrowIfNull(logger);
         foreach (var m in Values)
         {
             if (m.Alias.Contains(method))
@@ -91,7 +96,7 @@ public class Method
             }
         }
 
-        Logger.LogError($"Unknown method in combat strategy script: {method}");
+        logger.LogError($"Unknown method in combat strategy script: {method}");
         throw new ArgumentException($"Unknown method in combat strategy script: {method}");
     }
 }

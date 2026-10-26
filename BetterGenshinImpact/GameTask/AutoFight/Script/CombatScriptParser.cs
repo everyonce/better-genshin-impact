@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using static BetterGenshinImpact.GameTask.Common.TaskControl;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace BetterGenshinImpact.GameTask.AutoFight.Script;
 
@@ -12,25 +12,30 @@ public class CombatScriptParser
 {
     public static string CurrentAvatarName = "当前角色";
     
-    public static CombatScriptBag ReadAndParse(string path)
+    /// <summary>Read combat scripts without resolving application services.</summary>
+    public static CombatScriptBag ReadAndParse(string path) => ReadAndParse(path, NullLogger.Instance);
+
+    /// <summary>Read combat scripts and report parse failures through the caller-owned logger.</summary>
+    public static CombatScriptBag ReadAndParse(string path, ILogger logger)
     {
+        ArgumentNullException.ThrowIfNull(logger);
         if (File.Exists(path))
         {
             // 防护性代码：防止 .json 策略文件被错误传入旧的 .txt 解析器
             if (path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
             {
-                Logger.LogError("This task does not support JSON strategies yet; use a TXT strategy");
+                logger.LogError("This task does not support JSON strategies yet; use a TXT strategy");
                 throw new Exception("This task does not support JSON strategies yet; use a TXT strategy");
             }
 
-            return new CombatScriptBag(Parse(path));
+            return new CombatScriptBag(Parse(path, logger));
         }
         else if (Directory.Exists(path))
         {
             var files = Directory.GetFiles(path, "*.txt", SearchOption.AllDirectories);
             if (files.Length == 0)
             {
-                Logger.LogError("Combat script file not found: {Path}", path);
+                logger.LogError("Combat script file not found: {Path}", path);
                 throw new Exception("Combat script file not found");
             }
 
@@ -39,11 +44,11 @@ public class CombatScriptParser
             {
                 try
                 {
-                    combatScripts.Add(Parse(file));
+                    combatScripts.Add(Parse(file, logger));
                 }
                 catch (Exception e)
                 {
-                    Logger.LogWarning("Failed to parse combat script file: {Path}, {Msg}", file, e.Message);
+                    logger.LogWarning("Failed to parse combat script file: {Path}, {Msg}", file, e.Message);
                 }
             }
 
@@ -51,22 +56,32 @@ public class CombatScriptParser
         }
         else
         {
-            Logger.LogError("Combat script file not found: {Path}", path);
+            logger.LogError("Combat script file not found: {Path}", path);
             throw new Exception("Combat script file not found");
         }
     }
 
-    public static CombatScript Parse(string path)
+    /// <summary>Read one text script without resolving application services.</summary>
+    public static CombatScript Parse(string path) => Parse(path, NullLogger.Instance);
+
+    /// <summary>Read one text script using the caller-owned logger.</summary>
+    public static CombatScript Parse(string path, ILogger logger)
     {
+        ArgumentNullException.ThrowIfNull(logger);
         var script = File.ReadAllText(path);
-        var combatScript = ParseContext(script);
+        var combatScript = ParseContext(script, logger);
         combatScript.Path = path;
         combatScript.Name = Path.GetFileNameWithoutExtension(path);
         return combatScript;
     }
 
-    public static CombatScript ParseContext(string context, bool validate = true, string? defaultAvatarName = null)
+    /// <summary>Parse text using a silent logger for metadata and data construction.</summary>
+    public static CombatScript ParseContext(string context, bool validate = true, string? defaultAvatarName = null) => ParseContext(context, NullLogger.Instance, validate, defaultAvatarName);
+
+    /// <summary>Parse text using the caller-owned logger; preserve validation and avatar defaults.</summary>
+    public static CombatScript ParseContext(string context, ILogger logger, bool validate = true, string? defaultAvatarName = null)
     {
+        ArgumentNullException.ThrowIfNull(logger);
         var lines = context.Split(["\r\n", "\r", "\n"], StringSplitOptions.RemoveEmptyEntries);
         var result = new List<string>();
         foreach (var line in lines)
@@ -90,26 +105,26 @@ public class CombatScriptParser
             }
         }
 
-        return ParseLines(result, validate, defaultAvatarName);
+        return ParseLines(result, logger, validate, defaultAvatarName);
     }
 
-    private static CombatScript ParseLines(List<string> lines, bool validate = true, string? defaultAvatarName = null)
+    private static CombatScript ParseLines(List<string> lines, ILogger logger, bool validate = true, string? defaultAvatarName = null)
     {
         List<CombatCommand> combatCommands = [];
         HashSet<string> combatAvatarNames = [];
         foreach (var line in lines)
         {
-            var oneLineCombatCommands = ParseLine(line, combatAvatarNames, validate, defaultAvatarName);
+            var oneLineCombatCommands = ParseLine(line, combatAvatarNames, logger, validate, defaultAvatarName);
             combatCommands.AddRange(oneLineCombatCommands);
         }
 
         var names = string.Join(",", combatAvatarNames);
-        // Logger.LogDebug("战斗脚本解析完成，共{Cnt}条指令，涉及角色：{Str}", combatCommands.Count, names);
+        // logger.LogDebug("战斗脚本解析完成，共{Cnt}条指令，涉及角色：{Str}", combatCommands.Count, names);
 
         return new CombatScript(combatAvatarNames, combatCommands);
     }
 
-    private static List<CombatCommand> ParseLine(string line, HashSet<string> combatAvatarNames, bool validate = true, string? defaultAvatarName = null)
+    private static List<CombatCommand> ParseLine(string line, HashSet<string> combatAvatarNames, ILogger logger, bool validate = true, string? defaultAvatarName = null)
     {
         line = line.Trim();
         var oneLineCombatCommands = new List<CombatCommand>();
@@ -147,22 +162,28 @@ public class CombatScriptParser
             }
             else if (validate)
             {
-                Logger.LogError("Invalid combat script format: separate the character and command with a space");
+                logger.LogError("Invalid combat script format: separate the character and command with a space");
                 throw new Exception("Invalid combat script format: separate the character and command with a space");
             }
         }
 
-        oneLineCombatCommands.AddRange(ParseLineCommands(commands, character));
+        oneLineCombatCommands.AddRange(ParseLineCommands(commands, character, logger));
         combatAvatarNames.Add(character);
         return oneLineCombatCommands;
     }
 
-    public static List<int> ParseRoundCommand(CombatCommand roundCommand) {
+    /// <summary>Parse round selection without resolving application services.</summary>
+    public static List<int> ParseRoundCommand(CombatCommand roundCommand) => ParseRoundCommand(roundCommand, NullLogger.Instance);
+
+    /// <summary>Parse round selection using the caller-owned logger.</summary>
+    public static List<int> ParseRoundCommand(CombatCommand roundCommand, ILogger logger)
+    {
+        ArgumentNullException.ThrowIfNull(logger);
         // 解析round命令的入参，返回一个整数列表，代表在哪些回合执行后续指令
         // 支持Round(1)、Round(1,3,5)、Round(2-4)、Round(1,3-5)等格式
         var activatingRounds = new List<int>();
         if (roundCommand.Args == null || roundCommand.Args.Count == 0) {
-            Logger.LogError("round requires arguments specifying the rounds in which subsequent commands run; e.g. round(1) or round(1,3-5)");
+            logger.LogError("round requires arguments specifying the rounds in which subsequent commands run; e.g. round(1) or round(1,3-5)");
             throw new ArgumentException("round requires arguments specifying the rounds in which subsequent commands run; e.g. round(1) or round(1,3-5)");
         }
         foreach (var arg in roundCommand.Args) {
@@ -170,13 +191,13 @@ public class CombatScriptParser
                 // 范围
                 var parts = arg.Split('-', StringSplitOptions.TrimEntries);
                 if (parts.Length != 2) {
-                    Logger.LogError("Invalid round arguments; e.g. round(1-3)");
+                    logger.LogError("Invalid round arguments; e.g. round(1-3)");
                     throw new ArgumentException("Invalid round arguments; e.g. round(1-3)");
                 }
                 var start = int.Parse(parts[0]);
                 var end = int.Parse(parts[1]);
                 if (start > end || start <= 0) {
-                    Logger.LogError("Invalid round arguments: the starting round must be greater than 0 and no greater than the ending round; e.g. round(1-3)");
+                    logger.LogError("Invalid round arguments: the starting round must be greater than 0 and no greater than the ending round; e.g. round(1-3)");
                     throw new ArgumentException("Invalid round arguments: the starting round must be greater than 0 and no greater than the ending round; e.g. round(1-3)");
                 }
                 for (int i = start; i <= end; i++) {
@@ -186,7 +207,7 @@ public class CombatScriptParser
                 // 单个回合
                 var round = int.Parse(arg);
                 if (round <= 0) {
-                    Logger.LogError("Invalid round arguments: the round number must be greater than 0; e.g. round(1)");
+                    logger.LogError("Invalid round arguments: the round number must be greater than 0; e.g. round(1)");
                     throw new ArgumentException("Invalid round arguments: the round number must be greater than 0; e.g. round(1)");
                 }
                 activatingRounds.Add(round);
@@ -195,16 +216,22 @@ public class CombatScriptParser
         return activatingRounds;
     }
 
-    public static List<CombatCommand> ParseLineCommands(string lineWithoutAvatar, string avatarName) {
+    /// <summary>Parse command groups without resolving application services.</summary>
+    public static List<CombatCommand> ParseLineCommands(string lineWithoutAvatar, string avatarName) => ParseLineCommands(lineWithoutAvatar, avatarName, NullLogger.Instance);
+
+    /// <summary>Parse command groups using the caller-owned logger.</summary>
+    public static List<CombatCommand> ParseLineCommands(string lineWithoutAvatar, string avatarName, ILogger logger)
+    {
+        ArgumentNullException.ThrowIfNull(logger);
         var parts = lineWithoutAvatar.Split("|", StringSplitOptions.RemoveEmptyEntries);
         var fullCombatCommands = new List<CombatCommand>();
         foreach (var part in parts)
         {
-            var combatCommands = ParseLinePart(part, avatarName);
+            var combatCommands = ParseLinePart(part, avatarName, logger);
             if (combatCommands.Count > 0 && combatCommands[0].Method == Method.Round) {
                 // 遇到round指令，作为回合分隔符使用，不加入最终指令列表
                 var roundCommand = combatCommands[0];
-                var activatingRounds = ParseRoundCommand(roundCommand);
+                var activatingRounds = ParseRoundCommand(roundCommand, logger);
                 combatCommands.RemoveAt(0);
                 foreach (var combatCommand in combatCommands) {
                     
@@ -215,13 +242,18 @@ public class CombatScriptParser
         }
         // foreach (var combatCommand in fullCombatCommands)
         // {
-        //     Logger.LogDebug("解析战斗脚本命令：{cmd}", combatCommand.ToString());
+        //     logger.LogDebug("解析战斗脚本命令：{cmd}", combatCommand.ToString());
         // }
         return fullCombatCommands;
     }
 
-    public static List<CombatCommand> ParseLinePart(string lineWithoutAvatar, string avatarName)
+    /// <summary>Parse one command group without resolving application services.</summary>
+    public static List<CombatCommand> ParseLinePart(string lineWithoutAvatar, string avatarName) => ParseLinePart(lineWithoutAvatar, avatarName, NullLogger.Instance);
+
+    /// <summary>Parse one command group using the caller-owned logger.</summary>
+    public static List<CombatCommand> ParseLinePart(string lineWithoutAvatar, string avatarName, ILogger logger)
     {
+        ArgumentNullException.ThrowIfNull(logger);
         var oneLineCombatCommands = new List<CombatCommand>();
         var commandArray = lineWithoutAvatar.Split(",", StringSplitOptions.RemoveEmptyEntries);
 
@@ -242,7 +274,7 @@ public class CombatScriptParser
                     command += "," + commandArray[j];
                     if (command.Count("(".Contains) > 1)
                     {
-                        Logger.LogError("Invalid combat script format: unmatched parentheses in command {Cmd}", command);
+                        logger.LogError("Invalid combat script format: unmatched parentheses in command {Cmd}", command);
                         throw new Exception("Invalid combat script format: unmatched parentheses in command");
                     }
 
@@ -257,12 +289,12 @@ public class CombatScriptParser
 
                 if (!(command.Contains('(') && command.Contains(')')))
                 {
-                    Logger.LogError("Invalid combat script format: incomplete parentheses in command {Cmd}", command);
+                    logger.LogError("Invalid combat script format: incomplete parentheses in command {Cmd}", command);
                     throw new Exception("Invalid combat script format: incomplete parentheses in command");
                 }
             }
 
-            var combatCommand = new CombatCommand(avatarName, command);
+            var combatCommand = new CombatCommand(avatarName, command, logger);
             oneLineCombatCommands.Add(combatCommand);
         }
 

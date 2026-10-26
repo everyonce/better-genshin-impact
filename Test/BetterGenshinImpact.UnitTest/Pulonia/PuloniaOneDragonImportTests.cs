@@ -1,3 +1,4 @@
+using BetterGenshinImpact.GameTask.Common.Resin;
 using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.GameTask.Common.Job;
 using BetterGenshinImpact.GameTask.SoloTask;
@@ -14,7 +15,7 @@ namespace BetterGenshinImpact.UnitTest.Pulonia;
 public sealed class PuloniaOneDragonImportTests : IDisposable
 {
     /// <summary>本测试独占的临时来源目录。</summary>
-    private readonly string _directory = Path.Combine(Path.GetTempPath(), "bgi-pulonia-import-" + Guid.NewGuid().ToString("N"));
+    private readonly string _directory = Path.Combine(Path.GetTempPath(), "bgi-" + BetterGenshinImpact.Helpers.ShortId.Create(null, 8));
 
     /// <summary>
     /// 一条龙自有字段使用的参数类型，按 SoloTaskJson 序列化的默认值必须通过按同一合同生成的 Schema 校验，
@@ -42,8 +43,11 @@ public sealed class PuloniaOneDragonImportTests : IDisposable
     /// 旧一条龙的顺序、重复名称和关闭状态保留；一条龙自有字段按新参数名写入独立任务节点。
     /// 战斗类任务的参数基类依赖运行中的应用，预设冻结只能在应用内验证。
     /// </summary>
-    [Fact]
-    public async Task DragonImport_PreservesOrderAndWritesSoloParameters()
+    [Theory]
+    [InlineData(40, 40)]
+    [InlineData(-1, 0)]
+    [InlineData(0, 0)]
+    public async Task DragonImport_PreservesOrderAndWritesSoloParameters(int retainedResin, int expectedRetainedResin)
     {
         var dragon = new OneDragonFlowConfig { Name = "测试龙", CompletionAction = "关机", NextTaskId = "second" };
         dragon.TaskOrder = ["first", "second", "third", "fourth", "fifth"];
@@ -53,7 +57,7 @@ public sealed class PuloniaOneDragonImportTests : IDisposable
             ["fourth"] = "领取每日奖励", ["fifth"] = "领取尘歌壶奖励"
         };
         dragon.TaskEnabledList = new() { ["first"] = true, ["second"] = false, ["third"] = true, ["fourth"] = true, ["fifth"] = true };
-        dragon.CraftingBenchCountry = "稻妻"; dragon.MinResinToKeep = 40;
+        dragon.CraftingBenchCountry = "稻妻"; dragon.MinResinToKeep = retainedResin;
         dragon.AdventurersGuildCountry = "璃月"; dragon.DailyRewardPartyName = "好感队";
         dragon.SereniteaPotTpType = "尘歌壶道具"; dragon.SecretTreasureObjects = ["每天重复", "精锻用魔矿"];
         var json = PuloniaTaskJson.Write(dragon);
@@ -72,7 +76,7 @@ public sealed class PuloniaOneDragonImportTests : IDisposable
         Assert.Equal(5, nodes.Select(n => n.Id).Distinct().Count());
         Assert.Empty(nodes[0].Parameters);
         Assert.Equal("稻妻", nodes[1].Parameters.Value<string>("country"));
-        Assert.Equal(40, nodes[1].Parameters.Value<int>("min_resin_to_keep"));
+        Assert.Equal(expectedRetainedResin, nodes[1].Parameters.Value<int>("min_resin_to_keep"));
         Assert.Equal("璃月", nodes[3].Parameters.Value<string>("country"));
         Assert.Equal("好感队", nodes[3].Parameters.Value<string>("party_name"));
         Assert.Equal("尘歌壶道具", nodes[4].Parameters.Value<string>("teleport_type"));
@@ -151,16 +155,16 @@ public sealed class PuloniaOneDragonImportTests : IDisposable
         document.SelectedNode = Assert.Single(document.RootNode.Children);
         var node = document.SelectedNode!;
         Assert.Equal("", document.GetOneDragonParameters(node).Value<string>("team_name"));
-        document.ApplyOneDragonParameters(node, new JObject());
+        document.ReplaceOneDragonParameters(node, new JObject());
         Assert.Empty(task.Parameters);
         Assert.False(document.IsDirty);
-        document.ApplyOneDragonParameters(node, new JObject { ["run_count"] = 3 });
+        document.ReplaceOneDragonParameters(node, new JObject { ["resin_usage"] = JObject.Parse(SoloTaskJson.Serialize(ResinUsageLegacyMapper.FromBoss(true, 3, false, false))) });
         Assert.Single(task.Parameters);
-        Assert.Equal(3, task.Parameters.Value<int>("run_count"));
+        Assert.Equal(3, task.Parameters["resin_usage"]!.Value<int>("run_count"));
         Assert.True(document.IsDirty);
     }
 
-    /// <summary>参数版本不兼容的预设不能混入卡片与配置预览。</summary>
+    /// <summary>参数版本不兼容的预设不能混入卡片与配置预览；提示由打开的高级设置按需计算，切换选中节点不再刷新。</summary>
     [Fact]
     public void ParameterPreview_RejectsPresetWithDifferentSchemaVersion()
     {
@@ -172,7 +176,8 @@ public sealed class PuloniaOneDragonImportTests : IDisposable
             { Name = "预设格式", RootTask = new PuloniaTask { Children = [task] } }, [preset], new PuloniaTaskClipboardService(), false);
         document.SetDefinitions([definition]);
         document.SelectedNode = Assert.Single(document.RootNode.Children);
-        Assert.Contains("参数版本", document.EditorMessage);
+        using var advanced = new PuloniaTaskNodeAdvancedSettingsViewModel(document, document.SelectedNode!, dialogs: null);
+        Assert.Contains("参数版本", advanced.Message);
         Assert.Equal("", document.GetOneDragonParameters(document.SelectedNode!).Value<string>("team_name"));
     }
 
@@ -197,7 +202,7 @@ public sealed class PuloniaOneDragonImportTests : IDisposable
     {
         var target = Path.GetFullPath(_directory);
         if (Path.GetDirectoryName(target) == Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.GetTempPath()))
-            && Path.GetFileName(target).StartsWith("bgi-pulonia-import-", StringComparison.Ordinal) && Directory.Exists(target))
+            && Path.GetFileName(target).StartsWith("bgi-", StringComparison.Ordinal) && Directory.Exists(target))
             Directory.Delete(target, recursive: true);
     }
 }

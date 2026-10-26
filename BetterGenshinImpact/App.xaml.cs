@@ -22,6 +22,7 @@ using BetterGenshinImpact.Helpers;
 using BetterGenshinImpact.Helpers.Extensions;
 using BetterGenshinImpact.Helpers.Win32;
 using BetterGenshinImpact.Pulonia.Executors;
+using BetterGenshinImpact.Pulonia.Remote;
 using BetterGenshinImpact.Pulonia.Services;
 using BetterGenshinImpact.Service;
 using BetterGenshinImpact.Service.ChildSession;
@@ -217,6 +218,7 @@ public partial class App : Application
                 services.AddView<PuloniaTaskPlanPage, PuloniaTaskPlanViewModel>();
                 services.AddView<PuloniaOneDragonPage, PuloniaOneDragonViewModel>();
                 services.AddView<PuloniaTaskHistoryPage, PuloniaTaskHistoryViewModel>();
+                services.AddSingleton<PuloniaLegacyHistoryViewModel>();
                 services.AddView<MusicPage, MusicPageViewModel>();
                 services.AddSingleton<PathingConfigViewModel>();
                 services.AddSingleton<IBannerImageService, BannerImageService>();
@@ -263,13 +265,18 @@ public partial class App : Application
                 // 游戏运行环境：按实例类型选定 Provider，见 Docs/design/game-runtime.md
                 services.AddSingleton<Win32RuntimeProvider>();
                 services.AddSingleton<IGameRuntimeProvider>(sp => sp.GetRequiredService<Win32RuntimeProvider>());
-                services.AddSingleton<IGameRuntimeProvider, WebPageRuntimeProvider>();
+                services.AddSingleton<WebPageRuntimeProvider>();
+                services.AddSingleton<IGameRuntimeProvider>(sp => sp.GetRequiredService<WebPageRuntimeProvider>());
                 services.AddTransient<CloudWebHostWindow>();
                 services.AddSingleton<Func<CloudWebHostWindow>>(sp => () => sp.GetRequiredService<CloudWebHostWindow>());
                 services.AddSingleton<GameRuntimeService>();
-                // 云原神网页版实例：实例名存储与启动器（Primary 首页使用）
+                services.AddSingleton<BetterGenshinImpact.Core.Recorder.KeyMouseRecordService>();
+                // 云原神网页版实例：实例名存储与启动器（Primary 首页的管理窗口使用）
                 services.AddSingleton<WebViewInstanceStore>();
                 services.AddSingleton<WebViewInstanceLauncher>();
+                services.AddTransient<CloudWebInstanceWindowViewModel>();
+                services.AddTransient<CloudWebInstanceWindow>();
+                services.AddSingleton<Func<CloudWebInstanceWindow>>(sp => () => sp.GetRequiredService<CloudWebInstanceWindow>());
                 services.AddSingleton<RecognitionTemplateAssetService>();
                 services.AddSingleton<RecognitionTemplateEditorService>();
                 services.AddSingleton<NotificationService>();
@@ -292,11 +299,39 @@ public partial class App : Application
                 services.AddSingleton<PuloniaTaskResourceCatalog>();
                 services.AddSingleton(_ => BetterGenshinImpact.Core.Script.Repositories.ScriptRepositoryStore.Shared);
                 services.AddSingleton<PuloniaRepositoryManagementService>();
-                services.AddSingleton<PuloniaTaskService>();
-                services.AddSingleton<IPuloniaTaskService>(sp => sp.GetRequiredService<PuloniaTaskService>());
+                // Pulonia 跨实例派发：主实例经派发代理把节点交给子实例，子实例用节点宿主执行。
+                // 两者都在首次使用时才取得多实例服务，避免与其构造互相依赖
+                services.AddSingleton(sp => new PuloniaRemoteExecutionBroker(() => sp.GetRequiredService<InstanceService>()));
+                services.AddSingleton<IPuloniaRemoteNodeDispatcher>(sp => sp.GetRequiredService<PuloniaRemoteExecutionBroker>());
+                services.AddSingleton(sp => new PuloniaRemoteNodeHost(
+                    () => sp.GetRequiredService<InstanceService>(),
+                    sp.GetServices<IPuloniaTaskExecutor>(),
+                    sp.GetRequiredService<PuloniaGameTaskCoordinator>(),
+                    sp.GetRequiredService<TaskStopService>(),
+                    sp.GetRequiredService<ILogger<PuloniaRemoteNodeHost>>(),
+                    sp.GetService<IPuloniaGenshinAccountSwitcher>()));
+                // 只有主实例是协调器：子实例不读写共享的 User/Pulonia/state.json，也不消费队列。
+                // 调度宿主与页面都依赖接口，只注册这一份单例；容器关闭时释放它（IAsyncDisposable）。
+                services.AddSingleton<IPuloniaTaskService>(sp => new PuloniaTaskService(
+                    sp.GetRequiredService<PuloniaTaskStore>(),
+                    sp.GetRequiredService<PuloniaTaskBuilder>(),
+                    sp.GetServices<IPuloniaTaskExecutor>(),
+                    sp.GetRequiredService<PuloniaGameTaskCoordinator>(),
+                    sp.GetRequiredService<TaskStopService>(),
+                    sp.GetRequiredService<TimeProvider>(),
+                    sp.GetService<IPuloniaGenshinAccountSwitcher>(),
+                    sp.GetRequiredService<IPuloniaRemoteNodeDispatcher>(),
+                    sp.GetRequiredService<InstanceBootstrap>().Context.IsRoot,
+                    sp.GetRequiredService<ILogger<PuloniaTaskService>>()));
                 services.AddSingleton(TimeProvider.System);
                 services.AddSingleton<PuloniaTaskTriggerHost>();
                 services.AddHostedService(sp => sp.GetRequiredService<PuloniaTaskTriggerHost>());
+                // Pulonia 任务计划页与新一条龙页共用同一编辑会话；高级设置的公共设置与采集 CD 表单由视图层提供。
+                services.AddSingleton<BetterGenshinImpact.ViewModel.Pages.Pulonia.PuloniaPlanEditingSession>();
+                services.AddSingleton<BetterGenshinImpact.ViewModel.Pages.Pulonia.IPuloniaTaskSettingsDialogs,
+                    BetterGenshinImpact.View.Windows.Pulonia.PuloniaTaskSettingsDialogs>();
+                // 树脂设置公共弹窗；各宿主页面在后续接入时只依赖视图模型层接口。
+                services.AddSingleton<BetterGenshinImpact.ViewModel.Resin.IResinSettingsDialogs, ResinSettingsDialogs>();
                 services.AddSingleton<IMusicScoreParser, MusicScoreParser>();
                 services.AddSingleton<IMusicStateStore, MusicStateStore>();
                 services.AddSingleton<IInstrumentProfileService, InstrumentProfileService>();

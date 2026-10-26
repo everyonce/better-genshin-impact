@@ -1,3 +1,5 @@
+using BetterGenshinImpact.GameTask.Common.Resin;
+using BetterGenshinImpact.GameTask.AutoFight.Strategy;
 using BetterGenshinImpact.Core.Input;
 using BetterGenshinImpact.Core.BgiVision;
 using BetterGenshinImpact.Core.Config;
@@ -45,8 +47,11 @@ namespace BetterGenshinImpact.GameTask.AutoBoss;
 /// </summary>
 [SoloTaskInfo(TaskId, "自动首领讨伐", Group = "树脂与战斗", Order = 220, OneDragonOrder = 4)]
 [SoloTaskSettingsView(typeof(AutoBossSettingsView), typeof(AutoBossSettingsViewModel))]
-public class AutoBossTask : ISoloTask<AutoBossParam, RewardSummary>
+public class AutoBossTask : ISoloTask<AutoBossParam, ResinClaimData>
 {
+    /// <summary>本任务支持的树脂使用方式、种类、档位及默认设置。</summary>
+    public static ResinUsageCapability ResinCapability => ResinCapabilities.Boss;
+
     /// <summary>
     /// 任务稳定标识。
     /// </summary>
@@ -80,19 +85,27 @@ public class AutoBossTask : ISoloTask<AutoBossParam, RewardSummary>
     private string _combatStrategyPath = string.Empty;
 
     /// <summary>
-    /// TXT 战斗策略解析结果；使用 JSON 策略时为 null
+    /// TXT 战斗策略解析结果；使用 JSON/键鼠策略时为 null
     /// </summary>
     private CombatScriptBag? _combatScriptBag;
 
     /// <summary>
-    /// JSON 战斗策略文件路径；不是 JSON 策略时为 null
+    /// 由统一入口执行的 JSON/键鼠策略路径；文本策略时为 null
     /// </summary>
-    private string? _jsonCombatStrategyPath;
+    private string? _entryCombatStrategyPath;
     private readonly ReturnMainUiTask _returnMainUiTask;
     private readonly Dictionary<string, int> _rewardSummary = new();
     private SwitchPartyTask? _switchPartyTask;
     private CancellationToken _ct;
-    private int _successfulRewardCount;
+    /// <summary>首领领奖及战前补充的统一记账，领奖只记录原粹。</summary>
+    private ResinClaimSelector _selector = null!;
+    /// <summary>本次结束原因，区分战前不足、领奖不足和未找到使用选项。</summary>
+    private ResinStopReason _stopReason;
+    /// <summary>是否已经开始首领战斗，首次预检不足时返回跳过。</summary>
+    private bool _hasBattled;
+
+    /// <summary>材料目标是否已全部达成。</summary>
+    private bool _itemStopReached;
 
     private static readonly TimeSpan OriginalResinRecoveryInterval = TimeSpan.FromMinutes(8);
     private const int MaxQuickUseQuantity = 20;
@@ -139,7 +152,8 @@ public class AutoBossTask : ISoloTask<AutoBossParam, RewardSummary>
 
     private sealed record OriginalResinInfo(int Count, int Limit);
 
-    private sealed record SupplementalResinOption(string Name, RecognitionObject Template);
+    /// <summary>首领战前补充选项；种类用于消耗记账，模板及面板流程沿用原实现。</summary>
+    private sealed record SupplementalResinOption(ResinKind Kind, string Name, RecognitionObject Template);
 
     /// <summary>
     /// 创建自动首领讨伐任务。业务参数在 <see cref="RunAsync"/> 中传入。
@@ -160,19 +174,30 @@ public class AutoBossTask : ISoloTask<AutoBossParam, RewardSummary>
     /// <param name="param">自动首领讨伐参数，包含 Boss、队伍、战斗策略、讨伐次数和补充树脂开关。</param>
     /// <param name="ct">任务取消令牌。</param>
     /// <returns>任务结果，数据为本次识别到的奖励汇总。</returns>
-    public async Task<SoloTaskResult<RewardSummary>> RunAsync(AutoBossParam param, CancellationToken ct)
+    public async Task<SoloTaskResult<ResinClaimData>> RunAsync(AutoBossParam param, CancellationToken ct)
     {
         _taskParam = param;
         _ct = ct;
         _rewardSummary.Clear();
-        _successfulRewardCount = 0;
+        _itemStopReached = false;
+        if (param.ResinUsage.Validate(ResinCapability) is { } problem)
+            return SoloTaskResult.Failed(SoloTaskReasons.InvalidParameter, problem);
+        _selector = new ResinClaimSelector(param.ResinUsage, ResinCapability);
+        _stopReason = ResinStopReason.NoUsableOption;
+        _hasBattled = false;
 
         // 1. 业务参数校验，可预见的参数问题直接返回失败结果
-        var failure = ValidateParam(param) ?? Initialize(param);
+        var failure = ValidateParam(param, _runtime) ?? Initialize(param);
         if (failure != null)
         {
             _logger.LogError("{Name}：{Msg}", TaskName, failure.Message);
             return failure;
+        }
+
+        if (_taskParam.TargetItems.Count > 0)
+        {
+            _logger.LogInformation("{Name}：材料目标 {Targets}，达到后提前结束", TaskName,
+                string.Join("，", _taskParam.TargetItems.Select(x => $"{x.ItemName}×{x.TargetCount}")));
         }
 
         // 2. 运行环境校验：路线资源与分辨率
@@ -210,8 +235,10 @@ public class AutoBossTask : ISoloTask<AutoBossParam, RewardSummary>
             Notify.Event("AutoBoss").Success($"{TaskName}结束");
         }
 
-        // 没有确认奖励已到账的手段，按未确认结束返回，并附带本次识别到的奖励汇总
-        return SoloTaskResult.Unverified(RewardSummary.From(_rewardSummary), "首领讨伐流程已结束。");
+        // 讨伐次数或材料目标任一达成都按目标完成结算并返回成功；树脂不足等提前结束按未确认结束返回，并附带奖励汇总。
+        return ResinClaimResults.Complete(_selector,
+            _selector.IsTargetReached || _itemStopReached ? ResinStopReason.TargetReached : _stopReason,
+            "首领讨伐流程已结束", _hasBattled, RewardSummary.From(_rewardSummary), _itemStopReached);
     }
 
     /// <summary>
@@ -222,7 +249,7 @@ public class AutoBossTask : ISoloTask<AutoBossParam, RewardSummary>
     private SoloTaskResult? Initialize(AutoBossParam param)
     {
         _combatScriptBag = null;
-        _jsonCombatStrategyPath = null;
+        _entryCombatStrategyPath = null;
 
         // 1. 未设置策略路径时按策略名称生成（与原构造函数行为一致）
         if (string.IsNullOrWhiteSpace(param.CombatStrategyPath))
@@ -231,34 +258,28 @@ public class AutoBossTask : ISoloTask<AutoBossParam, RewardSummary>
         }
 
         // 2. 不是已存在的路径（例如任务计划保存的是策略名）时先解析
-        var strategyPath = param.CombatStrategyPath;
-        if (!File.Exists(strategyPath) && !Directory.Exists(strategyPath))
-        {
-            if (!CombatStrategyResolver.TryResolve(strategyPath, out var resolvedPath))
-            {
-                return SoloTaskResult.Failed(SoloTaskReasons.StrategyNotFound, "当前选择的自动战斗策略文件不存在");
-            }
-
-            strategyPath = resolvedPath;
-        }
+        var strategy = CombatStrategyResolver.Parse(param.CombatStrategyPath);
+        if (!strategy.Exists)
+            return SoloTaskResult.Failed(SoloTaskReasons.StrategyNotFound, $"战斗策略不存在：{param.CombatStrategyPath}");
+        var strategyPath = strategy.Path;
 
         // 自动连招策略没有对应的文件，首领讨伐不支持
-        if (AutoFightParam.ComboStrategyName.Equals(strategyPath, StringComparison.Ordinal))
+        if (strategy.Kind == CombatStrategyKind.Combo)
         {
             return SoloTaskResult.Failed(SoloTaskReasons.InvalidParameter, "自动首领讨伐不支持自动连招策略。");
         }
 
         _combatStrategyPath = strategyPath;
 
-        // 3. 按策略类型选择战斗引擎：JSON / TXT
-        if (strategyPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+        // 3. 按策略类型选择战斗引擎：统一入口（JSON、键鼠）/ TXT
+        if (strategy.Kind is not (CombatStrategyKind.Txt or CombatStrategyKind.AutoSelect))
         {
-            _jsonCombatStrategyPath = strategyPath;
-            _logger.LogInformation("Auto Boss: JSON strategy file detected; using the JSON combat engine");
+            _entryCombatStrategyPath = strategyPath;
+            _logger.LogInformation("Auto Boss: using the unified combat entry for the selected strategy");
         }
         else
         {
-            _combatScriptBag = CombatScriptParser.ReadAndParse(strategyPath);
+            _combatScriptBag = CombatScriptParser.ReadAndParse(strategyPath, _logger);
         }
 
         return null;
@@ -277,11 +298,12 @@ public class AutoBossTask : ISoloTask<AutoBossParam, RewardSummary>
         while (ShouldContinueBeforeRound())
         {
             _ct.ThrowIfCancellationRequested();
-            _logger.LogInformation("{Name}: starting boss fight {Round} for {Boss}", TaskName, _successfulRewardCount + 1, _taskParam.BossName);
+            _logger.LogInformation("{Name}: starting boss fight {Round} for {Boss}", TaskName, _selector.ClaimCount + 1, _taskParam.BossName);
             
             //3.树脂不足则退出
             if (!await EnsureResinBeforeRound())
             {
+                _stopReason = ResinStopReason.ResinExhausted;
                 _logger.LogInformation("{Name}：原粹树脂不足或补充失败，结束任务", TaskName);
                 break;
             }
@@ -293,6 +315,7 @@ public class AutoBossTask : ISoloTask<AutoBossParam, RewardSummary>
             }
             
             //5.开始战斗
+            _hasBattled = true;
             await RunAutoFight();
             
             //6.寻路到征讨之花
@@ -306,7 +329,6 @@ public class AutoBossTask : ISoloTask<AutoBossParam, RewardSummary>
                 break;
             }
 
-            _successfulRewardCount++;
             _taskParam.RewardClaimedCallback?.Invoke();
             if (!ShouldContinueBeforeRound())
             {
@@ -330,12 +352,11 @@ public class AutoBossTask : ISoloTask<AutoBossParam, RewardSummary>
     }
 
     /// <summary>
-    /// 判断本轮开始前是否还有继续讨伐的次数。
+    /// 判断本轮开始前是否还有继续讨伐的次数：树脂设置目标未达成且材料目标未达成时继续。
     /// </summary>
-    /// <returns>树脂耗尽模式始终返回 true；指定次数模式下未达到目标次数时返回 true。</returns>
     private bool ShouldContinueBeforeRound()
     {
-        return !_taskParam.SpecifyRunCount || _successfulRewardCount < _taskParam.RunCount;
+        return !_selector.IsTargetReached && !_itemStopReached;
     }
 
     /// <summary>
@@ -365,14 +386,10 @@ public class AutoBossTask : ISoloTask<AutoBossParam, RewardSummary>
             }
 
             _logger.LogInformation("{Name}: current Original Resin {Count}/{Limit}, insufficient to claim boss rewards", TaskName, originalResin.Count, originalResin.Limit);
-            if (!_taskParam.SpecifyRunCount)
+            // 耗尽和指定次数都允许战前补充，只由本次设置与能力决定。
+            if (_selector.ReplenishKinds.Count == 0)
             {
-                return false;
-            }
-
-            if (!_taskParam.UseTransientResin && !_taskParam.UseFragileResin)
-            {
-                _logger.LogInformation("{Name}：指定讨伐次数模式未开启补充树脂，停止讨伐", TaskName);
+                _logger.LogInformation("{Name}：未开启可用的补充树脂，停止讨伐", TaskName);
                 return false;
             }
 
@@ -397,9 +414,10 @@ public class AutoBossTask : ISoloTask<AutoBossParam, RewardSummary>
     {
         var page = new BvPage(_runtime, _ct);
         //树脂图标
+        // 当新老深渊都有战绩时，左边界需要放宽到 900
         var resinIconLocator = page
             .Locator(LoadRecognitionObject("OriginalResinTopIcon"))
-            .WithRoi(ScaleRect(1200, 25, 580, 50));
+            .WithRoi(ScaleRect(900, 25, 880, 50));
         
         await page.Flow()
             .Do((Action)(() =>
@@ -412,7 +430,8 @@ public class AutoBossTask : ISoloTask<AutoBossParam, RewardSummary>
             }))
             .UntilAny(BuildBigMapLocators(page))
             .WaitUntil(resinIconLocator)
-            .Click().UntilAnyText(new[] { "全部恢复", "原粹树脂已完全恢复" }, ScaleRect(1180, 75, 620, 200))
+            // 树脂详情弹窗随图标左移，扫描区左边界与新图标 ROI 对齐，右边界保持不变
+            .Click().UntilAnyText(new[] { "全部恢复", "原粹树脂已完全恢复" }, ScaleRect(900, 75, 900, 200))
             .Run();
 
         //根据树脂图标位置偏移，计算出体力恢复时间的弹窗位置
@@ -574,6 +593,7 @@ public class AutoBossTask : ISoloTask<AutoBossParam, RewardSummary>
                     return false;
                 }
 
+                _selector.RecordConsumed(resin.Kind, usedQuantity);
                 usedAnyResin = true;
                 _logger.LogInformation("{Name}: used {Quantity} {ResinName} to replenish Original Resin", TaskName, usedQuantity, resin.Name);
                 await _runtime.Delay(800, _ct);
@@ -607,20 +627,12 @@ public class AutoBossTask : ISoloTask<AutoBossParam, RewardSummary>
         return true;
     }
 
+    /// <summary>按选择器提供的须臾、脆弱顺序建立战前补充选项，不将补充视为领奖。</summary>
     private List<SupplementalResinOption> BuildSupplementalResinOptions()
     {
-        var options = new List<SupplementalResinOption>();
-        if (_taskParam.UseTransientResin)
-        {
-            options.Add(new SupplementalResinOption("须臾树脂", LoadRecognitionObject("TransientResinInSupplementPane")));
-        }
-
-        if (_taskParam.UseFragileResin)
-        {
-            options.Add(new SupplementalResinOption("脆弱树脂", LoadRecognitionObject("FragileResinInSupplementPane")));
-        }
-
-        return options;
+        return _selector.ReplenishKinds.Select(kind => new SupplementalResinOption(kind,
+            ResinUsageText.DisplayName(kind), LoadRecognitionObject(kind == ResinKind.Transient
+                ? "TransientResinInSupplementPane" : "FragileResinInSupplementPane"))).ToList();
     }
 
     private static int CalculateSupplementalResinTargetQuantity(OriginalResinInfo originalResin)
@@ -638,7 +650,8 @@ public class AutoBossTask : ISoloTask<AutoBossParam, RewardSummary>
         }
 
         var openButtonLocator = page.Locator(LoadRecognitionObject("OpenResinSupplementPaneButton"))
-            .WithRoi(ScaleRect(1200, 25, 580, 50))
+            // 浓缩树脂为 0 时顶栏不显示浓缩条目，"+"按钮随原粹药丸整体左移，搜索区与图标 ROI 保持一致
+            .WithRoi(ScaleRect(900, 25, 880, 50))
             .WithRetryInterval(300);
 
         try
@@ -966,9 +979,9 @@ public class AutoBossTask : ISoloTask<AutoBossParam, RewardSummary>
     {
         _logger.LogInformation("{Name}：执行战斗策略", TaskName);
 
-        if (_jsonCombatStrategyPath != null)
+        if (_entryCombatStrategyPath != null)
         {
-            await StartJsonFight();
+            await StartEntryFight();
         }
         else
         {
@@ -980,7 +993,7 @@ public class AutoBossTask : ISoloTask<AutoBossParam, RewardSummary>
             try
             {
                 // 组合调用使用 RunAsync，保留子任务异常向外传播的语义
-                fightResult = await new AutoFightTask(_runtime, _config).RunAsync(taskParam, _ct);
+                fightResult = await new AutoFightEntryTask(_runtime, _config).RunAsync(taskParam, _ct);
             }
             catch (NormalEndException e)
             {
@@ -1001,17 +1014,16 @@ public class AutoBossTask : ISoloTask<AutoBossParam, RewardSummary>
     }
 
     /// <summary>
-    /// JSON策略战斗入口：委托给AutoFightJsonTask，由其自身处理战斗结束检测，
+    /// JSON/键鼠策略战斗入口：委托给AutoFightEntryTask，由其自身处理战斗结束检测，
     /// 抑制战后拾取逻辑。
     /// </summary>
-    private async Task StartJsonFight()
+    private async Task StartEntryFight()
     {
-        CancellationTokenSource cts = new();
-        _ct.Register(cts.Cancel);
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(_ct);
 
         var jsonParam = new AutoFightParam
         {
-            CombatStrategyPath = _jsonCombatStrategyPath!,
+            CombatStrategyPath = _entryCombatStrategyPath!,
             FightFinishDetectEnabled = true,
             ExpBasedPickupEnabled = false,
             KazuhaPickupEnabled = false,
@@ -1019,7 +1031,7 @@ public class AutoBossTask : ISoloTask<AutoBossParam, RewardSummary>
             Timeout = _taskParam.Timeout,
         };
 
-        var jsonTask = new AutoFightJsonTask(_runtime, _config);
+        var jsonTask = new AutoFightEntryTask(_runtime, _config);
 
         try
         {
@@ -1027,16 +1039,18 @@ public class AutoBossTask : ISoloTask<AutoBossParam, RewardSummary>
             var result = await jsonTask.RunAsync(jsonParam, cts.Token);
             if (result.Kind == SoloTaskResultKind.Failed)
             {
-                _logger.LogWarning("JSON战斗任务失败：{Msg}", result.Message);
+                _logger.LogWarning("JSON/key-mouse combat task failed: {Msg}", result.Message);
             }
         }
+        catch (OperationCanceledException) when (_ct.IsCancellationRequested) { throw; }
+        catch (RetryException) { throw; }
         catch (NormalEndException e)
         {
             _logger.LogInformation("Combat operation interrupted: {Msg}", e.Message);
         }
         catch (Exception e)
         {
-            _logger.LogWarning("JSON combat task error: {Msg}", e.Message);
+            _logger.LogWarning("JSON/key-mouse combat task error: {Msg}", e.Message);
         }
     }
 
@@ -1066,7 +1080,7 @@ public class AutoBossTask : ISoloTask<AutoBossParam, RewardSummary>
     /// </summary>
     /// <param name="param">本次运行的任务参数。</param>
     /// <returns>参数无效时返回失败结果；有效时返回 null。</returns>
-    private static SoloTaskResult? ValidateParam(AutoBossParam param)
+    private static SoloTaskResult? ValidateParam(AutoBossParam param, GameRuntime runtime)
     {
         if (string.IsNullOrWhiteSpace(param.BossName))
         {
@@ -1083,20 +1097,29 @@ public class AutoBossTask : ISoloTask<AutoBossParam, RewardSummary>
             return SoloTaskResult.Failed(SoloTaskReasons.InvalidParameter, "角色死亡后重试次数不能小于 0");
         }
 
-        // 只有指定讨伐次数模式才使用 RunCount，与原校验一致
-        if (param.SpecifyRunCount && param.RunCount < 1)
-        {
-            return SoloTaskResult.Failed(SoloTaskReasons.InvalidParameter, "指定讨伐次数必须大于 0");
-        }
-
-        if (!param.SpecifyRunCount && (param.UseTransientResin || param.UseFragileResin))
-        {
-            return SoloTaskResult.Failed(SoloTaskReasons.InvalidParameter, "只有指定讨伐次数模式才能开启须臾树脂或脆弱树脂补充");
-        }
+        // 树脂方式、次数和补充开关由任务入口按能力统一校验。
 
         if (param.Timeout < 1)
         {
             return SoloTaskResult.Failed(SoloTaskReasons.InvalidParameter, "战斗超时必须大于 0 秒");
+        }
+
+        if (param.TargetItems.Count > 0)
+        {
+            if (!TargetItemCatalog.Instance.TryGetBossProfile(param.BossName, out var profile))
+            {
+                return SoloTaskResult.Failed(SoloTaskReasons.InvalidParameter, $"当前首领没有奖励数据：{param.BossName}");
+            }
+
+            try
+            {
+                TargetItemCatalog.Instance.ValidateBossSettings(profile, param.TargetItems);
+                RewardResultRecognizer.Instance.EnsureSupported(runtime);
+            }
+            catch (Exception e) when (e is TargetItemConfigurationException or InvalidOperationException)
+            {
+                return SoloTaskResult.Failed(SoloTaskReasons.InvalidParameter, e.Message);
+            }
         }
 
         return null;
@@ -1469,6 +1492,8 @@ public class AutoBossTask : ISoloTask<AutoBossParam, RewardSummary>
             return false;
         }
 
+        // 世界首领奖励只消耗原粹，补充记录与领奖记录分开。
+        _selector.RecordClaim(ResinKind.Original, 40);
         await TryRecognizeRewardResult(page);
         await CloseRewardResult();
         Notify.Event("AutoBoss").Success($"{TaskName}奖励领取");
@@ -1477,7 +1502,7 @@ public class AutoBossTask : ISoloTask<AutoBossParam, RewardSummary>
 
     private async Task TryRecognizeRewardResult(BvPage page)
     {
-        if (!_taskParam.RewardRecognitionEnabled)
+        if (!_taskParam.RewardRecognitionEnabled && _taskParam.TargetItems.Count == 0)
         {
             return;
         }
@@ -1494,22 +1519,47 @@ public class AutoBossTask : ISoloTask<AutoBossParam, RewardSummary>
             _logger.LogInformation("{Name}：开始奖励识别", TaskName);
             var rewards = RewardResultRecognizer.Instance.RecognizeMultiPage(_runtime);
 
-            RewardResultRecognizer.MergeIntoSummary(_rewardSummary, rewards);
-
-            if (rewards.Count > 0)
+            if (rewards.Count == 0)
             {
-                _logger.LogInformation("{Name}: reward recognition results for this round: {Rewards}", TaskName,
-                    string.Join(", ", rewards.Select(r => $"{r.Key} x{r.Value}")));
+                _logger.LogWarning("{Name}: no rewards recognized for this round", TaskName);
+                return;
             }
-            else
+
+            RewardResultRecognizer.MergeIntoSummary(_rewardSummary, rewards);
+            _logger.LogInformation("{Name}: reward recognition results for this round: {Rewards}", TaskName,
+                string.Join(", ", rewards.Select(r => $"{r.Key} x{r.Value}")));
+
+            if (_taskParam.TargetItems.Count > 0)
             {
-                _logger.LogWarning("{Name}：本轮奖励识别结果为空", TaskName);
+                if (!TargetItemCatalog.Instance.TryGetBossProfile(_taskParam.BossName, out _))
+                {
+                    _logger.LogWarning("{Name}：当前首领没有奖励数据，跳过材料目标进度计算", TaskName);
+                    return;
+                }
+
+                var progress = TargetItemCatalog.Instance.CalculateBoss(_taskParam.TargetItems, _rewardSummary);
+                _itemStopReached = progress.AllSatisfied;
+                LogTargetProgress("材料目标", progress);
+
+                if (_itemStopReached)
+                {
+                    _logger.LogInformation("{Name}：材料目标已全部达成", TaskName);
+                }
             }
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
             _logger.LogWarning(e, "{Name}: reward recognition failed; skipping reward summary for this round", TaskName);
         }
+    }
+
+    /// <summary>
+    /// 打印一组材料目标的进度。
+    /// </summary>
+    private void LogTargetProgress(string label, TargetProgress progress)
+    {
+        _logger.LogInformation("{Name}：{Label}进度 {Targets}", TaskName, label,
+            string.Join("，", progress.Targets.Select(x => $"{x.ItemName} {x.CountedCount}/{x.TargetCount}")));
     }
 
     private async Task<bool> WaitForRewardResultReady(BvPage page)
@@ -1551,10 +1601,12 @@ public class AutoBossTask : ISoloTask<AutoBossParam, RewardSummary>
             var supplementRegions = await page.Locator("补充原粹树脂", useRect).TryWaitFor(1000);
             if (supplementRegions.Count > 0)
             {
+                _stopReason = ResinStopReason.ResinExhausted;
                 _logger.LogInformation("{Name}：领奖界面提示补充原粹树脂，当前原粹树脂不足", TaskName);
             }
             else
             {
+                _stopReason = ResinStopReason.NoUsableOption;
                 _logger.LogWarning("{Name}：未能在世界 Boss 领奖界面点击“使用原粹树脂”，原因：{Reason}", TaskName, e.Message);
             }
 

@@ -2,14 +2,19 @@ using BetterGenshinImpact.GameTask.Common;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using BetterGenshinImpact.Core.Recognition;
 using BetterGenshinImpact.Core.Input;
 using BetterGenshinImpact.Core.Simulator.Extensions;
-using BetterGenshinImpact.GameTask.AutoGeniusInvokation.Exception;
+using BetterGenshinImpact.GameTask.AutoDomain.Model;
 using BetterGenshinImpact.GameTask.AutoDomain.TrainingGuide;
+using BetterGenshinImpact.GameTask.Common;
+using BetterGenshinImpact.GameTask.Common.BgiVision;
 using BetterGenshinImpact.GameTask.Common.Element.Assets;
 using BetterGenshinImpact.GameTask.Common.Job;
+using BetterGenshinImpact.GameTask.Common.Resin;
+using BetterGenshinImpact.GameTask.Model.Area;
 using BetterGenshinImpact.Helpers;
 using Microsoft.Extensions.Logging;
 using OpenCvSharp;
@@ -48,7 +53,8 @@ public partial class AutoDomainTask
     private readonly HashSet<string> _guideDomainsWithObservedDemand = new();
     private int _guideRounds;
     private int _guideRoundResin;
-    private Model.ResinStatus? _guideResinStatus;
+    /// <summary>最近一次培养计划领奖后的树脂库存快照，用于预估剩余组合。</summary>
+    private ResinStatus? _guideResinStatus;
     private IReadOnlyDictionary<string, int>? _guideRoundRewards;
     private string? _guideLevelKey;
     private TrainingGuideFamilyPlan? _guideActivePlan;
@@ -56,6 +62,7 @@ public partial class AutoDomainTask
     private readonly HashSet<string> _guideProcessedLevels = new();
     private readonly HashSet<string> _guideProcessedDomains = new();
     private List<string>? _guideDomainCandidates;
+    /// <summary>本次运行的自定义培养目标；在 Initialize 中由参数解析，null 表示沿用游戏内培养计划。</summary>
     private Dictionary<TrainingGuideMaterial, int>? _guideCustomTargets;
     private readonly HashSet<string> _guideUnavailableFamilies = new();
     private sealed class GuideDomainCompleteException : Exception { }
@@ -96,8 +103,12 @@ public partial class AutoDomainTask
                     {
                         Logger.LogWarning("自定义培养目标未全部完成，以下材料入口未开放或未识别，停止任务：{Families}",
                             string.Join("、", _guideUnavailableFamilies.Select(FormatGuideFamily)));
+                        // 目标未全部完成，不能按刷取完成结算
+                        _stopReason = ResinStopReason.NoUsableOption;
                         return;
                     }
+                    // 培养计划已全部完成；配置了备选秘境时由备选秘境的领奖流程更新结束原因
+                    _stopReason = ResinStopReason.TargetReached;
                     await RunGuideFallback();
                     return;
                 }
@@ -116,7 +127,7 @@ public partial class AutoDomainTask
             }
             // 树脂不足、次数用尽时结束任务，不切换下一秘境或备选秘境。
             if (_guideNextAction is GuideNextAction.Continue or GuideNextAction.Stop) return;
-            if (!await BetterGenshinImpact.GameTask.Common.BgiVision.Bv.WaitForMainUi(_runtime, _ct, 30))
+            if (!await Bv.WaitForMainUi(_runtime, _ct, 30))
                 throw new InvalidOperationException("退出秘境后未确认回到主界面，停止重新进入");
             await _runtime.Delay(800, _ct);
             if (_guideNextAction == GuideNextAction.AdvancePlan)
@@ -668,104 +679,148 @@ public partial class AutoDomainTask
         UIDispatcherHelper.BeginInvoke(() => Toast.Information(message.TrimEnd()));
     }
 
-    private static int SelectGuideResinAmount(int remaining, int condensed, int original) =>
+    /// <summary>按剩余需求与可用库存选择本轮消耗：60 为浓缩树脂，40/20 为原粹树脂；0 表示没有可用组合。</summary>
+    /// <param name="remaining">当前材料剩余预计树脂。</param>
+    /// <param name="condensed">可用浓缩树脂个数。</param>
+    /// <param name="original">可用原粹树脂点数。</param>
+    /// <param name="allow40">原粹树脂档位设置是否允许 40 点。</param>
+    /// <returns>本轮消耗的树脂点数。</returns>
+    private static int SelectGuideResinAmount(int remaining, int condensed, int original, bool allow40 = true) =>
         remaining <= 0 ? 0 : condensed > 0 && (remaining >= 60 || original < 20) ? 60 :
-        original >= 40 && remaining >= 40 ? 40 : original >= 20 ? 20 : 0;
+        allow40 && original >= 40 && remaining >= 40 ? 40 : original >= 20 ? 20 : 0;
 
+    /// <summary>描述完成剩余需求预计使用的树脂组合，用于日志与通知。</summary>
+    /// <param name="remaining">当前材料剩余预计树脂。</param>
+    /// <returns>面向用户的组合说明。</returns>
     private string DescribeGuideResinAllocation(int remaining)
     {
         if (remaining <= 0) return "当前材料计划执行完毕";
-        if (_taskParam.SpecifyResinUse)
+        var usage = _taskParam.ResinUsage;
+        if (usage.Mode == ResinUsageMode.PerType)
         {
-            if (_resinPriorityListWhenSpecifyUse.Any(r => r.Name == "原粹树脂" && r.RemainCount > 0))
+            // 分别指定：按固定使用顺序分配各类剩余次数；浓缩、须臾、脆弱每次按 60 体计
+            var counts = _selector.RemainingCounts;
+            if (counts.Original > 0 && usage.OriginalTier == OriginalResinTier.Default)
                 return "指定额度包含未指定档位的原粹树脂，20/40体用量待领奖确认";
-            var allowances = _resinPriorityListWhenSpecifyUse.Select(r => new TrainingGuideResinAllowance(
-                r.Name, r.Name == "原粹树脂20" ? 20 : r.Name == "原粹树脂40" ? 40 : 60,
-                Math.Max(0, r.RemainCount))).ToArray();
+            var originalPerClaim = usage.OriginalTier == OriginalResinTier.Only20 ? 20 : 40;
+            var allowances = ResinKinds.InOrder.Select(kind => new TrainingGuideResinAllowance(
+                ResinUsageText.DisplayName(kind), kind == ResinKind.Original ? originalPerClaim : 60,
+                Math.Max(0, counts[kind]))).ToArray();
             var plan = TrainingGuideResinPlanner.Allocate(new[] { remaining }, allowances);
             return "按指定额度预计：" + string.Join("、", plan.Uses) +
                 (plan.UncoveredResin > 0 ? $"；额度尚缺{plan.UncoveredResin}体" : "");
         }
         if (_guideResinStatus == null) return "组合次数待领奖时读取树脂库存";
-        var condensed = _guideResinStatus.CondensedResinCount;
-        var original = _guideResinStatus.OriginalResinCount;
+        // 刷至耗尽或指定次数：只计入已允许的浓缩、原粹树脂
+        var condensed = usage.Allowed.Condensed ? _guideResinStatus.CondensedResinCount : 0;
+        var original = usage.Allowed.Original ? _guideResinStatus.OriginalResinCount : 0;
+        var allow40 = usage.OriginalTier != OriginalResinTier.Only20;
         var shortage = remaining;
-        var counts = new Dictionary<int, int> { [60] = 0, [40] = 0, [20] = 0 };
+        var usesByAmount = new Dictionary<int, int> { [60] = 0, [40] = 0, [20] = 0 };
         while (shortage > 0)
         {
-            var amount = SelectGuideResinAmount(shortage, condensed, original);
+            var amount = SelectGuideResinAmount(shortage, condensed, original, allow40);
             if (amount == 0) break;
-            counts[amount]++;
+            usesByAmount[amount]++;
             if (amount == 60) condensed--; else original -= amount;
             shortage -= amount;
         }
-        var uses = string.Join("、", new[] { 60, 40, 20 }.Where(n => counts[n] > 0)
-            .Select(n => $"{n}体{counts[n]}次"));
+        var uses = string.Join("、", new[] { 60, 40, 20 }.Where(n => usesByAmount[n] > 0)
+            .Select(n => $"{n}体{usesByAmount[n]}次"));
         return (uses.Length == 0 ? "暂无可用树脂" : "预计" + uses) +
             (shortage > 0 ? $"；树脂尚缺{shortage}体" : shortage < 0 ? $"（预计超出{-shortage}体）" : "");
     }
 
-    private async Task<bool> UseTrainingGuideResin(Model.ResinStatus status)
+    /// <summary>
+    /// 刷至耗尽或指定次数时，按培养计划剩余需求在候选中选择树脂与原粹档位并领取；分别指定时由主流程按设置领取。
+    /// 浓缩、原粹树脂都不可用时，再按固定顺序使用已允许的须臾、脆弱树脂。
+    /// </summary>
+    /// <param name="candidates">选择器按设置给出的本轮候选。</param>
+    /// <param name="status">领奖前顶栏树脂库存，不会被修改。</param>
+    /// <returns>成功领取时返回使用的树脂与原粹实际点数；没有可用组合或领取失败返回 null。</returns>
+    private async Task<(ResinKind Kind, int OriginalSpent)?> UseTrainingGuideResin(IReadOnlyList<ResinKind> candidates,
+        ResinStatus status)
     {
         var remaining = _guideActivePlan == null ? null : RemainingGuideResin(_guideActivePlan);
         if (remaining == null || remaining <= 0)
             throw new InvalidOperationException("培养计划剩余需求无效，停止领取以避免错误消耗树脂");
 
-        _guideResinStatus = status;
-        var amount = SelectGuideResinAmount(remaining.Value, status.CondensedResinCount, status.OriginalResinCount);
-        if (amount == 0) return false;
-        var useCondensed = amount == 60;
+        // 1. 按剩余需求选择本轮消耗
+        _guideResinStatus = new ResinStatus
+        {
+            CondensedResinCount = status.CondensedResinCount,
+            OriginalResinCount = status.OriginalResinCount
+        };
+        var condensed = candidates.Contains(ResinKind.Condensed) ? status.CondensedResinCount : 0;
+        var original = candidates.Contains(ResinKind.Original) ? status.OriginalResinCount : 0;
+        var amount = SelectGuideResinAmount(remaining.Value, condensed, original,
+            _taskParam.ResinUsage.OriginalTier != OriginalResinTier.Only20);
+        ResinKind kind;
+        if (amount == 60) kind = ResinKind.Condensed;
+        else if (amount > 0) kind = ResinKind.Original;
+        else
+        {
+            var fallback = candidates.Where(k => k is ResinKind.Transient or ResinKind.Fragile)
+                .Cast<ResinKind?>().FirstOrDefault();
+            if (fallback == null) return null;
+            kind = fallback.Value;
+            amount = 60;
+        }
         Logger.LogInformation("培养树脂组合：{Allocation}", DescribeGuideResinAllocation(remaining.Value));
         Logger.LogInformation("培养计划：剩余预计 {Remaining}体，本轮选择 {Amount}体{Resin}",
-            remaining, amount, useCondensed ? "浓缩树脂" : "原粹树脂");
-        if (useCondensed)
+            remaining, amount, ResinUsageText.DisplayName(kind));
+
+        // 2. 非原粹树脂直接领取，每次按 60 体计
+        if (kind != ResinKind.Original)
         {
             using var capture = _runtime.CaptureToRectArea();
-            var (success, _) = PressUseResin(_runtime, capture, "浓缩树脂");
-            if (success)
-            {
-                _guideRoundResin = 60;
-                status.CondensedResinCount--;
-            }
-            return success;
+            var (used, _) = ResinRewardPrompt.PressUseResin(_runtime, capture, kind, Logger, "培养计划", _ct,
+                _taskParam.GameCultureInfo);
+            if (!used) return null;
+            _guideRoundResin = 60;
+            if (kind == ResinKind.Condensed) _guideResinStatus.CondensedResinCount--;
+            return (kind, 0);
         }
 
-        bool switched;
-        try
-        {
-            switched = SwitchOriginalResinType(amount, _ct);
-        }
-        catch (RetryException)
-        {
-            Logger.LogWarning("培养计划：切换原粹树脂类型重试超时，本轮停止领奖");
-            return false;
-        }
-
-        if (!switched) return false;
+        // 3. 原粹树脂先切换到目标档位
+        if (!ResinRewardPrompt.SwitchOriginalTier(_runtime, amount, Logger, "培养计划", _ct)) return null;
         await _runtime.Delay(400, _ct);
         // 切档后重新截图，并只校验原粹树脂所在行，不能使用旧截图或默认20体记账。
         using var screen = _runtime.CaptureToRectArea();
         var texts = screen.FindMulti(RecognitionObject.Ocr(screen.Width * .25, screen.Height * .2, screen.Width * .5, screen.Height * .6));
         try
         {
-            var resin = texts.FirstOrDefault(t => System.Text.RegularExpressions.Regex.IsMatch(t.Text, ResolveResinNamePattern("原粹树脂")));
-            if (resin == null) return false;
-            var amounts = System.Text.RegularExpressions.Regex.Matches(resin.Text, @"(?<!\d)(20|40)(?!\d)")
-                .Select(m => int.Parse(m.Value)).Distinct().ToArray();
-            if (amounts.Length != 1 || amounts[0] != amount)
+            var cost = ReadGuideOriginalCost(texts);
+            if (cost != amount)
             {
-                Logger.LogWarning("培养计划：未确认原粹树脂已切换到 {Amount}体，停止领取；识别文本：{Text}", amount, resin.Text);
-                return false;
+                Logger.LogWarning("培养计划：未确认原粹树脂已切换到 {Amount}体，停止领取；识别消耗：{Cost}",
+                    amount, cost?.ToString() ?? "未确认");
+                return null;
             }
-            var (success, _) = PressUseResin(_runtime, texts, "原粹树脂");
-            if (success)
-            {
-                _guideRoundResin = amount;
-                status.OriginalResinCount -= amount;
-            }
-            return success;
+            var (success, spent) = ResinRewardPrompt.PressUseResin(_runtime, texts, ResinKind.Original, Logger, "培养计划", _ct,
+                _taskParam.GameCultureInfo);
+            if (!success) return null;
+            _guideRoundResin = amount;
+            _guideResinStatus.OriginalResinCount -= amount;
+            return (ResinKind.Original, spent);
         }
         finally { foreach (var text in texts) text.Dispose(); }
+    }
+
+    /// <summary>读取领奖弹窗中原粹树脂行显示的唯一消耗档位。</summary>
+    /// <param name="regions">弹窗 OCR 结果。</param>
+    /// <returns>20 或 40；未找到原粹树脂行或同时出现两个档位时返回 null。</returns>
+    private int? ReadGuideOriginalCost(IReadOnlyList<Region> regions)
+    {
+        var pattern = ResinRewardPrompt.ResolveResinNamePattern(ResinKind.Original, _taskParam.StringLocalizer,
+            _taskParam.GameCultureInfo);
+        var name = regions.FirstOrDefault(r => Regex.IsMatch(r.Text, pattern));
+        if (name == null) return null;
+        // 与领奖点击相同，按同行拼接文字，兼容 OCR 将名称与消耗量拆开的情况
+        var line = string.Concat(regions.Where(r => ResinRewardPrompt.IsHeightOverlap(r, name))
+            .OrderBy(r => r.X).Select(r => r.Text));
+        var amounts = Regex.Matches(line, @"(?<!\d)(20|40)(?!\d)").Select(m => int.Parse(m.Value)).Distinct().ToArray();
+        return amounts.Length == 1 ? amounts[0] : null;
     }
 
     private int? RemainingGuideResin(TrainingGuideFamilyPlan plan)

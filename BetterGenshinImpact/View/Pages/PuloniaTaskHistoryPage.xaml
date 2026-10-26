@@ -20,6 +20,9 @@
             <TextBlock Margin="0,4,0,0" Text="{i18n:T 查看 Pulonia 任务计划的跨重启历史、节点尝试和真实证据。记录仅保存于本机。}"
                        TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
         </StackPanel>
-        <controls:PuloniaTaskHistoryView Grid.Row="1" DataContext="{Binding ViewModel}" />
+        <TabControl Grid.Row="1">
+            <TabItem Header="{i18n:T 当前格式记录}"><controls:PuloniaTaskHistoryView DataContext="{Binding ViewModel}" /></TabItem>
+            <TabItem Header="{i18n:T 旧版记录（只读）}"><controls:PuloniaLegacyHistoryView DataContext="{Binding LegacyHistory, Mode=OneWay}" /></TabItem>
+        </TabControl>
     </Grid>
 </UserControl>

@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using BetterGenshinImpact.Core.Input;
+using BetterGenshinImpact.Core.Script;
 using BetterGenshinImpact.GameTask;
 using BetterGenshinImpact.GameTask.Common;
 using BetterGenshinImpact.GameTask.Runtime;
@@ -28,21 +29,39 @@ public sealed class PuloniaGameTaskCoordinator
     }
 
     /// <summary>
-    /// 等待全局任务锁，必要时启动游戏会话，并进入现有任务模式。
+    /// 等待全局任务锁，必要时启动游戏会话，等待订阅脚本自动更新结束，并进入现有任务模式。
     /// 租约记录本次启动返回的运行环境，节点内的任务只使用它。
     /// </summary>
+    /// <exception cref="InvalidOperationException">当前异步流已经持有任务会话，或无法准备游戏运行环境。</exception>
+    /// <exception cref="TimeoutException">等待订阅脚本自动更新超时。</exception>
     public async Task<PuloniaGameTaskLease> AcquireAsync(CancellationToken ct)
     {
+        // 会话内已经持有任务锁（信号量不可重入），再次等待会永久挂起；与 TaskRunner 一致直接报错便于定位
+        if (GameTaskSessionScope.IsActive)
+            throw new InvalidOperationException("当前已在任务会话中，不能再次获取游戏任务租约，请直接使用已持有的运行环境。");
+
         await TaskControl.TaskSemaphore.WaitAsync(ct).ConfigureAwait(false);
         GameRuntime? runtime = null;
+        var taskStateEntered = false;
         try
         {
             runtime = await _runtimeService.StartAsync(ct).ConfigureAwait(false);
             if (runtime is null || runtime.IsStopping)
                 throw new InvalidOperationException("无法准备游戏运行环境。");
             ct.ThrowIfCancellationRequested();
+            ValidateAdmission(runtime);
+
+            // 自动更新会删除并重新检出用户脚本目录，与 TaskRunner 一样等它结束后再执行节点
+            await ScriptRepoUpdater.Instance.WaitForAutoUpdateAsync(ct).ConfigureAwait(false);
+
+            // Waiting does not transfer runtime ownership; reject a stopped or replaced binding.
+            ct.ThrowIfCancellationRequested();
+            if (!ReferenceEquals(_runtimeService.Current, runtime))
+                throw new InvalidOperationException("pulonia_runtime_changed_during_admission");
+            ValidateAdmission(runtime);
 
             // Pulonia 节点始终沿调用链使用本次运行令牌，不创建独立任务执行作用域。
+            taskStateEntered = true;
             BeginTaskState(runtime);
             RunnerContext.Instance.Clear();
             return new PuloniaGameTaskLease(runtime);
@@ -51,7 +70,8 @@ public sealed class PuloniaGameTaskCoordinator
         {
             try
             {
-                CleanupTaskState(runtime);
+                // Admission refusal never entered task mode and must not release another owner's input.
+                if (taskStateEntered) CleanupTaskState(runtime);
             }
             finally
             {
@@ -59,6 +79,13 @@ public sealed class PuloniaGameTaskCoordinator
             }
             throw;
         }
+    }
+
+    /// <summary>Apply the same generic-task desktop restriction before any Pulonia activation or input.</summary>
+    internal static void ValidateAdmission(GameRuntime runtime)
+    {
+        if (runtime.IsStopping) throw new InvalidOperationException("pulonia_runtime_stopping");
+        TaskRunner.ValidateDesktopAdmission(runtime, desktopController: false);
     }
 
     /// <summary>

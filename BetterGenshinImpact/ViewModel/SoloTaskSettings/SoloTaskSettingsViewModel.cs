@@ -1,4 +1,7 @@
+using BetterGenshinImpact.GameTask.AutoFight.Strategy;
 using System;
+using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using BetterGenshinImpact.Core.Config;
@@ -14,14 +17,32 @@ namespace BetterGenshinImpact.ViewModel.SoloTaskSettings;
 /// </summary>
 public abstract class SoloTaskSettingsViewModel : ObservableObject
 {
-    /// <summary>载入时的有效参数快照；“重置草稿”和来源变化检测依赖它。</summary>
+    /// <summary>专属界面已提供的参数；其余参数由宿主补充为设置卡片，避免专属界面遮蔽可用功能。</summary>
+    public abstract string[] EditedParameterNames { get; }
+
+    /// <summary>载入时的有效参数快照；变化收集与来源变化检测依赖它。</summary>
     protected JObject Original { get; }
+
+    /// <summary>
+    /// 任一输入（包括每周安排、商品勾选等子行）发生变化时触发；即时生效的宿主据此立即提交，
+    /// 先确认后提交的宿主可以忽略。
+    /// </summary>
+    public event EventHandler? Edited;
 
     /// <summary>保存当前有效参数快照，具体字段由派生类填充。</summary>
     /// <param name="original">当前有效参数；内部保存独立副本，调用方后续修改不影响快照。</param>
     protected SoloTaskSettingsViewModel(JObject original)
     {
         Original = (JObject)original.DeepClone();
+        PropertyChanged += (_, _) => Edited?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>把子行的属性变化也转发为 <see cref="Edited"/>，派生类在填充子行后调用一次。</summary>
+    /// <param name="items">可编辑的子行。</param>
+    protected void TrackEdits(IEnumerable<INotifyPropertyChanged> items)
+    {
+        foreach (var item in items)
+            item.PropertyChanged += (_, _) => Edited?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>把输入相对快照的真实变化写入 changes；由宿主的“应用设置”统一校验提交。</summary>
@@ -97,24 +118,16 @@ public abstract class SoloTaskSettingsViewModel : ObservableObject
     }
 
     /// <summary>
-    /// 把参数里的战斗策略名或路径转换为下拉框显示的策略名：
-    /// 自动战斗策略目录本身显示为“根据队伍自动选择”，目录下的策略文件显示为文件名（不含扩展名），
-    /// 策略名原样显示，目录之外的路径无法用名称表示也原样显示。
+    /// 把参数里的战斗策略名或路径转换为选择器使用的规范值：
+    /// 自动战斗根目录转为“根据队伍自动选择”，子目录转为 auto: 范围；
+    /// 文件按统一规则省略扩展名，存在歧义时保留扩展名，根目录外的路径保持绝对路径。
     /// </summary>
     /// <param name="nameOrPath">参数中的策略名或路径；为空时视为自动选择，与任务的解析规则一致。</param>
-    /// <returns>策略显示名。</returns>
+    /// <returns>策略规范值。</returns>
     protected static string ToStrategyName(string? nameOrPath)
     {
-        if (string.IsNullOrWhiteSpace(nameOrPath)) return CombatStrategyResolver.AutoSelectName;
-        // 非绝对路径即策略名（包括“根据队伍自动选择”和连招固定名）
-        if (!Path.IsPathRooted(nameOrPath)) return nameOrPath;
-
-        var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(Global.Absolute(@"User\AutoFight\")));
-        var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(nameOrPath));
-        if (string.Equals(full, root, StringComparison.OrdinalIgnoreCase)) return CombatStrategyResolver.AutoSelectName;
-        if (string.Equals(Path.GetDirectoryName(full), root, StringComparison.OrdinalIgnoreCase))
-            return Path.GetFileNameWithoutExtension(full);
-        return nameOrPath;
+        // 非绝对路径的策略名和固定项也经过同一规则，避免同名 txt/json 混淆。
+        return CombatStrategyResolver.Parse(nameOrPath).Value;
     }
 
     /// <summary>当前值不在选项中时追加到末尾，外部导入的暂不可用选项仍能显示，用户可以主动改选。</summary>

@@ -1,6 +1,8 @@
 using BetterGenshinImpact.GameTask.AutoFight.Model;
 using BetterGenshinImpact.GameTask.Common;
 using BetterGenshinImpact.Helpers;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -19,8 +21,15 @@ public class CombatCommand
 
     public List<int> ActivatingRound { get; set; }
 
-    public CombatCommand(string name, string command)
+    /// <summary>Parse one command without resolving application logging services.</summary>
+    public CombatCommand(string name, string command) : this(name, command, NullLogger.Instance)
     {
+    }
+
+    /// <summary>Parse one command using the caller-owned logger; execution remains a separate operation.</summary>
+    public CombatCommand(string name, string command, ILogger logger)
+    {
+        ArgumentNullException.ThrowIfNull(logger);
         Name = name.Trim();
         command = command.Trim();
         var startIndex = command.IndexOf('(');
@@ -29,14 +38,14 @@ public class CombatCommand
             var endIndex = command.IndexOf(')');
             var method = command[..startIndex];
             method = method.Trim();
-            Method = Method.GetEnumByCode(method);
+            Method = Method.GetEnumByCode(method, logger);
 
             var parameters = command.Substring(startIndex + 1, endIndex - startIndex - 1);
             Args = [..parameters.Split(',', StringSplitOptions.TrimEntries)];
         }
         else
         {
-            Method = Method.GetEnumByCode(command);
+            Method = Method.GetEnumByCode(command, logger);
             Args = [];
         }
 

@@ -85,10 +85,17 @@ public partial class PuloniaTaskPlanDocumentViewModel
     /// <exception cref="PuloniaTaskValidationException">合并后的参数不符合 Schema。</exception>
     private void ValidateParameterChanges(PuloniaTaskNodeViewModel node, JObject changes)
     {
-        var effective = GetOneDragonParameters(node);
-        foreach (var field in changes.Properties())
-            effective[field.Name] = field.Value.DeepClone();
+        // Re-resolve the proposed source layer; merging into a normalized preview would erase inherited legacy siblings.
+        var parameters = (JObject)node.Model.Parameters.DeepClone();
+        foreach (var field in changes.Properties()) parameters[field.Name] = field.Value.DeepClone();
+        var probe = new PuloniaTask
+        {
+            Id = node.Model.Id, Name = node.Model.Name, TaskType = node.Model.TaskType, Path = node.Model.Path,
+            Resource = node.Model.Resource, PresetId = node.Model.PresetId, Parameters = parameters
+        };
+        var resolution = ResolveParameters(probe, GetAncestorModels(node.Parent));
+        resolution.RequireCompatible();
         if (GetDefinition(node.Model) is { } definition)
-            PuloniaTaskValidator.ValidateParameters(effective, definition.ParameterSchema, node.Name);
+            PuloniaTaskValidator.ValidateParameters(resolution.Parameters, definition.ParameterSchema, node.Name);
     }
 }

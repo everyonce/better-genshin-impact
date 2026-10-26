@@ -3,6 +3,7 @@
 - 使用 Windows 环境，使用简体中文沟通。
 - C# 文件必须使用 UTF-8 无 BOM 编码，避免乱码。
 - 保留已有注释，可修改或补充，不要随意删除。
+- 在无冲突情况下请不要对类使用全路径
 
 ## 设计原则
 
@@ -26,6 +27,10 @@
 - ViewModel 必须直接或间接继承 `ObservableObject`；项目的 `ViewModel` 基类已满足此要求。
 - 使用 `[ObservableProperty]` 生成属性，使用 `[RelayCommand]` 生成命令；异步命令返回 `Task`。
 - View 通过构造函数注入 ViewModel，沿用所在页面的 `DataContext` 约定；XAML 绑定路径须与其一致，避免复杂逻辑。
+- XAML 绑定只读属性、计算属性或纯展示文本时，必须显式指定 `Mode=OneWay`，不要依赖目标依赖属性的默认绑定模式。尤其 `Run.Text` 默认双向绑定，绑定只读属性会在加载 XAML 时抛出异常。示例：`<Run Text="{Binding TriggerDirectory, Mode=OneWay}" />`。
+- 只有需要将用户输入回写到可写属性的绑定才使用 `Mode=TwoWay`；新增或修改含 `Run.Text` 的视图时，必须检查所有展示用绑定的方向。
+- 子视图构造时尚未加入父控件资源树，`StaticResource` 必须能在本视图或明确合并的字典中解析；禁止依赖稍后才挂接的父视图资源。新增类别模板须验证实际实例化及布局，不能只以编译通过作为 XAML 可用的依据。
+- 控件局部样式应通过 `BasedOn` 继承对应 WPF-UI 默认样式；承载类别视图的 `ContentControl` 须明确内容拉伸，避免覆盖主题状态或出现内容挤缩。
 - 交互优先使用 Behaviors，避免在代码后置中编写不符合 MVVM 的交互逻辑。
 - 在 `App.xaml.cs` 中注册依赖：页面使用 `services.AddView<ExamplePage, ExampleViewModel>()`，单例服务使用 `services.AddSingleton<IExampleService, ExampleService>()`。
 - 新增窗口必须启用主题背景；简单对话框优先使用 `ThemedMessageBox`，不要使用 WPF 自带的 `MessageBox`。
@@ -37,6 +42,8 @@
 - 键鼠操作之间也需合理间隔，避免在 30 fps 游戏中因操作过快而丢失输入。
 
 ## 编译验证
+
+禁止直接运行主程序进行测试或截图（包括启动 exe、`dotnet run` 或通过 IDE 启动）。主程序要求管理员权限，harness 无法通过启动 exe 完成模拟测试和截图感知，因此不要将启动主程序作为验证步骤。
 
 在仓库根目录执行以下命令，仅输出错误；退出码 0 表示成功，非 0 表示失败。编译通过即可，无需运行程序；若程序占用导致失败，停止验证并说明即可，无需继续尝试。
 

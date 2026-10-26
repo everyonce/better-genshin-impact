@@ -17,11 +17,53 @@ public static class PuloniaTaskJson
     /// <summary>
     /// 从 JSON 读取并校验当前计划格式；不在缺少身份时生成新 ID。
     /// </summary>
-    public static PuloniaTaskPlan ReadPlan(string json)
+    public static PuloniaTaskPlan ReadPlan(string json) => ReadPlan(json, out _, out _);
+
+    /// <summary>
+    /// Project only legacy node presentation fields. A non-null collapsed list also marks an explicitly
+    /// all-expanded legacy plan; the store persists that initialization before replacing the plan.
+    /// </summary>
+    internal static PuloniaTaskPlan ReadPlan(string json, out List<string>? legacyCollapsedIds,
+        out string? projectedJson)
     {
-        var plan = Read<PuloniaTaskPlan>(json);
+        var token = ReadObject(json);
+        var collapsed = new List<string>();
+        var found = false;
+        var count = 0;
+        // Unknown versions and noncanonical locations retain the ordinary strict serializer rejection.
+        if (token["schema_version"] is { Type: JTokenType.Integer } version
+            && version.Value<long>() == PuloniaTaskPlan.CurrentSchemaVersion
+            && token["root_task"] is JObject root)
+            ProjectNodePresentation(root, 0, ref count, collapsed, ref found);
+        var plan = token.ToObject<PuloniaTaskPlan>(JsonSerializer.Create(CreateSettings()))
+                   ?? throw new JsonSerializationException("Plan must be an object.");
         PuloniaTaskValidator.ValidatePlan(plan);
+        legacyCollapsedIds = found ? collapsed : null;
+        // Keep all executable tokens, including omitted defaults, rather than reserializing the model.
+        projectedJson = found ? token.ToString(Formatting.Indented) : null;
         return plan;
+    }
+
+    /// <summary>Walk only typed task children, with the same tree bounds as executable validation.</summary>
+    private static void ProjectNodePresentation(JToken? token, int depth, ref int count,
+        List<string> collapsed, ref bool found)
+    {
+        if (token is not JObject node || depth > PuloniaTaskValidator.MaxTreeDepth
+            || ++count > PuloniaTaskValidator.MaxTreeNodes)
+            throw new PuloniaTaskValidationException("root_task", "Invalid task tree or presentation projection limit.");
+        if (node.Property("is_expanded", StringComparison.Ordinal) is { } property)
+        {
+            if (property.Value.Type != JTokenType.Boolean || node["id"]?.Type != JTokenType.String)
+                throw new PuloniaTaskValidationException("is_expanded", "Legacy expansion must be a Boolean on an identified task.");
+            if (!property.Value.Value<bool>()) collapsed.Add(node.Value<string>("id")!);
+            property.Remove();
+            found = true;
+        }
+        if (node["children"] is null) return;
+        if (node["children"] is not JArray children)
+            throw new PuloniaTaskValidationException("children", "Task children must be an array.");
+        foreach (var child in children)
+            ProjectNodePresentation(child, depth + 1, ref count, collapsed, ref found);
     }
 
     /// <summary>
@@ -54,8 +96,9 @@ public static class PuloniaTaskJson
 
     /// <summary>
     /// 深复制计划，保留全部稳定 ID；运行准备使用此入口。
+    /// 只在序列化前校验一次：通过校验的计划经 JSON 往返内容不变，副本无需再校验。
     /// </summary>
-    public static PuloniaTaskPlan ClonePlan(PuloniaTaskPlan plan) => ReadPlan(WritePlan(plan));
+    public static PuloniaTaskPlan ClonePlan(PuloniaTaskPlan plan) => Read<PuloniaTaskPlan>(WritePlan(plan));
 
     /// <summary>
     /// 复制整份计划并重建身份及内部节点引用；副本触发器默认禁用，避免重复自动执行。
@@ -94,21 +137,21 @@ public static class PuloniaTaskJson
     public static PuloniaTaskSnapshot ReadSnapshot(string json) => Read<PuloniaTaskSnapshot>(json);
 
     /// <summary>
-    /// 读取并校验当前运行状态文件。
+    /// 读取并校验当前运行状态文件；仅允许完全空的旧状态进行无损升级。
     /// </summary>
     public static PuloniaTaskState ReadState(string json)
     {
+        if (PuloniaTaskStateCompatibility.ReadEmptyLegacy(json) is { } upgraded) return upgraded;
         var state = Read<PuloniaTaskState>(json);
         if (state.SchemaVersion != PuloniaTaskState.CurrentSchemaVersion)
             throw new PuloniaTaskValidationException("state.json",
-                $"不支持运行状态格式版本 {state.SchemaVersion}。");
+                $"Unsupported state schema {state.SchemaVersion}; preserve all state and history for migration.");
         if (state.Sequence < 0 || state.PendingRequests is null || state.PendingArchives is null
-            || state.Ledger is null || state.UncertainOperations is null || state.TriggerStates is null)
+            || state.Ledger is null || state.TriggerStates is null)
             throw new PuloniaTaskValidationException("state.json", "运行状态内容不完整或序列无效。");
         if (state.PendingRequests.Count > 10000 || state.PendingArchives.Count > 10000
-            || state.Ledger.Count > 100000 || state.UncertainOperations.Count > 10000 || state.TriggerStates.Count > 10000)
+            || state.Ledger.Count > 100000 || state.TriggerStates.Count > 10000)
             throw new PuloniaTaskValidationException("state.json", "运行状态集合超过支持上限。");
-        var requestIds = new HashSet<Guid>();
         var triggerKeys = new HashSet<string>(StringComparer.Ordinal);
         foreach (var trigger in state.TriggerStates)
         {
@@ -116,24 +159,23 @@ public static class PuloniaTaskJson
                 throw new PuloniaTaskValidationException("state.json/trigger_states", "触发器状态为空或重复。");
             PuloniaTaskValidator.ValidateId(trigger.PlanId, "trigger_state/plan_id");
             PuloniaTaskValidator.ValidateId(trigger.TriggerId, "trigger_state/trigger_id");
-            if (trigger.TriggerActivatedAtUtc == default || trigger.LastRequestId == Guid.Empty
-                || string.IsNullOrWhiteSpace(trigger.Status))
-                throw new PuloniaTaskValidationException("state.json/trigger_states", "触发器配置版本、请求 ID 或状态无效。");
+            if (trigger.TriggerActivatedAtUtc == default)
+                throw new PuloniaTaskValidationException("state.json/trigger_states", "触发器配置版本无效。");
         }
-        var runIds = new HashSet<Guid>();
+        var runIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var record in state.PendingRequests)
         {
             ValidateRunRecord(record, "state.json/pending_requests");
             if (record.Status != PuloniaTaskRunStatus.Queued)
                 throw new PuloniaTaskValidationException("state.json", "待执行请求必须处于排队状态。");
-            AddRunIdentity(record, requestIds, runIds, "state.json");
+            AddRunIdentity(record, runIds, "state.json");
         }
         if (state.ActiveRun is { } active)
         {
             ValidateRunRecord(active, "state.json/active_run");
             if (active.Status is not (PuloniaTaskRunStatus.Running or PuloniaTaskRunStatus.Cancelling))
                 throw new PuloniaTaskValidationException("state.json", "活动运行状态无效。");
-            AddRunIdentity(active, requestIds, runIds, "state.json");
+            AddRunIdentity(active, runIds, "state.json");
         }
         foreach (var record in state.PendingArchives)
         {
@@ -141,7 +183,7 @@ public static class PuloniaTaskJson
             if (record.Status is PuloniaTaskRunStatus.Queued or PuloniaTaskRunStatus.Running
                 or PuloniaTaskRunStatus.Cancelling)
                 throw new PuloniaTaskValidationException("state.json", "待归档运行尚未结束。");
-            AddRunIdentity(record, requestIds, runIds, "state.json");
+            AddRunIdentity(record, runIds, "state.json");
         }
         var eventKeys = new HashSet<string>(StringComparer.Ordinal);
         foreach (var entry in state.Ledger)
@@ -151,12 +193,6 @@ public static class PuloniaTaskJson
                 || string.IsNullOrWhiteSpace(entry.WindowKey) || entry.Units <= 0
                 || string.IsNullOrWhiteSpace(entry.TaskRunId) || entry.Evidence is null)
                 throw new PuloniaTaskValidationException("state.json/ledger", "账本项字段无效或事件键重复。");
-        }
-        foreach (var intent in state.UncertainOperations)
-        {
-            if (intent.RunId == Guid.Empty || string.IsNullOrWhiteSpace(intent.TaskAddress)
-                || intent.RuleIds is null || intent.Reservations is null || intent.RuleIds.Count == 0)
-                throw new PuloniaTaskValidationException("state.json/uncertain_operations", "未决操作字段无效。");
         }
         return state;
     }
@@ -186,36 +222,38 @@ public static class PuloniaTaskJson
     /// </summary>
     private static void ValidateRunRecord(PuloniaTaskRunRecord record, string path)
     {
-        if (record.RequestId == Guid.Empty || record.RunId == Guid.Empty || record.Request is null
+        if (record.Request is null
             || string.IsNullOrWhiteSpace(record.PlanName) || string.IsNullOrWhiteSpace(record.SnapshotJson)
             || string.IsNullOrWhiteSpace(record.Message) || record.NodeResults is null
             || record.CompletedTaskAddresses is null || record.ConfirmedEffects is null)
             throw new PuloniaTaskValidationException(path, "运行记录必要字段缺失。");
+        PuloniaTaskValidator.ValidateId(record.RunId, path + "/run_id");
+        if (record.ResumedFromRunId is { } resumedFrom)
+            PuloniaTaskValidator.ValidateId(resumedFrom, path + "/resumed_from_run_id");
         PuloniaTaskValidator.ValidateId(record.Request.PlanId, path + "/plan_id");
         if (record.Request.ParameterOverrides is null)
             throw new PuloniaTaskValidationException(path, "运行请求参数覆盖不能为空。");
         var eventKeys = new HashSet<string>(StringComparer.Ordinal);
         foreach (var effect in record.ConfirmedEffects)
         {
-            // 新字段可缺省以兼容旧历史，但已保存的确认事实不能缺失身份或证据。
+            // 已保存的确认事实不能缺失身份或证据。
             if (effect is null || string.IsNullOrWhiteSpace(effect.TaskAddress) || effect.Attempt <= 0
                 || effect.Entry is null || string.IsNullOrWhiteSpace(effect.Entry.EventKey)
                 || string.IsNullOrWhiteSpace(effect.Entry.EffectKey) || string.IsNullOrWhiteSpace(effect.Entry.ScopeKey)
                 || effect.Entry.Units <= 0 || effect.Entry.Evidence is null
-                || effect.Entry.TaskRunId != $"{record.RunId:N}:{effect.TaskAddress}"
+                || effect.Entry.TaskRunId != $"{record.RunId}:{effect.TaskAddress}"
                 || !eventKeys.Add(effect.Entry.EventKey))
                 throw new PuloniaTaskValidationException(path, "运行确认事件身份、额度或证据无效。");
         }
     }
 
     /// <summary>
-    /// 校验当前状态内请求与运行身份不重复。
+    /// 校验当前状态内运行身份不重复。
     /// </summary>
-    private static void AddRunIdentity(PuloniaTaskRunRecord record, ISet<Guid> requestIds,
-        ISet<Guid> runIds, string path)
+    private static void AddRunIdentity(PuloniaTaskRunRecord record, ISet<string> runIds, string path)
     {
-        if (!requestIds.Add(record.RequestId) || !runIds.Add(record.RunId))
-            throw new PuloniaTaskValidationException(path, "请求 ID 或运行 ID 在当前状态中重复。");
+        if (!runIds.Add(record.RunId))
+            throw new PuloniaTaskValidationException(path, "运行 ID 在当前状态中重复。");
     }
 
     /// <summary>
@@ -223,7 +261,7 @@ public static class PuloniaTaskJson
     /// </summary>
     public static PuloniaTask CopySubtree(PuloniaTask task)
     {
-        // 使用临时根进行同一套结构校验，不允许对象循环进入序列化。
+        // 使用临时根进行同一套结构校验；同一对象挂在多处或形成循环时因节点 ID 重复被拒绝，不会进入序列化。
         var wrapper = new PuloniaTaskPlan();
         wrapper.RootTask.Children.Add(task);
         var clone = ClonePlan(wrapper).RootTask.Children[0];
@@ -234,15 +272,20 @@ public static class PuloniaTaskJson
     /// <summary>
     /// 读取单一对象，拒绝重复键、额外根值、未知属性与过深 JSON。
     /// </summary>
+    /// <param name="json">JSON 文本。</param>
     internal static T Read<T>(string json)
+        => ReadObject(json).ToObject<T>(JsonSerializer.Create(CreateSettings()))
+           ?? throw new JsonSerializationException("JSON 对象不能为空。");
+
+    /// <summary>Parse the shared strict single-object envelope before any typed projection.</summary>
+    private static JObject ReadObject(string json)
     {
         using var input = new StringReader(json);
         using var reader = new JsonTextReader(input) { DateParseHandling = DateParseHandling.None, MaxDepth = 256 };
         var token = JObject.Load(reader, new JsonLoadSettings { DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error });
         if (reader.Read())
             throw new JsonSerializationException("JSON 根对象后不能包含其他内容。");
-        return token.ToObject<T>(JsonSerializer.Create(CreateSettings()))
-               ?? throw new JsonSerializationException("JSON 对象不能为空。");
+        return token;
     }
 
     /// <summary>
@@ -251,7 +294,16 @@ public static class PuloniaTaskJson
     internal static string Write(object value) => JsonConvert.SerializeObject(value, CreateSettings());
 
     /// <summary>
-    /// 每次创建独立序列化配置，不共享可变 JsonSerializer 实例。
+    /// 全部读写共享的契约解析器。DefaultContractResolver 线程安全并按类型缓存契约；
+    /// 每次新建会让缓存失效，高频的状态复制和快照读写都要重新反射。
+    /// </summary>
+    private static readonly DefaultContractResolver SharedContractResolver = new()
+    {
+        NamingStrategy = new SnakeCaseNamingStrategy()
+    };
+
+    /// <summary>
+    /// 每次创建独立序列化配置，不共享可变 JsonSerializer 实例；契约解析器共享以复用契约缓存。
     /// </summary>
     private static JsonSerializerSettings CreateSettings() => new()
     {
@@ -259,7 +311,7 @@ public static class PuloniaTaskJson
         DateParseHandling = DateParseHandling.None,
         TypeNameHandling = TypeNameHandling.None,
         MissingMemberHandling = MissingMemberHandling.Error,
-        ContractResolver = new DefaultContractResolver { NamingStrategy = new SnakeCaseNamingStrategy() },
+        ContractResolver = SharedContractResolver,
         MaxDepth = 256
     };
 

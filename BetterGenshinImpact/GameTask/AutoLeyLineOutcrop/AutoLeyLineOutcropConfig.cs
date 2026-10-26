@@ -1,12 +1,19 @@
+using BetterGenshinImpact.GameTask.Common.Resin;
 using CommunityToolkit.Mvvm.ComponentModel;
 using System;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
+using BetterGenshinImpact.GameTask.Common.Reward;
 
 namespace BetterGenshinImpact.GameTask.AutoLeyLineOutcrop;
 
 [Serializable]
 public partial class AutoLeyLineOutcropConfig : ObservableObject
 {
+    /// <summary>统一树脂设置；为空时在读取配置后由旧字段迁移。</summary>
+    [ObservableProperty]
+    private ResinUsage? _resinUsage;
+
     public AutoLeyLineOutcropConfig()
     {
         AttachFightConfigEvents(_fightConfig);
@@ -18,18 +25,23 @@ public partial class AutoLeyLineOutcropConfig : ObservableObject
     [ObservableProperty]
     private string _country = "蒙德";
 
+    /// <summary>仅用于迁移旧树脂设置；界面与执行层使用 ResinUsage。</summary>
     [ObservableProperty]
     private bool _isResinExhaustionMode = false;
 
+    /// <summary>仅用于迁移旧树脂设置；界面与执行层使用 ResinUsage。</summary>
     [ObservableProperty]
     private bool _openModeCountMin = false;
 
+    /// <summary>仅用于迁移旧树脂设置；界面与执行层使用 ResinUsage。</summary>
     [ObservableProperty]
     private int _count = 6;
 
+    /// <summary>仅用于迁移旧树脂设置；界面与执行层使用 ResinUsage。</summary>
     [ObservableProperty]
     private bool _useTransientResin = false;
 
+    /// <summary>仅用于迁移旧树脂设置；界面与执行层使用 ResinUsage。</summary>
     [ObservableProperty]
     private bool _useFragileResin = false;
 
@@ -42,6 +54,7 @@ public partial class AutoLeyLineOutcropConfig : ObservableObject
     [ObservableProperty]
     private int _timeout = 120;
 
+    /// <summary>仅用于迁移旧树脂设置；界面与执行层使用 ResinUsage。</summary>
     [ObservableProperty]
     private bool _isGoToSynthesizer = false;
 
@@ -56,6 +69,12 @@ public partial class AutoLeyLineOutcropConfig : ObservableObject
     /// </summary>
     [ObservableProperty]
     private int _scanDropsAfterRewardSeconds = 12;
+
+    /// <summary>
+    /// 材料目标列表：按物品名与数量提前停止。
+    /// </summary>
+    [ObservableProperty]
+    private ObservableCollection<TargetItem> _targetItems = [];
 
     [ObservableProperty]
     private AutoLeyLineOutcropFightConfig _fightConfig = new();
@@ -82,5 +101,21 @@ public partial class AutoLeyLineOutcropConfig : ObservableObject
     private void OnFightConfigPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         OnPropertyChanged(nameof(FightConfig));
+    }
+
+    /// <summary>仅在尚无统一设置时，从旧字段迁移一次；已有新设置始终优先。</summary>
+    public void MigrateLegacyResinUsage()
+    {
+        if (ResinUsage is not null) return;
+        ResinUsage = ResinUsageLegacyMapper.FromLeyLine(IsResinExhaustionMode, OpenModeCountMin, Count,
+            UseTransientResin, UseFragileResin);
+    }
+
+    /// <summary>确保完成旧字段迁移并返回配置持有的设置；参数类读取后必须 Clone。</summary>
+    /// <returns>配置持有的非空树脂设置。</returns>
+    public ResinUsage EnsureResinUsage()
+    {
+        MigrateLegacyResinUsage();
+        return ResinUsage!;
     }
 }

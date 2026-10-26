@@ -23,9 +23,9 @@ public sealed class PuloniaTaskRunItemViewModel : ObservableObject
     public PuloniaTaskRunView Run { get; }
 
     /// <summary>
-    /// 请求 ID。
+    /// 运行 ID；选择、取消和续跑都按此身份定位。
     /// </summary>
-    public Guid RequestId => Run.RequestId;
+    public string RunId => Run.RunId;
 
     /// <summary>
     /// 计划名称。
@@ -52,16 +52,14 @@ public sealed class PuloniaTaskRunItemViewModel : ObservableObject
 
     /// <summary>
     /// 状态的语义分类，供列表与详情按类别着色：running=进行中、success=成功、failed=失败、attention=需关注，其余显示为中性灰。
+    /// 归类规则由 <see cref="PuloniaTaskRunClassifier.Categorize"/> 决定，这里只转换为视图触发器使用的键。
     /// </summary>
-    public string StatusKind => Run.Status switch
+    public string StatusKind => PuloniaTaskRunClassifier.Categorize(Run.Status) switch
     {
-        // 停止中仍属于未结束的活跃状态，与运行中一样延续强调色。
-        PuloniaTaskRunStatus.Running or PuloniaTaskRunStatus.Cancelling => "running",
-        PuloniaTaskRunStatus.Succeeded => "success",
-        // 超时按失败处理，与状态筛选的“失败 / 超时”分组保持一致。
-        PuloniaTaskRunStatus.Failed or PuloniaTaskRunStatus.TimedOut => "failed",
-        // 中断通常需要人工续跑或核对，与待处理一样使用警示色。
-        PuloniaTaskRunStatus.NeedsAttention or PuloniaTaskRunStatus.Interrupted => "attention",
+        PuloniaTaskRunStatusCategory.Running => "running",
+        PuloniaTaskRunStatusCategory.Success => "success",
+        PuloniaTaskRunStatusCategory.Failed => "failed",
+        PuloniaTaskRunStatusCategory.Attention => "attention",
         _ => "neutral"
     };
 
@@ -96,16 +94,16 @@ public sealed class PuloniaTaskRunItemViewModel : ObservableObject
     public IReadOnlyList<PuloniaTaskHistoryField> OverviewFields =>
     [
         new("运行摘要", Message),
-        new("运行 ID", Run.RunId.ToString("D")),
-        new("请求 ID", RequestId.ToString("D")),
+        new("运行 ID", Run.RunId),
         new("实际核验 UID", Run.VerifiedUid ?? "尚未核验 / 无游戏任务"),
         new("来源 / 作用域", $"{Run.Source} · {ScopeText}"),
+        new("运行实例", ExecutionTargetText),
         new("触发器 / 执行范围", $"{Run.TriggerId ?? "手动提交"} / {Run.TargetTaskId ?? "整个计划"}"),
         new("触发 / 最晚开始", $"{PuloniaTaskHistoryText.Time(Run.OccurrenceUtc)} / {PuloniaTaskHistoryText.Time(Run.DeadlineUtc)}"),
         new("提交 / 开始 / 结束", $"{SubmittedAtText} / {PuloniaTaskHistoryText.Time(Run.StartedAt)} / {PuloniaTaskHistoryText.Time(Run.FinishedAt)}"),
         new("执行耗时", PuloniaTaskHistoryText.Duration(Run.StartedAt, Run.FinishedAt)),
         new("续跑关联", Run.ResumedFromRunId is { } from
-            ? $"来源运行：{from:D}\n起点：{Run.ResumeFromTaskAddress ?? "未完成节点"}" : "首次运行")
+            ? $"来源运行：{from}\n起点：{Run.ResumeFromTaskAddress ?? "未完成节点"}" : "首次运行")
     ];
 
     /// <summary>
@@ -118,22 +116,19 @@ public sealed class PuloniaTaskRunItemViewModel : ObservableObject
     /// <summary>
     /// 存在不确定业务结果时显示人工核验提示。
     /// </summary>
-    public bool NeedsVerification => Run.HasUncertainOperation || NodeResults.Any(item =>
-        item.OutcomeKind is PuloniaTaskOutcomeKind.ExecutedUnverified or PuloniaTaskOutcomeKind.PartiallySucceeded
-            or PuloniaTaskOutcomeKind.NeedsAttention);
+    public bool NeedsVerification => PuloniaTaskRunClassifier.HasUncertainAttempt(NodeResults);
 
     /// <summary>
     /// 本次运行的确认事件，即使对应节点在结果落盘前中断也可以追溯。
     /// </summary>
     public IReadOnlyList<PuloniaTaskHistoryField> ConfirmedEffectFields => Run.ConfirmedEffects.Count == 0
-        ? [new("已确认副作用", "本次记录未留存确认事件；旧历史的空集合不表示实际未发生副作用。")]
+        ? [new("已确认副作用", "本次运行没有记录确认事件；没有记录不代表游戏中未发生副作用。")]
         : Run.ConfirmedEffects.Select(PuloniaTaskNodeResultViewModel.CreateEffectField).ToArray();
 
     /// <summary>
     /// 当前状态是否仍可请求取消。
     /// </summary>
-    public bool CanCancel => Run.Status is PuloniaTaskRunStatus.Queued
-        or PuloniaTaskRunStatus.Running or PuloniaTaskRunStatus.Cancelling;
+    public bool CanCancel => PuloniaTaskRunClassifier.IsActive(Run.Status);
 
     /// <summary>
     /// 当前条目是否已经写入不可变历史。
@@ -146,9 +141,14 @@ public sealed class PuloniaTaskRunItemViewModel : ObservableObject
     public bool CanResume => IsHistorical && Run.Status != PuloniaTaskRunStatus.Succeeded;
 
     /// <summary>
-    /// 运行账号与世界作用域摘要。
+    /// 运行账号摘要；世界拥有者字段已删除，采集 CD 按实际核验 UID 或默认账号隔离。
     /// </summary>
-    public string ScopeText => $"账号：{Run.AccountId ?? "默认"} · 世界：{Run.WorldOwnerAccountId ?? Run.AccountId ?? "默认"}";
+    public string ScopeText => $"账号：{Run.AccountId ?? "默认"}";
+
+    /// <summary>
+    /// 执行实例的显示名；本地执行时为主实例。
+    /// </summary>
+    public string ExecutionTargetText => Run.ExecutionTarget?.DisplayName is { Length: > 0 } name ? name : "主实例";
 
     /// <summary>
     /// 条目来自当前状态还是不可变历史。

@@ -1,3 +1,4 @@
+using BetterGenshinImpact.Pulonia.Remote;
 using System;
 using System.Buffers.Binary;
 using System.ComponentModel;
@@ -363,7 +364,8 @@ public sealed partial class ExternalControlService : BackgroundService
                 if (idleRestart is not null)
                 {
                     var runtime = _serviceProvider.GetRequiredService<BetterGenshinImpact.GameTask.Runtime.GameRuntimeService>();
-                    return _restartReservation.TryLaunch(runtime.TryReserveRestart, runtime.ReleaseRestartReservation,
+                    return _restartReservation.TryLaunch(() => ReserveIdleRuntimeRestart(runtime),
+                        () => ReleaseIdleRuntimeRestart(runtime),
                         HasOtherRestartWork, () =>
                         {
                             cancellationToken.ThrowIfCancellationRequested();
@@ -407,6 +409,22 @@ public sealed partial class ExternalControlService : BackgroundService
         }
     }
 
+    /// <summary>Compose the existing runtime gate with remote pure/pending ownership before launch.</summary>
+    private static bool ReserveIdleRuntimeRestart(BetterGenshinImpact.GameTask.Runtime.GameRuntimeService runtime)
+    {
+        if (!runtime.TryReserveRestart()) return false;
+        if (PuloniaRemoteNodeHost.TryReserveRestart()) return true;
+        runtime.ReleaseRestartReservation();
+        return false;
+    }
+
+    /// <summary>A failed launch releases exactly the two reservations acquired by this owner.</summary>
+    private static void ReleaseIdleRuntimeRestart(BetterGenshinImpact.GameTask.Runtime.GameRuntimeService runtime)
+    {
+        try { PuloniaRemoteNodeHost.ReleaseRestartReservation(); }
+        finally { runtime.ReleaseRestartReservation(); }
+    }
+
     /// <summary>Ordinary admission sees the reserved semaphore; only its owner excludes that one check.</summary>
     private bool IsRestartBusy() => _applicationRestarting || _restartReservation.BlocksAdmission
         || TaskControl.TaskSemaphore.CurrentCount == 0 || HasOtherRestartWork();
@@ -414,6 +432,7 @@ public sealed partial class ExternalControlService : BackgroundService
     /// <summary>Work that must remain absent even after the restart owns the task semaphore.</summary>
     private bool HasOtherRestartWork() =>
         IsOwnedTaskRunning()
+        || PuloniaRemoteNodeHost.HasActiveNodes
         || _agentStreamOwner.Snapshot().Running
         || _navigationResetOwner.Running
         || _navigationBaselineOwner.Running

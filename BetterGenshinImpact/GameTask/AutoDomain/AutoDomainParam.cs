@@ -1,8 +1,15 @@
+using System;
+using System.Text.Json.Serialization;
+using System.Diagnostics.CodeAnalysis;
+using BetterGenshinImpact.GameTask.Common.Resin;
+using BetterGenshinImpact.GameTask.AutoFight.Strategy;
 using System.Collections.Generic;
+using BetterGenshinImpact.GameTask.AutoDomain.TrainingGuide;
 using BetterGenshinImpact.GameTask.Model;
 using BetterGenshinImpact.GameTask.AutoFight;
 using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Service;
+using BetterGenshinImpact.GameTask.Common.Reward;
 
 namespace BetterGenshinImpact.GameTask.AutoDomain;
 
@@ -11,6 +18,33 @@ namespace BetterGenshinImpact.GameTask.AutoDomain;
 /// </summary>
 public class AutoDomainParam : BaseTaskParam<AutoDomainTask>
 {
+    /// <summary>参数独立持有的树脂设置，默认值来自任务能力。</summary>
+    private ResinUsage _resinUsage = ResinCapabilities.Domain.Defaults;
+
+    /// <summary>JS 已赋值的不分档位原粹次数；null 表示尚未赋值或已归一化。</summary>
+    private int? _legacyOriginal;
+
+    /// <summary>JS 已赋值的20 点档位原粹次数；null 表示尚未赋值或已归一化。</summary>
+    private int? _legacyOriginal20;
+
+    /// <summary>JS 已赋值的40 点档位原粹次数；null 表示尚未赋值或已归一化。</summary>
+    private int? _legacyOriginal40;
+
+    /// <summary>统一树脂设置；JSON null 回退为任务默认值，整体替换会清除待归一化的旧字段。</summary>
+    [AllowNull]
+    public ResinUsage ResinUsage
+    {
+        get => _resinUsage;
+        set
+        {
+            _resinUsage = value ?? ResinCapabilities.Domain.Defaults;
+            _legacyOriginal = null;
+            _legacyOriginal20 = null;
+            _legacyOriginal40 = null;
+        }
+    }
+
+
     /// <summary>
     /// 配置根。参数类由脚本和界面直接 new，没有创建方可以传入配置，暂时读配置根（见 task-context-removal.md 第 5 节）
     /// </summary>
@@ -20,11 +54,15 @@ public class AutoDomainParam : BaseTaskParam<AutoDomainTask>
     public string? TrainingTargetsJson { get; set; }
 
     /// <summary>JS 使用 JSON.stringify([{material: "材料完整名称", target: 28}]) 传入。</summary>
+    /// <param name="json">自定义培养目标 JSON，格式错误时抛出异常且不修改当前值。</param>
     public void SetTrainingTargets(string json)
     {
-        TrainingGuide.TrainingGuideCustomTargets.Parse(json);
+        TrainingGuideCustomTargets.Parse(json);
         TrainingTargetsJson = json;
     }
+
+    /// <summary>JS 兼容的额外轮数上限；构造参数 0 按原语义转换为 9999，不进入树脂设置。</summary>
+    [JsonIgnore]
     public int DomainRoundNum { get; set; }
 
     public string CombatStrategyPath { get; set; }
@@ -45,30 +83,74 @@ public class AutoDomainParam : BaseTaskParam<AutoDomainTask>
     // 1~4
     public string MaxArtifactStar { get; set; } = "4";
 
-    public bool SpecifyResinUse { get; set; } = false;
+    /// <summary>JS 兼容开关，直接在分别指定和耗尽方式之间切换，不清除隐藏字段。</summary>
+    [JsonIgnore]
+    public bool SpecifyResinUse
+    {
+        get => ResinUsageLegacyMapper.ToSpecifyResinUse(ResinUsage);
+        set => ResinUsage.Mode = value ? ResinUsageMode.PerType : ResinUsageMode.Exhaust;
+    }
 
     // 使用树脂优先级
+    /// <summary>JS 兼容列表，保留读写但不影响固定使用顺序，且不与全局配置共享。</summary>
+    [JsonIgnore]
     public List<string> ResinPriorityList { get; set; } =
     [
         "浓缩树脂",
         "原粹树脂"
     ];
     // 使用原粹树脂刷取副本次数
-    public int OriginalResinUseCount { get; set; } = 0;
+    /// <summary>JS 兼容次数，已赋值时读取暂存值，否则按当前原粹档位投影；统一由 ResolveResinUsage 合并。</summary>
+    [JsonIgnore]
+    public int OriginalResinUseCount
+    {
+        get => _legacyOriginal ?? (ResinUsage.OriginalTier == OriginalResinTier.Default ? ResinUsage.Counts.Original : 0);
+        set => _legacyOriginal = value;
+    }
     // 使用原粹树脂(20)刷取副本次数
-    public int OriginalResin20UseCount { get; set; } = 0;
+    /// <summary>JS 兼容的 20 点档位次数，已赋值时读取暂存值，否则按当前档位投影原粹目标。</summary>
+    [JsonIgnore]
+    public int OriginalResin20UseCount
+    {
+        get => _legacyOriginal20 ?? (ResinUsage.OriginalTier == OriginalResinTier.Only20 ? ResinUsage.Counts.Original : 0);
+        set => _legacyOriginal20 = value;
+    }
 
     // 使用原粹树脂(40)刷取副本次数
-    public int OriginalResin40UseCount { get; set; } = 0;
+    /// <summary>JS 兼容的 40 点档位次数，已赋值时读取暂存值，否则按当前档位投影原粹目标。</summary>
+    [JsonIgnore]
+    public int OriginalResin40UseCount
+    {
+        get => _legacyOriginal40 ?? (ResinUsage.OriginalTier == OriginalResinTier.Prefer40 ? ResinUsage.Counts.Original : 0);
+        set => _legacyOriginal40 = value;
+    }
 
     // 使用浓缩树脂刷取副本次数
-    public int CondensedResinUseCount { get; set; } = 0;
+    /// <summary>JS 兼容的浓缩次数，直接读写统一设置中该类的领奖次数。</summary>
+    [JsonIgnore]
+    public int CondensedResinUseCount
+    {
+        get => ResinUsage.Counts.Condensed;
+        set => ResinUsage.Counts.Condensed = value;
+    }
 
     // 使用须臾树脂刷取副本次数
-    public int TransientResinUseCount { get; set; } = 0;
+    /// <summary>JS 兼容的须臾次数，直接读写统一设置中该类的领奖次数。</summary>
+    [JsonIgnore]
+    public int TransientResinUseCount
+    {
+        get => ResinUsage.Counts.Transient;
+        set => ResinUsage.Counts.Transient = value;
+    }
 
     // 使用脆弱树脂刷取副本次数
-    public int FragileResinUseCount { get; set; } = 0;
+    /// <summary>JS 兼容的脆弱次数，直接读写统一设置中该类的领奖次数。</summary>
+    [JsonIgnore]
+    public int FragileResinUseCount
+    {
+        get => ResinUsage.Counts.Fragile;
+        set => ResinUsage.Counts.Fragile = value;
+    }
 
     /// <summary>
     /// 是否启用奖励名称识别。默认关闭。
@@ -106,12 +188,18 @@ public class AutoDomainParam : BaseTaskParam<AutoDomainTask>
     public int ReviveRetryCount { get; set; } = 3;
 
     /// <summary>
+    /// 材料目标列表。
+    /// </summary>
+    public List<TargetItem> TargetItems { get; set; } = [];
+
+    /// <summary>
     /// 使用全局秘境配置创建参数，轮数为无限（9999），战斗策略取全局自动战斗策略。
     /// 行为与原来的 <c>new AutoDomainParam()</c>（即 <c>AutoDomainParam(0)</c>）一致，供 ClearScript 与任务框架的无参构造使用。
     /// </summary>
     public AutoDomainParam() : this(0)
     {
     }
+
     /// <summary>Training guide options inherit task settings at construction; JS may override any subset for this run.</summary>
     public bool TrainingGuideCalculateRunsEnabled { get; set; }
 
@@ -121,15 +209,19 @@ public class AutoDomainParam : BaseTaskParam<AutoDomainTask>
         get => _trainingGuideRunPreference;
         set => _trainingGuideRunPreference = value is 0 or 1 ? value : 0;
     }
+
+    /// <summary>培养计划刷取偏好的存储字段，只保存 0 或 1。</summary>
     private int _trainingGuideRunPreference;
 
     /// <summary>Crafting bonus reserve percentage, clamped to 0 through 20.</summary>
     public int TrainingGuideCraftingBonusReservePercent
     {
         get => _trainingGuideCraftingBonusReservePercent;
-        set => _trainingGuideCraftingBonusReservePercent = System.Math.Clamp(value, 0,
-            TrainingGuide.TrainingGuideRunCalculator.MaxCraftingBonusReservePercent);
+        set => _trainingGuideCraftingBonusReservePercent = Math.Clamp(value, 0,
+            TrainingGuideRunCalculator.MaxCraftingBonusReservePercent);
     }
+
+    /// <summary>合成收益预留百分比的存储字段，范围 0～20。</summary>
     private int _trainingGuideCraftingBonusReservePercent;
 
     /// <summary>Use recognized rewards to update the remaining training plan.</summary>
@@ -150,7 +242,11 @@ public class AutoDomainParam : BaseTaskParam<AutoDomainTask>
     /// <summary>Sunday or limited-time reward selection for the fallback domain.</summary>
     public string TrainingGuideFallbackSundaySelectedValue { get; set; } = string.Empty;
 
-    public bool ShouldRecognizeRewards() => RewardRecognitionEnabled ||
+    /// <summary>
+    /// 本次运行是否需要识别奖励：常规奖励识别、材料目标或培养计划奖励识别任一需要即识别。
+    /// </summary>
+    /// <returns>需要识别奖励时返回 true。</returns>
+    public bool ShouldRecognizeRewards() => RewardRecognitionEnabled || TargetItems.Count > 0 ||
         (TrainingTargetsJson != null && TrainingGuideRewardRecognitionEnabled) ||
         (DomainName == AutoDomainTask.TrainingGuideOption &&
          TrainingGuideCalculateRunsEnabled && TrainingGuideRewardRecognitionEnabled);
@@ -176,20 +272,19 @@ public class AutoDomainParam : BaseTaskParam<AutoDomainTask>
 
     public void SetDefault()
     {
-        var config = Config.AutoDomainConfig;
+        SetAutoDomainConfig(Config.AutoDomainConfig);
+        MaxArtifactStar = Config.AutoArtifactSalvageConfig.MaxArtifactStar;
+    }
+
+    /// <summary>从指定秘境配置复制参数，树脂设置深拷贝后由参数独立持有。</summary>
+    /// <param name="config">秘境业务配置。</param>
+    public void SetAutoDomainConfig(AutoDomainConfig config)
+    {
         PartyName = config.PartyName;
         DomainName = config.DomainName;
         SundaySelectedValue = config.SundaySelectedValue;
         AutoArtifactSalvage = config.AutoArtifactSalvage;
-        MaxArtifactStar = Config.AutoArtifactSalvageConfig.MaxArtifactStar;
-        ResinPriorityList = new List<string>(config.ResinPriorityList);
-        OriginalResinUseCount = config.OriginalResinUseCount;
-        CondensedResinUseCount = config.CondensedResinUseCount;
-        TransientResinUseCount = config.TransientResinUseCount;
-        FragileResinUseCount = config.FragileResinUseCount;
-        SpecifyResinUse = config.SpecifyResinUse;
-        OriginalResin20UseCount = config.OriginalResin20UseCount;
-        OriginalResin40UseCount = config.OriginalResin40UseCount;
+        ResinUsage = config.EnsureResinUsage().Clone();
         RewardRecognitionEnabled = config.RewardRecognitionEnabled;
         // 以下业务设置原来由任务直接读取 AutoDomainConfig，现在随参数传入
         FightEndDelay = config.FightEndDelay;
@@ -198,6 +293,14 @@ public class AutoDomainParam : BaseTaskParam<AutoDomainTask>
         LeftRightMoveTimes = config.LeftRightMoveTimes;
         AutoEat = config.AutoEat;
         ReviveRetryCount = config.ReviveRetryCount;
+        TargetItems = TargetItem.CloneAll(config.TargetItems);
+        CopyTrainingGuideSettings(config);
+    }
+
+    /// <summary>从秘境配置复制培养计划相关设置；Pulonia 导入旧配置时也使用此方法。</summary>
+    /// <param name="config">秘境业务配置。</param>
+    internal void CopyTrainingGuideSettings(AutoDomainConfig config)
+    {
         TrainingGuideCalculateRunsEnabled = config.TrainingGuideCalculateRunsEnabled;
         TrainingGuideRunPreference = config.TrainingGuideRunPreference;
         TrainingGuideCraftingBonusReservePercent = config.TrainingGuideCraftingBonusReservePercent;
@@ -221,6 +324,20 @@ public class AutoDomainParam : BaseTaskParam<AutoDomainTask>
         SetDefault();
     }
 
+    /// <summary>将 JS 已赋值的原粹/20/40 次数组合归一化一次，不覆盖其他树脂及使用方式。</summary>
+    public void ResolveResinUsage()
+    {
+        if (_legacyOriginal is null && _legacyOriginal20 is null && _legacyOriginal40 is null) return;
+        var mapped = ResinUsageLegacyMapper.FromDomain(SpecifyResinUse, OriginalResinUseCount,
+            CondensedResinUseCount, TransientResinUseCount, FragileResinUseCount,
+            OriginalResin20UseCount, OriginalResin40UseCount, out var warning);
+        var next = ResinUsage.Clone();
+        next.Counts.Original = mapped.Counts.Original;
+        next.OriginalTier = mapped.OriginalTier;
+        ResinUsage = next;
+        if (warning is not null) Serilog.Log.Warning("{Warning}", warning);
+    }
+
     /// <summary>  
     /// 设置战斗策略路径
     /// </summary>  
@@ -232,23 +349,14 @@ public class AutoDomainParam : BaseTaskParam<AutoDomainTask>
             strategyName = Config.AutoFightConfig.StrategyName;
         }
 
-        if ("根据队伍自动选择".Equals(strategyName))
-        {
-            return Global.Absolute(@"User\AutoFight\");
-        }
-        else if (AutoFightParam.ComboStrategyName.Equals(strategyName))
-        {
-            return AutoFightParam.ComboStrategyName;
-        }
-        else
-        {
-            return Global.Absolute(@"User\AutoFight\" + strategyName + ".txt");
-        }
+        return CombatStrategyResolver.Parse(strategyName).Path;
     }
 
+    /// <summary>JS 兼容入口；树脂使用顺序固定，传入的优先级不再生效。</summary>
+    /// <param name="priorities">旧脚本传入的优先级。</param>
+    [Obsolete("树脂使用顺序固定，此方法不再生效")]
     public void SetResinPriorityList(params string[] priorities)
     {
-        ResinPriorityList.Clear();
-        ResinPriorityList.AddRange(priorities);
+        // 保留旧方法供社区脚本调用。
     }
 }

@@ -168,6 +168,11 @@ public partial class MusicGuidedWindow : Window, IMusicGuidedOverlay
     public MusicGuidedKeyLayoutConfig? KeyLayout { get; set; }
 
     /// <summary>
+    /// 判断游戏是否在前台，由创建方按当前运行环境提供；未设置时使用会话捕获的目标运行环境。
+    /// </summary>
+    public Func<bool>? IsGameForeground { get; set; }
+
+    /// <summary>
     /// 已经贴住游戏窗口（Show() 之后 IsLoaded 不会同步变 true，所以只看句柄）。
     /// </summary>
     public bool IsAttached => _gameHandle != 0 && !_isClosing;
@@ -654,7 +659,7 @@ public partial class MusicGuidedWindow : Window, IMusicGuidedOverlay
         }
 
         _gameActiveCheckedAt = now;
-        _gameActiveCached = _session?.IsTargetActive == true;
+        _gameActiveCached = IsGameForeground?.Invoke() ?? (_session?.IsTargetActive == true);
         return _gameActiveCached;
     }
 

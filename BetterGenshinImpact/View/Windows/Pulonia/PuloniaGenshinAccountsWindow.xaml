@@ -21,15 +21,15 @@
       <TextBlock Text="{i18n:T 登录选择方式}"/><ComboBox i18n:OptionDisplay.Path="Value" ItemsSource="{Binding LoginModes}" SelectedValuePath="Key" SelectedValue="{Binding LoginMode}" Margin="0,6,0,12"/>
       <TextBlock Text="{i18n:T 登录列表中的账号文字（按列表填写脱敏手机号或邮箱）}" TextWrapping="Wrap"/>
       <TextBox Text="{Binding ListText, UpdateSourceTrigger=PropertyChanged}" Margin="0,6,0,12"/>
-      <TextBlock Text="{i18n:T 账号图片}"/><TextBlock Text="{Binding ImagePath}" TextWrapping="Wrap" Margin="0,6,0,8"/>
+      <TextBlock Text="{i18n:T 账号图片}"/><TextBlock Text="{Binding Mode=OneWay, Path=ImagePath}" TextWrapping="Wrap" Margin="0,6,0,8"/>
       <WrapPanel Margin="0,0,0,16"><ui:Button Content="{i18n:T 导入图片}" Command="{Binding ImportImageCommand}" Margin="0,0,8,0"/><ui:Button Content="{i18n:T 采集当前账号图片}" Command="{Binding CaptureImageCommand}"/></WrapPanel>
-      <TextBlock Text="{i18n:T 可选密码登录备用（留空保留已保存凭据）}"/>
+      <TextBlock Text="{i18n:T 可选密码登录备用（留空保留已保存凭据；登录方式为账号图片或列表文字时，保存后删除已保存凭据）}" TextWrapping="Wrap"/>
       <TextBox Text="{Binding LoginUsername, UpdateSourceTrigger=PropertyChanged}" Margin="0,6,0,8"/>
       <PasswordBox Margin="0,0,0,12"><b:Interaction.Behaviors><behavior:PasswordBoxBindingBehavior Password="{Binding LoginPassword, Mode=TwoWay}"/></b:Interaction.Behaviors></PasswordBox>
      </StackPanel>
     </StackPanel>
    </ScrollViewer>
   </Grid>
-  <DockPanel Grid.Row="2" Margin="18,8,18,18"><ui:Button DockPanel.Dock="Right" Content="{i18n:T 保存账号设置}" Appearance="Primary" Command="{Binding SaveCommand}" IsEnabled="{Binding CanEdit}" Margin="12,0,0,0"/><TextBlock Text="{Binding Message}" TextWrapping="Wrap" VerticalAlignment="Center"/></DockPanel>
+  <DockPanel Grid.Row="2" Margin="18,8,18,18"><ui:Button DockPanel.Dock="Right" Content="{i18n:T 保存账号设置}" Appearance="Primary" Command="{Binding SaveCommand}" IsEnabled="{Binding CanEdit}" Margin="12,0,0,0"/><TextBlock Text="{Binding Mode=OneWay, Path=Message}" TextWrapping="Wrap" VerticalAlignment="Center"/></DockPanel>
  </Grid>
 </ui:FluentWindow>

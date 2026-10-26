@@ -101,7 +101,7 @@ public class MiningHandler : IActionHandler
             bool foundAvatar = false;
             foreach (var miningActionStr in _miningActions)
             {
-                var miningAction = CombatScriptParser.ParseContext(miningActionStr);
+                var miningAction = CombatScriptParser.ParseContext(miningActionStr, Logger);
                 foreach (var command in miningAction.CombatCommands)
                 {
                     var avatar = combatScenes.SelectAvatar(command.Name);

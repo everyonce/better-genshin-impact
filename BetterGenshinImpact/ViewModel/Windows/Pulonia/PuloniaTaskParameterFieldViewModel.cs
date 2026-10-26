@@ -1,7 +1,12 @@
+using BetterGenshinImpact.GameTask.AutoFight.Strategy;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using BetterGenshinImpact.Pulonia.Services;
+using BetterGenshinImpact.GameTask.Common.Resin;
+using BetterGenshinImpact.GameTask.SoloTask;
+using BetterGenshinImpact.ViewModel.Resin;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -27,6 +32,12 @@ public enum PuloniaTaskParameterEditorKind
     /// 固定选项编辑器。
     /// </summary>
     Choice,
+
+    /// <summary>统一战斗策略选择器。</summary>
+    CombatStrategy,
+
+    /// <summary>公共树脂入口卡片，确认后整体替换嵌套对象。</summary>
+    ResinUsage,
 
     /// <summary>
     /// JSON 数组或对象编辑器。
@@ -84,9 +95,20 @@ public partial class PuloniaTaskParameterFieldViewModel : ObservableObject
     /// </summary>
     public bool IsBooleanEditor => EditorKind == PuloniaTaskParameterEditorKind.Boolean;
 
-    /// <summary>
-    /// 是否显示固定选项编辑器。
-    /// </summary>
+    /// <summary>是否显示统一战斗策略选择器。</summary>
+    public bool IsCombatStrategyEditor => EditorKind == PuloniaTaskParameterEditorKind.CombatStrategy;
+    /// <summary>是否使用树脂入口，其他标量与 JSON 编辑器均不显示。</summary>
+    public bool IsResinUsageEditor => EditorKind == PuloniaTaskParameterEditorKind.ResinUsage;
+    /// <summary>树脂字段的独立草稿入口，非树脂字段为 null。</summary>
+    public ResinUsageEntryViewModel? Resin { get; }
+    /// <summary>解析后的初始树脂设置，用于保持缺失、null 和格式错误原值不产生覆盖。</summary>
+    private readonly ResinUsage? _initialResin;
+    /// <summary>树脂值是否相对初始草稿发生结构变化。</summary>
+    internal bool HasResinChanges => Resin is not null && Resin.Value != _initialResin;
+    /// <summary>当前任务可使用的策略类型。</summary>
+    public CombatStrategyKind AllowedStrategyKinds { get; }
+
+    /// <summary>是否显示固定选项编辑器。</summary>
     public bool IsChoiceEditor => EditorKind == PuloniaTaskParameterEditorKind.Choice;
 
     /// <summary>
@@ -139,14 +161,22 @@ public partial class PuloniaTaskParameterFieldViewModel : ObservableObject
     /// 根据字段 Schema 和能力默认值建立编辑字段。
     /// </summary>
     public PuloniaTaskParameterFieldViewModel(string name, JObject schema, JToken? defaultValue,
-        bool hasDefaultValue, bool isRequired)
+        bool hasDefaultValue, bool isRequired, IResinSettingsDialogs? dialogs = null)
     {
         Name = name;
-        DisplayName = GetDisplayName(name);
+        DisplayName = PuloniaTaskFieldNames.GetDisplayName(name);
         Description = GetDescription(name);
         IsRequired = isRequired;
         _hasDefaultValue = hasDefaultValue;
         _defaultValue = defaultValue?.DeepClone();
+        if (ResinUsageViewModelSupport.GetTask(schema.Value<string>("x-resin-usage")) is { } task)
+        {
+            // 字段来自静态 Schema 工厂而非 DI；显式服务优先，真实应用中才尝试静态容器，取不到仍可显示摘要。
+            Resin = new(task.Name, task.Capability, ResinUsageViewModelSupport.Read(defaultValue, task.Capability),
+                ResinUsageViewModelSupport.ResolveDialogs(dialogs));
+            _initialResin = Resin.Value;
+            Resin.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(Resin.Value)) OnPropertyChanged(nameof(Resin)); };
+        }
 
         var types = schema["type"] is JArray typeArray
             ? typeArray.Values<string>().Where(type => type is not null).Cast<string>().ToList()
@@ -157,7 +187,9 @@ public partial class PuloniaTaskParameterFieldViewModel : ObservableObject
             ? choices.ToDictionary(choice => choice.Type == JTokenType.String ? choice.Value<string>()! : choice.ToString(Formatting.None), choice => choice.DeepClone(), StringComparer.Ordinal)
             : new Dictionary<string, JToken>();
         Choices = _choiceValues.Keys.ToArray();
-        EditorKind = Choices.Count > 0
+        AllowedStrategyKinds = (CombatStrategyKind)(schema.Value<int?>("x-combat-strategy-kinds") ?? (int)CombatStrategyKind.WithoutCombo);
+        var isCombatStrategy = System.Text.Json.JsonNamingPolicy.SnakeCaseLower.ConvertName(name) is "strategy_name" or "combat_strategy_path";
+        EditorKind = Resin is not null ? PuloniaTaskParameterEditorKind.ResinUsage : isCombatStrategy ? PuloniaTaskParameterEditorKind.CombatStrategy : Choices.Count > 0
             ? PuloniaTaskParameterEditorKind.Choice
             : _valueType switch
             {
@@ -166,6 +198,7 @@ public partial class PuloniaTaskParameterFieldViewModel : ObservableObject
                 _ => PuloniaTaskParameterEditorKind.Text
             };
 
+        if (IsResinUsageEditor) return;
         var initialValue = defaultValue ?? JValue.CreateNull();
         if (EditorKind == PuloniaTaskParameterEditorKind.Boolean)
             BooleanValue = initialValue.Value<bool?>() ?? false;
@@ -184,6 +217,8 @@ public partial class PuloniaTaskParameterFieldViewModel : ObservableObject
     /// </summary>
     public JToken BuildValue()
     {
+        if (Resin is not null)
+            return HasResinChanges ? JObject.Parse(SoloTaskJson.Serialize(Resin.Value)) : _defaultValue?.DeepClone() ?? JValue.CreateNull();
         if (EditorKind == PuloniaTaskParameterEditorKind.Boolean)
             return new JValue(BooleanValue);
         if (EditorKind == PuloniaTaskParameterEditorKind.Choice)
@@ -238,6 +273,7 @@ public partial class PuloniaTaskParameterFieldViewModel : ObservableObject
     /// </summary>
     public bool ShouldPersist(JToken value)
     {
+        if (IsResinUsageEditor && !HasResinChanges) return false;
         if (_hasDefaultValue)
             return !JToken.DeepEquals(_defaultValue, value);
         return IsRequired || value.Type != JTokenType.Null;
@@ -254,46 +290,6 @@ public partial class PuloniaTaskParameterFieldViewModel : ObservableObject
             return Convert.ToString(((JValue)value).Value, CultureInfo.InvariantCulture) ?? string.Empty;
         return value.Value<string>() ?? string.Empty;
     }
-
-    /// <summary>
-    /// 返回当前已接入参数的中文名称；未知字段仍保留稳定字段名。
-    /// </summary>
-    internal static string GetDisplayName(string name) => name switch
-    {
-        "domain_name" => "秘境", "boss_name" => "首领", "strategy_name" => "战斗策略",
-        "team_name" or "team" or "fight_team_name" => "队伍", "run_count" or "count" or "round_count" => "次数",
-        "specify_run_count" => "指定次数", "revive_retry_count" => "死亡重试次数", "timeout" => "战斗超时（秒）",
-        "boss_num" => "幽境首领序号", "weekday_overrides" => "每周安排（0 周日至 6 周六，服务器四点日切）",
-        "one_dragon_mode" => "地脉花一条龙模式", "specify_resin_use" => "指定树脂用量", "max_artifact_star" => "分解最大星级",
-        "auto_artifact_salvage" => "结束后分解圣遗物", "reward_recognition_enabled" => "识别奖励",
-        "use_transient_resin" => "使用须臾树脂", "use_fragile_resin" => "使用脆弱树脂",
-        "resin_priority_list" => "树脂优先级", "is_resin_exhaustion_mode" => "刷至树脂耗尽",
-        "sunday_selected_value" => "周日奖励序号", "ley_line_outcrop_type" => "地脉花类型",
-        "fight_config" => "战斗设置", "return_to_statue_after_each_round" => "每轮结束回神像",
-        "original_resin_use_count" => "原粹树脂次数", "original_resin20_use_count" => "20 树脂次数",
-        "original_resin40_use_count" => "40 树脂次数", "condensed_resin_use_count" => "浓缩树脂次数",
-        "transient_resin_use_count" => "须臾树脂次数", "fragile_resin_use_count" => "脆弱树脂次数",
-        "friendship_team" => "好感队伍", "open_mode_count_min" => "次数取较小值",
-        "is_go_to_synthesizer" => "前往合成台", "scan_drops_after_reward_enabled" => "领奖后扫描掉落物",
-        "scan_drops_after_reward_seconds" => "扫描掉落物时长（秒）", "fight_end_delay" => "战斗结束后等待（秒）",
-        "short_movement" => "短距离移动", "walk_to_f" => "走近交互", "left_right_move_times" => "左右移动次数",
-        "auto_eat" => "自动吃药",
-        "settings" => "脚本设置",
-        "party_name" => "队伍名称",
-        "skip_party_switch" => "跳过队伍切换",
-        "auto_pick_enabled" => "自动拾取",
-        "auto_fight_enabled" => "自动战斗",
-        "auto_skip_enabled" => "自动跳过剧情",
-        "with_delay" => "按录制延时回放",
-        "file_name" => "程序或命令",
-        "arguments" => "参数数组",
-        "working_directory" => "工作目录",
-        "operation" => "C# 操作名",
-        "values" => "数值数组",
-        "delay_milliseconds" => "延时（毫秒）",
-        "country" => "国家",
-        _ => name
-    };
 
     /// <summary>
     /// 返回当前已接入参数的简短说明。

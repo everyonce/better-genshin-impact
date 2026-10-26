@@ -1,3 +1,5 @@
+using BetterGenshinImpact.GameTask.Common.Resin;
+using BetterGenshinImpact.GameTask.AutoFight.Strategy;
 using BetterGenshinImpact.Core.Input;
 using BetterGenshinImpact.Core.Recognition;
 using BetterGenshinImpact.Core.Recognition.OpenCv;
@@ -19,6 +21,7 @@ using BetterGenshinImpact.GameTask.AutoFight.Script;
 using BetterGenshinImpact.GameTask.Common;
 using BetterGenshinImpact.GameTask.Common.BgiVision;
 using BetterGenshinImpact.GameTask.Common.Job;
+using BetterGenshinImpact.GameTask.Common.Reward;
 using BetterGenshinImpact.GameTask.Common.Map.Maps.Base;
 using BetterGenshinImpact.GameTask;
 using BetterGenshinImpact.GameTask.Model;
@@ -54,10 +57,13 @@ namespace BetterGenshinImpact.GameTask.AutoLeyLineOutcrop;
 /// </summary>
 [SoloTaskInfo(TaskId, "自动地脉花", Group = "树脂与战斗", Order = 240, OneDragonOrder = 6)]
 [SoloTaskSettingsView(typeof(AutoLeyLineOutcropSettingsView), typeof(AutoLeyLineOutcropSettingsViewModel))]
-public class AutoLeyLineOutcropTask : ISoloTask<AutoLeyLineOutcropParam, NoData>
+public class AutoLeyLineOutcropTask : ISoloTask<AutoLeyLineOutcropParam, ResinClaimData>
 {
     /// <summary>Stable text used to identify retryable combat failures.</summary>
     private const string CombatFailureMessage = "Combat failed";
+    /// <summary>本任务支持的树脂使用方式、种类、档位及默认设置。</summary>
+    public static ResinUsageCapability ResinCapability => ResinCapabilities.LeyLineOutcrop;
+
     /// <summary>
     /// 独立任务稳定标识。
     /// </summary>
@@ -66,7 +72,7 @@ public class AutoLeyLineOutcropTask : ISoloTask<AutoLeyLineOutcropParam, NoData>
     /// <summary>
     /// 本任务专用原因码：树脂已耗尽，未执行地脉花挑战。
     /// </summary>
-    public const string ResinExhaustedReason = "resin_exhausted";
+    public const string ResinExhaustedReason = SoloTaskReasons.ResinExhausted;
 
     /// <summary>
     /// 本任务专用原因码：当前地脉花位置没有匹配的路线策略。
@@ -105,6 +111,11 @@ public class AutoLeyLineOutcropTask : ISoloTask<AutoLeyLineOutcropParam, NoData>
     /// </summary>
     private bool _routeStrategyNotFound;
     private TpTask _tpTask = null!;
+
+    /// <summary>
+    /// 背包摩拉扫描器
+    /// </summary>
+    private MoraFromInventoryScanner _moraFromInventoryScanner = null!;
     private readonly ReturnMainUiTask _returnMainUiTask;
     private SwitchPartyTask? _switchPartyTask;
     private ISystemInfo _systemInfo = null!;
@@ -121,9 +132,26 @@ public class AutoLeyLineOutcropTask : ISoloTask<AutoLeyLineOutcropParam, NoData>
 
     private double _leyLineX;
     private double _leyLineY;
+    /// <summary>本次统一领奖目标与消耗记录。</summary>
+    private ResinClaimSelector _selector = null!;
+    /// <summary>本批次的内部领奖次数上限，不改写参数。</summary>
+    private int _targetRunTimes;
+    /// <summary>没有可用领奖选项后停止后续路线和挑战。</summary>
+    private bool _rewardStopped;
+    /// <summary>本次树脂结束原因。</summary>
+    private ResinStopReason _stopReason;
     private int _currentRunTimes;
     private int _recheckCount;
     private int _consecutiveFailureCount;
+
+    /// <summary>材料目标是否已全部达成。</summary>
+    private bool _itemStopReached;
+
+    /// <summary>启示之花奖励停止的背包基线。</summary>
+    private Dictionary<string, int>? _expBaseline;
+
+    /// <summary>藏金之花奖励停止的摩拉基线。</summary>
+    private int? _moraBaseline;
     private DateTime _lastRewardNavLog = DateTime.MinValue;
 
     private RecognitionObject? _paimonMenuRo;
@@ -176,8 +204,16 @@ public class AutoLeyLineOutcropTask : ISoloTask<AutoLeyLineOutcropParam, NoData>
     /// 参数无效返回 Failed(invalid_parameter)；树脂耗尽未执行返回 Skipped(resin_exhausted)；
     /// 出现未匹配的地脉花路线策略返回 Failed(ley_line_route_not_found)；其余正常结束返回 Unverified。
     /// </returns>
-    public async Task<SoloTaskResult<NoData>> RunAsync(AutoLeyLineOutcropParam param, CancellationToken ct)
+    public async Task<SoloTaskResult<ResinClaimData>> RunAsync(AutoLeyLineOutcropParam param, CancellationToken ct)
     {
+        param.ResolveResinUsage();
+        if (param.ResinUsage.Validate(ResinCapability) is { } problem)
+            return SoloTaskResult.Failed(SoloTaskReasons.InvalidParameter, problem);
+        _selector = new ResinClaimSelector(param.ResinUsage, ResinCapability);
+        _currentRunTimes = 0;
+        _recheckCount = 0;
+        _rewardStopped = false;
+        _stopReason = ResinStopReason.ResinExhausted;
         // 1. 参数校验：无效参数直接返回失败，不做任何游戏操作
         var invalidReason = ValidateParam(param);
         if (invalidReason != null)
@@ -190,23 +226,27 @@ public class AutoLeyLineOutcropTask : ISoloTask<AutoLeyLineOutcropParam, NoData>
         _oneDragonMode = param.OneDragonMode;
         _routeStrategyNotFound = false;
         _ct = ct;
+        _itemStopReached = false;
+        _expBaseline = null;
+        _moraBaseline = null;
         Notify.Event(NotificationEvent.LeyLineStart).Success($"{TaskName}启动");
 
         try
         {
             Initialize();
-            var runTimesValue = await HandleResinExhaustionMode();
+            var runTimesValue = await CalculateTargetRunTimes();
             if (runTimesValue <= 0)
             {
                 // 树脂耗尽：条件不满足，未执行挑战
                 Logger.LogInformation("Task ended: {Msg}", "树脂耗尽，任务结束");
-                return SoloTaskResult.Skipped(ResinExhaustedReason, "树脂耗尽，任务结束");
+                return SoloTaskResult.Skipped(SoloTaskReasons.ResinExhausted, ResinUsageText.Skipped);
             }
 
             await PrepareForLeyLineRun();
+            await CaptureLeylineBaselineAsync();
             await RunLeyLineChallenges();
 
-            if (_taskParam.IsResinExhaustionMode)
+            if (_taskParam.ResinUsage.Mode == ResinUsageMode.Exhaust && !_rewardStopped)
             {
                 await RecheckResinAndContinue();
             }
@@ -217,8 +257,10 @@ public class AutoLeyLineOutcropTask : ISoloTask<AutoLeyLineOutcropParam, NoData>
                 return SoloTaskResult.Failed(RouteStrategyNotFoundReason, "No matching ley line strategy was found");
             }
 
-            // 现有流程没有领取证据，结果为“已执行，未核验”
-            return SoloTaskResult.Unverified("地脉花流程已结束。");
+            // 领奖次数或材料目标任一达成都按目标完成结算并返回成功；树脂不足等提前结束为“已执行，未核验”。
+            return ResinClaimResults.Complete(_selector,
+                _selector.IsTargetReached || _itemStopReached ? ResinStopReason.TargetReached : _stopReason,
+                "地脉花流程已结束", true, targetItemsReached: _itemStopReached);
         }
         catch (Exception e) when (e is NormalEndException or OperationCanceledException)
         {
@@ -263,22 +305,23 @@ public class AutoLeyLineOutcropTask : ISoloTask<AutoLeyLineOutcropParam, NoData>
     {
         _systemInfo = _runtime.SystemInfo;
         _tpTask = new TpTask(_runtime, _config, _ct);
+        _moraFromInventoryScanner = new MoraFromInventoryScanner(_runtime, _logger);
         NormalizeSettings();
         LoadConfigData();
         LoadRecognitionObjects();
     }
 
     /// <summary>
-    /// 校验本次运行的业务参数（原 ValidateSettings 中抛异常的检查，以及次数、超时必须为正数）。
+    /// 校验本次运行的业务参数（次数、类型、国家、队伍与材料目标）。
     /// </summary>
     /// <param name="param">本次运行的业务参数</param>
     /// <returns>参数无效时返回中文原因；有效时返回 null</returns>
     private static string? ValidateParam(AutoLeyLineOutcropParam param)
     {
         // 次数与超时必须为正数（与 Pulonia 原执行器的校验一致）
-        if (param.Count < 1 || param.Timeout < 1)
+        if (param.Timeout < 1)
         {
-            return "地脉花次数和超时必须为正数。";
+            return "地脉花超时必须为正数。";
         }
 
         if (string.IsNullOrWhiteSpace(param.LeyLineOutcropType))
@@ -299,6 +342,18 @@ public class AutoLeyLineOutcropTask : ISoloTask<AutoLeyLineOutcropParam, NoData>
         if (!string.IsNullOrWhiteSpace(param.FriendshipTeam) && string.IsNullOrWhiteSpace(param.Team))
         {
             return "配置好感队时必须配置战斗队伍";
+        }
+
+        if (param.TargetItems.Count > 0)
+        {
+            try
+            {
+                TargetItemCatalog.Instance.ValidateLeylineSettings(param.LeyLineOutcropType, param.TargetItems);
+            }
+            catch (TargetItemConfigurationException e)
+            {
+                return e.Message;
+            }
         }
 
         return null;
@@ -395,38 +450,18 @@ public class AutoLeyLineOutcropTask : ISoloTask<AutoLeyLineOutcropParam, NoData>
         return scaled;
     }
 
-    private async Task<int> HandleResinExhaustionMode()
+    /// <summary>仅按本次允许的树脂预计算批次上限，不改写 JS 兼容 Count 或统一参数。</summary>
+    private async Task<int> CalculateTargetRunTimes()
     {
-        if (!_taskParam.IsResinExhaustionMode)
-        {
-            return _taskParam.Count;
-        }
-
         var result = await CalCountByResin();
-        if (result.Count <= 0)
-        {
-            return 0;
-        }
-
-        if (_taskParam.OpenModeCountMin)
-        {
-            _taskParam.Count = Math.Min(result.Count, _taskParam.Count);
-        }
-        else
-        {
-            _taskParam.Count = result.Count;
-        }
-
-        var text =
-            "树脂耗尽模式统计结果:\n" +
-            $"原粹树脂次数: {result.OriginalResinTimes}\n" +
-            $"浓缩树脂次数: {result.CondensedResinTimes}\n" +
-            $"须臾树脂次数: {result.TransientResinTimes}\n" +
-            $"脆弱树脂次数: {result.FragileResinTimes}\n" +
-            $"总次数: {result.Count}";
+        var remaining = ResinExecutionRules.TargetRunCount(_taskParam.ResinUsage, result.Count, _selector.ClaimCount);
+        _targetRunTimes = _currentRunTimes + remaining;
+        var text = "树脂使用统计结果:\n"
+            + $"原粹树脂次数: {result.OriginalResinTimes}\n浓缩树脂次数: {result.CondensedResinTimes}\n"
+            + $"须臾树脂次数: {result.TransientResinTimes}\n脆弱树脂次数: {result.FragileResinTimes}\n"
+            + $"本批次数: {remaining}";
         Notify.Event(NotificationEvent.LeyLineInfo).Send(text);
-
-        return _taskParam.Count;
+        return remaining;
     }
 
     private async Task PrepareForLeyLineRun()
@@ -449,7 +484,7 @@ public class AutoLeyLineOutcropTask : ISoloTask<AutoLeyLineOutcropParam, NoData>
 
     private async Task RunLeyLineChallenges()
     {
-        while (_currentRunTimes < _taskParam.Count)
+        while (!_itemStopReached && _currentRunTimes < _targetRunTimes && !_rewardStopped && !_selector.IsTargetReached)
         {
             await FindLeyLineOutcropByBook(_taskParam.Country, _taskParam.LeyLineOutcropType);
 
@@ -514,15 +549,14 @@ public class AutoLeyLineOutcropTask : ISoloTask<AutoLeyLineOutcropParam, NoData>
 
             var optimal = SelectOptimalPath(paths);
             await ExecutePath(optimal);
-            _currentRunTimes++;
 
-            if (_currentRunTimes >= _taskParam.Count)
+            if (_itemStopReached || _currentRunTimes >= _targetRunTimes || _rewardStopped || _selector.IsTargetReached)
             {
                 return;
             }
 
             var currentNode = targetNode;
-            while (currentNode.Next.Count > 0 && _currentRunTimes < _taskParam.Count)
+            while (!_itemStopReached && currentNode.Next.Count > 0 && _currentRunTimes < _targetRunTimes && !_rewardStopped && !_selector.IsTargetReached)
             {
                 if (currentNode.Next.Count == 1)
                 {
@@ -541,7 +575,6 @@ public class AutoLeyLineOutcropTask : ISoloTask<AutoLeyLineOutcropParam, NoData>
                         Routes = [next.Route]
                     };
                     await ExecutePath(path);
-                    _currentRunTimes++;
                     currentNode = nextNode;
                 }
                 else
@@ -579,7 +612,6 @@ public class AutoLeyLineOutcropTask : ISoloTask<AutoLeyLineOutcropParam, NoData>
                         Routes = [selected.Value.Route]
                     };
                     await ExecutePath(path);
-                    _currentRunTimes++;
                     currentNode = selected.Value.Node;
                 }
             }
@@ -779,11 +811,190 @@ public class AutoLeyLineOutcropTask : ISoloTask<AutoLeyLineOutcropParam, NoData>
         var rewardSuccess = await AttemptReward();
         if (!rewardSuccess)
         {
+            // 树脂原因正常结束，不当作路线或战斗失败重试；材料目标模式同样按树脂结果结算。
+            if (_rewardStopped)
+            {
+                if (_taskParam.TargetItems.Count > 0)
+                {
+                    _logger.LogInformation("地脉花：树脂不足或无可用树脂选项，材料目标未全部达成");
+                }
+
+                return;
+            }
+
             throw new Exception("Could not claim the reward");
         }
 
         await TryScanDropsAfterReward();
+        await TryEvaluateLeylineTargetItemAsync();
         _consecutiveFailureCount = 0;
+    }
+
+    /// <summary>
+    /// 材料目标模式启动时记录背包基线，后续按增量判断。
+    /// </summary>
+    private async Task CaptureLeylineBaselineAsync()
+    {
+        if (_taskParam.TargetItems.Count == 0)
+        {
+            return;
+        }
+
+        if (_taskParam.LeyLineOutcropType == "藏金之花")
+        {
+            _moraBaseline = await ScanMoraWithRetryAsync();
+            if (_moraBaseline == null)
+            {
+                throw new Exception("摩拉背包扫描失败，无法建立奖励基线");
+            }
+
+            _logger.LogInformation("地脉花：摩拉基线 {Mora}", _moraBaseline.Value);
+        }
+        else if (_taskParam.LeyLineOutcropType == "启示之花")
+        {
+            _expBaseline = await ScanExpBooksWithRetryAsync();
+            if (_expBaseline == null)
+            {
+                throw new Exception("经验书背包扫描失败，无法建立奖励基线");
+            }
+
+            _logger.LogInformation("地脉花：经验书基线 {Baseline}",
+                string.Join("，", _expBaseline.Select(x => $"{x.Key} {x.Value}")));
+        }
+    }
+
+    /// <summary>
+    /// 每轮领奖后重新扫描背包，按本次任务增量判断材料目标。
+    /// </summary>
+    private async Task TryEvaluateLeylineTargetItemAsync()
+    {
+        if (_taskParam.TargetItems.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var catalog = TargetItemCatalog.Instance;
+            var gains = new Dictionary<string, int>(StringComparer.Ordinal);
+            if (_taskParam.LeyLineOutcropType == "藏金之花")
+            {
+                var current = await ScanMoraWithRetryAsync();
+                if (current == null)
+                {
+                    _logger.LogWarning("地脉花：本轮摩拉扫描失败，不更新材料目标进度");
+                    return;
+                }
+
+                gains[catalog.LeylineMoraItemName] = Math.Max(0, current.Value - (_moraBaseline ?? 0));
+            }
+            else
+            {
+                var current = await ScanExpBooksWithRetryAsync();
+                if (current == null)
+                {
+                    _logger.LogWarning("地脉花：本轮经验书扫描失败，不更新材料目标进度");
+                    return;
+                }
+
+                foreach (var item in catalog.LeylineExpItems)
+                {
+                    var baseline = _expBaseline?.TryGetValue(item.Name, out var value) == true ? value : 0;
+                    var currentCount = current.TryGetValue(item.Name, out var count) ? count : 0;
+                    gains[item.Name] = Math.Max(0, currentCount - baseline);
+                }
+            }
+
+            var progress = catalog.CalculateLeyline(_taskParam.TargetItems, gains);
+            _itemStopReached = progress.AllSatisfied;
+            _logger.LogInformation("地脉花：材料目标进度 {Progress}",
+                string.Join("，", progress.Targets.Select(x => $"{x.ItemName} {x.CountedCount}/{x.TargetCount}")));
+            if (_itemStopReached)
+            {
+                _logger.LogInformation("地脉花：材料目标已全部达成");
+            }
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            _logger.LogWarning(e, "地脉花：本轮背包扫描失败，继续任务");
+        }
+    }
+
+    /// <summary>
+    /// 统计三档经验书的当前背包数量。
+    /// </summary>
+    private async Task<Dictionary<string, int>> CountExpBooksAsync()
+    {
+        var itemNames = TargetItemCatalog.Instance.LeylineExpItems.Select(x => x.Name).ToList();
+        var param = new CountInventoryItemParam
+        {
+            ItemNames = itemNames,
+            StopByItemSort = true
+        };
+        var result = await new CountInventoryItem(_runtime).RunAsync(param, _ct);
+        return result.Data?.Counts ?? [];
+    }
+
+    /// <summary>
+    /// 扫描摩拉，失败时重试一次，共两次尝试。
+    /// </summary>
+    private async Task<int?> ScanMoraWithRetryAsync()
+    {
+        for (var attempt = 1; attempt <= 2; attempt++)
+        {
+            try
+            {
+                var result = await _moraFromInventoryScanner.ScanAsync(InputHub.Foreground, _ct);
+                if (result != null)
+                {
+                    return result;
+                }
+            }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                _logger.LogWarning(e, "地脉花：摩拉扫描失败（第 {Attempt} 次）", attempt);
+            }
+
+            _ct.ThrowIfCancellationRequested();
+            if (attempt < 2)
+            {
+                await _runtime.Delay(500, _ct);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// 扫描经验书，失败时重试一次，共两次尝试。
+    /// </summary>
+    private async Task<Dictionary<string, int>?> ScanExpBooksWithRetryAsync()
+    {
+        for (var attempt = 1; attempt <= 2; attempt++)
+        {
+            try
+            {
+                var result = await CountExpBooksAsync();
+                // 背包扫描不会返回 0；未识别到的物品会被省略，空结果无法区分“三档都是 0”
+                // 和“未识别到任何目标”，因此要求至少识别到一本，避免把识别失败当成 0 基线。
+                if (result.Count > 0 && result.Values.All(x => x >= 0))
+                {
+                    return result;
+                }
+            }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                _logger.LogWarning(e, "地脉花：经验书扫描失败（第 {Attempt} 次）", attempt);
+            }
+
+            _ct.ThrowIfCancellationRequested();
+            if (attempt < 2)
+            {
+                await _runtime.Delay(500, _ct);
+            }
+        }
+
+        return null;
     }
 
     private static string BuildTargetRoute(string routePath)
@@ -1183,7 +1394,7 @@ public class AutoLeyLineOutcropTask : ISoloTask<AutoLeyLineOutcropParam, NoData>
                 .ToArray();
             foreach (var actionStr in actionsToUse)
             {
-                var pickUpAction = CombatScriptParser.ParseContext(actionStr);
+                var pickUpAction = CombatScriptParser.ParseContext(actionStr, _logger);
                 for (var i = 0; i < 2; i++)
                 {
                     await qin.WaitSkillCd(_ct);
@@ -1297,7 +1508,7 @@ public class AutoLeyLineOutcropTask : ISoloTask<AutoLeyLineOutcropParam, NoData>
         var autoFightConfig = BuildLeyLineAutoFightConfig();
         var strategyPath = BuildAutoFightStrategyPath(autoFightConfig);
 
-        if (strategyPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+        if (CombatStrategyResolver.Parse(strategyPath).Kind is not (CombatStrategyKind.Txt or CombatStrategyKind.AutoSelect))
         {
             var jsonParam = new AutoFightParam
             {
@@ -1309,7 +1520,7 @@ public class AutoLeyLineOutcropTask : ISoloTask<AutoLeyLineOutcropParam, NoData>
                 Timeout = autoFightConfig.Timeout > 0 ? autoFightConfig.Timeout : 600,
             };
             // 战斗结束由 OCR 判定后取消 ct 控制，子任务结果不参与判断
-            return new AutoFightJsonTask(_runtime, _config).RunAsync(jsonParam, ct);
+            return new AutoFightEntryTask(_runtime, _config).RunAsync(jsonParam, ct);
         }
         else
         {
@@ -1324,7 +1535,7 @@ public class AutoLeyLineOutcropTask : ISoloTask<AutoLeyLineOutcropParam, NoData>
             taskParam.KazuhaPickupEnabled = false;
             taskParam.QinDoublePickUp = false;
             taskParam.OnlyPickEliteDropsMode = "DisableAutoPickupForNonElite";
-            return new AutoFightTask(_runtime, _config).RunAsync(taskParam, ct);
+            return new AutoFightEntryTask(_runtime, _config).RunAsync(taskParam, ct);
         }
     }
 
@@ -1356,13 +1567,10 @@ public class AutoLeyLineOutcropTask : ISoloTask<AutoLeyLineOutcropParam, NoData>
 
     private static string BuildAutoFightStrategyPath(AutoFightConfig config)
     {
-        var (path, _) = AutoFightParam.ResolveStrategyPath(config.StrategyName);
-        if (!File.Exists(path) && !Directory.Exists(path))
-        {
-            throw new Exception("Combat strategy file does not exist");
-        }
-
-        return path;
+        var strategy = CombatStrategyResolver.Resolve(config.StrategyName);
+        if (strategy.Kind == CombatStrategyKind.Combo)
+            throw new InvalidOperationException("地脉花不支持自动连招策略");
+        return strategy.Path;
     }
 
     private async Task<bool> RecognizeTextInRegion(int timeoutMs)
@@ -1371,7 +1579,9 @@ public class AutoLeyLineOutcropTask : ISoloTask<AutoLeyLineOutcropParam, NoData>
         var noTextCount = 0;
         var fightTextDetectedAt = DateTime.MinValue;
         var lastSeekAssistAt = DateTime.MinValue;
-        var seekEnemyEnabled = _taskParam.FightConfig.SeekEnemyEnabled;
+        // 键鼠宏独占输入和录制视角，外部的寻敌辅助也不能并发操作。
+        var seekEnemyEnabled = _taskParam.FightConfig.SeekEnemyEnabled
+            && CombatStrategyResolver.Parse(_taskParam.FightConfig.StrategyName).Kind != CombatStrategyKind.KeyMouse;
         var seekEnemyInterval = TimeSpan.FromSeconds(Math.Clamp(_taskParam.FightConfig.SeekEnemyIntervalSeconds, 1, 60));
         var seekEnemyRotaryFactor = Math.Clamp(_taskParam.FightConfig.SeekEnemyRotaryFactor, 1, 13);
         var successKeywords = new[] { "挑战达成", "战斗胜利", "挑战成功" };
@@ -1809,135 +2019,74 @@ public class AutoLeyLineOutcropTask : ISoloTask<AutoLeyLineOutcropParam, NoData>
         await Task.Delay(OcrOverlayRenderLeadMs, _ct);
     }
 
+    /// <summary>沿用两次点击核验；只在领奖弹窗确实消失后记录一次成功，避免重试重复记账。</summary>
     private async Task<bool> TryUseRewardResin()
     {
         for (var attempt = 0; attempt < 2; attempt++)
         {
-            if (await TryUseRewardResinOnce())
+            var (pressed, kind, spent) = await TryUseRewardResinOnce();
+            if (pressed)
             {
                 await _runtime.Delay(1000, _ct);
                 if (!await VerifyRewardPage())
                 {
+                    _selector.RecordClaim(kind, spent);
+                    _currentRunTimes = _selector.ClaimCount;
                     return true;
                 }
-
+                _stopReason = ResinStopReason.NoUsableOption;
                 _logger.LogDebug("Reward screen is still present after clicking resin; preparing retry {Attempt}", attempt + 1);
             }
-            else
-            {
-                _logger.LogDebug("Failed to select resin on the reward screen; preparing retry {Attempt}", attempt + 1);
-            }
-
             await _runtime.Delay(300, _ct);
         }
-
+        _rewardStopped = true;
         return false;
     }
 
-    private async Task<bool> TryUseRewardResinOnce()
+    /// <summary>按固定使用顺序尝试界面提供的树脂；档位切换只影响原粹候选。</summary>
+    private async Task<(bool Success, ResinKind Kind, int OriginalSpent)> TryUseRewardResinOnce()
     {
         await ActivateRewardPrompt();
-
-        var promptRegions = CaptureRewardPromptRegions();
-        if (promptRegions.Count == 0)
+        var regions = CaptureRewardPromptRegions();
+        var offered = ResinRewardPrompt.DetectOffered(regions,
+            _runtime.SystemInfo.ScaleMax1080PCaptureRect.Width / 2d, _taskParam.GameCultureInfo);
+        var candidates = _selector.Candidates(offered);
+        if (candidates.Count == 0)
         {
-            _logger.LogDebug("No resin dialog content recognized on the reward screen");
-            return false;
+            _stopReason = _selector.IsTargetReached ? ResinStopReason.TargetReached
+                : ResinExecutionRules.NoCandidateReason(offered,
+                    ResinRewardPrompt.HasShortageHint(regions, _taskParam.GameCultureInfo));
+            return (false, default, 0);
         }
-
-        var lineTexts = BuildPromptTextLines(promptRegions);
-        var isOriginalResinEmpty = lineTexts.Any(text => text.Contains("补充", StringComparison.Ordinal));
-        var hasDoubleReward = lineTexts.Any(text => text.Contains("双倍", StringComparison.Ordinal)
-                                                    || text.Contains("2倍产出", StringComparison.Ordinal)
-                                                    || text.Contains("2倍", StringComparison.Ordinal));
-        var originalResinLines = lineTexts.Where(text => text.Contains("原粹", StringComparison.Ordinal)).ToList();
-        var hasOriginal20 = !isOriginalResinEmpty && originalResinLines.Any(text => text.Contains("20", StringComparison.Ordinal));
-        var hasOriginal40 = !isOriginalResinEmpty && originalResinLines.Any(text => text.Contains("40", StringComparison.Ordinal));
-        var hasCondensed = lineTexts.Any(text => text.Contains("浓缩", StringComparison.Ordinal));
-        var hasTransient = lineTexts.Any(text => text.Contains("须臾", StringComparison.Ordinal));
-        var hasFragile = lineTexts.Any(text => text.Contains("脆弱", StringComparison.Ordinal));
-
-        // 双倍奖励下优先切到 40 树脂，避免误用 20 树脂。
-        if (hasDoubleReward && hasOriginal20 && !hasOriginal40)
+        foreach (var kind in candidates)
         {
-            if (await TrySwitch20To40Resin())
+            if (kind == ResinKind.Original)
             {
-                await _runtime.Delay(300, _ct);
-                promptRegions = CaptureRewardPromptRegions();
-                if (promptRegions.Count == 0)
+                var lines = BuildPromptTextLines(regions);
+                var originalLines = lines.Where(text => text.Contains("原粹", StringComparison.Ordinal)).ToArray();
+                var has20 = originalLines.Any(text => text.Contains("20", StringComparison.Ordinal));
+                var has40 = originalLines.Any(text => text.Contains("40", StringComparison.Ordinal));
+                var hasDouble = lines.Any(text => text.Contains("双倍", StringComparison.Ordinal)
+                    || text.Contains("2倍", StringComparison.Ordinal));
+                var tier = _taskParam.ResinUsage.OriginalTier;
+                // 默认沿用双倍活动切 40，其余保持当前界面；指定档位主动切换。
+                var expected = tier == OriginalResinTier.Only20 ? 20
+                    : tier == OriginalResinTier.Prefer40 || hasDouble ? 40 : 0;
+                if (expected != 0 && !(expected == 20 ? has20 : has40))
                 {
-                    return false;
+                    var switched = await TrySwitchOriginalTier(expected);
+                    if (!switched && tier == OriginalResinTier.Only20) continue;
+                    if (!switched && tier == OriginalResinTier.Prefer40 && !has20
+                        && !await TrySwitchOriginalTier(20)) continue;
+                    await _runtime.Delay(300, _ct);
+                    regions = CaptureRewardPromptRegions();
                 }
-
-                lineTexts = BuildPromptTextLines(promptRegions);
-                isOriginalResinEmpty = lineTexts.Any(text => text.Contains("补充", StringComparison.Ordinal));
-                hasDoubleReward = lineTexts.Any(text => text.Contains("双倍", StringComparison.Ordinal)
-                                                        || text.Contains("2倍产出", StringComparison.Ordinal)
-                                                        || text.Contains("2倍", StringComparison.Ordinal));
-                originalResinLines = lineTexts.Where(text => text.Contains("原粹", StringComparison.Ordinal)).ToList();
-                hasOriginal20 = !isOriginalResinEmpty && originalResinLines.Any(text => text.Contains("20", StringComparison.Ordinal));
-                hasOriginal40 = !isOriginalResinEmpty && originalResinLines.Any(text => text.Contains("40", StringComparison.Ordinal));
-                hasCondensed = lineTexts.Any(text => text.Contains("浓缩", StringComparison.Ordinal));
-                hasTransient = lineTexts.Any(text => text.Contains("须臾", StringComparison.Ordinal));
-                hasFragile = lineTexts.Any(text => text.Contains("脆弱", StringComparison.Ordinal));
             }
+            var (success, spent) = await TryPressRewardResin(regions, kind);
+            if (success) return (true, kind, spent);
         }
-
-        var candidates = new List<string>();
-        if (hasDoubleReward && (hasOriginal20 || hasOriginal40))
-        {
-            candidates.Add("原粹树脂");
-        }
-        else if (isOriginalResinEmpty)
-        {
-            if (hasCondensed)
-            {
-                candidates.Add("浓缩树脂");
-            }
-
-            if (hasTransient && _taskParam.UseTransientResin)
-            {
-                candidates.Add("须臾树脂");
-            }
-
-            if (hasFragile && _taskParam.UseFragileResin)
-            {
-                candidates.Add("脆弱树脂");
-            }
-        }
-        else
-        {
-            if (hasCondensed)
-            {
-                candidates.Add("浓缩树脂");
-            }
-
-            if (hasTransient && _taskParam.UseTransientResin)
-            {
-                candidates.Add("须臾树脂");
-            }
-
-            if (hasOriginal20 || hasOriginal40)
-            {
-                candidates.Add("原粹树脂");
-            }
-
-            if (hasFragile && _taskParam.UseFragileResin)
-            {
-                candidates.Add("脆弱树脂");
-            }
-        }
-
-        foreach (var resinName in candidates.Distinct(StringComparer.Ordinal))
-        {
-            if (await TryPressRewardResin(promptRegions, resinName))
-            {
-                return true;
-            }
-        }
-
-        _logger.LogDebug("Resin recognition did not match on the reward screen; OCR={Texts}", string.Join(" | ", lineTexts));
-        return false;
+        _stopReason = ResinStopReason.NoUsableOption;
+        return (false, default, 0);
     }
 
     private async Task ActivateRewardPrompt()
@@ -1985,22 +2134,17 @@ public class AutoLeyLineOutcropTask : ISoloTask<AutoLeyLineOutcropParam, NoData>
         return capture.FindMulti(RecognitionObject.Ocr(GetRewardPromptContentRoi(capture)));
     }
 
-    private async Task<bool> TryPressRewardResin(List<Region> promptRegions, string resinName)
+    /// <summary>沿用抬起左键与等待，再调用公共行匹配和双击逻辑。</summary>
+    private async Task<(bool Success, int OriginalSpent)> TryPressRewardResin(List<Region> promptRegions, ResinKind kind)
     {
         // 某些链路会残留左键按下状态，先显式抬起一次再点使用按钮。
         InputHub.Foreground.Mouse.LeftButtonUp();
         await _runtime.Delay(60, _ct);
-
-        var (success, _) = AutoDomainTask.PressUseResin(_runtime, promptRegions, resinName, TaskName);
-        if (success)
-        {
-            _logger.LogDebug("Attempted to use resin on the reward screen: {ResinName}", resinName);
-        }
-
-        return success;
+        return ResinRewardPrompt.PressUseResin(_runtime, promptRegions, kind, _logger, TaskName, _ct, _taskParam.GameCultureInfo);
     }
 
-    private async Task<bool> TrySwitch20To40Resin()
+    /// <summary>使用地脉花原有切档模板切至 20 或 40，保留点击后 800 ms 识别等待。</summary>
+    private async Task<bool> TrySwitchOriginalTier(int expectedNum)
     {
         var switchRo = BuildTemplate("Assets/icon/switch_button.png", null, 0.7);
         using var capture = _runtime.CaptureToRectArea();
@@ -2015,7 +2159,7 @@ public class AutoLeyLineOutcropTask : ISoloTask<AutoLeyLineOutcropParam, NoData>
 
         using var check = _runtime.CaptureToRectArea();
         var lineTexts = BuildPromptTextLines(check.FindMulti(_ocrRoThis));
-        return lineTexts.Any(text => text.Contains("40", StringComparison.Ordinal) && text.Contains("原粹", StringComparison.Ordinal));
+        return lineTexts.Any(text => text.Contains(expectedNum.ToString(), StringComparison.Ordinal) && text.Contains("原粹", StringComparison.Ordinal));
     }
 
     private static Rect GetRewardPromptTitleRoi(ImageRegion capture)
@@ -2338,86 +2482,55 @@ public class AutoLeyLineOutcropTask : ISoloTask<AutoLeyLineOutcropParam, NoData>
         }
     }
 
+    /// <summary>耗尽方式在批次结束后复查余量并扩展内部目标，保持原复查上限，不修改参数；材料目标已达成时不再重查。</summary>
     private async Task RecheckResinAndContinue()
     {
-        _recheckCount++;
-        if (_taskParam.OpenModeCountMin)
+        while (!_rewardStopped && !_itemStopReached && ++_recheckCount <= MaxRecheckCount)
         {
-            if (_currentRunTimes >= _taskParam.Count)
-            {
-                return;
-            }
+            var count = await CalculateTargetRunTimes();
+            if (count <= 0 || count > 50) return;
+            await RunLeyLineChallenges();
         }
-
-        if (_recheckCount > MaxRecheckCount)
-        {
-            return;
-        }
-
-        var result = await CalCountByResin();
-        if (result.Count <= 0)
-        {
-            return;
-        }
-
-        if (result.Count > 50)
-        {
-            return;
-        }
-
-        _currentRunTimes = 0;
-        _taskParam.Count = result.Count;
-        await RunLeyLineChallenges();
-        await RecheckResinAndContinue();
     }
 
+    /// <summary>根据本次开关或各类剩余次数，将库存转换为可领奖次数。</summary>
     private async Task<ResinCountResult> CalCountByResin()
     {
         var counts = await CountAllResin();
-
-        var originalTimes = counts.OriginalResinCount / 40;
-        var remaining = counts.OriginalResinCount % 40;
-        if (remaining >= 20)
+        var claims = ResinExecutionRules.AvailableClaims(_taskParam.ResinUsage, new ResinKindValues<int>
         {
-            originalTimes += remaining / 20;
-        }
-
-        var condensedTimes = counts.CondensedResinCount;
-        var transientTimes = _taskParam.UseTransientResin ? counts.TransientResinCount : 0;
-        var fragileTimes = _taskParam.UseFragileResin ? counts.FragileResinCount : 0;
-
+            Original = counts.OriginalResinCount, Condensed = counts.CondensedResinCount,
+            Transient = counts.TransientResinCount, Fragile = counts.FragileResinCount
+        }, _selector.RemainingCounts);
         return new ResinCountResult
         {
-            Count = originalTimes + condensedTimes + transientTimes + fragileTimes,
-            OriginalResinTimes = originalTimes,
-            CondensedResinTimes = condensedTimes,
-            TransientResinTimes = transientTimes,
-            FragileResinTimes = fragileTimes
+            Count = ResinKinds.InOrder.Sum(kind => claims[kind]),
+            OriginalResinTimes = claims.Original, CondensedResinTimes = claims.Condensed,
+            TransientResinTimes = claims.Transient, FragileResinTimes = claims.Fragile
         };
     }
 
+    /// <summary>只识别本次仍允许的库存；分别指定时已完成的种类不再计入。</summary>
     private async Task<ResinCounts> CountAllResin()
     {
         await _returnMainUiTask.Start(_ct);
         await _runtime.Delay(1500, _ct);
-
         InputHub.Foreground.SimulateAction(GIActions.OpenMap);
         await _runtime.Delay(1500, _ct);
-
         var result = new ResinCounts
         {
-            OriginalResinCount = await CountOriginalResin(),
-            CondensedResinCount = await CountCondensedResin()
+            OriginalResinCount = ResinExecutionRules.CanUse(_taskParam.ResinUsage, _selector, ResinKind.Original) ? await CountOriginalResin() : 0,
+            CondensedResinCount = ResinExecutionRules.CanUse(_taskParam.ResinUsage, _selector, ResinKind.Condensed) ? await CountCondensedResin() : 0
         };
-
-        if (_taskParam.UseTransientResin || _taskParam.UseFragileResin)
+        var transient = ResinExecutionRules.CanUse(_taskParam.ResinUsage, _selector, ResinKind.Transient);
+        var fragile = ResinExecutionRules.CanUse(_taskParam.ResinUsage, _selector, ResinKind.Fragile);
+        if (transient || fragile)
         {
             await OpenReplenishResinUi();
             await _runtime.Delay(1500, _ct);
-            result.TransientResinCount = await CountTransientResin();
-            result.FragileResinCount = await CountFragileResin();
+            if (transient) result.TransientResinCount = await CountTransientResin();
+            if (fragile) result.FragileResinCount = await CountFragileResin();
         }
-
         await _returnMainUiTask.Start(_ct);
         return result;
     }

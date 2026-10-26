@@ -1,9 +1,9 @@
-using BetterGenshinImpact.GameTask.Runtime;
 using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Script;
 using BetterGenshinImpact.GameTask;
 using BetterGenshinImpact.GameTask.Music.Model;
 using BetterGenshinImpact.GameTask.Music.Service;
+using BetterGenshinImpact.GameTask.Runtime;
 using BetterGenshinImpact.Service.Interface;
 using BetterGenshinImpact.Service.I18n;
 using BetterGenshinImpact.View;
@@ -40,6 +40,9 @@ public partial class MusicPageViewModel : ViewModel
     private readonly IMusicTimelineBuilder _timelineBuilder;
     private readonly IMusicStateStore _stateStore;
     private readonly ISnackbarService _snackbarService;
+
+    /// <summary>游戏运行环境服务；引导式跟弹每次读取 Current，不持有运行环境</summary>
+    private readonly GameRuntimeService _runtimeService;
     private readonly ILogger<MusicPageViewModel> _logger = App.GetLogger<MusicPageViewModel>();
     private CancellationTokenSource? _refreshCancellationTokenSource;
     private CancellationTokenSource? _coverLoadCancellationTokenSource;
@@ -65,8 +68,10 @@ public partial class MusicPageViewModel : ViewModel
         IMusicTimelineBuilder timelineBuilder,
         IMusicStateStore stateStore,
         IConfigService configService,
-        ISnackbarService snackbarService)
+        ISnackbarService snackbarService,
+        GameRuntimeService runtimeService)
     {
+        _runtimeService = runtimeService;
         _libraryService = libraryService;
         _coverService = coverService;
         _playbackService = playbackService;
@@ -905,7 +910,7 @@ public partial class MusicPageViewModel : ViewModel
         }
 
         // Bind once to the existing native runtime; guided play must not discover another session or recover host UI.
-        var runtime = App.GetService<GameRuntimeService>()?.Current;
+        var runtime = _runtimeService.Current;
         if (runtime == null || runtime.Kind != GameRuntimeKind.Win32Window || runtime.IsDesktopCapture ||
             runtime.IsStopping || !runtime.Window.IsAlive)
         {
@@ -914,8 +919,10 @@ public partial class MusicPageViewModel : ViewModel
                 ControlAppearance.Danger, null, TimeSpan.FromSeconds(4));
             return;
         }
+        // The overlay and session share the same captured window identity.
+        Func<bool> isGameActive = () => !runtime.IsStopping && runtime.Window.IsAlive && runtime.Window.IsForeground;
         var layoutConfig = Config.MusicConfig.GuidedKeyLayout;
-        _guidedWindow = new MusicGuidedWindow();
+        _guidedWindow = new MusicGuidedWindow { IsGameForeground = isGameActive };
         // 覆盖层与会话共用同一份键位参数：这样在覆盖层上现场微调（按住 Ctrl + 方向键）
         // 时，窗口改的就是会话正在用的那份配置，改完立刻重画。
         _guidedWindow.KeyLayout = layoutConfig;
@@ -937,9 +944,12 @@ public partial class MusicPageViewModel : ViewModel
             Overlay = _guidedWindow,
             // Only this session's captured native window may contribute keys; switching away pauses recognition.
             // The existing runtime is borrowed and never rebound by guided play.
-            IsGameActive = () => !runtime.IsStopping && runtime.Window.IsAlive && runtime.Window.IsForeground,
+            IsGameActive = isGameActive,
             Logger = message => _logger.LogInformation("{Message}", message),
-            OnSegmentChanged = OnGuidedSegmentChanged
+            OnSegmentChanged = OnGuidedSegmentChanged,
+            // Keep the optional upstream lookup bound to this same borrowed runtime.
+            CurrentRuntime = () => runtime,
+            Config = Config
         };
 
         // 自动识别琴键位置要截到「演奏界面」，所以先把游戏窗口切到前台再开始：

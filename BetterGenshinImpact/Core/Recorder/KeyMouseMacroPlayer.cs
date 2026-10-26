@@ -170,6 +170,8 @@ public class KeyMouseMacroPlayer
                     break;
 
                 case MacroEventType.MouseMoveBy:
+                    // 同一份事件会循环重放，视角修正只作用于本次输入，不能改写录制数据。
+                    var mouseX = e.MouseX;
                     if (e.CameraOrientation != null)
                     {
                         using var capture = runtime.CaptureToRectArea();
@@ -180,11 +182,11 @@ public class KeyMouseMacroPlayer
                         if (diff != 0 && diff < 8 && diff > -8)
                         {
                             TaskControl.Logger.LogWarning("Camera replay deviation is {diff}°; attempting correction", diff);
-                            e.MouseX -= diff;
+                            mouseX -= diff;
                         }
                     }
 
-                    input.Mouse.MoveMouseBy(e.MouseX, e.MouseY);
+                    input.Mouse.MoveMouseBy(mouseX, e.MouseY);
                     break;
 
                 default:

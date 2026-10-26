@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using BetterGenshinImpact.Core.Recognition;
 using BetterGenshinImpact.Core.Simulator.Extensions;
+using BetterGenshinImpact.GameTask.Common;
 using BetterGenshinImpact.GameTask.Common.Job;
 using static BetterGenshinImpact.GameTask.Common.TaskControl;
 
@@ -14,11 +15,17 @@ namespace BetterGenshinImpact.GameTask.AutoDomain;
 // 冒险之证培养指南的页面导航与秘境名称规范化。
 public partial class AutoDomainTask
 {
+    /// <summary>秘境下拉中“根据提升指南选择秘境”的选项值。</summary>
     public const string TrainingGuideOption = "根据提升指南选择秘境";
     /// <summary>Preserve the fork public option name and saved value while adopting the training planner.</summary>
     public const string DevelopmentGuideOption = TrainingGuideOption;
+
+    /// <summary>本轮由提升指南选出的秘境名称；为 null 时使用参数中的秘境。</summary>
     private string? _guideDomainName;
 
+    /// <summary>去除空白并修正已知 OCR 误识别的秘境名称。</summary>
+    /// <param name="text">OCR 原文。</param>
+    /// <returns>规范化后的名称。</returns>
     private static string NormalizeGuideDomainName(string text)
     {
         var name = Regex.Replace(text, @"\s+", "");
@@ -54,6 +61,7 @@ public partial class AutoDomainTask
         throw new InvalidOperationException($"提升指南：未找到{text}，请检查游戏语言和界面");
     }
 
+    /// <summary>返回主界面后打开冒险之证的秘境提升指南页。</summary>
     private async Task OpenTrainingGuide()
     {
         await new ReturnMainUiTask(_runtime).Start(_ct);

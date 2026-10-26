@@ -1,4 +1,5 @@
 using BetterGenshinImpact.Service.I18n;
+using BetterGenshinImpact.GameTask.AutoFight.Strategy;
 using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Script;
 using BetterGenshinImpact.Core.Script.Project;
@@ -11,9 +12,11 @@ using BetterGenshinImpact.GameTask.AutoDomain;
 using BetterGenshinImpact.GameTask.AutoFight;
 using BetterGenshinImpact.GameTask.AutoFishing;
 using BetterGenshinImpact.GameTask.AutoGeniusInvokation;
+using BetterGenshinImpact.GameTask.AutoLeyLineOutcrop;
 using BetterGenshinImpact.GameTask.AutoStygianOnslaught;
 using BetterGenshinImpact.GameTask.AutoWood;
 using BetterGenshinImpact.GameTask.Common.Element.Assets;
+using BetterGenshinImpact.GameTask.Common.Reward;
 using BetterGenshinImpact.GameTask.GetGridIcons;
 using BetterGenshinImpact.GameTask.Model.GameUI;
 using BetterGenshinImpact.GameTask.OneDragon;
@@ -28,6 +31,7 @@ using BetterGenshinImpact.Service.Instance;
 using BetterGenshinImpact.View.Pages;
 using BetterGenshinImpact.View.Windows;
 using BetterGenshinImpact.ViewModel.Pages.View;
+using BetterGenshinImpact.ViewModel.Resin;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Newtonsoft.Json.Linq;
@@ -54,6 +58,30 @@ namespace BetterGenshinImpact.ViewModel.Pages;
 public partial class TaskSettingsPageViewModel : ViewModel
 {
     public AllConfig Config { get; set; }
+
+    /// <summary>秘境树脂入口，与旧一条龙秘境入口同步同一配置。</summary>
+    public ResinUsageEntryViewModel DomainResin { get; }
+    /// <summary>首领树脂入口。</summary>
+    public ResinUsageEntryViewModel BossResin { get; }
+    /// <summary>幽境树脂入口。</summary>
+    public ResinUsageEntryViewModel StygianResin { get; }
+    /// <summary>地脉花树脂入口。</summary>
+    public ResinUsageEntryViewModel LeyLineResin { get; }
+
+    /// <summary>
+    /// 自动首领讨伐的材料目标编辑器。
+    /// </summary>
+    public TargetItemListEditorViewModel AutoBossTargetItems { get; }
+
+    /// <summary>
+    /// 自动秘境的材料目标编辑器。
+    /// </summary>
+    public TargetItemListEditorViewModel AutoDomainTargetItems { get; }
+
+    /// <summary>
+    /// 自动地脉花的材料目标编辑器。
+    /// </summary>
+    public TargetItemListEditorViewModel AutoLeyLineTargetItems { get; }
 
     private readonly INavigationService _navigationService;
     /// <summary>
@@ -214,12 +242,26 @@ public partial class TaskSettingsPageViewModel : ViewModel
     /// <param name="oneDragonFlowViewModel">一条龙页面 ViewModel（DI 单例注入，避免独立 new 导致状态分裂）</param>
     /// <param name="instanceService">多实例连接与独立任务运行服务</param>
     /// <param name="soloTaskRegistry">独立任务注册表</param>
+    /// <param name="dialogs">公共树脂弹窗服务。</param>
     public TaskSettingsPageViewModel(IConfigService configService, INavigationService navigationService,
         TaskStopService taskStopService,
         OneDragonFlowViewModel oneDragonFlowViewModel, InstanceService instanceService,
-        SoloTaskRegistry soloTaskRegistry)
+        SoloTaskRegistry soloTaskRegistry, IResinSettingsDialogs? dialogs = null)
     {
         Config = configService.Get();
+        // 入口只整体替换配置；同配置上的其他页面入口会收到属性通知并刷新摘要。
+        var domainConfig = Config.AutoDomainConfig;
+        DomainResin = ResinUsageConfigBinding.Create("自动秘境", AutoDomainTask.ResinCapability, domainConfig,
+            domainConfig.EnsureResinUsage, value => domainConfig.ResinUsage = value, dialogs);
+        var bossConfig = Config.AutoBossConfig;
+        BossResin = ResinUsageConfigBinding.Create("自动首领讨伐", AutoBossTask.ResinCapability, bossConfig,
+            bossConfig.EnsureResinUsage, value => bossConfig.ResinUsage = value, dialogs);
+        var stygianConfig = Config.AutoStygianOnslaughtConfig;
+        StygianResin = ResinUsageConfigBinding.Create("自动幽境危战", AutoStygianOnslaughtTask.ResinCapability, stygianConfig,
+            stygianConfig.EnsureResinUsage, value => stygianConfig.ResinUsage = value, dialogs);
+        var leyLineConfig = Config.AutoLeyLineOutcropConfig;
+        LeyLineResin = ResinUsageConfigBinding.Create("自动地脉花", AutoLeyLineOutcropTask.ResinCapability, leyLineConfig,
+            leyLineConfig.EnsureResinUsage, value => leyLineConfig.ResinUsage = value, dialogs);
         _configService = configService;
         _navigationService = navigationService;
         _taskStopService = taskStopService;
@@ -230,6 +272,18 @@ public partial class TaskSettingsPageViewModel : ViewModel
         _soloTaskButtonController = new SoloTaskButtonController(instanceService, soloTaskRegistry, configService,
             SoloTaskStates.Values);
         NormalizeLeyLineOutcropType();
+
+        // 材料目标直接读写各自任务的配置集合，候选物品随首领、秘境与地脉花类型变化
+        AutoBossTargetItems = new TargetItemListEditorViewModel(Config.AutoBossConfig.TargetItems);
+        AutoDomainTargetItems = new TargetItemListEditorViewModel(Config.AutoDomainConfig.TargetItems);
+        AutoLeyLineTargetItems = new TargetItemListEditorViewModel(Config.AutoLeyLineOutcropConfig.TargetItems);
+        RefreshAutoBossTargetItems();
+        RefreshAutoDomainTargetItems();
+        RefreshAutoLeyLineTargetItems();
+        Config.AutoBossConfig.PropertyChanged += OnAutoBossConfigPropertyChanged;
+        Config.AutoDomainConfig.PropertyChanged += OnAutoDomainConfigPropertyChanged;
+        Config.AutoLeyLineOutcropConfig.PropertyChanged += OnAutoLeyLineOutcropConfigPropertyChanged;
+
         _scanDropsAfterRewardEnabledUi = Config.AutoLeyLineOutcropConfig.ScanDropsAfterRewardEnabled;
 
         //_strategyList = LoadCustomScript(Global.Absolute(@"User\AutoGeniusInvokation"));
@@ -311,6 +365,122 @@ public partial class TaskSettingsPageViewModel : ViewModel
         {
             Config.AutoLeyLineOutcropConfig.LeyLineOutcropType = LeyLineOutcropTypeList[0];
         }
+    }
+
+    /// <summary>
+    /// 首领变化后刷新自动首领讨伐的材料目标候选物品。
+    /// </summary>
+    private void OnAutoBossConfigPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(AutoBossConfig.BossName))
+        {
+            UIDispatcherHelper.Invoke(RefreshAutoBossTargetItems);
+        }
+    }
+
+    /// <summary>
+    /// 秘境变化后刷新自动秘境的材料目标候选物品。
+    /// </summary>
+    private void OnAutoDomainConfigPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(AutoDomainConfig.DomainName))
+        {
+            UIDispatcherHelper.Invoke(RefreshAutoDomainTargetItems);
+        }
+    }
+
+    /// <summary>
+    /// 地脉花类型变化后刷新自动地脉花的材料目标候选物品。
+    /// </summary>
+    private void OnAutoLeyLineOutcropConfigPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(AutoLeyLineOutcropConfig.LeyLineOutcropType))
+        {
+            UIDispatcherHelper.Invoke(RefreshAutoLeyLineTargetItems);
+        }
+    }
+
+    /// <summary>
+    /// 按当前首领刷新自动首领讨伐的材料目标候选物品。
+    /// </summary>
+    private void RefreshAutoBossTargetItems()
+    {
+        AutoBossTargetItems.ApplyChoices(BuildBossTargetItemChoices(Config.AutoBossConfig.BossName));
+    }
+
+    /// <summary>
+    /// 按当前秘境刷新自动秘境的材料目标候选物品。
+    /// </summary>
+    private void RefreshAutoDomainTargetItems()
+    {
+        AutoDomainTargetItems.ApplyChoices(BuildDomainTargetItemChoices(Config.AutoDomainConfig.DomainName));
+    }
+
+    /// <summary>
+    /// 按当前地脉花类型刷新自动地脉花的材料目标候选物品。
+    /// </summary>
+    private void RefreshAutoLeyLineTargetItems()
+    {
+        AutoLeyLineTargetItems.ApplyChoices(BuildLeyLineTargetItemChoices(Config.AutoLeyLineOutcropConfig.LeyLineOutcropType));
+    }
+
+    /// <summary>
+    /// 构造当前首领可掉落的材料目标：首领材料与各元素宝石。
+    /// </summary>
+    /// <param name="bossName">首领名称。</param>
+    /// <returns>可选的奖励物品；没有奖励数据时为空。</returns>
+    private static IReadOnlyList<TargetItemOption> BuildBossTargetItemChoices(string bossName)
+    {
+        if (!TargetItemCatalog.Instance.TryGetBossProfile(bossName, out var profile))
+        {
+            return [];
+        }
+
+        var choices = new List<TargetItemOption>
+        {
+            new(profile.BossMaterial, $"首领材料｜{profile.BossMaterial}")
+        };
+        foreach (var family in profile.GemFamilies)
+        {
+            foreach (var item in family.Items)
+            {
+                choices.Add(new TargetItemOption(item.ItemName, item.ItemName));
+            }
+        }
+
+        return choices;
+    }
+
+    /// <summary>
+    /// 构造当前秘境可掉落的材料目标。
+    /// </summary>
+    /// <param name="domainName">秘境名称。</param>
+    /// <returns>可选的奖励物品；圣遗物秘境、提升指南或未收录秘境为空。</returns>
+    private static IReadOnlyList<TargetItemOption> BuildDomainTargetItemChoices(string domainName)
+    {
+        TargetItemCatalog.Instance.TryGetDomainItems(domainName, out var items);
+        return items;
+    }
+
+    /// <summary>
+    /// 构造当前地脉花类型可获得的材料目标。
+    /// </summary>
+    /// <param name="leyLineType">地脉花类型。</param>
+    /// <returns>藏金之花为摩拉，启示之花为三档经验书；其他类型为空。</returns>
+    private static IReadOnlyList<TargetItemOption> BuildLeyLineTargetItemChoices(string leyLineType)
+    {
+        var catalog = TargetItemCatalog.Instance;
+        if (leyLineType == "藏金之花")
+        {
+            return [new TargetItemOption(catalog.LeylineMoraItemName, catalog.LeylineMoraItemName)];
+        }
+
+        if (leyLineType == "启示之花")
+        {
+            return catalog.LeylineExpItems.Select(x => new TargetItemOption(x.Name, x.Name)).ToList();
+        }
+
+        return [];
     }
 
 
@@ -503,22 +673,10 @@ public partial class TaskSettingsPageViewModel : ViewModel
             return true;
         }
 
-        if ("根据队伍自动选择".Equals(strategyName))
-        {
-            path = Global.Absolute(@"User\AutoFight\");
-        }
-        else if (AutoFightParam.ComboStrategyName.Equals(strategyName))
-        {
-            // 固定策略：不对应策略文件，跳过存在性检查，由 ComboCombatTaskFactory 路由
-            path = strategyName;
-            return false;
-        }
-        else
-        {
-            (path, _) = AutoFightParam.ResolveStrategyPath(strategyName);
-        }
-
-        if (!File.Exists(path) && !Directory.Exists(path))
+        // 固定策略不对应文件；所有名称、前缀和路径统一由解析器检查。
+        var strategy = CombatStrategyResolver.Parse(strategyName);
+        path = strategy.Path;
+        if (!strategy.Exists)
         {
             UIDispatcherHelper.Invoke(() => { Toast.Error(I18nService.Instance.Translate("当前选择的自动战斗策略文件不存在")); });
             return true;

@@ -1,0 +1,81 @@
+<UserControl xmlns:i18n="clr-namespace:BetterGenshinImpact.Service.I18n" x:Class="BetterGenshinImpact.View.Controls.PuloniaLegacyHistoryView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:b="http://schemas.microsoft.com/xaml/behaviors"
+             xmlns:history="clr-namespace:BetterGenshinImpact.ViewModel.Pages.Pulonia"
+             Foreground="{DynamicResource TextFillColorPrimaryBrush}">
+    <b:Interaction.Triggers>
+        <b:EventTrigger EventName="Loaded"><b:InvokeCommandAction Command="{Binding RefreshCommand, Mode=OneWay}" /></b:EventTrigger>
+    </b:Interaction.Triggers>
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="LegacyBoolVisibility" />
+        <DataTemplate DataType="{x:Type history:PuloniaTaskHistoryField}">
+            <StackPanel Margin="0,0,0,10">
+                <TextBlock Text="{i18n:TB Label}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                <TextBox Margin="0,4,0,0" Text="{Binding Value, Mode=OneWay}" IsReadOnly="True"
+                         TextWrapping="Wrap" MaxHeight="180" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" />
+            </StackPanel>
+        </DataTemplate>
+    </UserControl.Resources>
+    <Grid Margin="0,8,0,0">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <StackPanel>
+            <TextBlock Text="{i18n:T 旧版记录仅供查看；不会解除调度保护或解决未知结果。}" TextWrapping="Wrap" />
+            <TextBlock Margin="0,3,0,6" Text="{i18n:T 缺失字段显示为 [absent]；显式空值显示为 null。}" TextWrapping="Wrap" />
+            <WrapPanel>
+                <Button Command="{Binding RefreshCommand, Mode=OneWay}" Content="{i18n:T 刷新}" Margin="0,0,10,4" />
+                <TextBlock Text="{i18n:TB ModeMessage}" Margin="0,4,10,4" />
+                <TextBlock Text="{i18n:T 显示数量}" Margin="0,4,4,4"/><TextBlock Text="{Binding RecordCount, Mode=OneWay}" Margin="0,4,0,4"/>
+            </WrapPanel>
+        </StackPanel>
+        <Expander Grid.Row="1" Header="{i18n:T 按原始标识读取单条记录}" Margin="0,4,0,8">
+            <WrapPanel Margin="0,6,0,0">
+                <StackPanel Margin="0,0,8,6"><TextBlock Text="{i18n:T 原始计划标识}"/><TextBox Width="180" MaxLength="96" Text="{Binding ExactPlanId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" /></StackPanel>
+                <StackPanel Margin="0,0,8,6"><TextBlock Text="{i18n:T 运行文件别名}"/><TextBox Width="250" MaxLength="32" Text="{Binding ExactRunId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" /></StackPanel>
+                <Button VerticalAlignment="Bottom" Margin="0,0,0,6" Command="{Binding LoadExactCommand, Mode=OneWay}" Content="{i18n:T 读取单条记录}" />
+            </WrapPanel>
+        </Expander>
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="2*" MinWidth="160"/><ColumnDefinition Width="8"/><ColumnDefinition Width="3*" MinWidth="260"/></Grid.ColumnDefinitions>
+            <ListBox x:Name="LegacyRecordList" ItemsSource="{Binding Records, Mode=OneWay}" SelectedItem="{Binding SelectedRecord, Mode=TwoWay}"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
+                <ListBox.ItemTemplate><DataTemplate><StackPanel Margin="4">
+                    <TextBlock Text="{Binding PlanLabel, Mode=OneWay}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding RunLabel, Mode=OneWay}" FontSize="11" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding TimeLabel, Mode=OneWay}" FontSize="11" />
+                    <TextBlock Text="{Binding StatusLabel, Mode=OneWay}" FontSize="11" />
+                    <TextBlock Text="{i18n:T 含未解决的历史事实}" TextWrapping="Wrap" Visibility="{Binding HasUnresolvedFacts, Mode=OneWay, Converter={StaticResource LegacyBoolVisibility}}" />
+                </StackPanel></DataTemplate></ListBox.ItemTemplate>
+            </ListBox>
+            <GridSplitter Grid.Column="1" Width="4" HorizontalAlignment="Center" />
+            <Grid Grid.Column="2">
+                <TextBlock Text="{i18n:T 选择旧版记录以查看只读证据。}" TextWrapping="Wrap" Margin="8">
+                    <TextBlock.Style><Style TargetType="TextBlock"><Style.Triggers>
+                        <DataTrigger Binding="{Binding HasSelectedRecord, Mode=OneWay}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                    </Style.Triggers></Style></TextBlock.Style>
+                </TextBlock>
+                <ScrollViewer x:Name="LegacyDetails" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                              Background="{DynamicResource ApplicationBackgroundBrush}" Visibility="{Binding HasSelectedRecord, Mode=OneWay, Converter={StaticResource LegacyBoolVisibility}}">
+                    <StackPanel Margin="8,0,4,0">
+                        <TextBlock x:Name="LegacyTruncationNotice" Text="{i18n:T 预览已截断；原始文件和 SHA-256 保持不变。}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,8"
+                                   Visibility="{Binding IsPreviewTruncated, Mode=OneWay, Converter={StaticResource LegacyBoolVisibility}}" />
+                        <ItemsControl x:Name="LegacyOverview" ItemsSource="{Binding OverviewFields, Mode=OneWay}" />
+                        <Expander Header="{i18n:T 原始事实预览（格式化片段）}" IsExpanded="True">
+                            <ItemsControl x:Name="LegacyFacts" ItemsSource="{Binding FactFields, Mode=OneWay}" Margin="0,8,0,0" />
+                        </Expander>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+        </Grid>
+        <StackPanel Grid.Row="3" Margin="0,8,0,0">
+            <ProgressBar Height="3" IsIndeterminate="True" Visibility="{Binding IsRefreshing, Mode=OneWay, Converter={StaticResource LegacyBoolVisibility}}" />
+            <TextBlock Text="{i18n:TB StatusMessage}" TextWrapping="Wrap" />
+            <TextBlock Text="{Binding StorageDirectory, Mode=OneWay}" FontSize="11" TextTrimming="CharacterEllipsis"/>
+            <Expander Header="{i18n:T 读取与范围提示}">
+                <StackPanel><TextBlock Text="{Binding FailureCount, Mode=OneWay}"/>
+                    <ScrollViewer MaxHeight="120" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><ItemsControl x:Name="LegacyFailures" ItemsSource="{Binding Failures, Mode=OneWay}" /></ScrollViewer>
+                </StackPanel>
+            </Expander>
+        </StackPanel>
+    </Grid>
+</UserControl>

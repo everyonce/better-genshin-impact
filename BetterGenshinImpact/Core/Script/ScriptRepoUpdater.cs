@@ -227,8 +227,8 @@ public partial class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
             await _repoWriteLock.WaitAsync();
             try
             {
-                // 与仓库版本保留共用跨进程锁，避免读取到更新过程中的混合来源。
-                using var resourceAccess = await ScriptRepositoryStore.Shared.EnterSourceAccessAsync();
+                // 与仓库版本保留共用按目录的跨进程锁，避免读取到更新过程中的混合来源；只锁官方仓库目录。
+                using var resourceAccess = await ScriptRepositoryStore.Shared.EnterSourceAccessAsync(CenterRepoPath);
                 var subscribedPaths = GetSubscribedPathsForCurrentRepo();
                 if (subscribedPaths.Count == 0)
                 {
@@ -281,8 +281,8 @@ public partial class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
             await _repoWriteLock.WaitAsync();
             try
             {
-                // 与仓库版本保留共用跨进程锁，避免读取到更新过程中的混合来源。
-                using var resourceAccess = await ScriptRepositoryStore.Shared.EnterSourceAccessAsync();
+                // 与仓库版本保留共用按目录的跨进程锁，避免读取到更新过程中的混合来源；只锁官方仓库目录。
+                using var resourceAccess = await ScriptRepositoryStore.Shared.EnterSourceAccessAsync(CenterRepoPath);
                 var (successCount, failCount) = await UpdateAllSubscribedScriptsCore(scriptConfig);
                 _logger.LogInformation("One-click update of subscribed scripts completed: {Success} succeeded, {Fail} failed.", successCount, failCount);
                 UIDispatcherHelper.Invoke(() =>
@@ -794,8 +794,8 @@ public partial class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
         await _repoWriteLock.WaitAsync();
         try
         {
-            // 与仓库版本保留共用跨进程锁，避免读取到更新过程中的混合来源。
-            using var resourceAccess = await ScriptRepositoryStore.Shared.EnterSourceAccessAsync();
+            // 与仓库版本保留共用按目录的跨进程锁，避免读取到更新过程中的混合来源；只锁官方仓库目录。
+            using var resourceAccess = await ScriptRepositoryStore.Shared.EnterSourceAccessAsync(CenterRepoPath);
             var config = Config.ScriptConfig;
             var repoUrl = ResolveRepoUrl(config);
             var repoPath = CenterRepoPath;
@@ -823,8 +823,8 @@ public partial class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
         await _repoWriteLock.WaitAsync();
         try
         {
-            // 与仓库版本保留共用跨进程锁，避免读取到更新过程中的混合来源。
-            using var resourceAccess = await ScriptRepositoryStore.Shared.EnterSourceAccessAsync();
+            // 与仓库版本保留共用按目录的跨进程锁，避免读取到更新过程中的混合来源；只锁官方仓库目录。
+            using var resourceAccess = await ScriptRepositoryStore.Shared.EnterSourceAccessAsync(CenterRepoPath);
             return await UpdateCenterRepoByGitCore(repoUrl, onCheckoutProgress);
         }
         finally
@@ -1933,8 +1933,7 @@ public partial class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
         await _repoWriteLock.WaitAsync();
         try
         {
-            // 与仓库版本保留共用跨进程锁，避免读取到更新过程中的混合来源。
-            using var resourceAccess = await ScriptRepositoryStore.Shared.EnterSourceAccessAsync();
+            // 目标目录要在解压分析后才能确定，按目录的来源锁在 Core 中确定目标后再取得。
             return await ImportLocalRepoZipCore(zipFilePath, onProgress);
         }
         finally
@@ -1947,6 +1946,8 @@ public partial class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
     {
         var tempUnzipDir = Path.Combine(ReposTempPath, "importZipFile");
         string targetFolderName = CenterRepoFolderName;
+        // 目标仓库目录的来源锁；确定目标后取得，持有到发布更新通知之后，只阻塞读取该仓库的会话。
+        FileStream? resourceAccess = null;
 
         try
         {
@@ -2021,6 +2022,7 @@ public partial class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
                 targetFolderName = bestMatchFolder;
                 targetPath = Path.Combine(ReposPath, targetFolderName);
                 _logger.LogInformation("ZIP import: directory structure overlap is {Ratio:P0}; replacing existing repository {Folder}.", bestOverlap, targetFolderName);
+                resourceAccess = await ScriptRepositoryStore.Shared.EnterSourceAccessAsync(targetPath);
 
                 // 读取旧的 repo_updated.json 用于生成更新标记
                 var oldUpdatedPath = Path.Combine(targetPath, "repo_updated.json");
@@ -2052,11 +2054,13 @@ public partial class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
                 }
                 targetPath = Path.Combine(ReposPath, targetFolderName);
                 _logger.LogInformation("ZIP import: directory structure overlap is {Ratio:P0}; creating folder {Folder}.", bestOverlap, targetFolderName);
+                resourceAccess = await ScriptRepositoryStore.Shared.EnterSourceAccessAsync(targetPath);
             }
             else
             {
                 // 没有已有仓库，使用默认文件夹名
                 targetPath = Path.Combine(ReposPath, targetFolderName);
+                resourceAccess = await ScriptRepositoryStore.Shared.EnterSourceAccessAsync(targetPath);
                 if (Directory.Exists(targetPath))
                 {
                     // 读取旧内容用于生成更新标记
@@ -2104,17 +2108,19 @@ public partial class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
                 _logger.LogWarning(ex, "ZIP import: failed to generate repo_updated.json.");
             }
 
+            // 仍持有目标目录的来源锁时发布通知：重写的 repo_updated.json 改变文件式修订，并清空本实例的文件哈希缓存。
+            ScriptRepositoryStore.Shared.NotifyUpdated(targetPath);
             onProgress?.Invoke(95, "正在清理临时文件...");
         }
         finally
         {
+            resourceAccess?.Dispose();
             // 阶段7: 清理 (95-100%)
             DirectoryHelper.DeleteReadOnlyDirectory(ReposTempPath);
         }
 
         onProgress?.Invoke(100, "导入完成");
         _logger.LogInformation("ZIP import completed. Target folder: {Folder}", targetFolderName);
-        ScriptRepositoryStore.Shared.NotifyUpdated(Path.Combine(ReposPath, targetFolderName));
         return Path.Combine(ReposPath, targetFolderName);
     }
 
@@ -2123,8 +2129,8 @@ public partial class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
         await _repoWriteLock.WaitAsync();
         try
         {
-            // 与仓库版本保留共用跨进程锁，避免读取到更新过程中的混合来源。
-            using var resourceAccess = await ScriptRepositoryStore.Shared.EnterSourceAccessAsync();
+            // 与仓库版本保留共用按目录的跨进程锁，避免读取到更新过程中的混合来源；只锁官方仓库目录。
+            using var resourceAccess = await ScriptRepositoryStore.Shared.EnterSourceAccessAsync(CenterRepoPath);
             await DownloadRepoAndUnzipCore(url);
         }
         finally
@@ -2264,8 +2270,8 @@ public partial class ScriptRepoUpdater : Singleton<ScriptRepoUpdater>
         await _repoWriteLock.WaitAsync();
         try
         {
-            // 与仓库版本保留共用跨进程锁，避免读取到更新过程中的混合来源。
-            using var resourceAccess = await ScriptRepositoryStore.Shared.EnterSourceAccessAsync();
+            // 与仓库版本保留共用按目录的跨进程锁，避免读取到更新过程中的混合来源；只锁官方仓库目录。
+            using var resourceAccess = await ScriptRepositoryStore.Shared.EnterSourceAccessAsync(CenterRepoPath);
             await ImportScriptFromPathJsonCore(pathJson);
         }
         finally

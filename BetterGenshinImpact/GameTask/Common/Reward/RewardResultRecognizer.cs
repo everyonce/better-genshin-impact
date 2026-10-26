@@ -11,8 +11,11 @@ using BetterGenshinImpact.Helpers;
 using BetterGenshinImpact.Service;
 using Microsoft.Extensions.Logging;
 using OpenCvSharp;
+using OpenCvSharp.Extensions;
 using System;
 using System.Collections.Generic;
+using System.Drawing;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -37,7 +40,8 @@ public class RewardResultRecognizer
     /// <param name="Name">奖励名称。</param>
     /// <param name="Count">奖励数量；未知时为 -1。</param>
     /// <param name="QualityLevel">稀有度；未知或不支持时为 -1。</param>
-    private sealed record RecognizedReward(string? Name, int Count, int QualityLevel = -1);
+    /// <param name="CardIndex">卡片在奖励条带中的下标；仅用于调试截图把识别结果映射回卡片矩形。</param>
+    private sealed record RecognizedReward(string? Name, int Count, int QualityLevel = -1, int CardIndex = -1);
 
     /// <summary>
     /// 单页奖励识别结果。
@@ -82,6 +86,9 @@ public class RewardResultRecognizer
         // 整轮识别共用一个识别器实例，用完销毁，不常驻内存。
         using IItemIconRecognizer iconRecognizer = ItemIconRecognizerFactory.CreateConfigured();
 
+        // 调试截图共用的时间戳槽位；实际值在首次保存时由 debug 方法生成。
+        string? rewardDebugRunId = null;
+
         for (int currentPage = 1; currentPage <= maxPages; currentPage++)
         {
             if (currentPage > 1)
@@ -93,7 +100,7 @@ public class RewardResultRecognizer
             if (requireReliableCounts)
                 TrainingGuideDiagnostics.Detail("培养领奖：开始识别第 {Page} 页", currentPage);
             var pageResult = RecognizeRewardPage(screen, iconRecognizer, requireReliableCounts);
-            SaveRewardDebugImage(currentPage, screen.SrcMat, pageResult.CardRects);
+            SaveRewardDebugImage(currentPage, screen.SrcMat, pageResult, ref rewardDebugRunId);
 
             // 培养严格模式失败时先保留证据，再按原有逻辑返回或抛异常。
             if (requireReliableCounts && TrainingGuideDiagnostics.Enabled && (pageResult.Rewards.Count == 0 ||
@@ -196,6 +203,27 @@ public class RewardResultRecognizer
     }
 
     /// <summary>
+    /// 启动前校验奖励识别支持的分辨率与物品图标模型。
+    /// </summary>
+    /// <exception cref="InvalidOperationException">分辨率或模型不可用时抛出。</exception>
+    public void EnsureSupported(GameRuntime runtime)
+    {
+        if (!IsSupportedRewardResolution(runtime))
+        {
+            throw new InvalidOperationException("奖励识别仅支持 1920×1080 分辨率");
+        }
+
+        try
+        {
+            using var recognizer = ItemIconRecognizerFactory.CreateConfigured();
+        }
+        catch (Exception e)
+        {
+            throw new InvalidOperationException("奖励识别的物品图标模型不可用", e);
+        }
+    }
+
+    /// <summary>
     /// 识别单页奖励截图。
     /// </summary>
     /// <param name="screen">当前页全屏截图。</param>
@@ -239,12 +267,13 @@ public class RewardResultRecognizer
     }
 
     /// <summary>
-    /// 保存 HSV 二值化后的奖励检测框图。
+    /// 保存带名称与数量标注的奖励检测图；仅用于调试截图。
     /// </summary>
     /// <param name="page">当前页码。</param>
     /// <param name="screenMat">全屏截图。</param>
-    /// <param name="cardRects">奖励卡片矩形。</param>
-    private void SaveRewardDebugImage(int page, Mat screenMat, List<Rect> cardRects)
+    /// <param name="pageResult">本页奖励识别结果与卡片矩形。</param>
+    /// <param name="rewardDebugRunId">本轮识别共用的时间戳；首次保存时生成。</param>
+    private void SaveRewardDebugImage(int page, Mat screenMat, RewardPageRecognitionResult pageResult, ref string? rewardDebugRunId)
     {
         var commonConfig = Config.CommonConfig;
         if (!commonConfig.ScreenshotEnabled || !commonConfig.RewardRecognitionScreenshotEnabled)
@@ -252,22 +281,77 @@ public class RewardResultRecognizer
             return;
         }
 
+        rewardDebugRunId ??= DateTime.Now.ToString("yyyyMMdd_HHmmss_fff");
+
         try
         {
             var directory = Global.Absolute(@"log\RewardRecognition");
             Directory.CreateDirectory(directory);
 
-            using var bandMat = new Mat(screenMat, new Rect(220, 444, 1480, 220));
-            using var mask = CreateRewardBandMask(bandMat);
-            using var debugMat = new Mat();
-            Cv2.CvtColor(mask, debugMat, ColorConversionCodes.GRAY2BGR);
+            // 调试图顶部预留文字区，避免名称超出条带顶部被截断。
+            const int labelHeight = 22;
+            const int labelTopPadding = labelHeight + 4;
 
-            foreach (var rect in cardRects)
+            using var bandMat = new Mat(screenMat, new Rect(220, 444, 1480, 220));
+            using var debugMat = new Mat();
+            Cv2.CopyMakeBorder(bandMat, debugMat, labelTopPadding, 0, 0, 0, BorderTypes.Constant, Scalar.Black);
+
+            foreach (var rect in pageResult.CardRects)
             {
-                Cv2.Rectangle(debugMat, rect, Scalar.LimeGreen, 2);
+                // 检测框向外扩 1px，避免边框压住图标边缘。
+                var debugRect = new Rect(rect.X - 1, rect.Y + labelTopPadding - 1, rect.Width + 2, rect.Height + 2);
+                Cv2.Rectangle(debugMat, debugRect, Scalar.LimeGreen, 2);
             }
 
-            Cv2.ImWrite(Path.Combine(directory, $"rewardRecDebug{page}.png"), debugMat);
+            using var bitmap = debugMat.ToBitmap();
+            using var graphics = Graphics.FromImage(bitmap);
+            using var font = new Font("Microsoft YaHei UI", 13, FontStyle.Bold, GraphicsUnit.Pixel);
+            using var backgroundBrush = new SolidBrush(Color.FromArgb(235, 0, 0, 0));
+            using var successBrush = new SolidBrush(Color.LimeGreen);
+            using var failedBrush = new SolidBrush(Color.Red);
+            using var format = new StringFormat
+            {
+                Alignment = StringAlignment.Center,
+                LineAlignment = StringAlignment.Center,
+                FormatFlags = StringFormatFlags.NoWrap,
+                Trimming = StringTrimming.EllipsisCharacter,
+            };
+
+            var rewardsByCard = pageResult.Rewards.ToDictionary(r => r.CardIndex);
+
+            for (int cardIdx = 0; cardIdx < pageResult.CardRects.Count; cardIdx++)
+            {
+                // 图标识别失败的卡片没有识别结果，单独标出，避免调试时误以为漏画。
+                string label;
+                Brush brush;
+                // 名称未识别的失败占位与没有结果的卡片同样标为未识别
+                if (rewardsByCard.TryGetValue(cardIdx, out var reward) && !string.IsNullOrEmpty(reward.Name))
+                {
+                    if (reward.Count >= 0)
+                    {
+                        label = $"{reward.Name} x{reward.Count}";
+                        brush = successBrush;
+                    }
+                    else
+                    {
+                        label = $"{reward.Name} x?";
+                        brush = failedBrush;
+                    }
+                }
+                else
+                {
+                    label = "名称未识别";
+                    brush = failedBrush;
+                }
+
+                var cardRect = pageResult.CardRects[cardIdx];
+                // 名称画在卡片上方，底边与绿框保留 1px 间隙。
+                var labelRect = new RectangleF(cardRect.X + 2, cardRect.Y + labelTopPadding - labelHeight - 2, cardRect.Width - 4, labelHeight);
+                graphics.FillRectangle(backgroundBrush, labelRect);
+                graphics.DrawString(label, font, brush, labelRect, format);
+            }
+
+            bitmap.Save(Path.Combine(directory, $"rewardRecDebug_{rewardDebugRunId}_{page}.png"), ImageFormat.Png);
         }
         catch (Exception e)
         {
@@ -398,14 +482,15 @@ public class RewardResultRecognizer
             {
                 _logger.LogWarning("Reward recognition: skipped an unrecognized reward icon.");
                 // Preserve an unknown item so strict planning cannot silently omit it.
-                results.Add(new RecognizedReward(null, -1));
+                // 保留失败占位，使严格模式能够拒绝不完整结果；普通模式会在 ToRewardItems 中过滤该项。
+                results.Add(new RecognizedReward(null, -1, CardIndex: cardIdx));
                 continue;
             }
 
             // === 数量 OCR ===
             var count = RecognizeCountByOcr(cardMat, ocrService, cardIdx, requireReliableCounts);
 
-            results.Add(new RecognizedReward(iconName, count));
+            results.Add(new RecognizedReward(iconName, count, CardIndex: cardIdx));
         }
 
         return results;
@@ -451,6 +536,14 @@ public class RewardResultRecognizer
                     cardIdx + 1, result.RawText, result.Count, result.Reason, result.ComponentCount);
             if (result.Count >= 0)
             {
+                // NARROW_ONE / WIDE_SEVEN 为结构纠错成功，记录原文与纠正结果便于排查。
+                if (result.Reason != null)
+                {
+                    _logger.LogDebug(
+                        "奖励识别：卡片 {CardIndex} 数量结构纠错：{Reason}，OCR 原文：{RawText}，有效连通域：{ComponentCount}，纠正结果：{Count}",
+                        cardIdx, result.Reason, result.RawText, result.ComponentCount, result.Count);
+                }
+
                 return result.Count;
             }
 

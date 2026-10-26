@@ -197,7 +197,7 @@ public class PickUpCollectHandler(GameRuntime runtime, AllConfig config) : IActi
 
             foreach (var pickUpActionStr in actionsToUse)
             {
-                var pickUpAction = CombatScriptParser.ParseContext(pickUpActionStr);
+                var pickUpAction = CombatScriptParser.ParseContext(pickUpActionStr, Logger);
                 foreach (var command in pickUpAction.CombatCommands)
                 {
                     var avatar = combatScenes.SelectAvatar(command.Name);

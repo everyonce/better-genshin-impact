@@ -1,3 +1,5 @@
+using BetterGenshinImpact.GameTask.Common.Resin;
+using BetterGenshinImpact.GameTask.AutoFight.Strategy;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -147,7 +149,7 @@ public sealed class PuloniaTaskLegacyImporter
         result.Differences.Add(location + "：行走、战斗、食物与 Shell 设置已转为分组公共配置；旧任务周期、完成跳过、执行优先级及断点不迁入。");
     }
 
-    /// <summary>递归迁移 d-v3 树，保留父子开关、顺序和展开状态。</summary>
+    /// <summary>递归迁移 d-v3 树，保留父子开关和顺序；展开状态属于编辑器界面，不随计划导入。</summary>
     private PuloniaTask ConvertGear(JObject data, PuloniaTaskImportResult result, string location, int depth, int[] refCount)
     {
         if (depth > 64 || ++refCount[0] > 10000) throw new InvalidOperationException("d-v3 树超过层级或数量限制。");
@@ -157,7 +159,7 @@ public sealed class PuloniaTaskLegacyImporter
         try { parameters = raw is JObject obj ? (JObject)obj.DeepClone() : string.IsNullOrWhiteSpace(raw?.Value<string>()) ? new JObject() : PuloniaTaskJson.Read<JObject>(raw!.Value<string>()!); }
         catch (Exception) { parameters = new JObject { ["raw"] = raw?.DeepClone() }; }
         var node = new PuloniaTask { Name = Value<string>(data, "name") ?? "导入任务", TaskType = type,
-            IsEnabled = Value<bool?>(data, "is_enabled") ?? true, IsExpanded = Value<bool?>(data, "is_expanded") ?? true,
+            IsEnabled = Value<bool?>(data, "is_enabled") ?? true,
             Path = Value<string>(data, "path") };
         if (type is "group" or "root") node.TaskType = "group";
         else if (type == "javascript")
@@ -220,7 +222,7 @@ public sealed class PuloniaTaskLegacyImporter
                 case "领取邮件": node.TaskType = PuloniaSoloTaskExecutor.ToTaskType(ClaimMailRewardsTask.TaskId); break;
                 case "合成树脂":
                     node.TaskType = PuloniaSoloTaskExecutor.ToTaskType(GoToCraftingBenchTask.TaskId);
-                    node.Parameters = ToParameters(new CraftCondensedResinParam { Country = dragon.CraftingBenchCountry, MinResinToKeep = dragon.MinResinToKeep });
+                    node.Parameters = ToParameters(new CraftCondensedResinParam { Country = dragon.CraftingBenchCountry, MinResinToKeep = ResinUsageLegacyMapper.NormalizeMinResinToKeep(dragon.MinResinToKeep) });
                     result.Differences.Add(location + "/" + name + "：保留原粹树脂数取自本次导入的一条龙配置，运行时不再读取当前选中的一条龙配置。");
                     break;
                 case "领取每日奖励":
@@ -240,7 +242,12 @@ public sealed class PuloniaTaskLegacyImporter
                 case "自动首领讨伐":
                     node.TaskType = PuloniaSoloTaskExecutor.ToTaskType(AutoBossTask.TaskId);
                     values = ToParameters(CreateBossParam(config, dragon));
-                    if (dragon.AutoBossTotalRunCountLimit > 0) { node.IsEnabled = false; result.Differences.Add(location + "/" + name + "：旧累计上限 / 已完成次数无账号证据，未迁入；节点暂时禁用。"); }
+                    if (dragon.AutoBossTotalRunCountLimit > 0)
+                    {
+                        values[PuloniaSoloTaskExecutor.BossTotalRunCountLimitParameter] = dragon.AutoBossTotalRunCountLimit;
+                        node.IsEnabled = false;
+                        result.Differences.Add(location + "/" + name + "：累计上限已迁入；旧已完成次数无账号证据，未迁入，节点暂时禁用，请核对后启用。");
+                    }
                     break;
                 case "自动幽境危战":
                     node.TaskType = PuloniaSoloTaskExecutor.ToTaskType(AutoStygianOnslaughtTask.TaskId);
@@ -281,28 +288,21 @@ public sealed class PuloniaTaskLegacyImporter
 
     /// <summary>
     /// 自动秘境：业务设置来自导入时的秘境配置，队伍、秘境和周日奖励来自一条龙；
-    /// 轮数 9999 表示按树脂配置刷取，策略保存名称，运行时再解析为路径。
+    /// 树脂设置复制迁移后的统一模型，策略保存名称，运行时再解析为路径。
     /// </summary>
     private static AutoDomainParam CreateDomainParam(AllConfig config, OneDragonFlowConfig dragon)
     {
         var domain = config.AutoDomainConfig;
         var strategy = string.IsNullOrEmpty(config.AutoFightConfig.StrategyName) ? CombatStrategyResolver.AutoSelectName : config.AutoFightConfig.StrategyName;
         // 内部构造不加载全局业务默认值，全部字段在这里显式填写
-        return new AutoDomainParam(strategy)
+        var param = new AutoDomainParam(strategy)
         {
             PartyName = dragon.PartyName,
             DomainName = dragon.DomainName,
             SundaySelectedValue = dragon.SundayEverySelectedValue,
             AutoArtifactSalvage = domain.AutoArtifactSalvage,
             MaxArtifactStar = config.AutoArtifactSalvageConfig.MaxArtifactStar,
-            SpecifyResinUse = domain.SpecifyResinUse,
-            ResinPriorityList = [.. domain.ResinPriorityList],
-            OriginalResinUseCount = domain.OriginalResinUseCount,
-            OriginalResin20UseCount = domain.OriginalResin20UseCount,
-            OriginalResin40UseCount = domain.OriginalResin40UseCount,
-            CondensedResinUseCount = domain.CondensedResinUseCount,
-            TransientResinUseCount = domain.TransientResinUseCount,
-            FragileResinUseCount = domain.FragileResinUseCount,
+            ResinUsage = domain.EnsureResinUsage().Clone(),
             RewardRecognitionEnabled = domain.RewardRecognitionEnabled,
             FightEndDelay = domain.FightEndDelay,
             ShortMovement = domain.ShortMovement,
@@ -311,6 +311,9 @@ public sealed class PuloniaTaskLegacyImporter
             AutoEat = domain.AutoEat,
             ReviveRetryCount = domain.ReviveRetryCount
         };
+        // 培养计划设置同样来自导入时的秘境配置
+        param.CopyTrainingGuideSettings(domain);
+        return param;
     }
 
     /// <summary>
@@ -324,10 +327,8 @@ public sealed class PuloniaTaskLegacyImporter
         param.BossName = dragon.AutoBossName;
         param.StrategyName = strategy;
         param.TeamName = dragon.AutoBossTeamName;
-        param.SpecifyRunCount = dragon.AutoBossSpecifyRunCount;
-        param.RunCount = dragon.AutoBossRunCount;
-        param.UseTransientResin = dragon.AutoBossUseTransientResin;
-        param.UseFragileResin = dragon.AutoBossUseFragileResin;
+        param.ResinUsage = ResinUsageLegacyMapper.FromBoss(dragon.AutoBossSpecifyRunCount,
+            dragon.AutoBossRunCount, dragon.AutoBossUseTransientResin, dragon.AutoBossUseFragileResin);
         param.ReviveRetryCount = dragon.AutoBossReviveRetryCount;
         param.ReturnToStatueAfterEachRound = dragon.AutoBossReturnToStatueAfterEachRound;
         param.RewardRecognitionEnabled = dragon.AutoBossRewardRecognitionEnabled;
@@ -366,11 +367,12 @@ public sealed class PuloniaTaskLegacyImporter
         var param = new AutoLeyLineOutcropParam(source)
         {
             FightConfig = fight,
-            IsResinExhaustionMode = dragon.LeyLineResinExhaustionMode,
-            OpenModeCountMin = dragon.LeyLineOpenModeCountMin,
             OneDragonMode = dragon.LeyLineOneDragonMode
         };
-        if (dragon.LeyLineRunCount > 0) param.Count = dragon.LeyLineRunCount;
+        // 一条龙保存模式与次数，补充开关仍来自导入时的地脉花配置。
+        param.ResinUsage = ResinUsageLegacyMapper.FromLeyLine(dragon.LeyLineResinExhaustionMode,
+            dragon.LeyLineOpenModeCountMin, dragon.LeyLineRunCount > 0 ? dragon.LeyLineRunCount : param.Count,
+            source.EnsureResinUsage().Allowed.Transient, source.EnsureResinUsage().Allowed.Fragile);
         return param;
     }
 

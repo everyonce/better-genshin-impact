@@ -1,6 +1,12 @@
+using System.Text.Json.Serialization;
+using System.Diagnostics.CodeAnalysis;
+using BetterGenshinImpact.GameTask.Common.Resin;
+using BetterGenshinImpact.GameTask.AutoFight.Strategy;
 using System;
+using System.Collections.Generic;
 using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.GameTask.AutoFight;
+using BetterGenshinImpact.GameTask.Common.Reward;
 using BetterGenshinImpact.GameTask.Model;
 using BetterGenshinImpact.Service;
 
@@ -11,6 +17,21 @@ namespace BetterGenshinImpact.GameTask.AutoBoss;
 /// </summary>
 public class AutoBossParam : BaseTaskParam<AutoBossTask>
 {
+    /// <summary>参数独立持有的树脂设置，默认值来自任务能力。</summary>
+    private ResinUsage _resinUsage = ResinCapabilities.Boss.Defaults;
+
+    /// <summary>统一树脂设置；JSON null 回退为任务默认值，整体替换会清除待归一化的旧字段。</summary>
+    [AllowNull]
+    public ResinUsage ResinUsage
+    {
+        get => _resinUsage;
+        set
+        {
+            _resinUsage = value ?? ResinCapabilities.Boss.Defaults;
+        }
+    }
+
+
     private const string AutoStrategyName = "根据队伍自动选择";
 
     /// <summary>
@@ -64,22 +85,46 @@ public class AutoBossParam : BaseTaskParam<AutoBossTask>
     /// <summary>
     /// 是否启用“指定讨伐次数”模式；关闭时刷取至原粹树脂耗尽。
     /// </summary>
-    public bool SpecifyRunCount { get; set; }
+    /// <summary>JS 兼容属性，直接读写统一树脂设置，不参与参数 JSON。</summary>
+    [JsonIgnore]
+    public bool SpecifyRunCount
+    {
+        get => ResinUsageLegacyMapper.ToBossSpecifyRunCount(ResinUsage);
+        set => ResinUsage.Mode = value ? ResinUsageMode.RunCount : ResinUsageMode.Exhaust;
+    }
 
     /// <summary>
     /// 指定模式下成功领取奖励的目标次数。
     /// </summary>
-    public int RunCount { get; set; } = 1;
+    /// <summary>JS 兼容属性，直接读写统一树脂设置，不参与参数 JSON。</summary>
+    [JsonIgnore]
+    public int RunCount
+    {
+        get => ResinUsage.RunCount;
+        set => ResinUsage.RunCount = value;
+    }
 
     /// <summary>
     /// 指定讨伐次数模式下，原粹树脂不足时是否允许使用须臾树脂补充。
     /// </summary>
-    public bool UseTransientResin { get; set; }
+    /// <summary>JS 兼容属性，直接读写统一树脂设置，不参与参数 JSON。</summary>
+    [JsonIgnore]
+    public bool UseTransientResin
+    {
+        get => ResinUsage.Allowed.Transient;
+        set => ResinUsage.Allowed.Transient = value;
+    }
 
     /// <summary>
     /// 指定讨伐次数模式下，原粹树脂不足时是否允许使用脆弱树脂补充。
     /// </summary>
-    public bool UseFragileResin { get; set; }
+    /// <summary>JS 兼容属性，直接读写统一树脂设置，不参与参数 JSON。</summary>
+    [JsonIgnore]
+    public bool UseFragileResin
+    {
+        get => ResinUsage.Allowed.Fragile;
+        set => ResinUsage.Allowed.Fragile = value;
+    }
 
     /// <summary>
     /// 检测到角色死亡后，回神像恢复并重试当前首领讨伐的最大次数。
@@ -106,6 +151,11 @@ public class AutoBossParam : BaseTaskParam<AutoBossTask>
     /// 用于 Pulonia 等入口避免重新读取全局业务设置。
     /// </summary>
     public AutoFightConfig? FightConfig { get; set; }
+
+    /// <summary>
+    /// 材料目标列表：按物品名与数量提前停止。
+    /// </summary>
+    public List<TargetItem> TargetItems { get; set; } = [];
 
     /// <summary>
     /// 每次成功领取奖励后的回调，仅供一条龙持久化累计成功次数。
@@ -161,14 +211,12 @@ public class AutoBossParam : BaseTaskParam<AutoBossTask>
         BossName = config.BossName;
         StrategyName = config.StrategyName;
         TeamName = config.TeamName;
-        SpecifyRunCount = config.SpecifyRunCount;
-        RunCount = config.RunCount;
-        UseTransientResin = config.UseTransientResin;
-        UseFragileResin = config.UseFragileResin;
+        ResinUsage = config.EnsureResinUsage().Clone();
         ReviveRetryCount = config.ReviveRetryCount;
         ReturnToStatueAfterEachRound = config.ReturnToStatueAfterEachRound;
         RewardRecognitionEnabled = config.RewardRecognitionEnabled;
         Timeout = config.Timeout;
+        TargetItems = TargetItem.CloneAll(config.TargetItems);
     }
 
     /// <summary>
@@ -194,8 +242,6 @@ public class AutoBossParam : BaseTaskParam<AutoBossTask>
     /// <returns>策略文件路径；“根据队伍自动选择”返回自动战斗策略目录。</returns>
     private static string BuildCombatStrategyPath(string strategyName)
     {
-        return AutoStrategyName.Equals(strategyName)
-            ? Global.Absolute(@"User\AutoFight\")
-            : Global.Absolute(@"User\AutoFight\" + strategyName + ".txt");
+        return CombatStrategyResolver.Parse(strategyName).Path;
     }
 }

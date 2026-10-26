@@ -5,6 +5,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using BetterGenshinImpact.Helpers;
 using LibGit2Sharp;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -14,8 +15,8 @@ namespace BetterGenshinImpact.Core.Script.Repositories;
 /// <summary>仓库管理的注册操作，官方保护和固定目录约束同时在服务层执行。</summary>
 public sealed partial class ScriptRepositoryStore
 {
-    /// <summary>保留的官方仓库身份，重置或切换镜像时始终保持不变。</summary>
-    public const string OfficialRepositoryId = "00000000000000000000000000000001";
+    /// <summary>保留的官方仓库身份，重置或切换镜像时始终保持不变；同时作为资源目录名。</summary>
+    public const string OfficialRepositoryId = "official";
 
     /// <summary>与原官方仓库弹窗共用的固定 clone 目录。</summary>
     public string OfficialDirectory => Path.Combine(_repositoriesDirectory, "bettergi-scripts-list");
@@ -23,7 +24,8 @@ public sealed partial class ScriptRepositoryStore
     /// <summary>按稳定身份取得唯一的第三方 clone 位置，配置不能重定向到另一个仓库。</summary>
     public string GetManagedRemoteDirectory(string repositoryId)
     {
-        if (repositoryId.Length != 32 || !repositoryId.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
+        // 官方仓库使用固定的 bettergi-scripts-list 目录，这里只分配第三方 rep_ 目录。
+        if (!ShortId.IsMatch(repositoryId, "rep"))
             throw new ArgumentException("仓库 ID 无效。");
         return Path.Combine(_repositoriesDirectory, "Pulonia", repositoryId);
     }
@@ -36,36 +38,46 @@ public sealed partial class ScriptRepositoryStore
             { Id = pair.Key, Name = pair.Key, Url = pair.Value }).ToArray(), Branch = "release"
     };
 
-    /// <summary>补入唯一的官方记录，不创建 clone 目录，不在打开管理窗口时下载内容。</summary>
+    /// <summary>
+    /// 补入唯一的官方记录，不创建 clone 目录，不在打开管理窗口时下载内容。
+    /// 官方记录已存在时只读取注册、不取锁；缺失时才在 registry 锁内重新读取并补入。
+    /// </summary>
     public async Task<ScriptRepositoryRegistration> EnsureOfficialRepositoryAsync(CancellationToken ct = default)
     {
+        if (FindValidOfficial(ReadRegistrations()) is { } existing) return existing;
         using var gate = await AcquireLockAsync("registry", ct).ConfigureAwait(false);
         var registrations = ReadRegistrations();
-        var official = registrations.FirstOrDefault(r => r.IsOfficial);
-        if (official is not null)
-        {
-            if (!official.IsEnabled || official.Kind != "official" || official.Branch != "release"
-                || !string.Equals(official.Directory, OfficialDirectory, StringComparison.OrdinalIgnoreCase))
-                throw new IOException("官方仓库配置无效，官方来源不能禁用、修改分支或重新定位。");
-            return official;
-        }
+        if (FindValidOfficial(registrations) is { } official) return official;
         official = CreateOfficialRegistration();
         registrations.Add(official);
         WriteJson(Path.Combine(RootDirectory, "repositories.json"), registrations);
         return official;
     }
 
+    /// <summary>返回注册列表中的官方记录并校验其固定配置；尚未补入时返回 null。</summary>
+    private ScriptRepositoryRegistration? FindValidOfficial(IEnumerable<ScriptRepositoryRegistration> registrations)
+    {
+        var official = registrations.FirstOrDefault(r => r.IsOfficial);
+        if (official is not null && (!official.IsEnabled || official.Kind != "official" || official.Branch != "release"
+                || !string.Equals(official.Directory, OfficialDirectory, StringComparison.OrdinalIgnoreCase)))
+            throw new IOException("官方仓库配置无效，官方来源不能禁用、修改分支或重新定位。");
+        return official;
+    }
+
     /// <summary>读取一个已注册来源，管理操作可以识别未下载和已经移除的记录。</summary>
     public Task<ScriptRepositoryRegistration> GetRepositoryAsync(string id, CancellationToken ct = default)
-        => GetRegistrationAsync(id, ct);
+    {
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult(GetRegistration(id));
+    }
 
     /// <summary>重新读取用户维护的本地仓库并发布当前版本；不会访问远端或修改任何任务引用。</summary>
     public async Task RefreshLocalRepositoryAsync(string id, CancellationToken ct = default)
     {
-        var registration = await GetRegistrationAsync(id, ct).ConfigureAwait(false);
+        var registration = GetRegistration(id);
         if (!registration.IsEnabled || registration.IsRemote)
             throw new InvalidOperationException("只有已启用的本地仓库可以刷新目录。");
-        using var sourceAccess = await EnterSourceAccessAsync(ct).ConfigureAwait(false);
+        using var sourceAccess = await EnterSourceAccessAsync(registration.Directory, ct).ConfigureAwait(false);
         await Task.Run(() =>
         {
             ct.ThrowIfCancellationRequested();
@@ -143,8 +155,8 @@ public sealed partial class ScriptRepositoryStore
         if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("仓库名称不能为空。");
         using var gate = await AcquireLockAsync("registry", ct).ConfigureAwait(false);
         var registrations = ReadRegistrations();
-        var id = Guid.NewGuid().ToString("N");
-        var remoteId = Guid.NewGuid().ToString("N");
+        var id = NewRepositoryId(registrations);
+        var remoteId = ShortId.Create("rem");
         var registration = new ScriptRepositoryRegistration
         {
             Id = id, Name = name.Trim(), Kind = "remote", Directory = GetManagedRemoteDirectory(id),

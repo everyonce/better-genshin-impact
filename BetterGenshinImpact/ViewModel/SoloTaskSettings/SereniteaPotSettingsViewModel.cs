@@ -9,6 +9,9 @@ namespace BetterGenshinImpact.ViewModel.SoloTaskSettings;
 /// <summary>领取尘歌壶奖励的专属设置草稿，沿用原一条龙的进壶方式、购买日期和商品选择。</summary>
 public partial class SereniteaPotSettingsViewModel : SoloTaskSettingsViewModel
 {
+    /// <inheritdoc />
+    public override string[] EditedParameterNames => ["teleport_type", "secret_treasure_objects"];
+
     /// <summary>洞天百宝支持的商品，顺序与原一条龙的商品勾选列表一致。</summary>
     private static readonly string[] Goods = ["布匹", "须臾树脂", "大英雄的经验", "流浪者的经验", "精锻用魔矿", "摩拉", "祝圣精华", "祝圣油膏"];
 
@@ -47,6 +50,7 @@ public partial class SereniteaPotSettingsViewModel : SoloTaskSettingsViewModel
         PurchaseScheduleChoices = WithCurrentChoice(["每天重复", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"], _originalPurchaseSchedule);
         PurchaseItems = Goods.Concat(_originalPurchaseItems).Distinct(StringComparer.Ordinal)
             .Select(name => new SereniteaPotPurchaseItemViewModel(name, _originalPurchaseItems.Contains(name, StringComparer.Ordinal))).ToArray();
+        TrackEdits(PurchaseItems);
     }
 
     /// <summary>仅提交真正修改的设置，并将日期及商品恢复为任务原有的字符串数组。</summary>

@@ -1,3 +1,5 @@
+using BetterGenshinImpact.GameTask.Common.Resin;
+using BetterGenshinImpact.GameTask.AutoFight.Strategy;
 using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Input;
 using BetterGenshinImpact.Core.BgiVision;
@@ -78,8 +80,11 @@ public enum StygianState
 /// </summary>
 [SoloTaskInfo(TaskId, "自动幽境危战", Group = "树脂与战斗", Order = 230, WaitForMainUi = false, OneDragonOrder = 5)]
 [SoloTaskSettingsView(typeof(AutoStygianOnslaughtSettingsView), typeof(AutoStygianOnslaughtSettingsViewModel))]
-public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, ISoloTask<AutoStygianOnslaughtParam, NoData>
+public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, ISoloTask<AutoStygianOnslaughtParam, ResinClaimData>
 {
+    /// <summary>本任务支持的树脂使用方式、种类、档位及默认设置。</summary>
+    public static ResinUsageCapability ResinCapability => ResinCapabilities.StygianOnslaught;
+
     /// <summary>
     /// 独立任务稳定标识。
     /// </summary>
@@ -116,19 +121,25 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
     private AutoStygianOnslaughtParam _taskParam = null!;
 
     /// <summary>
-    /// TXT 战斗策略解析结果；使用 JSON 策略时为空。
+    /// TXT 战斗策略解析结果；使用 JSON/键鼠策略时为空。
     /// </summary>
     private CombatScriptBag? _combatScriptBag;
 
     /// <summary>
-    /// JSON 战斗策略路径；使用 TXT 策略时为空。
+    /// JSON/键鼠策略路径；使用 TXT 策略时为空。
     /// </summary>
-    private string? _jsonCombatStrategyPath;
+    private string? _entryCombatStrategyPath;
 
-    /// <summary>
-    /// 指定树脂使用次数时的树脂优先级与剩余次数。
-    /// </summary>
-    private List<ResinUseRecord> _resinPriorityListWhenSpecifyUse = [];
+    /// <summary>本次统一树脂选择与记账。</summary>
+    private ResinClaimSelector _selector = null!;
+    /// <summary>本轮领奖后的最后一轮判断，供两个状态处理入口共用。</summary>
+    private bool _isLastRound;
+    /// <summary>本次领奖未找到候选或点击失败，停止后续挑战。</summary>
+    private bool _rewardStopped;
+    /// <summary>本次树脂结束原因。</summary>
+    private ResinStopReason _stopReason;
+    /// <summary>是否已开始挑战。</summary>
+    private bool _hasBattled;
 
     private LowerHeadThenWalkToTask? _lowerHeadThenWalkToTask;
 
@@ -156,13 +167,11 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
     /// <returns>策略存在时返回 true</returns>
     private static bool TryResolveStrategyPath(AutoStygianOnslaughtParam param, out string path)
     {
-        if (!string.IsNullOrWhiteSpace(param.CombatScriptBagPath))
-        {
-            path = param.CombatScriptBagPath;
-            return System.IO.File.Exists(path) || System.IO.Directory.Exists(path);
-        }
+        var strategy = CombatStrategyResolver.Parse(string.IsNullOrWhiteSpace(param.CombatScriptBagPath)
+            ? param.StrategyName : param.CombatScriptBagPath);
+        path = strategy.Path;
+        return strategy.Exists;
 
-        return CombatStrategyResolver.TryResolve(param.StrategyName, out path);
     }
 
     /// <summary>
@@ -173,17 +182,18 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
     private void InitializeFromParam(AutoStygianOnslaughtParam param, string strategyPath)
     {
         _taskParam = param;
-        if (strategyPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+        _entryCombatStrategyPath = null;
+        _combatScriptBag = null;
+        if (CombatStrategyResolver.Parse(strategyPath).Kind is not (CombatStrategyKind.Txt or CombatStrategyKind.AutoSelect))
         {
-            _jsonCombatStrategyPath = strategyPath;
-            Logger.LogInformation("自动幽境危战：检测到JSON策略文件，将使用JSON战斗引擎");
+            _entryCombatStrategyPath = strategyPath;
+            Logger.LogInformation("自动幽境危战：使用统一战斗入口执行所选策略");
         }
         else
         {
-            _combatScriptBag = CombatScriptParser.ReadAndParse(strategyPath);
+            _combatScriptBag = CombatScriptParser.ReadAndParse(strategyPath, Logger);
         }
 
-        _resinPriorityListWhenSpecifyUse = ResinUseRecord.BuildFromDomainParam(param);
     }
 
     /// <summary>
@@ -226,8 +236,15 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
     /// 首领序号无效返回 Failed(invalid_parameter)；战斗策略不存在返回 Failed(strategy_not_found)；
     /// 紊乱爆发期已结束返回 Skipped(event_ended)；其余正常结束返回 Unverified。
     /// </returns>
-    public async Task<SoloTaskResult<NoData>> RunAsync(AutoStygianOnslaughtParam param, CancellationToken ct)
+    public async Task<SoloTaskResult<ResinClaimData>> RunAsync(AutoStygianOnslaughtParam param, CancellationToken ct)
     {
+        if (param.ResinUsage.Validate(ResinCapability) is { } problem)
+            return SoloTaskResult.Failed(SoloTaskReasons.InvalidParameter, problem);
+        _selector = new ResinClaimSelector(param.ResinUsage, ResinCapability);
+        _stopReason = ResinStopReason.NoUsableOption;
+        _isLastRound = false;
+        _rewardStopped = false;
+        _hasBattled = false;
         // 1. 参数校验：首领序号只能是 1—3
         if (param.BossNum is < 1 or > 3)
         {
@@ -239,6 +256,9 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
         {
             return SoloTaskResult.Failed(SoloTaskReasons.StrategyNotFound, $"{TaskName}战斗策略不存在：{strategyPath}");
         }
+
+        if (CombatStrategyResolver.Parse(strategyPath).Kind == CombatStrategyKind.Combo)
+            return SoloTaskResult.Failed(SoloTaskReasons.InvalidParameter, "幽境危战不支持自动连招策略。");
 
         // 3. 依赖参数的初始化（原构造函数逻辑）
         InitializeFromParam(param, strategyPath);
@@ -284,10 +304,10 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
         await ArtifactSalvage();
         Notify.Event(NotificationEvent.DomainEnd).Success($"{TaskName}结束");
 
-        // 现有流程没有领取证据，结果为“已执行，未核验”
-        return domainErrorMessage == null
-            ? SoloTaskResult.Unverified("幽境危战流程已结束。")
-            : SoloTaskResult.Unverified($"幽境危战流程异常结束：{domainErrorMessage}");
+        // 按树脂设置刷取完成返回成功；树脂不足等提前结束为“已执行，未核验”
+        return ResinClaimResults.Complete(_selector, _stopReason,
+            domainErrorMessage == null ? "幽境危战流程已结束" : $"幽境危战流程异常结束：{domainErrorMessage}",
+            _hasBattled);
     }
 
     private async Task<bool> DoDomain()
@@ -307,6 +327,7 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
         }
 
         // 阶段2：战斗循环
+        _hasBattled = true;
         await BattleLoopStateMachine(page);
 
         await ExitDomain(page);
@@ -640,7 +661,7 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
     {
         Logger.LogInformation($"{TaskName}：选择树脂");
         using var ra = _runtime.CaptureToRectArea();
-        await UseResinAndCheckLast(ra);
+        _isLastRound = await UseResinAndCheckLast(ra);
         return StateHandlerResult.Success; // 等待转换到 ContinueOrExit 或 DomainLobby
     }
 
@@ -651,7 +672,7 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
         using var ra = _runtime.CaptureToRectArea();
 
         // 检查是否还有树脂
-        var isLastTurn = _resinPriorityListWhenSpecifyUse.Sum(o => o.RemainCount) <= 0;
+        var isLastTurn = _isLastRound || _selector.IsTargetReached;
 
         if (isLastTurn)
         {
@@ -694,7 +715,7 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
     {
         Logger.LogInformation("========== Starting battle loop ==========");
 
-        for (var round = 0; round < 9999; round++)
+        for (var round = 0; round < 9999 && !_selector.IsTargetReached && !_rewardStopped; round++)
         {
             _ct.ThrowIfCancellationRequested();
             Logger.LogInformation(">>> Battle round {Round} <<<", round + 1);
@@ -749,10 +770,10 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
         CurrentState = StygianState.BossSelect;
         await EnsureNextStateTransition(60000);
 
-        if (_jsonCombatStrategyPath != null)
+        if (_entryCombatStrategyPath != null)
         {
-            Logger.LogInformation($"{TaskName}：执行战斗策略(JSON)");
-            await StartJsonFight();
+            Logger.LogInformation($"{TaskName}：执行战斗策略(JSON/键鼠)");
+            await StartEntryFight();
         }
         else
         {
@@ -785,15 +806,9 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
         using var ra = _runtime.CaptureToRectArea();
         var textList = ra.FindMulti(RecognitionObject.Ocr(ra.Width * 0.25, ra.Height * 0.2, ra.Width * 0.5, ra.Height * 0.6));
 
-        // 检查是否无树脂
-        if (textList.Any(t => t.Text.Contains("数量不足") || t.Text.Contains("补充原粹树脂")))
-        {
-            Logger.LogInformation("Original Resin depleted");
-            return false;
-        }
-
-        // 使用树脂
+        // 不因单独的“补充原粹树脂”提示退出，所有行都交给选择器判断。
         var isLastTurn = await UseResinAndCheckLast(ra);
+        if (_rewardStopped) return false;
 
         await _runtime.Delay(1000, _ct);
 
@@ -829,67 +844,52 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
         return !isLastTurn;
     }
 
+    /// <summary>使用统一候选并在成功点击后记账，保存本轮的结束判断供状态机共用。</summary>
     private async Task<bool> UseResinAndCheckLast(ImageRegion ra)
     {
-        bool isLastTurn = false;
-
-        if (!_taskParam.SpecifyResinUse)
+        var regions = ra.FindMulti(RecognitionObject.Ocr(ra.Width * 0.25, ra.Height * 0.2, ra.Width * 0.5, ra.Height * 0.6));
+        var offered = ResinRewardPrompt.DetectOffered(regions, ra.Width / 2d, _taskParam.GameCultureInfo);
+        var candidates = _selector.Candidates(offered);
+        if (candidates.Count == 0)
         {
-            // 自动刷干树脂
-            // 识别树脂状况
-            var resinStatus = ResinStatus.RecogniseFromRegion(ra, _runtime.SystemInfo, OcrFactory.Paddle);
-            resinStatus.Print(Logger);
-
-            if (resinStatus is { CondensedResinCount: <= 0, OriginalResinCount: < 20 })
-            {
-                Logger.LogWarning("Not enough resin");
-                return true;
-            }
-
-            if (resinStatus.CondensedResinCount > 0)
-            {
-                AutoDomainTask.PressUseResin(_runtime, ra, "浓缩树脂", TaskName);
-                resinStatus.CondensedResinCount -= 1;
-            }
-            else if (resinStatus.OriginalResinCount >= 20)
-            {
-                var (_, num) = AutoDomainTask.PressUseResin(_runtime, ra, "原粹树脂", TaskName);
-                resinStatus.OriginalResinCount -= num;
-            }
-
-            isLastTurn = resinStatus is { CondensedResinCount: <= 0, OriginalResinCount: < 20 };
+            _stopReason = _selector.IsTargetReached ? ResinStopReason.TargetReached
+                : ResinExecutionRules.NoCandidateReason(offered, ResinRewardPrompt.HasShortageHint(regions, _taskParam.GameCultureInfo));
+            _rewardStopped = true;
+            return _isLastRound = true;
         }
-        else
+        ResinStatus? status = null;
+        try
         {
-            var textList = ra.FindMulti(RecognitionObject.Ocr(ra.Width * 0.25, ra.Height * 0.2, ra.Width * 0.5, ra.Height * 0.6));
-            int successCount = 0;
-
-            foreach (var record in _resinPriorityListWhenSpecifyUse)
-            {
-                if (record.RemainCount > 0)
-                {
-                    var (success, _) = AutoDomainTask.PressUseResin(_runtime, textList, record.Name, TaskName);
-                    if (success)
-                    {
-                        record.RemainCount -= 1;
-                        Logger.LogInformation("Auto Domain: {Name}, completed {Re}/{Max} runs",
-                            record.Name, record.MaxCount - record.RemainCount, record.MaxCount);
-                        successCount++;
-                        break;
-                    }
-                }
-            }
-
-            isLastTurn = _resinPriorityListWhenSpecifyUse.Sum(o => o.RemainCount) <= 0;
-
-            if (successCount == 0)
-            {
-                Logger.LogWarning("Available resin options cannot satisfy the configured claim counts");
-                return true;
-            }
+            status = ResinStatus.RecogniseFromRegion(ra, _runtime.SystemInfo, OcrFactory.Paddle);
+            status.Print(Logger);
         }
-
-        return isLastTurn;
+        catch (Exception e) when (e is not OperationCanceledException and not NormalEndException)
+        {
+            Logger.LogWarning("{TaskName}：顶栏识别失败，无法预测最后一轮，将继续：{Reason}", TaskName, e.Message);
+        }
+        foreach (var kind in candidates)
+        {
+            if (kind == ResinKind.Original && _taskParam.ResinUsage.OriginalTier != OriginalResinTier.Default)
+            {
+                // 幽境已确认可切 20/40，沿用秘境的切档模板；实际模板匹配仍需游戏内验收。
+                var tier = _taskParam.ResinUsage.OriginalTier;
+                var switched = ResinRewardPrompt.SwitchOriginalTier(_runtime, tier == OriginalResinTier.Only20 ? 20 : 40, Logger, TaskName, _ct);
+                if (!switched && (tier == OriginalResinTier.Only20
+                    || !ResinRewardPrompt.SwitchOriginalTier(_runtime, 20, Logger, TaskName, _ct))) continue;
+                using var fresh = _runtime.CaptureToRectArea();
+                regions = fresh.FindMulti(RecognitionObject.Ocr(fresh.Width * 0.25, fresh.Height * 0.2, fresh.Width * 0.5, fresh.Height * 0.6));
+            }
+            var (success, spent) = ResinRewardPrompt.PressUseResin(_runtime, regions, kind, Logger, TaskName, _ct, _taskParam.GameCultureInfo);
+            if (!success) continue;
+            _selector.RecordClaim(kind, spent);
+            _isLastRound = ResinExecutionRules.IsLastRound(_taskParam.ResinUsage, _selector,
+                status?.OriginalResinCount, status?.CondensedResinCount, kind, spent);
+            if (_isLastRound) _stopReason = _selector.IsTargetReached ? ResinStopReason.TargetReached : ResinStopReason.ResinExhausted;
+            return _isLastRound;
+        }
+        _rewardStopped = true;
+        _stopReason = ResinStopReason.NoUsableOption;
+        return _isLastRound = true;
     }
 
     #endregion
@@ -899,14 +899,7 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
     private void Init()
     {
         LogScreenResolution();
-        if (_taskParam.SpecifyResinUse)
-        {
-            Logger.LogInformation("→ {Text} 指定使用树脂", $"{TaskName}，");
-        }
-        else
-        {
-            Logger.LogInformation("→ {Text} 用尽所有浓缩树脂和原粹树脂后结束", $"{TaskName}，");
-        }
+        Logger.LogInformation("{TaskName}：{ResinUsage}", TaskName, ResinUsageText.Summary(_taskParam.ResinUsage, ResinCapability));
     }
 
     private void LogScreenResolution()
@@ -1115,17 +1108,17 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
     }
 
     /// <summary>
-    /// JSON策略战斗入口：委托给AutoFightJsonTask，抑制其自带的结束检测和拾取逻辑，
+    /// JSON/键鼠策略战斗入口：委托给AutoFightEntryTask，抑制其自带的结束检测和拾取逻辑，
     /// 幽境危战的DomainEndDetectionTask通过CancellationToken控制战斗结束。
     /// </summary>
-    private async Task StartJsonFight()
+    private async Task StartEntryFight()
     {
         CancellationTokenSource cts = new();
         _ct.Register(cts.Cancel);
 
         var jsonParam = new AutoFightParam
         {
-            CombatStrategyPath = _jsonCombatStrategyPath!,
+            CombatStrategyPath = _entryCombatStrategyPath!,
             FightFinishDetectEnabled = false,
             ExpBasedPickupEnabled = false,
             KazuhaPickupEnabled = false,
@@ -1133,7 +1126,7 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
             Timeout = 600,
         };
 
-        var jsonTask = new AutoFightJsonTask(_runtime, _config);
+        var jsonTask = new AutoFightEntryTask(_runtime, _config);
 
         var domainEndTask = DomainEndDetectionTask(cts);
 
@@ -1146,7 +1139,7 @@ public class AutoStygianOnslaughtTask : StateMachineBase<StygianState, BvPage>, 
             }
             catch (Exception e)
             {
-                Logger.LogWarning("JSON combat task failed: {Msg}", e.Message);
+                Logger.LogWarning("JSON/key-mouse combat task error: {Msg}", e.Message);
             }
         }, cts.Token);
 

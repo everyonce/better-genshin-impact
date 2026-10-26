@@ -31,6 +31,21 @@ public static class InstanceOperations
     public const string TaskStop = "task.stop";
     public const string TaskStatusGet = "task.status.get";
     public const string TaskStatusChanged = "task.status.changed";
+
+    /// <summary>
+    /// 主实例请求子实例执行一个 Pulonia 节点；子实例立即确认，在后台执行
+    /// </summary>
+    public const string PuloniaNodeStart = "pulonia.node.start";
+
+    /// <summary>
+    /// 主实例请求子实例取消一个 Pulonia 节点
+    /// </summary>
+    public const string PuloniaNodeCancel = "pulonia.node.cancel";
+
+    /// <summary>
+    /// 子实例回报 Pulonia 节点结束
+    /// </summary>
+    public const string PuloniaNodeFinished = "pulonia.node.finished";
 }
 
 public sealed class InstanceIpcEnvelope

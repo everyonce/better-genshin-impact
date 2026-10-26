@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using BetterGenshinImpact.Core.Config;
+using BetterGenshinImpact.GameTask.Common;
 using BetterGenshinImpact.GameTask.Music.Model;
 using BetterGenshinImpact.GameTask.Runtime;
 using Fischless.GameCapture;
@@ -1001,4 +1002,10 @@ public sealed class MusicGuidedSessionOptions
 
     /// <summary>段落切换回调（段序号从 0 起）</summary>
     public Action<int, int>? OnSegmentChanged { get; init; }
+
+    /// <summary>读取当前已绑定的游戏运行环境；未绑定时返回 null，会话改用临时截图器抓帧</summary>
+    public Func<GameRuntime?>? CurrentRuntime { get; init; }
+
+    /// <summary>配置根，提供临时截图器的截图方式与参数</summary>
+    public AllConfig? Config { get; init; }
 }

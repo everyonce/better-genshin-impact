@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using BetterGenshinImpact.Core.Script;
+using BetterGenshinImpact.Core.Script.Repositories;
 using BetterGenshinImpact.Pulonia.Executors;
 using BetterGenshinImpact.Pulonia.Models;
 using BetterGenshinImpact.Pulonia.Services;
@@ -29,6 +30,11 @@ public partial class PuloniaTaskCreationDialogViewModel : ViewModel
     /// 创建弹窗按当前任务类型使用的轻量资源索引。
     /// </summary>
     private readonly PuloniaTaskResourceCatalog _resourceCatalog;
+
+    /// <summary>
+    /// 校验参数、固定资源版本并建立任务树的服务；弹窗只负责收集输入。
+    /// </summary>
+    private readonly PuloniaTaskCreationService _creationService;
 
     /// <summary>
     /// 尚未过滤的本地资源索引。
@@ -75,9 +81,9 @@ public partial class PuloniaTaskCreationDialogViewModel : ViewModel
     /// </summary>
     public IReadOnlyList<PuloniaDirectoryImportModeOption> DirectoryImportModes { get; } =
     [
-        new("reference", "引用目录（推荐）", "保存固定目录版本，资源清单在运行准备时展开；计划树保持简洁。"),
-        new("structured", "展开为任务并保留目录", "把当前文件清单写成可逐项编辑的任务树，并保留子目录结构。"),
-        new("flat", "展开为扁平任务", "把当前文件清单写入一个分组，不保留子目录层级。")
+        new(PuloniaTaskDirectoryImportMode.Reference, "引用目录（推荐）", "保存固定目录版本，资源清单在运行准备时展开；计划树保持简洁。"),
+        new(PuloniaTaskDirectoryImportMode.Structured, "展开为任务并保留目录", "把当前文件清单写成可逐项编辑的任务树，并保留子目录结构。"),
+        new(PuloniaTaskDirectoryImportMode.Flat, "展开为扁平任务", "把当前文件清单写入一个分组，不保留子目录层级。")
     ];
 
     /// <summary>
@@ -180,8 +186,7 @@ public partial class PuloniaTaskCreationDialogViewModel : ViewModel
     /// <summary>
     /// 当前选择是否是支持批量导入的路线或录制目录。
     /// </summary>
-    public bool IsDirectoryImport => SelectedResource?.IsDirectory == true
-                                     && SelectedDefinition?.TaskType is "pathing" or "keymouse";
+    public bool IsDirectoryImport => PuloniaTaskCreationService.IsDirectoryImport(SelectedDefinition?.TaskType, SelectedResource);
 
     /// <summary>
     /// 当前目录添加方式的说明。
@@ -243,6 +248,11 @@ public partial class PuloniaTaskCreationDialogViewModel : ViewModel
     private string? _readmeFilePath;
 
     /// <summary>
+    /// 当前显示的资源预览；仓库 JS 预览持有一次性预览目录，切换或关闭时释放。
+    /// </summary>
+    private PuloniaTaskResourcePreview? _currentPreview;
+
+    /// <summary>
     /// 当前 JS 项目自定义设置的加载状态或空状态说明。
     /// </summary>
     [ObservableProperty]
@@ -286,6 +296,7 @@ public partial class PuloniaTaskCreationDialogViewModel : ViewModel
     {
         _creationTaskType = creationTaskType;
         _resourceCatalog = resourceCatalog;
+        _creationService = new PuloniaTaskCreationService(resourceCatalog);
         // 菜单直接传入具体任务类型，这里只按类型精确匹配
         AvailableDefinitions = definitions
             .Where(definition => definition.TaskType == creationTaskType)
@@ -390,7 +401,7 @@ public partial class PuloniaTaskCreationDialogViewModel : ViewModel
     {
         ParameterFields.Clear();
         JavaScriptSettingFields.Clear();
-        ReadmeFilePath = null;
+        ReleasePreview();
         if (value is not null)
         {
             var properties = value.ParameterSchema["properties"] as JObject ?? new JObject();
@@ -412,7 +423,10 @@ public partial class PuloniaTaskCreationDialogViewModel : ViewModel
                         or "auto_fight_enabled" or "auto_skip_enabled"))
                     continue;
                 var defaultProperty = value.DefaultParameters.Property(property.Name);
-                ParameterFields.Add(new PuloniaTaskParameterFieldViewModel(property.Name, fieldSchema,
+                ParameterFields.Add(new PuloniaTaskParameterFieldViewModel(property.Name,
+                    property.Name is "strategy_name" or "combat_strategy_path" or "resin_usage"
+                        ? BetterGenshinImpact.ViewModel.Pages.Pulonia.PuloniaOneDragonSettingChoices.Decorate(property.Name, fieldSchema, defaultProperty?.Value, value.TaskType)
+                        : fieldSchema,
                     defaultProperty?.Value, defaultProperty is not null, required.Contains(property.Name)));
             }
             SetSuggestedName(value.DisplayName);
@@ -460,7 +474,7 @@ public partial class PuloniaTaskCreationDialogViewModel : ViewModel
         OnPropertyChanged(nameof(IsDirectoryImport));
         var generation = ++_previewGeneration;
         _previewCancellationTokenSource?.Cancel();
-        ReadmeFilePath = null;
+        ReleasePreview();
         JavaScriptSettingFields.Clear();
         _javaScriptSettingsLoadFailed = false;
         JavaScriptSettingsMessage = IsJavaScriptTask ? "正在读取脚本设置…" : string.Empty;
@@ -503,6 +517,16 @@ public partial class PuloniaTaskCreationDialogViewModel : ViewModel
     /// 资源详情加载状态变化后刷新统一加载状态。
     /// </summary>
     partial void OnIsResourceDetailsLoadingChanged(bool value) => OnPropertyChanged(nameof(IsLoading));
+
+    /// <summary>
+    /// 先清除 README 路径让 Markdown 控件停止读取，再释放当前预览，删除其一次性预览目录。
+    /// </summary>
+    private void ReleasePreview()
+    {
+        ReadmeFilePath = null;
+        _currentPreview?.Dispose();
+        _currentPreview = null;
+    }
 
     /// <summary>
     /// README 文件变化后切换原生 Markdown 预览和普通文本空状态。
@@ -593,16 +617,19 @@ public partial class PuloniaTaskCreationDialogViewModel : ViewModel
                     overrides[PuloniaCollectionCooldown.ParameterName] = cooldown;
             }
 
-            var effectiveParameters = (JObject)SelectedDefinition.DefaultParameters.DeepClone();
-            foreach (var property in overrides.Properties())
-                effectiveParameters[property.Name] = property.Value.DeepClone();
-            PuloniaTaskValidator.ValidateParameters(effectiveParameters, SelectedDefinition.ParameterSchema,
-                "task/parameters");
-            ValidateKnownRequiredValues(SelectedDefinition.TaskType, effectiveParameters);
-
+            // 参数合并校验、资源版本固定和任务树建立由服务完成；服务先校验参数，失败时不会读取资源。
             IsBusy = true;
             StatusMessage = RequiresResource ? "正在固定资源版本…" : "正在创建任务…";
-            var task = await BuildTaskAsync(name, SelectedDefinition, SelectedResource, overrides);
+            var task = await _creationService.BuildAsync(new PuloniaTaskCreationRequest
+                {
+                    Name = name,
+                    Definition = SelectedDefinition,
+                    Resource = SelectedResource,
+                    Overrides = overrides,
+                    DirectoryImportMode = SelectedDirectoryImportMode?.Mode ?? PuloniaTaskDirectoryImportMode.Reference,
+                    IncludeSubdirectories = IncludeSubdirectories
+                },
+                (current, total) => StatusMessage = $"正在固定资源版本（{current}/{total}）…");
             if (_isClosed) return;
             Result = new PuloniaTaskCreationResult(task);
             StatusMessage = string.Empty;
@@ -711,7 +738,13 @@ public partial class PuloniaTaskCreationDialogViewModel : ViewModel
             var preview = await PuloniaTaskResourcePreviewLoader.LoadAsync(resource, taskType,
                 cancellationTokenSource.Token, _resourceCatalog.Repositories);
             if (generation != _previewGeneration)
+            {
+                // 已切换选择或关闭弹窗，这份预览不会显示，立即删除其预览目录。
+                preview.Dispose();
                 return;
+            }
+            ReleasePreview();
+            _currentPreview = preview;
             ResourcePreview = preview.Text;
             ReadmeFilePath = preview.MarkdownFilePath;
             foreach (var item in preview.JavaScriptSettingItems)
@@ -864,153 +897,4 @@ public partial class PuloniaTaskCreationDialogViewModel : ViewModel
             return path;
         return path.Replace('\\', '/').Trim('/');
     }
-
-    /// <summary>
-    /// 补充当前 Schema 子集尚不能表达的非空业务约束。
-    /// </summary>
-    private static void ValidateKnownRequiredValues(string taskType, JObject parameters)
-    {
-        if (taskType == "shell" && string.IsNullOrWhiteSpace(parameters.Value<string>("file_name")))
-            throw new FormatException("“程序或命令”不能为空。");
-        if (taskType == "csharp" && string.IsNullOrWhiteSpace(parameters.Value<string>("operation")))
-            throw new FormatException("“C# 操作名”不能为空。");
-    }
-
-    /// <summary>
-    /// 按单资源、目录引用或目录展开方式建立最终任务节点并固定资源版本。
-    /// </summary>
-    private async Task<PuloniaTask> BuildTaskAsync(string name, PuloniaTaskDefinition definition,
-        PuloniaTaskResourceDescriptor? resource, JObject overrides)
-    {
-        if (resource is null)
-        {
-            return new PuloniaTask
-            {
-                Name = name,
-                TaskType = definition.TaskType,
-                Parameters = overrides
-            };
-        }
-
-        // 提取选中版本成功后才建立节点，计划不会保存未完成缓存的资源引用。
-        if (resource.Resource is { } repositoryResource)
-            resource = resource.WithFullPath(await _resourceCatalog.Repositories.MaterializeAsync(repositoryResource, definition.TaskType));
-
-        if (!IsDirectoryImport)
-        {
-            var version = resource.IsDirectory
-                ? await ComputeDirectoryVersionAsync(resource.FullPath)
-                : await PuloniaTaskResourceFingerprint.ComputeFileVersionAsync(resource.FullPath);
-            return new PuloniaTask
-            {
-                Name = name,
-                TaskType = definition.TaskType,
-                Path = resource.Resource is null ? resource.RelativePath : null,
-                Resource = resource.Resource,
-                ResourceVersion = version,
-                Parameters = overrides
-            };
-        }
-
-        var mode = SelectedDirectoryImportMode?.Key ?? "reference";
-        var files = await _resourceCatalog.GetDirectoryFilesAsync(resource.FullPath, "*.json",
-            IncludeSubdirectories);
-        if (files.Count == 0)
-            throw new FormatException("选中的目录中没有可添加的 JSON 资源。");
-
-        if (mode == "reference")
-        {
-            var version = await PuloniaTaskResourceFingerprint.ComputeDirectoryVersionAsync(resource.FullPath, files);
-            var reference = new PuloniaTask
-            {
-                Name = name,
-                TaskType = "group",
-                Source = new PuloniaTaskSource
-                {
-                    Kind = "directory",
-                    Path = resource.Resource is null ? resource.FullPath : null,
-                    Resource = resource.Resource,
-                    TaskType = definition.TaskType,
-                    Recursive = IncludeSubdirectories,
-                    Version = version
-                }
-            };
-            AddGroupParameterOverride(reference, definition, overrides);
-            return reference;
-        }
-
-        var group = new PuloniaTask { Name = name, TaskType = "group" };
-        AddGroupParameterOverride(group, definition, overrides);
-        for (var index = 0; index < files.Count; index++)
-        {
-            var file = files[index];
-            StatusMessage = $"正在固定资源版本（{index + 1}/{files.Count}）…";
-            var leaf = new PuloniaTask
-            {
-                Name = Path.GetFileNameWithoutExtension(file),
-                TaskType = definition.TaskType,
-                Path = resource.Resource is null ? Path.GetRelativePath(definition.ResourceBaseDirectory!, file) : null,
-                Resource = resource.Resource?.WithPath(resource.Resource.RelativePath + "/" + Path.GetRelativePath(resource.FullPath, file).Replace('\\', '/')),
-                ResourceVersion = await PuloniaTaskResourceFingerprint.ComputeFileVersionAsync(file)
-            };
-            if (mode == "flat")
-            {
-                group.Children.Add(leaf);
-                continue;
-            }
-            AddStructuredLeaf(group, resource.FullPath, file, leaf);
-        }
-        return group;
-    }
-
-    /// <summary>
-    /// 只计算 JS 根目录 manifest.json 和 main.js，保持与运行准备和资源更新检查一致的范围。
-    /// </summary>
-    private Task<string> ComputeDirectoryVersionAsync(string directory)
-    {
-        return PuloniaTaskResourceFingerprint.ComputeJavaScriptVersionAsync(directory);
-    }
-
-    /// <summary>
-    /// 把创建表单中的显式设置作为分组公共参数应用到批量资源。
-    /// </summary>
-    private static void AddGroupParameterOverride(PuloniaTask group, PuloniaTaskDefinition definition,
-        JObject overrides)
-    {
-        if (overrides.Count == 0)
-            return;
-        group.ParameterOverrides.Add(new PuloniaTaskParameterOverride
-        {
-            TaskType = definition.TaskType,
-            SchemaVersion = definition.SchemaVersion,
-            Values = (JObject)overrides.DeepClone()
-        });
-    }
-
-    /// <summary>
-    /// 按选中目录的相对层级建立分组，并把叶子任务放入对应目录分组。
-    /// </summary>
-    private static void AddStructuredLeaf(PuloniaTask rootGroup, string selectedDirectory, string file,
-        PuloniaTask leaf)
-    {
-        var relativeDirectory = Path.GetDirectoryName(Path.GetRelativePath(selectedDirectory, file));
-        var parent = rootGroup;
-        if (!string.IsNullOrWhiteSpace(relativeDirectory) && relativeDirectory != ".")
-        {
-            foreach (var segment in relativeDirectory.Split(Path.DirectorySeparatorChar,
-                         StringSplitOptions.RemoveEmptyEntries))
-            {
-                var childGroup = parent.Children.FirstOrDefault(child => child.TaskType == "group"
-                                                                         && child.Name == segment);
-                if (childGroup is null)
-                {
-                    childGroup = new PuloniaTask { Name = segment, TaskType = "group" };
-                    parent.Children.Add(childGroup);
-                }
-                parent = childGroup;
-            }
-        }
-        parent.Children.Add(leaf);
-    }
-
 }

@@ -13,12 +13,16 @@ public partial class PuloniaTaskHistoryPage : UserControl
     /// </summary>
     public PuloniaTaskHistoryViewModel ViewModel { get; }
 
+    /// <summary>Separate evidence-only browser; no current run/resume binding is shared.</summary>
+    public PuloniaLegacyHistoryViewModel LegacyHistory { get; }
+
     /// <summary>
     /// 通过依赖注入建立页面，使用页面自身作为绑定根。
     /// </summary>
-    public PuloniaTaskHistoryPage(PuloniaTaskHistoryViewModel viewModel)
+    public PuloniaTaskHistoryPage(PuloniaTaskHistoryViewModel viewModel, PuloniaLegacyHistoryViewModel legacyHistory)
     {
         ViewModel = viewModel;
+        LegacyHistory = legacyHistory;
         DataContext = this;
         InitializeComponent();
     }

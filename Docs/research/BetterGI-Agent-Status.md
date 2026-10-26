@@ -1,6 +1,6 @@
 # BetterGI agent status
 
-Updated October 25, 2026, 22:31 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 26, 2026, 00:14 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
 
@@ -15,7 +15,7 @@ deferred; elapsed time alone does not resume them. Evidence is
 
 | Area | Latest verified state |
 |---|---|
-| Upstream integration | Four upstream commits through `39bb31b5` are merged and pushed in `982d24f7`. The final Debug build and the 1,890-case C# regression cohort passed. New Training Guide, music and collection UI/game behavior still needs live validation. |
+| Upstream integration | The default branch `refactor/20260930` is integrated through `86d2a413`, adding 30 commits beyond the previously merged refactor checkpoint. The final Debug build passed; selected CPU/offscreen cohorts passed 539 distinct UnitTest cases and 527 Agent cases across their recorded source trees. Application replacement and live feature validation remain deferred. |
 | Deployed application | Last verified at 17:45 UTC: R47 inside the existing minimized RDP session. Its 1,890 selected C# tests and Debug/Release validation passed before replacement; the same Genshin process was preserved. No new deployment or live check has occurred during the offline hold. |
 | Native navigation | Both saved R47 routes now pass the full audit: seed 3.82 seconds/37 observations and return 5.07 seconds/44 observations. The return's immediate predecessor link is accepted. This does not establish sustained gameplay. |
 | Reusable command | Bounded continuation and the reviewed schema3 envelope checker are in primary. Explicit v5 client support passed 279 Python tests. The separate H03 reader package and corrected return proof are accepted; future live continuation requires user readiness and fresh runtime checks. |
@@ -41,6 +41,36 @@ deferred; elapsed time alone does not resume them. Evidence is
 | GameScaling device-greedy decoding | The disabled candidate passed 19 fake decoder tests. Its two-owner comparison executor passed 16 guarded CPU tests, and a further complete producer-to-reader fixture passed. The prepared experiment compares four pairs on saved images with original full-action validation; CUDA equivalence, simultaneous memory fit and speed remain untested. |
 | Model optimization | Skipping unused final decoder work passed 1,733 correctness checks across two history41 evictions. A separate 40-pair experiment reduced median prediction time from 165.30 ms to 155.07 ms; paired actions/random states and final cache checks passed. |
 | Training | Not started. Model proposals and incomplete recordings are not expert action labels. |
+
+## Default-branch integration
+
+The upstream default branch adds shared resin settings and result handling,
+material collection targets, a unified combat-strategy browser, additional music
+formats, multi-instance task execution and cloud-web instance previews. The fork
+retains English UI, session-bound input, RDP controls and restart ownership checks.
+
+Compatibility preserves original plan and account evidence before conversion.
+Only an exactly empty legacy task state migrates automatically. Populated or
+unknown legacy state keeps scheduling blocked; its old records are available in
+a separate **Legacy records (read only)** tab with bounded previews and exact
+record lookup. This view cannot resume or schedule old work. Legacy resin
+policies that cannot retain their original meaning produce an explicit error.
+
+Validation covers 523 distinct core UnitTest cases and 527 Agent cases on the
+core merge, then 15 history view-model cases and one offscreen history layout
+case on the later UI revisions. The layout case uses the real theme at normal
+and narrow widths. These are scoped runs, not a claim that every test reran on
+the final source tree. The final Debug solution build passed. Evidence is
+`artifacts/research/2026-10-24/upstream-refactor-validation-final-01/validation-summary.json`
+(SHA256 `a607a96ae7d8cb0f56a1a55f675b3967e5ebcc9a23d3ecd2be77e6f62a6ff2df`).
+
+The initial parser test run exposed an indirect application-bootstrap dependency
+in preview logging. Pure parser defaults now use a null logger; gameplay callers
+supply their logger explicitly, and the affected tests pass. The aborted run,
+compiler correction and earlier layout-fixture failures remain recorded and are
+excluded from the passing totals. The live runtime has not been rechecked during
+the machine hold. This integration establishes no new model latency, instruction
+quality or sustained-gameplay result.
 
 ## Latency evidence
 

@@ -20,58 +20,9 @@ public sealed class PuloniaTaskHistoryTests : IDisposable
     /// <summary>
     /// 每个测试独占的临时目录，不使用程序真实 User/Pulonia。
     /// </summary>
-    private readonly string _directory = Path.Combine(Path.GetTempPath(), "bgi-pulonia-history-" + Guid.NewGuid().ToString("N"));
+    private readonly string _directory = Path.Combine(Path.GetTempPath(), "bgi-" + BetterGenshinImpact.Helpers.ShortId.Create(null, 8));
 
-    /// <summary>
-    /// 正常成功与部分成功都应归档确认事实，重复报告只保存一次，重建服务后仍可查看。
-    /// </summary>
-    [Theory]
-    [InlineData("sample.ledger.daily", PuloniaTaskRunStatus.Succeeded)]
-    [InlineData("sample.ledger.partial", PuloniaTaskRunStatus.Failed)]
-    public async Task ConfirmedEffects_SurviveRestartWithoutDuplicates(string operation, PuloniaTaskRunStatus expectedStatus)
-    {
-        using var store = new PuloniaTaskStore(_directory);
-        var plan = await store.SavePlanAsync(CreatePlan("确认事件", operation));
-        Guid requestId;
-        await using (var service = CreateService(store))
-        {
-            requestId = await service.EnqueueAsync(new PuloniaTaskRequest { PlanId = plan.Id });
-            var run = await service.WaitForCompletionAsync(requestId).WaitAsync(TimeSpan.FromSeconds(20));
-            Assert.Equal(expectedStatus, run.Status);
-            Assert.True(run.IsHistorical);
-            Assert.Single(run.ConfirmedEffects);
-            Assert.Single(await service.ListLedgerAsync());
-            var effect = run.ConfirmedEffects[0];
-            Assert.Equal(1, effect.Attempt);
-            Assert.Equal(run.NodeResults[0].TaskAddress, effect.TaskAddress);
-
-            // 查询返回对象的修改不能污染运行内部已落盘的确认事实。
-            effect.Entry.Evidence.Data["sample"] = false;
-            Assert.True((await service.GetRunAsync(requestId)).ConfirmedEffects[0].Entry.Evidence.Data.Value<bool>("sample"));
-        }
-        await using var restarted = CreateService(store);
-        var restored = await restarted.GetRunAsync(requestId);
-        Assert.Single(restored.ConfirmedEffects);
-        Assert.True(restored.ConfirmedEffects[0].Entry.Evidence.Data.Value<bool>("sample"));
-        var history = Assert.Single(await store.ListHistoryAsync());
-        Assert.Single(history.ConfirmedEffects);
-        var path = Path.Combine(_directory, "history", plan.Id, history.RunId.ToString("N") + ".json");
-        var bytes = await File.ReadAllBytesAsync(path);
-        Assert.False(bytes.Take(3).SequenceEqual(new byte[] { 0xEF, 0xBB, 0xBF }));
-        var node = new PuloniaTaskRunItemViewModel(restored).NodeDetails[0];
-        Assert.Contains(node.EvidenceFields, field => field.Label.StartsWith("已确认副作用"));
-    }
-
-    /// <summary>
-    /// 旧格式缺少新确认事件集合时应兼容，不能补造确认事实。
-    /// </summary>
-    [Fact]
-    public void OldHistory_WithoutConfirmedEffectsStillLoads()
-    {
-        var json = JObject.Parse(PuloniaTaskJson.WriteRunRecord(CreateRecord()));
-        json.Remove("confirmed_effects");
-        Assert.Empty(PuloniaTaskJson.ReadRunRecord(json.ToString()).ConfirmedEffects);
-    }
+    // 确认事实的归档与重启回归随通用额度框架移除，改由 PuloniaCollectionCooldownTests 以文件级 CD 覆盖。
 
     /// <summary>
     /// 重新打开存储后，类型专属返回值、多行中文日志与结构化证据仍完整保留。
@@ -155,15 +106,15 @@ public sealed class PuloniaTaskHistoryTests : IDisposable
     }
 
     /// <summary>
-    /// 独立任务的原因码单独成行，奖励汇总逐行显示为“名称 ×数量”，items 不再作为原始 JSON 重复展示。
+    /// 独立任务的原因码单独成行，奖励汇总从 rewards.items 显示为“名称 ×数量”，不重复展示原始 JSON。
     /// </summary>
     [Fact]
     public void SoloTaskResult_ShowsReasonCodeAndRewardItems()
     {
         var data = new JObject
         {
-            ["items"] = new JArray(new JObject { ["name"] = "原粹树脂", ["count"] = 2 },
-                new JObject { ["name"] = "摩拉", ["count"] = 60000 })
+            ["rewards"] = new JObject { ["items"] = new JArray(new JObject { ["name"] = "原粹树脂", ["count"] = 2 },
+                new JObject { ["name"] = "摩拉", ["count"] = 60000 }) }
         };
         var node = new PuloniaTaskNodeResultViewModel(new PuloniaTaskNodeResult("plan/node", "节点", "solo.auto_domain", 1,
             PuloniaTaskNodeStatus.Failed, "结果消息", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, data,
@@ -172,6 +123,7 @@ public sealed class PuloniaTaskHistoryTests : IDisposable
         Assert.Equal("strategy_not_found", node.ResultFields.Single(field => field.Label == "原因码").Value);
         Assert.Equal("原粹树脂 ×2\n摩拉 ×60000", node.ResultFields.Single(field => field.Label == "奖励").Value);
         Assert.DoesNotContain(node.ResultFields, field => field.Label == "items");
+        Assert.DoesNotContain(node.ResultFields, field => field.Label == "rewards");
     }
 
     /// <summary>
@@ -180,7 +132,7 @@ public sealed class PuloniaTaskHistoryTests : IDisposable
     [Fact]
     public void SoloTaskResult_WithoutReasonCodeAndEmptyRewards()
     {
-        var node = CreateNode("solo.auto_boss", new JObject { ["items"] = new JArray() });
+        var node = CreateNode("solo.auto_boss", new JObject { ["rewards"] = new JObject { ["items"] = new JArray() } });
 
         Assert.DoesNotContain(node.ResultFields, field => field.Label == "原因码");
         Assert.Equal("没有识别到奖励。", node.ResultFields.Single(field => field.Label == "奖励").Value);
@@ -233,7 +185,7 @@ public sealed class PuloniaTaskHistoryTests : IDisposable
         Assert.False(model.HasSelectedRun);
 
         await model.RevealRunAsync(requestId);
-        Assert.Equal(requestId, model.SelectedRun!.RequestId);
+        Assert.Equal(requestId, model.SelectedRun!.RunId);
         Assert.NotNull(model.SelectedRunNodeResult);
     }
 
@@ -276,7 +228,7 @@ public sealed class PuloniaTaskHistoryTests : IDisposable
 
         // 明确查看某次运行时仍恢复选择，历史及节点详情不受未选中状态影响。
         await model.RevealRunAsync(oldId);
-        Assert.Equal(oldId, model.SelectedRun!.RequestId);
+        Assert.Equal(oldId, model.SelectedRun!.RunId);
         Assert.NotNull(model.SelectedRunNodeResult);
         Assert.Equal(PuloniaTaskRunStatus.Succeeded, (await service.GetRunAsync(oldId)).Status);
         Assert.Equal(3, (await store.ListHistoryAsync()).Count);
@@ -298,9 +250,9 @@ public sealed class PuloniaTaskHistoryTests : IDisposable
         await service.WaitForCompletionAsync(secondId).WaitAsync(TimeSpan.FromSeconds(20));
         var model = new PuloniaTaskHistoryViewModel(service, store);
         await model.RevealRunAsync(firstId);
-        Assert.Equal(firstId, model.SelectedRun!.RequestId);
+        Assert.Equal(firstId, model.SelectedRun!.RunId);
 
-        await model.RefreshAsync(Guid.NewGuid());
+        await model.RefreshAsync("run_missing");
         Assert.Null(model.SelectedRun);
         Assert.Null(model.SelectedRunNodeResult);
     }
@@ -336,7 +288,7 @@ public sealed class PuloniaTaskHistoryTests : IDisposable
         plan = await store.SavePlanAsync(plan);
         var clipboard = new PuloniaTaskClipboardService();
         var document = new PuloniaTaskPlanDocumentViewModel(plan, [], clipboard, isNew: false);
-        var page = new PuloniaTaskPlanViewModel(store, clipboard, service, new PuloniaTaskResourceCatalog(), history)
+        var page = new PuloniaTaskPlanViewModel(new PuloniaPlanEditingSession(store, clipboard, service, new PuloniaTaskResourceCatalog()), history)
         {
             SelectedDocument = document,
             SelectedPlanTabIndex = tabIndex
@@ -350,7 +302,7 @@ public sealed class PuloniaTaskHistoryTests : IDisposable
         Assert.True(page.RunPlanCommand.CanExecute(null));
 
         await page.RunPlanCommand.ExecuteAsync(null);
-        var newId = history.SelectedRun!.RequestId;
+        var newId = history.SelectedRun!.RunId;
         Assert.NotEqual(oldId, newId);
         var newRun = await service.WaitForCompletionAsync(newId).WaitAsync(TimeSpan.FromSeconds(20));
         Assert.Equal(PuloniaTaskRunStatus.Succeeded, newRun.Status);
@@ -380,13 +332,13 @@ public sealed class PuloniaTaskHistoryTests : IDisposable
         var selectedDocument = new PuloniaTaskPlanDocumentViewModel(selected, [], clipboard, isNew: false);
         var cardDocument = new PuloniaTaskPlanDocumentViewModel(card, [], clipboard, isNew: false);
         var history = new PuloniaTaskHistoryViewModel(service, store);
-        var page = new PuloniaTaskPlanViewModel(store, clipboard, service, new PuloniaTaskResourceCatalog(), history)
+        var page = new PuloniaTaskPlanViewModel(new PuloniaPlanEditingSession(store, clipboard, service, new PuloniaTaskResourceCatalog()), history)
         { SelectedDocument = selectedDocument, SelectedPlanTabIndex = 1 };
         page.Documents.Add(selectedDocument);
         page.Documents.Add(cardDocument);
         Assert.True(page.RunPlanCommand.CanExecute(cardDocument));
         await page.RunPlanCommand.ExecuteAsync(cardDocument);
-        var run = await service.WaitForCompletionAsync(history.SelectedRun!.RequestId).WaitAsync(TimeSpan.FromSeconds(20));
+        var run = await service.WaitForCompletionAsync(history.SelectedRun!.RunId).WaitAsync(TimeSpan.FromSeconds(20));
         Assert.Equal(card.Id, run.PlanId);
         Assert.Equal(37, Assert.Single(run.NodeResults).Data.Value<int>("sum"));
         Assert.Null(run.ResumedFromRunId);
@@ -436,7 +388,7 @@ public sealed class PuloniaTaskHistoryTests : IDisposable
         });
         var plan = await store.SavePlanAsync(CreatePlan("停止游戏运行环境", "test.runtime_wait"));
         var nextPlan = await store.SavePlanAsync(CreatePlan("清理后运行", "test.after_cleanup"));
-        Guid requestId;
+        string requestId;
         await using (var service = CreateService(store, registry, stopService))
         {
             try
@@ -476,12 +428,12 @@ public sealed class PuloniaTaskHistoryTests : IDisposable
                 Assert.Empty(savedState.PendingArchives);
 
                 await model.RefreshAsync();
-                Assert.Equal(requestId, model.SelectedRun!.RequestId);
+                Assert.Equal(requestId, model.SelectedRun!.RunId);
                 Assert.Equal("已停止", model.SelectedRun.StatusText);
                 Assert.True(model.SelectedRun.IsHistorical);
                 Assert.False(model.SelectedRun.CanCancel);
                 Assert.Equal(PuloniaTaskRunStatus.Cancelled,
-                    (await store.ListHistoryAsync()).Single(item => item.RequestId == requestId).Status);
+                    (await store.ListHistoryAsync()).Single(item => item.RunId == requestId).Status);
             }
             finally
             {
@@ -543,7 +495,7 @@ public sealed class PuloniaTaskHistoryTests : IDisposable
         });
         var plan = await store.SavePlanAsync(CreatePlan("快捷键停止 JS 路线", "test.js_route"));
         var nextPlan = await store.SavePlanAsync(CreatePlan("JS 清理后运行", "test.js_after"));
-        Guid requestId;
+        string requestId;
         await using (var service = CreateService(store, registry, stopService))
         {
             try
@@ -570,7 +522,7 @@ public sealed class PuloniaTaskHistoryTests : IDisposable
                 Assert.Equal("已停止", model.SelectedRun!.StatusText);
                 Assert.False(model.SelectedRun.CanCancel);
                 Assert.Equal(PuloniaTaskRunStatus.Cancelled,
-                    (await store.ListHistoryAsync()).Single(item => item.RequestId == requestId).Status);
+                    (await store.ListHistoryAsync()).Single(item => item.RunId == requestId).Status);
             }
             finally
             {
@@ -602,7 +554,7 @@ public sealed class PuloniaTaskHistoryTests : IDisposable
         new PuloniaGameTaskCoordinator(null!), stopService ?? new TaskStopService(NullLogger<TaskStopService>.Instance));
 
     /// <summary>
-    /// 建立受控计算或账本计划。
+    /// 建立受控计算计划。
     /// </summary>
     private static PuloniaTaskPlan CreatePlan(string name, string operation) => new()
     {
@@ -613,7 +565,7 @@ public sealed class PuloniaTaskHistoryTests : IDisposable
             [new PuloniaTask
             {
                 Name = "测试节点", TaskType = "csharp",
-                Parameters = new JObject { ["operation"] = operation, ["values"] = new JArray(1, 2, 3), ["report_twice"] = true }
+                Parameters = new JObject { ["operation"] = operation, ["values"] = new JArray(1, 2, 3) }
             }]
         }
     };
@@ -623,7 +575,7 @@ public sealed class PuloniaTaskHistoryTests : IDisposable
     /// </summary>
     private static PuloniaTaskRunRecord CreateRecord() => new()
     {
-        RequestId = Guid.NewGuid(), RunId = Guid.NewGuid(), Request = new PuloniaTaskRequest { PlanId = "history-test" },
+        RunId = PuloniaId.NewRunId(DateTimeOffset.Now), Request = new PuloniaTaskRequest { PlanId = "history-test" },
         PlanName = "历史样本", SnapshotJson = "{}", Status = PuloniaTaskRunStatus.Succeeded,
         Message = "测试结束", SubmittedAt = DateTimeOffset.UtcNow
     };

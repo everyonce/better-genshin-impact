@@ -1,3 +1,4 @@
+using BetterGenshinImpact.GameTask.Common.Resin;
 using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Script.Dependence.Model;
 using BetterGenshinImpact.GameTask;
@@ -407,8 +408,10 @@ public class Dispatcher
   
         using var linkedCts = CreateLinkedCancellationTokenSource(customCt);
         CancellationToken cancellationToken = linkedCts?.Token ?? _ct;
-        var factory = GameTask.AutoFight.Factory.CombatTaskFactoryProvider.GetFactory(param.CombatStrategyPath);
-        LogIfFailed(await factory.CreateTask(_runtime, _allConfig).RunAsync(param, cancellationToken));
+        var result = await new AutoFightEntryTask(_runtime, _allConfig).RunAsync(param, cancellationToken);
+        if (result.ReasonCode == SoloTaskReasons.StrategyNotFound)
+            throw new System.IO.FileNotFoundException(result.Message, param.CombatStrategyPath);
+        LogIfFailed(result);
     }
     
     /// <summary>
@@ -430,7 +433,7 @@ public class Dispatcher
         CancellationToken cancellationToken = linkedCts?.Token ?? _ct;
 
         // 1. 解析策略字符串（ParseContext 已处理全角符号、注释、分号/逗号分隔）
-        var combatScript = CombatScriptParser.ParseContext(script, validate: false, defaultAvatarName: avatarName);
+        var combatScript = CombatScriptParser.ParseContext(script, _logger, validate: false, defaultAvatarName: avatarName);
         if (combatScript.CombatCommands.Count == 0) return;
 
         _logger.LogInformation("Executing {Text}", "Simple strategy script");
@@ -514,10 +517,10 @@ public class Dispatcher
     /// </summary>
     /// <param name="result">秘境或首领任务的结果。</param>
     /// <returns>名称到数量的字典。</returns>
-    private Dictionary<string, int> ToRewardDictionary(SoloTaskResult<RewardSummary> result)
+    private Dictionary<string, int> ToRewardDictionary(SoloTaskResult<ResinClaimData> result)
     {
         LogIfFailed(result);
-        return result.Data?.ToDictionary() ?? [];
+        return result.Data?.Rewards.ToDictionary() ?? [];
     }
 
     /// <summary>

@@ -1,6 +1,9 @@
+using BetterGenshinImpact.GameTask.Common.Resin;
 using CommunityToolkit.Mvvm.ComponentModel;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using BetterGenshinImpact.GameTask.Common.Reward;
 using BetterGenshinImpact.GameTask.AutoDomain.TrainingGuide;
 
 namespace BetterGenshinImpact.GameTask.AutoDomain;
@@ -8,6 +11,10 @@ namespace BetterGenshinImpact.GameTask.AutoDomain;
 [Serializable]
 public partial class AutoDomainConfig : ObservableObject
 {
+    /// <summary>统一树脂设置；为空时在读取配置后由旧字段迁移。</summary>
+    [ObservableProperty]
+    private ResinUsage? _resinUsage;
+
     /// <summary>
     /// 战斗结束后延迟几秒再开始寻找石化古树，秒
     /// </summary>
@@ -55,10 +62,12 @@ public partial class AutoDomainConfig : ObservableObject
     private string _sundaySelectedValue = string.Empty;
     
     // 指定树脂的使用次数
+    /// <summary>仅用于迁移旧树脂设置；界面与执行层使用 ResinUsage。</summary>
     [ObservableProperty]
     private bool _specifyResinUse = false;
     
     // 自定义使用树脂优先级
+    /// <summary>仅用于迁移旧树脂设置；界面与执行层使用 ResinUsage。</summary>
     [ObservableProperty]
     private List<string> _resinPriorityList =
     [
@@ -67,25 +76,31 @@ public partial class AutoDomainConfig : ObservableObject
     ];
     
     // 使用原粹树脂刷取副本次数
+    /// <summary>仅用于迁移旧树脂设置；界面与执行层使用 ResinUsage。</summary>
     [ObservableProperty]
     private int _originalResinUseCount = 0;
     // 使用原粹树脂(20)刷取副本次数
+    /// <summary>仅用于迁移旧树脂设置；界面与执行层使用 ResinUsage。</summary>
     [ObservableProperty]
     private int _originalResin20UseCount = 0;
 
     // 使用原粹树脂(40)刷取副本次数
+    /// <summary>仅用于迁移旧树脂设置；界面与执行层使用 ResinUsage。</summary>
     [ObservableProperty]
     private int _originalResin40UseCount = 0;
     
     //使用浓缩树脂刷取副本次数
+    /// <summary>仅用于迁移旧树脂设置；界面与执行层使用 ResinUsage。</summary>
     [ObservableProperty]
     private int _condensedResinUseCount = 0;
 
     // 使用须臾树脂刷取副本次数
+    /// <summary>仅用于迁移旧树脂设置；界面与执行层使用 ResinUsage。</summary>
     [ObservableProperty]
     private int _transientResinUseCount = 0;
     
     // 使用脆弱树脂刷取副本次数
+    /// <summary>仅用于迁移旧树脂设置；界面与执行层使用 ResinUsage。</summary>
     [ObservableProperty]
     private int _fragileResinUseCount = 0;
 
@@ -99,6 +114,12 @@ public partial class AutoDomainConfig : ObservableObject
     /// </summary>
     [ObservableProperty]
     private bool _rewardRecognitionEnabled = false;
+
+    /// <summary>
+    /// 材料目标列表：按物品名与数量提前停止。
+    /// </summary>
+    [ObservableProperty]
+    private ObservableCollection<TargetItem> _targetItems = [];
 
     /// <summary>
     /// 是否根据提升指南中的培养计划自动计算今日刷取次数。
@@ -163,4 +184,20 @@ public partial class AutoDomainConfig : ObservableObject
     [ObservableProperty]
     private string _trainingGuideFallbackSundaySelectedValue = string.Empty;
 
+    /// <summary>仅在尚无统一设置时，从旧字段迁移一次；已有新设置始终优先。</summary>
+    public void MigrateLegacyResinUsage()
+    {
+        if (ResinUsage is not null) return;
+        ResinUsage = ResinUsageLegacyMapper.FromDomain(SpecifyResinUse, OriginalResinUseCount, CondensedResinUseCount,
+            TransientResinUseCount, FragileResinUseCount, OriginalResin20UseCount, OriginalResin40UseCount, out var warning);
+        if (warning is not null) Serilog.Log.Warning("{Warning}", warning);
+    }
+
+    /// <summary>确保完成旧字段迁移并返回配置持有的设置；参数类读取后必须 Clone。</summary>
+    /// <returns>配置持有的非空树脂设置。</returns>
+    public ResinUsage EnsureResinUsage()
+    {
+        MigrateLegacyResinUsage();
+        return ResinUsage!;
+    }
 }

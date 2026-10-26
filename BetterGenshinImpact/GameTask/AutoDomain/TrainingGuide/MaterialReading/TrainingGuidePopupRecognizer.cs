@@ -7,13 +7,16 @@ using BetterGenshinImpact.Core.Recognition;
 using BetterGenshinImpact.GameTask.Common;
 using BetterGenshinImpact.GameTask.Runtime;
 using BetterGenshinImpact.GameTask.Model.Area;
+using BetterGenshinImpact.GameTask.Runtime;
 using Microsoft.Extensions.Logging;
 using OpenCvSharp;
-using static BetterGenshinImpact.GameTask.Common.TaskControl;
 
 namespace BetterGenshinImpact.GameTask.AutoDomain.TrainingGuide;
 
 /// <summary>浮窗局部 OCR。每种预处理方式连续读两帧，关键数字一致才接受。</summary>
+/// <param name="runtime">本次运行使用的运行环境，截图与等待都只使用它。</param>
+/// <param name="logger">任务日志。</param>
+/// <param name="ct">取消令牌。</param>
 public sealed class TrainingGuidePopupRecognizer(GameRuntime runtime, ILogger logger, CancellationToken ct)
 {
     public async Task<TrainingGuideMaterialReading?> ReadStable(TrainingGuideMaterial expectedMaterial,

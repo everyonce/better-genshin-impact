@@ -17,7 +17,7 @@ namespace BetterGenshinImpact.ViewModel.Pages;
 /// <summary>
 /// 全局执行记录和计划内历史共用的视图模型，维护记录列表、详情选择与安全续跑。
 /// </summary>
-public partial class PuloniaTaskHistoryViewModel : ViewModel
+public partial class PuloniaTaskHistoryViewModel : ViewModel, IDisposable
 {
     /// <summary>
     /// 历史、队列、当前状态与续跑的统一服务。
@@ -40,14 +40,9 @@ public partial class PuloniaTaskHistoryViewModel : ViewModel
     private readonly SemaphoreSlim _runRefreshGate = new(1, 1);
 
     /// <summary>
-    /// 合并后台事件刷新，避免短时间多次上报堆积 UI 工作。
+    /// 合并后台事件刷新，避免短时间多次上报堆积 UI 工作；读取期间又收到新事件时再取一次最新状态，不漏掉最终归档通知。
     /// </summary>
-    private bool _eventRefreshPending;
-
-    /// <summary>
-    /// 当前读取期间又收到新事件时，再取一次最新状态，不能漏掉最终归档通知。
-    /// </summary>
-    private bool _eventRefreshAgain;
+    private readonly PuloniaCoalescedRefresh _eventRefresh;
 
     /// <summary>
     /// 本地保存目录，供用户定位历史文件；不会自动上传。
@@ -136,15 +131,23 @@ public partial class PuloniaTaskHistoryViewModel : ViewModel
         && SelectedRunNodeResult.Result.TaskType != "genshin.account.prepare";
 
     /// <summary>
-    /// 注入统一运行服务；只订阅一次，页面与嵌入组件共享此单例。
+    /// 注入统一运行服务。全局记录页与任务计划页共享注入的单例；一条龙记录窗口另建实例，
+    /// 固定自己的计划范围，关闭时调用 <see cref="Dispose"/> 解除订阅，不改写单例的过滤状态。
     /// </summary>
     public PuloniaTaskHistoryViewModel(IPuloniaTaskService taskService, PuloniaTaskStore store)
     {
         _taskService = taskService;
         StorageDirectory = store.RootDirectory;
         _typeNames = taskService.Definitions.ToDictionary(item => item.TaskType, item => item.DisplayName);
+        // 给一批节点/确认事件一个合并窗口，不阻塞 UI 线程。
+        _eventRefresh = new PuloniaCoalescedRefresh(() => RefreshAsync(), TimeSpan.FromMilliseconds(100));
         _taskService.RunChanged += OnRunChanged;
     }
+
+    /// <summary>
+    /// 解除运行事件订阅；只用于窗口专属的实例，共享单例随程序存在。
+    /// </summary>
+    public void Dispose() => _taskService.RunChanged -= OnRunChanged;
 
     /// <summary>
     /// 全局记录页面不依赖现存计划文档，即使计划已删除仍可查看其历史。
@@ -173,8 +176,8 @@ public partial class PuloniaTaskHistoryViewModel : ViewModel
         try
         {
             StatusMessage = "正在取消运行，并等待当前执行器释放资源……";
-            await _taskService.CancelAsync(selected.RequestId);
-            await RefreshAsync(selected.RequestId);
+            await _taskService.CancelAsync(selected.RunId);
+            await RefreshAsync(selected.RunId);
             StatusMessage = "取消请求已处理；请以运行详情中的最终状态及核验提示为准。";
         }
         catch (Exception ex)
@@ -194,9 +197,9 @@ public partial class PuloniaTaskHistoryViewModel : ViewModel
             return;
         try
         {
-            var requestId = await _taskService.ResumeAsync(selected.Run.RunId);
-            await RevealRunAsync(requestId);
-            StatusMessage = $"已沿用历史运行 {selected.Run.RunId:D} 的固定快照继续未完成节点。";
+            var runId = await _taskService.ResumeAsync(selected.Run.RunId);
+            await RevealRunAsync(runId);
+            StatusMessage = "已按这次运行当时的配置继续未完成的任务。";
         }
         catch (Exception ex)
         {
@@ -214,27 +217,22 @@ public partial class PuloniaTaskHistoryViewModel : ViewModel
         var node = SelectedRunNodeResult;
         if (selected is null || node is null)
             return;
-        var allowUncertainReplay = selected.Run.HasUncertainOperation
-                                   || selected.Run.Status == PuloniaTaskRunStatus.NeedsAttention
-                                   || selected.Run.NodeResults
-                                       .GroupBy(item => item.TaskAddress, StringComparer.Ordinal)
-                                       .Select(group => group.Last())
-                                       .Any(item => item.OutcomeKind is PuloniaTaskOutcomeKind.ExecutedUnverified
-                                           or PuloniaTaskOutcomeKind.PartiallySucceeded
-                                           or PuloniaTaskOutcomeKind.NeedsAttention);
+        // 待处理运行或任一节点最后一次结果不确定时，需要用户明确承担重放选择。
+        var allowUncertainReplay = PuloniaTaskRunClassifier.RequiresReplayConfirmation(selected.Run.Status,
+            selected.Run.NodeResults);
         // 显式起点会重放其后的节点，已确认成功也可能重复，普通历史同样需要确认。
         var result = await ThemedMessageBox.ShowAsync(
             $"将从“{node.TaskName}”开始建立新运行，起点及之后的节点可能重复执行。"
-            + (allowUncertainReplay ? "\n此历史包含未核验操作，请先核对游戏状态；确认后会释放未决占用。" : "")
+            + (allowUncertainReplay ? "\n此历史包含未核验结果，请先核对游戏状态。" : "")
             + "\n是否确认？", "确认从节点开始", MessageBoxButton.YesNo,
             ThemedMessageBox.MessageBoxIcon.Warning, MessageBoxResult.No);
         if (result != MessageBoxResult.Yes)
             return;
         try
         {
-            var requestId = await _taskService.ResumeAsync(selected.Run.RunId, node.TaskAddress, allowUncertainReplay);
-            await RevealRunAsync(requestId);
-            StatusMessage = $"已沿用原快照，从节点 {node.TaskAddress} 开始关联运行。";
+            var runId = await _taskService.ResumeAsync(selected.Run.RunId, node.TaskAddress, allowUncertainReplay);
+            await RevealRunAsync(runId);
+            StatusMessage = $"已按这次运行当时的配置，从“{node.TaskName}”开始重新运行。";
         }
         catch (Exception ex)
         {
@@ -249,17 +247,17 @@ public partial class PuloniaTaskHistoryViewModel : ViewModel
     private Task RefreshRunsAsync() => RefreshAsync();
 
     /// <summary>
-    /// 用户主动提交或续跑时显示新请求，立即定位到该运行的最新状态。
+    /// 用户主动提交或续跑时显示新运行，立即定位到该运行的最新状态。
     /// </summary>
-    public async Task RevealRunAsync(Guid requestId)
+    public async Task RevealRunAsync(string runId)
     {
-        await RefreshAsync(requestId);
+        await RefreshAsync(runId);
     }
 
     /// <summary>
-    /// 刷新运行列表并优先选中指定请求，后台事件不抢占用户正在查看的记录。
+    /// 刷新运行列表并优先选中指定运行，后台事件不抢占用户正在查看的记录。
     /// </summary>
-    public async Task RefreshAsync(Guid? preferredRequestId = null)
+    public async Task RefreshAsync(string? preferredRunId = null)
     {
         await _runRefreshGate.WaitAsync();
         IsRefreshing = true;
@@ -276,7 +274,7 @@ public partial class PuloniaTaskHistoryViewModel : ViewModel
             LedgerEntries.Clear();
             foreach (var entry in ledger.OrderByDescending(item => item.OccurredAt))
                 LedgerEntries.Add(new PuloniaTaskLedgerItemViewModel(entry));
-            ApplyPlanFilter(preferredRequestId);
+            ApplyPlanFilter(preferredRunId);
             StatusMessage = _taskService.RecoveryNotice ?? "记录已更新；所有时间按本地时区显示。";
         }
         catch (Exception ex)
@@ -293,40 +291,14 @@ public partial class PuloniaTaskHistoryViewModel : ViewModel
     /// <summary>
     /// 服务状态变化时把刷新安排到 WPF UI 线程。
     /// </summary>
-    private void OnRunChanged(object? sender, PuloniaTaskRunChangedEventArgs e)
-    {
-        var dispatcher = Application.Current?.Dispatcher;
-        if (dispatcher is null || dispatcher.HasShutdownStarted)
-            return;
-        _ = dispatcher.InvokeAsync(async () =>
-        {
-            _eventRefreshAgain = true;
-            if (_eventRefreshPending)
-                return;
-            _eventRefreshPending = true;
-            try
-            {
-                while (_eventRefreshAgain)
-                {
-                    // 给一批节点/确认事件一个合并窗口，不阻塞 UI 线程。
-                    await Task.Delay(100);
-                    _eventRefreshAgain = false;
-                    await RefreshAsync();
-                }
-            }
-            finally
-            {
-                _eventRefreshPending = false;
-            }
-        });
-    }
+    private void OnRunChanged(object? sender, PuloniaTaskRunChangedEventArgs e) => _eventRefresh.Request();
 
     /// <summary>
-    /// 在 UI 线程按计划范围同步列表，并按请求、节点地址、尝试次数恢复选择。
+    /// 在 UI 线程按计划范围同步列表，并按运行、节点地址、尝试次数恢复选择。
     /// </summary>
-    private void ApplyPlanFilter(Guid? preferredRequestId = null)
+    private void ApplyPlanFilter(string? preferredRunId = null)
     {
-        var selectedRequestId = preferredRequestId ?? SelectedRun?.RequestId;
+        var selectedRunId = preferredRunId ?? SelectedRun?.RunId;
         var selectedAddress = SelectedRunNodeResult?.TaskAddress;
         var selectedAttempt = SelectedRunNodeResult?.Attempt;
         var filtered = _allRuns.Where(item => PlanFilterId is null || item.Run.PlanId == PlanFilterId).ToArray();
@@ -345,10 +317,10 @@ public partial class PuloniaTaskHistoryViewModel : ViewModel
             Runs.RemoveAt(Runs.Count - 1);
         // 未选中也是有效状态；后台刷新和计划切换不得强制选回第一条历史。
         // 只有显式提交/续跑指定请求，或保留用户正在查看的请求时才恢复选择。
-        SelectedRun = selectedRequestId is { } requestId
-            ? Runs.FirstOrDefault(item => item.RequestId == requestId)
+        SelectedRun = selectedRunId is { } runId
+            ? Runs.FirstOrDefault(item => item.RunId == runId)
             : null;
-        if (SelectedRun is { } current && current.RequestId == selectedRequestId)
+        if (SelectedRun is { } current && current.RunId == selectedRunId)
             SelectedRunNodeResult = current.NodeDetails.FirstOrDefault(item =>
                 item.TaskAddress == selectedAddress && item.Attempt == selectedAttempt) ?? SelectedRunNodeResult;
         OnPropertyChanged(nameof(CountText));

@@ -4,6 +4,7 @@ using OpenCvSharp;
 using System;
 using BetterGenshinImpact.GameTask;
 using BetterGenshinImpact.GameTask.AutoSkip;
+using BetterGenshinImpact.GameTask.Runtime;
 
 namespace BetterGenshinImpact.Service;
 
@@ -17,7 +18,7 @@ public static class PictureInPictureService
     public static void Update(Mat frame)
     {
         var generation = DesktopCaptureOverlayScope.Generation;
-        if (_manualClosed || DesktopCaptureOverlayScope.IsSuppressed)
+        if (_manualClosed || DesktopCaptureOverlayScope.IsSuppressed || !IsWindowAllowed())
         {
             return;
         }
@@ -31,7 +32,7 @@ public static class PictureInPictureService
         UIDispatcherHelper.BeginInvoke(() =>
         {
             // A queued frame must not reopen PiP during or after a desktop capture lifetime.
-            if (DesktopCaptureOverlayScope.IsSuppressed || generation != DesktopCaptureOverlayScope.Generation)
+            if (DesktopCaptureOverlayScope.IsSuppressed || generation != DesktopCaptureOverlayScope.Generation || !IsWindowAllowed())
             {
                 copy?.Dispose();
                 return;
@@ -84,7 +85,7 @@ public static class PictureInPictureService
 
     private static void EnsureWindow()
     {
-        if (_window != null)
+        if (_window != null || !IsWindowAllowed())
         {
             return;
         }
@@ -98,5 +99,13 @@ public static class PictureInPictureService
         {
             _window = null;
         };
+    }
+
+    /// <summary>
+    /// 云原神 WebView2 子实例只在主界面 Banner 内显示预览，禁止创建独立画中画窗口。
+    /// </summary>
+    private static bool IsWindowAllowed()
+    {
+        return App.GetService<GameRuntimeService>()?.Kind != GameRuntimeKind.WebPage;
     }
 }

@@ -154,6 +154,11 @@ Reward signals should be explicit and traceable: a verified interaction, reached
 
 ## Dataset and training plan
 
+October 26 update: the [public P2P metadata check](BetterGI-Agent-Status.md#public-training-data-check)
+found no Genshin labels in 108,851 recording entries. This does not establish
+the checkpoint's complete training history. No video archives were downloaded;
+collecting aligned local demonstrations remains the next data milestone.
+
 Record both human play and selected successful BetterGI routines. Scripted runs are inexpensive experts for narrow skills; human demonstrations supply interpretation, unusual movement, puzzle behavior, and recovery. Include unsuccessful episodes and label their outcomes rather than silently treating all automated actions as correct.
 
 Each episode needs:

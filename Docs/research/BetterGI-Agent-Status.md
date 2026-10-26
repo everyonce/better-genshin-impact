@@ -1,6 +1,6 @@
 # BetterGI agent status
 
-Updated October 26, 2026, 02:51 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 26, 2026, 03:01 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
 
@@ -46,7 +46,7 @@ deferred; elapsed time alone does not resume them. Evidence is
 | Checkpoint qualification entry | The complete single-load P/Q composition passed 104 guarded CPU cases, including the earlier scope and entry cases. Its real producer and reader validated 17 containers, 197 arrays and 120 checks using fake numerical operands. The assembled worker also passed all 30 guarded wrapper cases, including retained-state admission and failure cleanup. Actual model loading, numerical equivalence and controller timing remain unqualified. |
 | GameScaling device-greedy decoding | The disabled candidate passed 19 fake decoder tests. Its two-owner comparison executor passed 16 guarded CPU tests, and a further complete producer-to-reader fixture passed. The prepared experiment compares four pairs on saved images with original full-action validation; CUDA equivalence, simultaneous memory fit and speed remain untested. |
 | Model optimization | Skipping unused final decoder work passed 1,733 correctness checks across two history41 evictions. A separate 40-pair experiment reduced median prediction time from 165.30 ms to 155.07 ms; paired actions/random states and final cache checks passed. |
-| Training | Not started. Model proposals and incomplete recordings are not expert action labels. |
+| Training | Not started. The pinned public P2P metadata has no Genshin labels; local demonstrations remain needed. The current recorder captures automated receipts, not human input. Model proposals and incomplete recordings are not expert action labels. |
 
 ## Fresh saved-image model runs
 
@@ -361,6 +361,28 @@ Evidence:
   (16,650 bytes, SHA256 `5a012d6ce498960a79754aad161281661be6a4ceee5a8a66dea8b9ca772db3f9`).
 - Continuous native walking history: `artifacts/research/2026-10-24/offline-p2p-native-history-walk-closure-01.json`
   (3,696 bytes, SHA256 `3a0806751b7b0b2ab1142cb245991df1cca25ff068512a212cdb56d8b02989bd`); 178 unique source/input pins verified.
+
+## Public training data check
+
+On October 26, the official P2P metadata index at revision
+`1553d6b8190d270dcd256528ffa2066098225dba` contained 108,851 distinct recording
+paths. A case-insensitive search of both `env_name` and the actual
+`env_sub_type` column found no `genshin`, `yuanshen`, or `原神` labels.
+This establishes only this index's labels, not a checkpoint's training history
+or the absence of mislabeled gameplay. [Pinned upstream metadata](https://huggingface.co/datasets/elefantai/p2p-full-data/blob/1553d6b8190d270dcd256528ffa2066098225dba/data_metadata.parquet)
+
+Only the 6,049,853-byte index was downloaded. Its SHA256 matched the published
+file hash, `5fb7ce5ba3f5ec22ce4c084bc1640bc8c1546ff6beaab0f7e8b836cddcf43ed9`.
+An existing PyArrow 20.0.0 installation read it using one CPU thread; no model,
+video archive, credentials or live capture was involved. The retained inventory
+is `artifacts/research/2026-10-24/p2p-dataset-inventory-01/inventory.json`
+(66,168 bytes, SHA256
+`c8182ceb34bb50ecea964c1e77239b954d0830c9040623e59eceaf42951feb06`).
+
+The next data milestone remains aligned Genshin demonstrations with task outcomes.
+The existing stream recorder retains automated execution receipts; human input
+collection and verified training alignment remain separate work. Saved-image
+predictions must not be promoted into successful demonstration labels.
 
 ## Default-branch integration
 

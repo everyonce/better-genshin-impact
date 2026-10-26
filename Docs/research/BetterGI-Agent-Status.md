@@ -1,6 +1,6 @@
 # BetterGI agent status
 
-Updated October 26, 2026, 09:29 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 26, 2026, 10:04 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
 
@@ -19,7 +19,7 @@ deferred; elapsed time alone does not resume them. Evidence is
 | Area | Latest verified state |
 |---|---|
 | Upstream integration | The default branch `refactor/20260930` is integrated through `86d2a413`, adding 30 commits beyond the previously merged refactor checkpoint. The final Debug build passed; selected CPU/offscreen cohorts passed 539 distinct UnitTest cases and 527 Agent cases across their recorded source trees. Application replacement and live feature validation remain deferred. |
-| Prepared local builds | R49 (bootstrap) and R50 (final) are verified self-contained `win-x64` Release packages from one clean build of commit `65474cce`, under `artifacts/release-r49` and `artifacts/release-r50`. All 2,703 application files match byte for byte, and their 154 shipped User files match the source. Both passed the production launcher's file validation; neither package has been launched or deployed. |
+| Prepared local builds | R51 is a verified, inactive self-contained `win-x64` Release package from clean commit `f938b51e`, including the terminal timestamp fix. Its 2,703 files were inventoried, all 154 shipped User files match source, and the production launcher's file-only validation passed. R49 (bootstrap) and R50 remain intact. No package was launched or deployed during this work. |
 | Root upgrade staging | Commit `5f9ad00e` adds opt-in, byte-preserving Pulonia staging for a quiescent source and inactive, exclusive target. Twenty new tests and three existing regressions passed; independent source review found no actionable issue. Live use remains deferred. |
 | Coordinated root/child upgrade | The new explicit transaction uses the existing approved launcher and a one-shot startup binding, preserves the game/session, and ends with scheduling held. Required Debug validation, 129 distinct C# cases and 91 Python cases passed. Source and saved validation evidence passed independent readback. Actual task registration, cold launch, cross-session handoff and explicit resume remain untested. |
 | Deployed application | Last verified at 17:45 UTC: R47 inside the existing minimized RDP session. Its 1,890 selected C# tests and Debug/Release validation passed before replacement; the same Genshin process was preserved. No new deployment or live check has occurred during the offline hold. |
@@ -84,14 +84,20 @@ cache. All 160 selected C# cases and 48 portable Python cases passed with no
 skips. The Python checks imported no model runtime. Their file-link test required
 ordinary filesystem access outside the sandbox and used disposable workspace
 fixtures. No live status, capture, input, application replacement or GPU inference
-was performed for this work. R49/R50 remain unchanged and do not contain the new
-terminal-clock change.
+was performed for this source validation. R49/R50 remain unchanged and do not
+contain the new terminal-clock change. A clean self-contained Release build of
+`f938b51e` now supplies the fix in inactive R51. Its 2,703 files total 925,979,613
+bytes; all 154 shipped User files match source. The production launcher's
+`-ValidateOnly` path passed without process or application checks. R51's managed
+assembly SHA256 is `c54b60d6b6031f2a09951c0c6c981b24e6ccd63e2388283e583f63138668a93f`.
+Live deployment and qualification remain deferred.
 
 Evidence under `artifacts/research/2026-10-24`:
 
 - `replay-session-validation-02/completion.json`: SHA256 `07b8945b0bb0d23b21f1346bd89f0b1127a0afc1dff98ddc0c692fff1b0dd6c9`.
 - `replay-continuous-r16-boundaries-01.json`: SHA256 `60aed0dc597feb01b336e731c3ccd930f3cd33322cd5318c01e0815e9d5a1179`.
 - `replay-continuous-r17-02.json`: SHA256 `5ddee510fef50067850a3f8efcb4544c81229db5e3b9198a7ba5f5113a2d60f8`.
+- `r51-local-completion-01.json`: SHA256 `ff8a3be3c7382b2a7dc78300781a2d7cf53bef8d2fd875daa736d9d866593950`.
 
 Human demonstrations still require a separate synchronized input ledger. The
 existing macro recorder retains relative wall-clock times, merges nearby mouse
@@ -592,7 +598,27 @@ Preprocessing metadata now names the runtime dtype explicitly in its formula;
 all eight existing profile tests passed. Runtime precision, pixels and sampling
 behavior were not changed, and the CPU diagnostic did not initialize CUDA.
 
-Each temperature arm ran 56 cold-history predictions. All 112 comparisons with
+A later controlled comparison retained the upstream BF16 pixel rounding and
+cast those values to FP16 before the unchanged FP16 model. All 256 byte values
+matched the upstream arithmetic exactly on both CPU and GPU. The same saved
+Hamming-resized scene, cached backward/still goals and reset random seeds then
+produced 20 predictions: all ten matched pairs had identical decoded and
+controller outputs, and all four duplicate controls matched. Among four unique
+seeds per arm, the backward goal produced two forward actions, one diagonal
+backward-left action and one neutral action. The still goal produced two neutral
+outputs, one camera-only output and one attack/camera output. These are token
+observations, not game task scores. Changing input rounding alone did not improve
+this small comparison; it does not identify the cause of poor instruction following.
+
+The run completed in 34.52 seconds including setup, using 402 MiB peak PyTorch
+reservation. This is not a latency benchmark or full-model BF16 comparison.
+It used a single interpreter and local watchdog without independent process
+lifetime verification; training and live qualification remain false. Production
+normalization and sampling were unchanged. Evidence is
+`artifacts/research/2026-10-24/offline-p2p-normalization-pair-direct-01/review.json`
+(4,781 bytes, SHA256 `1c8474f8aa1554dbb5e11df036450a6c187ee612f598790bc666234615a2ea56`).
+
+In the earlier temperature comparison, each arm ran 56 cold-history predictions. All 112 comparisons with
 the bilinear runs began with identical cache/random state and goal tensors;
 the prepared pixels differed. Both native temperature arms shared the same
 pixels and passed all 16 duplicate controls. The workers closed successfully

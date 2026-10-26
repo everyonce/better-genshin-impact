@@ -1,6 +1,6 @@
 # BetterGI agent status
 
-Updated October 26, 2026, 00:14 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 26, 2026, 00:22 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
 
@@ -16,6 +16,7 @@ deferred; elapsed time alone does not resume them. Evidence is
 | Area | Latest verified state |
 |---|---|
 | Upstream integration | The default branch `refactor/20260930` is integrated through `86d2a413`, adding 30 commits beyond the previously merged refactor checkpoint. The final Debug build passed; selected CPU/offscreen cohorts passed 539 distinct UnitTest cases and 527 Agent cases across their recorded source trees. Application replacement and live feature validation remain deferred. |
+| Prepared local build | R48 is a verified self-contained `win-x64` Release package from clean commit `4c99cad1`, available at `artifacts/release-r48/BetterGI-English-win-x64`. All 2,703 package files are inventoried and hashed; its 154 shipped User files match the clean source. It has not been launched or deployed. |
 | Deployed application | Last verified at 17:45 UTC: R47 inside the existing minimized RDP session. Its 1,890 selected C# tests and Debug/Release validation passed before replacement; the same Genshin process was preserved. No new deployment or live check has occurred during the offline hold. |
 | Native navigation | Both saved R47 routes now pass the full audit: seed 3.82 seconds/37 observations and return 5.07 seconds/44 observations. The return's immediate predecessor link is accepted. This does not establish sustained gameplay. |
 | Reusable command | Bounded continuation and the reviewed schema3 envelope checker are in primary. Explicit v5 client support passed 279 Python tests. The separate H03 reader package and corrected return proof are accepted; future live continuation requires user readiness and fresh runtime checks. |
@@ -71,6 +72,16 @@ compiler correction and earlier layout-fixture failures remain recorded and are
 excluded from the passing totals. The live runtime has not been rechecked during
 the machine hold. This integration establishes no new model latency, instruction
 quality or sustained-gameplay result.
+
+The integration is pushed in merge `4c99cad1d99406cc60636b3a37998896b54f192a`.
+The R48 self-contained Release publish completed at 00:19:55 UTC on October 26,
+then all 925,945,021 packaged bytes were inventoried without loading the app or
+models. Its build manifest is `artifacts/release-r48/build-manifest.json`
+(SHA256 `48d7d5725be1e27ad6b33772727993220836319efd16045a5ebea4fb365bfbeb`).
+Package verification and the full file inventory are recorded in
+`artifacts/research/2026-10-24/upstream-r48-package-verification-01/verification.json`
+(SHA256 `d1346623b9d0c24d8bf5cb3167e7e0841e5595a2419bcafc7ea0b32484b0bd28`).
+RDP replacement and fresh runtime checks await explicit machine readiness.
 
 ## Latency evidence
 

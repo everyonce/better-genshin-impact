@@ -80,6 +80,16 @@ For pretrained Open P2P inference, replace `--model observe` with:
 --model open-p2p --source artifacts/agent/sources/open-p2p --checkpoint artifacts/agent/models/open-p2p-150M/150M/checkpoint-step=00500000.ckpt --history 200 --cuda-graph --p2p-fast-start
 ```
 
+The optional `--p2p-prewarm` flag prepares the masked CUDA graph during policy
+loading, before the bridge connects. It uses a temporary zero-valued RGB192
+image with the normal prediction layout, then restores empty history. It emits
+no controller input. Preparation time is recorded separately in
+`policyMetadata.startupGraphPreparation`; the work moves into loading rather
+than disappearing. The flag requires Open P2P, `--cuda-graph` and
+`--p2p-fast-start`, and remains disabled by default pending live verification.
+Saved-image checks matched actions, cached state and random-generator state at
+41 and 200 history frames, including a goal change and rejected-action rollback.
+
 The producer consumes fresh frames independently of inference through one replaceable slot. Slow models skip old frames rather than build a backlog. The controller rejects stale/expired actions and releases held inputs when the action horizon expires. Open P2P predicts a held-key state and relative mouse event; this adapter assigns a 50 ms interval, rather than predicting duration. An explicit `--action-hold-ms 100` selects the bounded hold used in the live trials. Replacement preserves common held keys. GameScaling predicts six steps totaling 200 ms. The first-input freshness deadline is separate from the hold horizon.
 
 In the r14 Release comparison, native-Hamming P2P directional input started at 94.57 ms median / 126.38 ms p95; all 1840 input starts respected the 150 ms deadline. The model still climbed or stalled at obstacles. The same-seed legacy trial was slower at the median but had fewer no-op proposals, so this single pair does not establish a navigation-quality winner. See the [live results and limitations](../../Docs/research/BetterGI-Agent-Sprint-Results-2026-10-23.md#r14-release-live-verification--2026-10-24-utc).

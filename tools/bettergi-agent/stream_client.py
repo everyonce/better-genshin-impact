@@ -24,6 +24,7 @@ from host_observation import HostObservationContract
 from navigation_idle_recovery import (GOAL_INTENTS, NavigationIdleRecovery, RecoverySuperseded,
                                       capture_context, eligible_frame, fresh_frame)
 from observation_profiles import LEGACY, P2P_NATIVE, PROFILES, validate_model_profile, verify_hello, verify_frame
+from p2p_startup import validate_startup_options
 
 
 class Bridge:
@@ -781,6 +782,8 @@ def parse_arguments(argv=None):
                         help='Record input reports known before each decision; model also supplies them to GameScaling')
     parser.add_argument('--p2p-fast-start', action='store_true',
                         help='Use masked empty fixed-capacity P2P history; requires --cuda-graph')
+    parser.add_argument('--p2p-prewarm', action='store_true',
+                        help='Prepare the P2P graph before connecting; requires cuda-graph and p2p-fast-start')
     parser.add_argument('--p2p-mouse-sampling', choices=['mean', 'conservative', 'truncated_normal'],
                         help='Override the P2P checkpoint mouse decoder; mean reproduces older comparisons')
     parser.add_argument('--p2p-temperature', type=float, default=1.0,
@@ -857,6 +860,10 @@ def parse_arguments(argv=None):
         parser.error(str(error))
     if args.p2p_fast_start and (args.model != 'open-p2p' or not args.cuda_graph):
         parser.error('p2p-fast-start requires the open-p2p model and cuda-graph')
+    try:
+        validate_startup_options(args)
+    except ValueError as error:
+        parser.error(str(error))
     if args.p2p_mouse_sampling is not None and args.model != 'open-p2p':
         parser.error('p2p-mouse-sampling requires open-p2p')
     try:
@@ -896,6 +903,7 @@ def parse_arguments(argv=None):
 def load_policy(args):
     """Load a real checkpoint once; a resident caller reuses this object for every episode."""
     validate_execution_context_options(args)
+    prewarm = validate_startup_options(args)
     p2p_temperature = validate_p2p_temperature_options(args)
     policy = None
     if args.model != 'observe':
@@ -916,6 +924,9 @@ def load_policy(args):
                               sampling=args.sampling, temperature=args.temperature,
                               top_k=args.top_k, top_p=args.top_p,
                               gamescaling_prefix_cache=args.gamescaling_prefix_cache, **temperature_options)
+        if prewarm:
+            from p2p_startup import prepare_startup_graph
+            prepare_startup_graph(policy)
     return policy
 
 

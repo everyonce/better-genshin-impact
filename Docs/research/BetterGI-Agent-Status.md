@@ -1,6 +1,6 @@
 # BetterGI agent status
 
-Updated October 26, 2026, 10:34 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 26, 2026, 11:23 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
 
@@ -8,7 +8,7 @@ Current work uses recorded screenshots and synthetic data until Daniel explicitl
 says the machine is ready for live game work again. Bounded offline model and
 latency tests remain authorized within the available shared-machine resources.
 The earlier blanket deferral of GPU qualification overstated that instruction;
-this interpretation was corrected on October 26. At 17:45:41 UTC, two
+this interpretation was corrected on October 26. At 17:45:41 UTC on October 25, two
 read-only status requests confirmed an idle child, disabled input, no running
 task or stream, and the minimized RDP host. No cleanup action was needed. Live
 observations, game tests and application replacement are
@@ -22,7 +22,7 @@ deferred; elapsed time alone does not resume them. Evidence is
 | Prepared local builds | R51 is a verified, inactive self-contained `win-x64` Release package from clean commit `f938b51e`, including the terminal timestamp fix. Its 2,703 files were inventoried, all 154 shipped User files match source, and the production launcher's file-only validation passed. R49 (bootstrap) and R50 remain intact. No package was launched or deployed during this work. |
 | Root upgrade staging | Commit `5f9ad00e` adds opt-in, byte-preserving Pulonia staging for a quiescent source and inactive, exclusive target. Twenty new tests and three existing regressions passed; independent source review found no actionable issue. Live use remains deferred. |
 | Coordinated root/child upgrade | The new explicit transaction uses the existing approved launcher and a one-shot startup binding, preserves the game/session, and ends with scheduling held. Required Debug validation, 129 distinct C# cases and 91 Python cases passed. Source and saved validation evidence passed independent readback. Actual task registration, cold launch, cross-session handoff and explicit resume remain untested. |
-| Deployed application | Last verified at 17:45 UTC: R47 inside the existing minimized RDP session. Its 1,890 selected C# tests and Debug/Release validation passed before replacement; the same Genshin process was preserved. No new deployment or live check has occurred during the offline hold. |
+| Deployed application | Last verified October 25 at 17:45 UTC: R47 inside the existing minimized RDP session. Its 1,890 selected C# tests and Debug/Release validation passed before replacement; the same Genshin process was preserved. No new deployment or live check has occurred during the offline hold. |
 | Native navigation | Both saved R47 routes now pass the full audit: seed 3.82 seconds/37 observations and return 5.07 seconds/44 observations. The return's immediate predecessor link is accepted. This does not establish sustained gameplay. |
 | Reusable command | Bounded continuation and the reviewed schema3 envelope checker are in primary. Explicit v5 client support passed 279 Python tests. The separate H03 reader package and corrected return proof are accepted; future live continuation requires user readiness and fresh runtime checks. |
 | Endpoint repair | Deployed in R46 with input telemetry and Right Shift support. Both R47 routes and the return's endpoint/continuation evidence pass their full audits. Physical input acknowledgment and training eligibility remain false. |
@@ -50,6 +50,49 @@ deferred; elapsed time alone does not resume them. Evidence is
 | GameScaling device-greedy decoding | A loaded-model run completed four setup calls and four balanced pairs. Saved records pass exact token/action checks and 236 exact recorded common-state comparisons; both graphs fit with 2,580 MiB peak PyTorch reservation. The candidate saved only 8.66–53.04 ms (0.19–1.42%) under heavy GPU load. Independent process verification was blocked, so full qualification and promotion remain withheld. |
 | Model optimization | Skipping unused final decoder work passed 1,733 correctness checks across two history41 evictions. A separate 40-pair experiment reduced median prediction time from 165.30 ms to 155.07 ms; paired actions/random states and final cache checks passed. |
 | Training | Not started. The pinned public P2P metadata has no Genshin labels; local demonstrations remain needed. The current recorder captures automated receipts, not human input. Model proposals and incomplete recordings are not expert action labels. |
+
+## Optional startup preparation and recorded idle intervals
+
+`stream_client.py --p2p-prewarm` prepares the existing masked P2P CUDA graph
+inside `load_policy`, before a bridge is opened. A temporary zero-valued RGB192
+image retains the real input's HWC-to-CHW storage layout. The existing capture
+validation runs, then history and pending feedback return to empty state. No
+controller action or recorded observation is emitted. Failure aborts policy
+loading. The option requires Open P2P, CUDA graphs and masked fast startup, and
+remains off by default. Twelve focused CPU checks passed.
+
+Two bounded saved-image comparisons passed: history length 41, and the default
+200 frames with the goal changed after preparation but before the first image.
+Each comparison used two predictions per arm with simulated acceptance followed
+by rejection. All four paired outputs matched exactly, as did goal, uniform,
+CPU/CUDA random state and 160 recorded cache-tensor comparisons before and after
+feedback. Rejection restored the previously committed history. These comparisons
+repeat one archived image and one seed; they do not establish gameplay quality.
+
+Illustrative first-prediction wall times were 3,269.25 vs 159.47 ms (41 frames)
+and 3,282.42 vs 168.68 ms (200 frames), cold vs prewarmed. Preparation itself
+took 2,233.72 and 2,133.44 ms during loading. Peak reservation was 572 and
+1,066 MiB. Both runs used one CPU thread and a 3 GiB allocator cap. Cold ran
+first, shared-machine load was uncontrolled, and these small comparisons are
+not steady-state latency qualification. Tool-owned runs exited successfully;
+independent process verification and live qualification remain unavailable.
+The first attempt stopped on a harness assertion that confused token and frame
+indices; its failed result is retained. Readback evidence is
+`artifacts/research/2026-10-24/p2p-startup-prewarm-review-01.json`
+(SHA256 `2c9f15b881cde5e9a7014d56d0994748c34f2ad551777a8f154e3cef9ed2a817`).
+
+A separate audit partitions 117.30 seconds of the archived r16 software-input
+timeline: directional keys account for 41.61%, explicit neutral applications
+34.93%, empty held-key states following mouse-only events 17.03%, other held
+inputs 0.29%, and released states awaiting another application 6.14%. Mouse
+deltas are instantaneous events, not held movement. There were 1,807 accepted
+receipts but 1,793 applied steps, including 648 neutral states. The 65 release
+intervals form 61 continuous gaps; consecutive release events do not create
+separate causal gaps. The first graph preparation took 1,945.21 ms. These are
+historical timings with 200 frames of policy history, and software intent does
+not prove physical delivery, character motion or task success. Evidence is
+`artifacts/research/2026-10-24/r16-input-coverage-audit-03.json`
+(SHA256 `dd66063a28347d9bf39cc264cdf8903433cec748d6f4932af25bdd8a6c882ab2`).
 
 ## Continuous evidence and demonstration readiness
 

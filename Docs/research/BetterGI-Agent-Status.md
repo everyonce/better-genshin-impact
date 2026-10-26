@@ -1,6 +1,6 @@
 # BetterGI agent status
 
-Updated October 26, 2026, 08:05 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 26, 2026, 08:44 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
 
@@ -92,7 +92,54 @@ or CUDA initialization occurred in those CPU checks. Evidence is under
 `artifacts/research/2026-10-24/gamescaling-reasoning-inputs-01/review.json`
 (22,330 bytes, SHA256
 `91ed0bf44273271538a358646efbbf352dc027b9734404ac4599a38a9dc9d282`).
-The corresponding GPU reasoning comparison has not yet run.
+The matched GPU comparison then completed one prediction per mode on the saved
+frame with the visible F prompt, using the same 160-token cap. The action-only
+case stopped after 30 tokens and matched the earlier 64-token result exactly.
+The reasoning-enabled case emitted an empty, closed thought and stopped after
+32 tokens. Both returned the same neutral action. Merely enabling reasoning did
+not elicit F on this frame; this does not show whether substantive reasoning
+would help. All 109 source/configuration pins passed readback. The receipt is
+`artifacts/research/2026-10-24/offline-gamescaling-reasoning-direct-01/review.json`
+(5,865 bytes, SHA256
+`dd6ed74485edfe6f8b4835638eb7b8f1001b66b751c558e4a7d0320ea40b4fa2`).
+
+A further single call removed manual downsampling (`--image-width 0`) while
+retaining the action-only control's other settings. Actual CPU preprocessing
+kept all non-image tokens identical and increased image tokens from 84 to 2,040,
+with a 68x120 patch grid from the original 1920x1080 capture. The GPU call still
+returned the exact same 30-token neutral output and all six action steps. Peak
+PyTorch reservation was 2,644 MiB within the existing 3 GiB cap. This comparison
+uses RGB input; it does not reproduce upstream's JPEG transport. Its 110 pinned
+source/configuration files passed readback. Evidence is
+`artifacts/research/2026-10-24/offline-gamescaling-native-size-direct-01/review.json`
+(2,788 bytes, SHA256
+`32cf99114b7c25925bfa1c679d6411b0c38793ca2aa8a87ecd2cbcad0985c05a`).
+These follow-ups retain the same missing independent lifetime verification and
+provide no live, latency or training qualification.
+
+The same 0.8B checkpoint then processed upstream's saved Doom example at native
+1280x720 size with its supplied system prompt. One greedy call and three sampled
+calls (temperature 1, seeds 42–44) produced four valid, compatible, non-neutral
+chunks. Two contained keyboard/mouse-button input; one fired, and one used
+movement keys. The other two changed only the camera. This establishes that the
+local generation path can emit active controls, without establishing correct
+aiming or gameplay competence. The
+[upstream reference](https://github.com/THUSI-Lab/GameScaling/blob/6764efabfbb4121d6e5d3cfcbc54dedf1469bf5a/examples/run_example.py)
+used a 9B model with five prior frames, so it is not an exact answer target for
+these cold 0.8B calls. The reference answer was excluded from model input.
+All 116 pinned files and retained responses passed readback; peak PyTorch
+reservation was 2,402 MiB. The receipt is
+`artifacts/research/2026-10-24/gamescaling-doom-sanity-01/review.json`
+(7,121 bytes, SHA256
+`d9f657557a609cb4b58ee7c0efd5a520a4087ba8008bde74c3161b8bbb45a411`).
+The independent lifetime, latency, live-quality and training limitations also
+apply to this diagnostic.
+
+Published real-time 0.8B results use BF16 and vLLM on one H200 per instance.
+That deployment is documented in the paper's
+[serving configuration, Appendix B.4](https://arxiv.org/html/2610.28698v1).
+The current cold eager diagnostics are behavioral probes; the earlier local
+CUDA-graph latency measurements remain the applicable optimized references.
 
 ## Coordinated application upgrade
 

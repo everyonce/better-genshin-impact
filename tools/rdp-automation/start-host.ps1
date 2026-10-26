@@ -78,6 +78,9 @@ function Invoke-HostControl {
 # Validate the exact existing installation without installing/reconfiguring or launching anything.
 function Get-VerifiedApprovedTask {
     param($Package)
+    # Use this PowerShell installation's hash commands, not an inherited Core/Windows module mix.
+    # This process-local import does not change the protected task or installed helpers.
+    Import-Module (Join-Path $PSHOME 'Modules\Microsoft.PowerShell.Utility\Microsoft.PowerShell.Utility.psd1') -Force -ErrorAction Stop
     Import-Module (Join-Path $PSScriptRoot 'ApprovedLauncher.psm1') -Force
     $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
     $plan = Get-ApprovedLauncherPlan -RepositoryRoot $repoRoot -UserSid $sid

@@ -149,11 +149,18 @@ def _same(control, current, original):
 
 def _idle(control, status, *, child):
     """Require current explicit idle state; this does not prove legacy multi-file store coherence."""
-    from child_reconciliation import _current_ui
+    from child_reconciliation import _current_ui, _legacy, _verified_status
     control.require_role(status, 'ChildSession' if child else 'Primary')
     _current_ui(control, status)
+    stream_idle = status.get('agentStreamRunning') is False
+    if not child and 'agentStreamRunning' not in status and status.get('remoteDesktop') is False:
+        # Only the verified R1 primary's old schema omits this field. Bind its
+        # actual package before interpreting the omission; never synthesize status.
+        directory = control.local_absolute(status['appDirectory'])
+        _verified_status(control, status, directory.parent.parent)
+        stream_idle = _legacy(status)
     if (status.get('taskRunning') is not False
-            or status.get('runtimeRunning') is not False or status.get('agentStreamRunning') is not False
+            or status.get('runtimeRunning') is not False or not stream_idle
             or status.get('pilotState') not in ('idle', 'completed', 'failed', 'cancelled')
             or child and not control._control_endpoint_ready(status)):
         raise control.ControlError('Upgrade requires a current idle, detached endpoint; no task is stopped automatically.')

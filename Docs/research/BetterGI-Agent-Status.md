@@ -1,6 +1,6 @@
 # BetterGI agent status
 
-Updated October 26, 2026, 03:01 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 26, 2026, 03:24 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
 
@@ -44,9 +44,54 @@ deferred; elapsed time alone does not resume them. Evidence is
 | Fixed attention masks | One actual G12 graph-pair qualification passed 267 numerical checks with zero observed differences. Both captured graphs and all ten masks retired; other prefixes, latency benefit and live use remain unqualified. |
 | Continuous input handoff | Queued-successor v2 remains off by default. The per-session server negotiation passed the Debug solution build and all 527 selected C# Agent tests. The installed experimental start CLI passed 19 fake-transport tests, and the installed Python handshake/transport cohort passed all 194 cases. The unchanged checkpoint scope has 43 previously passing cases; five harness checks and standalone capacity cleanup also passed earlier. Runtime activation, actual numerical qualification and observation/dispatch timing remain pending. |
 | Checkpoint qualification entry | The complete single-load P/Q composition passed 104 guarded CPU cases, including the earlier scope and entry cases. Its real producer and reader validated 17 containers, 197 arrays and 120 checks using fake numerical operands. The assembled worker also passed all 30 guarded wrapper cases, including retained-state admission and failure cleanup. Actual model loading, numerical equivalence and controller timing remain unqualified. |
-| GameScaling device-greedy decoding | The disabled candidate passed 19 fake decoder tests. Its two-owner comparison executor passed 16 guarded CPU tests, and a further complete producer-to-reader fixture passed. The prepared experiment compares four pairs on saved images with original full-action validation; CUDA equivalence, simultaneous memory fit and speed remain untested. |
+| GameScaling device-greedy decoding | A loaded-model run completed four setup calls and four balanced pairs. Saved records pass exact token/action checks and 236 exact recorded common-state comparisons; both graphs fit with 2,580 MiB peak PyTorch reservation. The candidate saved only 8.66–53.04 ms (0.19–1.42%) under heavy GPU load. Independent process verification was blocked, so full qualification and promotion remain withheld. |
 | Model optimization | Skipping unused final decoder work passed 1,733 correctness checks across two history41 evictions. A separate 40-pair experiment reduced median prediction time from 165.30 ms to 155.07 ms; paired actions/random states and final cache checks passed. |
 | Training | Not started. The pinned public P2P metadata has no Genshin labels; local demonstrations remain needed. The current recorder captures automated receipts, not human input. Model proposals and incomplete recordings are not expert action labels. |
+
+## GameScaling token-selection comparison
+
+At 03:17–03:19 UTC on October 26, the existing experimental device-greedy
+decoder ran beside the original decoder, sharing one model while retaining
+separate graph/cache owners. Four setup calls exercised the original complete
+action validation, followed by four pairs in alternating baseline/candidate order.
+The input was the earlier retained 640x360 frame, with either image-only input
+or the same frozen execution-receipt context. No game or controller was accessed.
+
+| Saved workload / order | Baseline public call | Candidate public call | Candidate reduction |
+|---|---:|---:|---:|
+| Image-only, baseline then candidate | 3,723.70 ms | 3,670.66 ms | 53.04 ms / 1.42% |
+| Image-only, candidate then baseline | 3,677.24 ms | 3,645.88 ms | 31.36 ms / 0.85% |
+| Receipt context, baseline then candidate | 4,500.80 ms | 4,485.66 ms | 15.14 ms / 0.34% |
+| Receipt context, candidate then baseline | 4,531.69 ms | 4,523.03 ms | 8.66 ms / 0.19% |
+
+The saved-record reader verified matching complete tokens and public actions,
+unchanged RNG, and all 59 common state entries per pair. All 236 recorded
+comparisons were exact. Float arrays were not retained, so their numerical
+deltas cannot be independently recomputed. Both graphs and their caches passed
+the worker's cleanup checks; peak PyTorch reserved memory was 2,580 MiB within
+the 3,072 MiB cap. Every output was the same 30-token neutral action, including
+the image-only calls whose instruction requested one attack.
+
+These four pairs show only a small reduction for this workload. The GPU was
+96–98% busy at 88°C with active thermal slowdown, and graphics clocks ranged
+from 975 to 1,350 MHz. These measurements neither estimate idle-machine speed
+nor replace the earlier, different-workload benchmark. Reference gated-delta-rule
+and causal-conv1d fallbacks remained active.
+
+The numerical worker and its supervisor reported completion, and the outer
+owned job closed. However, Windows denied the independent observer's CIM query.
+Automatic approval review then rejected a narrowly scoped self-process query
+because the active hold includes process/status checks. Permission for only
+offline benchmark-worker checks has been requested separately; no workaround
+or further process query was attempted. The full lifetime audit is incomplete,
+and the candidate remains disabled and outside production.
+
+Evidence: `artifacts/research/2026-10-24/offline-gamescaling-device-greedy-01/review.json`
+(10,488 bytes, SHA256
+`4a70361107be01e6b5d25d0c4da912c165c0b8995f34e34cad211ec0404f64c3`).
+The new packet preserves the original numerical helper bytes. Its only runtime
+source changes rename the earlier mistaken offline-hold authorization field and
+enforce one intra-op/inter-op CPU thread; the user's live-game hold remains in force.
 
 ## Fresh saved-image model runs
 

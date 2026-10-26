@@ -1,6 +1,6 @@
 # BetterGI agent status
 
-Updated October 26, 2026, 01:05 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 26, 2026, 01:26 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
 
@@ -20,13 +20,14 @@ deferred; elapsed time alone does not resume them. Evidence is
 |---|---|
 | Upstream integration | The default branch `refactor/20260930` is integrated through `86d2a413`, adding 30 commits beyond the previously merged refactor checkpoint. The final Debug build passed; selected CPU/offscreen cohorts passed 539 distinct UnitTest cases and 527 Agent cases across their recorded source trees. Application replacement and live feature validation remain deferred. |
 | Prepared local build | R48 is a verified self-contained `win-x64` Release package from clean commit `4c99cad1`, available at `artifacts/release-r48/BetterGI-English-win-x64`. All 2,703 package files are inventoried and hashed; its 154 shipped User files match the clean source. It has not been launched or deployed. |
+| Root upgrade staging | Commit `5f9ad00e` adds opt-in, byte-preserving Pulonia staging for a quiescent source and inactive, exclusive target. Twenty new tests and three existing regressions passed; independent source review found no actionable issue. Coordinated root retirement/restart and live compatibility checks remain deferred. |
 | Deployed application | Last verified at 17:45 UTC: R47 inside the existing minimized RDP session. Its 1,890 selected C# tests and Debug/Release validation passed before replacement; the same Genshin process was preserved. No new deployment or live check has occurred during the offline hold. |
 | Native navigation | Both saved R47 routes now pass the full audit: seed 3.82 seconds/37 observations and return 5.07 seconds/44 observations. The return's immediate predecessor link is accepted. This does not establish sustained gameplay. |
 | Reusable command | Bounded continuation and the reviewed schema3 envelope checker are in primary. Explicit v5 client support passed 279 Python tests. The separate H03 reader package and corrected return proof are accepted; future live continuation requires user readiness and fresh runtime checks. |
 | Endpoint repair | Deployed in R46 with input telemetry and Right Shift support. Both R47 routes and the return's endpoint/continuation evidence pass their full audits. Physical input acknowledgment and training eligibility remain false. |
 | Native timing v5 | Explicit native timing v5 is committed at `ab136e25be0467c28ca664a825eef5a79bdeefb1` and deployed in R47. Seed and return evidence are accepted; the next forward leg and four-leg qualification are deferred. |
 | Offline recognition replay | Eleven saved captures passed scoped CPU replay: five exploration frames, two climbing frames, the journal, one swimming-controls frame and two map screens. Eleven additional swimming-derived rows are explicitly synthetic. Five recorded positions match the production coordinate conversion; the other checks do not establish localization or current readiness. |
-| GPU runtime | Existing PyTorch 2.7.1 + CUDA 12.8 environment on the RTX 2080 SUPER. Three bounded saved-image model runs completed on October 26; their fresh results are below. No environment installation was needed. |
+| GPU runtime | Existing PyTorch 2.7.1 + CUDA 12.8 environment on the RTX 2080 SUPER. Bounded loaded-model latency runs and paired scene/goal probes completed on October 26; their fresh results are below. No environment installation was needed. |
 | P2P key compatibility | The official Right Shift command is included in deployed R46 through the existing input implementation. Separate live key-delivery qualification remains pending. |
 | Action acknowledgment | A matching request ID is required before settling policy history. Unknown outcomes preserve the pending action and stop the runner. The focused candidate and caller cohorts passed 55 distinct mocked tests. |
 | Execution-aware decisions | Opt-in client snapshots and GameScaling prompt conditioning are implemented; 121 distinct inert tests passed. One live attack command returned a completed software receipt. The closed context and graph comparisons produced neutral input in both contexts and did not establish receipt-dependent behavior. |
@@ -97,6 +98,59 @@ Evidence: `artifacts/research/2026-10-24/offline-model-reference-closure-01.json
 `c595ffcfbae6f67d8b2f9ddcd887bca691a27d78784fb2fcb749f9cba44f6094`).
 It pins all three plans, benchmark reports, worker supervision and logs.
 
+## Saved-image goal response
+
+The next probes used the same two retained courtyard route endpoints and cached
+walking/standing goals. P2P ran 160 predictions: four image/goal cases plus a
+duplicate-image control, each across 32 paired seeds. Every call reset to empty
+history; the original temperature-1 sampling and mouse decoder were retained.
+All 32 duplicate controls matched in tokens, raw actions, controller steps,
+cache contents and random state. Changing the image altered 10/32 walking
+actions; changing the goal altered 18/32 actions on the initial image and 19/32
+on the final image. These are proposal differences, not successful navigation.
+
+| Model / instruction | Movement proposals on initial image | Movement proposals on final image |
+|---|---:|---:|
+| P2P / walk forward | 27/32 | 27/32 |
+| P2P / stand still | 17/32 | 15/32 |
+| GameScaling sampled / walk forward | 1/8 | 1/8 |
+| GameScaling sampled / stand still | 1/8 | 1/8 |
+
+Movement here means a proposed W/A/S/D key, not measured displacement. P2P
+therefore responds to the image and goal, but the standing instruction still
+produces movement in roughly half these cold-history samples. Its instrumented
+probe is not a latency benchmark. The first recorder attempt failed while
+flattening structured action fields; its failed worker and logs are retained,
+and the corrected second attempt completed with unchanged model/source bytes.
+Independent closure: `artifacts/research/2026-10-24/offline-p2p-scene-goal-02/closure.json`
+(4,547 bytes, SHA256
+`52569c3414dd6213a64fea87c6e87243f02838a17b68102003f09baa07aa33dd`).
+
+GameScaling ran 48 measured sampled predictions, including 16 exact duplicate
+controls, with temperature 1, no top-k/top-p filtering, history 0, width 384 and
+at most 64 new tokens. Changing the image altered 3/8 raw actions for either
+goal. Changing the goal altered none of the eight paired actions on either
+image. The production CPU prompt path was reconstructed with model construction
+mocked and stopped before CUDA: both instructions survived tokenization, text
+inputs differed (835 versus 826 tokens), and image tensors matched. The original
+benchmark did not record prompt or full RNG/cache traces, so this reconstruction
+and the duplicate controls do not imply the stronger state proof of the P2P run.
+
+All 48 GameScaling outputs parsed and passed protocol checks. The initial image
+produced no input in 5/8 unique-seed trials, and the final image in 3/8, for both
+goals. Full-action median/p95 was 936.76/1,149.65 ms for walking and
+929.70/1,080.44 ms for standing; peak allocated memory was 2,371.22 MiB.
+Both workers closed successfully, and original whole-action generation validated
+the first two warmup actions in each run. Independent closure recomputed the
+summaries, compared all paired outputs and verified 117 unique source/input pins:
+`artifacts/research/2026-10-24/offline-gamescaling-scene-goal-closure-01.json`
+(9,259 bytes, SHA256
+`56a401973be3c36275edd9f7cf20f775b5f8053c78913135fee20be4a9247bb8`).
+
+These small samples expose instruction-response limitations; they do not rank
+gameplay quality, prove text-independent logits, qualify live control or create
+expert training labels. No actions were sent to the game.
+
 ## Default-branch integration
 
 The upstream default branch adds shared resin settings and result handling,
@@ -142,9 +196,19 @@ instance contract files and eight child-replacement helper functions. It does
 not establish compatibility with the running binaries: the archived R1 host and
 R47 child manifests both record dirty source checkouts, and no live check was
 performed. R48's new `pulonia.node.*` commands require a compatible root
-coordinator as well as the child. The existing configuration stager does not
-copy `User/Pulonia`; a full root upgrade must explicitly preserve that store
-before claiming migration or history continuity. Source assessment:
+coordinator as well as the child. At assessment time, the configuration stager
+did not copy `User/Pulonia`. Commit `5f9ad00e` now supplies explicit
+`--preserve-pulonia --source-quiescent` staging while retaining the default
+child-only behavior. All store writers must be quiescent and prevented from
+resuming, and the target must remain inactive and exclusive. Inventory/hash
+stability alone cannot prove a coherent snapshot of an actively written store.
+The helper preserves opaque bytes and legacy scheduling holds; it does not
+perform coordinated root replacement or establish runtime migration continuity.
+The tested/reviewed source handoff is
+`artifacts/research/2026-10-24/root-pulonia-staging-01/source-handoff-01.json`
+(6,635 bytes, SHA256
+`4429b5d75ec88d0351285d6e1189211182c4d5737ae3bf7c82d7bd4e10a4d374`).
+Original source assessment:
 `artifacts/research/2026-10-24/upstream-r48-host-compatibility-01/assessment.json`
 (SHA256 `9de82008d96770a346b701e66d1b9e0dc58c8901e129ff60706c92b82c35b744`).
 

@@ -62,7 +62,9 @@ and records its temperature in the result metadata; the value stays fixed for
 that adapter and its CUDA graphs. `--temperature` remains GameScaling's option.
 The current P2P candidate was tested with history 41 and cached text goals on
 retained screenshots. Lower temperature reduced unwanted movement under
-“Stand still” in those samples; wider gameplay quality remains unverified.
+“Stand still” in those samples, but left/jump probes stayed idle even with full
+history. Landmark goals changed some proposals; navigation success and wider
+gameplay quality remain unverified.
 See the [current evidence](../../Docs/research/BetterGI-Agent-Status.md).
 Overrides are refused with `--enable-input` and cannot enter the existing native
 checkpoint qualification profile. They currently support offline comparison

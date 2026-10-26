@@ -1,6 +1,6 @@
 # BetterGI agent status
 
-Updated October 26, 2026, 02:10 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 26, 2026, 02:41 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
 
@@ -28,7 +28,7 @@ deferred; elapsed time alone does not resume them. Evidence is
 | Native timing v5 | Explicit native timing v5 is committed at `ab136e25be0467c28ca664a825eef5a79bdeefb1` and deployed in R47. Seed and return evidence are accepted; the next forward leg and four-leg qualification are deferred. |
 | Offline recognition replay | Eleven saved captures passed scoped CPU replay: five exploration frames, two climbing frames, the journal, one swimming-controls frame and two map screens. Eleven additional swimming-derived rows are explicitly synthetic. Five recorded positions match the production coordinate conversion; the other checks do not establish localization or current readiness. |
 | GPU runtime | Existing PyTorch 2.7.1 + CUDA 12.8 environment on the RTX 2080 SUPER. Bounded loaded-model latency runs and paired scene/goal probes completed on October 26; their fresh results are below. No environment installation was needed. |
-| P2P temperature candidate | Explicit `--p2p-temperature 0.2` is available for replay and shadow runs. It reduced unwanted movement in paired saved-image probes; 40 actual API predictions exactly matched the reference, and the public CUDA graph command passed. One hundred CPU checks passed. Default sampling and the original native adapter remain unchanged; wider task quality and live control remain unqualified. |
+| P2P temperature candidate | Explicit `--p2p-temperature 0.2` is available for replay and shadow runs. It reduced unwanted movement for standing goals, but left/jump probes stayed idle across 54 frozen-image predictions each. Landmark goals changed some proposals without establishing navigation success. Forty actual API predictions exactly matched the reference; the public CUDA graph command and 100 CPU checks passed. Default sampling and the original native adapter remain unchanged. |
 | P2P key compatibility | The official Right Shift command is included in deployed R46 through the existing input implementation. Separate live key-delivery qualification remains pending. |
 | Action acknowledgment | A matching request ID is required before settling policy history. Unknown outcomes preserve the pending action and stop the runner. The focused candidate and caller cohorts passed 55 distinct mocked tests. |
 | Execution-aware decisions | Opt-in client snapshots and GameScaling prompt conditioning are implemented; 121 distinct inert tests passed. One live attack command returned a completed software receipt. The closed context and graph comparisons produced neutral input in both contexts and did not establish receipt-dependent behavior. |
@@ -226,6 +226,99 @@ Independently closed evidence:
   (3,707 bytes, SHA256 `41ca9af6d84c3cf6ec6d818f821d64854a31ae785849466be236bed152fce44e`).
 - Final CPU validation: `artifacts/research/2026-10-24/p2p-temperature-option-validation-02/result.json`
   (2,757 bytes, SHA256 `ade07a05ae2c9837678aa82369c8ceaa772622c34d4b7a1b375a3e5dc5244a72`).
+
+## Directional instruction probes
+
+The temperature option and its initial evidence are pushed in `a601adef`.
+Its 11 tested source files match the committed blobs after line-ending
+normalization; author and committer use the requested GitHub noreply address.
+The local handoff is `artifacts/research/2026-10-24/p2p-temperature-feature-handoff-01.json`.
+
+A broader probe added four instructions: walk left, walk right, walk backward
+and jump. Each new cached vector was generated once on CPU with the same local
+encoder/tokenizer weights and matched the upstream tokenization and embedding
+methods exactly. Both temperature arms ran 56 measured cold-history predictions
+on the initial saved image: seven conditions across eight seeds, including walk,
+stand and an exact duplicate control. All 56 pairs had identical initial
+cache/random state, goal tensor and pixels. All 48 historical control calls also
+matched their earlier token/action/cache/random-state outputs exactly.
+
+At temperature 0.2, the complete first-prediction outputs were:
+
+| Instruction | Outputs across eight paired seeds |
+|---|---|
+| Walk forward | W in 8/8 |
+| Stand still | No input in 8/8 |
+| Walk left | No input in 8/8 |
+| Walk right | W in 5/8; no input in 3/8 |
+| Walk backward | W in 3/8; no input in 5/8 |
+| Jump | No input in 8/8 |
+
+All mouse deltas were zero in this temperature-0.2 arm. Temperature 1 produced
+more varied proposals, but the left/right/backward/jump probes respectively
+included A in 0/8, D in 1/8, S in 1/8 and SPACE in 0/8 calls. These are observed
+keys, not unique correct-action labels or task-success scores; camera motion and
+multi-step behavior matter too.
+
+Separate left and jump episodes then ran 54 consecutive predictions each at
+temperature 0.2. Both remained entirely idle, including all 12 measured calls
+after filling history 41. Their initial predictions exactly matched the cold
+controls; each CUDA graph passed capture checks and both workers closed with
+unchanged sources/inputs. Filled history therefore did not resolve this
+particular fixed-image behavior. The proposed actions were never executed, and
+the scene never changed, so this still does not establish closed-loop failure.
+
+The [P2P paper](https://arxiv.org/html/2601.04575v1) describes training annotations
+as extended goals, deliberately avoiding instant directional commands. That
+makes these primitive-command probes a limited stress test. Scene-landmark goals
+need separate evaluation before interpreting them as general task capability.
+The local official inference code also retains the latest text across frames,
+so the adapter's persistent cached goal matches that aspect of upstream usage.
+
+Evidence:
+
+- CPU goal encoding: `artifacts/research/2026-10-24/offline-p2p-direction-goals-01/closure.json`
+  (3,989 bytes, SHA256 `eeda6c6f164e51c360fb821656f3839a479b7ef449c077d54e5514562082c051`).
+- Paired cold predictions: `artifacts/research/2026-10-24/offline-p2p-directions-closure-01.json`
+  (12,676 bytes, SHA256 `9b1e080d0947dae58e6df1d1fcc3d7d39389fc6fb7b855abc6f268c8e18bdbcb`); 112 measured predictions, two additional warmups and 178 unique source/input pins verified.
+- Continuous left/jump histories: `artifacts/research/2026-10-24/offline-p2p-direction-history-closure-01.json`
+  (6,365 bytes, SHA256 `f469c0701f37bee1d9b1a0a95e28174ba78ddcb2d0ac5168924f16454efccdf7`); 108 predictions, 24 measured graph calls and 178 unique source/input pins verified.
+
+## Landmark goal probes
+
+Four scene-based goals were then tested: approach the doorway on the left,
+approach the blue waypoint on the right, reach the cobblestone road, and stay
+near the waypoint while keeping it in view. Their cached embeddings were
+generated on CPU and matched the upstream encoder methods exactly. Each
+temperature arm ran 56 cold-history predictions: four new goals plus the same
+walking, standing and duplicate controls, across eight seeds on one saved image.
+
+| Goal | Controller outputs different from walking, temperature 1 | Different from walking, temperature 0.2 | No input, temperature 0.2 |
+|---|---:|---:|---:|
+| Approach doorway | 1/8 | 4/8 | 3/8 |
+| Approach waypoint | 2/8 | 5/8 | 2/8 |
+| Reach road | 2/8 | 4/8 | 0/8 |
+| Stay near waypoint | 3/8 | 5/8 | 2/8 |
+
+All 56 cross-temperature pairs started with identical pixels, goal tensors,
+cache and random state. All 48 historical control calls exactly matched their
+earlier actions and state, and all 16 within-run duplicate controls matched.
+Both workers finished successfully with unchanged sources and inputs.
+
+These differences establish some goal sensitivity on this image. They do not
+show progress toward the requested landmark or rank the temperatures by task
+quality. At temperature 0.2 every mouse delta was zero, and both waypoint goals
+produced W in 6/8 trials and D in 3/8; key counts can overlap in one action.
+An initial forward step may be compatible with several destinations. Changing
+observations and measured progress are required to evaluate navigation.
+No game input, live capture or training labels were produced.
+
+Evidence:
+
+- CPU goal encoding: `artifacts/research/2026-10-24/offline-p2p-landmark-goals-01/closure.json`
+  (4,304 bytes, SHA256 `313361103fe9eb6c6f5aa9ca1e4b8139a367501e6d3a0f4e7c1cb58d2e23c1a2`).
+- Paired predictions: `artifacts/research/2026-10-24/offline-p2p-landmarks-closure-01.json`
+  (13,514 bytes, SHA256 `0215a8066890af19c2f8e057c392add550e2b17543e8a8d678037281f6225503`); 112 measured predictions, two warmups and 178 unique source/input pins verified.
 
 ## Default-branch integration
 

@@ -11,9 +11,12 @@ internal static class CaptureStorageBudget
     internal const long MinimumFreeBytes = 2L * 1024 * 1024 * 1024;
     internal const long FrameReserveBytes = 16L * 1024 * 1024;
 
-    internal static void Check(string root, long pendingBytes, Func<long>? availableBytes = null, long maxBytes = MaxBytes)
+    /// <summary>Checks projected usage, accounting an existing text destination as the pending file.</summary>
+    internal static void Check(string root, long pendingBytes, Func<long>? availableBytes = null, long maxBytes = MaxBytes,
+        string? existingFilePath = null, bool append = false)
     {
         root = Path.GetFullPath(root);
+        var existingDestination = existingFilePath is null ? null : Path.GetFullPath(existingFilePath);
         long bytes = 0;
         int count = 0;
         if (Directory.Exists(root))
@@ -28,6 +31,13 @@ internal static class CaptureStorageBudget
                     if (Directory.Exists(entry)) Visit(entry);
                     else
                     {
+                        // The pending write replaces this file; append keeps its previous bytes.
+                        // Reparse checks above still apply before excluding its existing file slot.
+                        if (string.Equals(entry, existingDestination, StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (append) bytes = checked(bytes + new FileInfo(entry).Length);
+                            continue;
+                        }
                         bytes = checked(bytes + new FileInfo(entry).Length);
                         if (++count >= MaxFiles || bytes > maxBytes - pendingBytes)
                             throw new IOException("Capture storage limit reached; archive reviewed evidence before restarting.");

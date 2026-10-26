@@ -59,6 +59,12 @@ public sealed class AgentStreamSession
     private long _readbackPendingCount;
     /// <summary>Last typed capture outcome; bounded scalar telemetry contains no image or renewable source clock.</summary>
     private string? _lastCaptureOutcome;
+    /// <summary>One publication cadence also bounds initiation of expected-pending readback retries.</summary>
+    internal const double CaptureCadenceMs = 1000.0 / 30;
+    /// <summary>Yield between nonblocking polls; never spin or retry a genuine unavailable result.</summary>
+    internal const int PendingReadbackRetryDelayMs = 2;
+    /// <summary>A separate call cap remains finite even with a stalled clock or immediately completing test delay.</summary>
+    internal const int MaximumPendingReadbackRetries = 8;
     /// <summary>Optional native transition evidence, bounded independently of the stream and input controller.</summary>
     private readonly AgentReadinessSnapshots _snapshots;
     /// <summary>Fixed image contract for this stream lifetime; never switched under an active client.</summary>
@@ -155,16 +161,17 @@ public sealed class AgentStreamSession
     /// <summary>Capture and downsample independently of disk, OCR, inference and transport writes.</summary>
     private async Task CaptureLoopAsync(AgentActionController controller, CancellationToken ct)
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(1000.0 / 30));
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(CaptureCadenceMs));
         AgentSourceFrame? previousSource = null;
         while (await timer.WaitForNextTickAsync(ct))
         {
             if (!_runtime.Window.IsAlive || _runtime.IsStopping) return;
             var capturedAt = NowMs;
-            // A missing frame skips this publication tick; retry sleeps would add latency to later frames.
-            var captureAttempt = GameCaptureReadbackConsumer.Capture(_runtime.Capture, false, out _);
-            using var captured = captureAttempt.Frame;
-            if (SkipUnpublishedCapture(captureAttempt, controller, NowMs)) continue;
+            // Expected GPU readback may finish before the next cadence. Real failures still skip/invalidate immediately.
+            // Preserve this original request time across polls; neither retry nor delay renews source authority.
+            using var captured = await CaptureWithPendingRetriesAsync(_runtime.Capture, controller, capturedAt,
+                () => NowMs, () => _runtime.Window.IsAlive && !_runtime.IsStopping, ct);
+            if (captured is null) continue;
             var source = captured!.Frame;
             // Desktop evidence is required even for passive publication; absence never uses the old receipt-time fallback.
             var hostSnapshot = MapHostEvidence(captured, _runtime.IsDesktopCapture, _runtime.DesktopDcSourcePolicy,
@@ -212,6 +219,46 @@ public sealed class AgentStreamSession
                 _latest = next;
                 previous?.Release();
             }
+        }
+    }
+
+    /// <summary>Transfer one ready frame, retrying only validated expected-pending outcomes inside a finite capture turn.</summary>
+    /// <remarks>The deadline bounds retry initiation, not an already executing synchronous capture. Recognition, source/session
+    /// validation and the independent input watchdog remain outside this helper. Injected clocks/delays support inert tests.</remarks>
+    internal async Task<GameCaptureFrame?> CaptureWithPendingRetriesAsync(IGameCapture capture,
+        AgentActionController controller, double capturedAt, Func<double> clock, Func<bool> isActive,
+        CancellationToken ct, Func<TimeSpan, CancellationToken, Task>? delay = null)
+    {
+        delay ??= Task.Delay;
+        for (var retries = 0; ; retries++)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (!isActive()) return null;
+            // An overslept delay must not start another capture, even if the nominal requested delay fit.
+            if (retries > 0)
+            {
+                var elapsed = clock() - capturedAt;
+                if (!double.IsFinite(elapsed) || elapsed < 0 || elapsed >= CaptureCadenceMs) return null;
+            }
+            var attempt = GameCaptureReadbackConsumer.Capture(capture, false, out _);
+            var frame = attempt.Frame;
+            try
+            {
+                if (!SkipUnpublishedCapture(attempt, controller, clock()))
+                {
+                    var ready = frame;
+                    frame = null; // Caller now owns the exact returned pixels and immutable source metadata.
+                    return ready;
+                }
+            }
+            finally { frame?.Dispose(); }
+
+            if (attempt.Outcome != GameCaptureAttemptOutcome.ReadbackPending ||
+                retries >= MaximumPendingReadbackRetries) return null;
+            var spent = clock() - capturedAt;
+            if (!double.IsFinite(spent) || spent < 0 ||
+                spent + PendingReadbackRetryDelayMs >= CaptureCadenceMs) return null;
+            await delay(TimeSpan.FromMilliseconds(PendingReadbackRetryDelayMs), ct).ConfigureAwait(false);
         }
     }
 

@@ -1,26 +1,30 @@
 # BetterGI agent status
 
-Updated October 26, 2026, 15:32 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 26, 2026, 16:08 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
 
 Daniel explicitly resumed live testing through BetterGI RDP at 14:18 UTC on
-October 26. R53 now runs in session 3 while preserving Genshin and the minimized
+October 26. R54 now runs in session 3 while preserving Genshin and the minimized
 RDP session. The console root remains R1. Live tests include four 30-second P2P
-trials, a 90-second walk/stand/walk goal-switch trial, a GameScaling shadow trial,
+trials, three 90-second walk/stand/walk goal-switch trials, a GameScaling shadow trial,
+two WGC capture shadow trials,
 and a successful native seed route followed by four connected courtyard legs.
 The model/control pipeline works, but the learned policies do not yet reliably
-follow Genshin instructions. Capture and first-dispatch delays remain under investigation.
+follow Genshin instructions. R54 removed first-dispatch expirations in the latest
+trials. Blocking WGC capture now supports about 28 captured frames and 19 model
+decisions per second in the latest live run; repeatable task quality remains
+under investigation.
 Evidence is under `artifacts/live/2026-10-26-r52`. The earlier offline-only
 transition remains historical evidence, not a current restriction.
 
 | Area | Latest verified state |
 |---|---|
 | Upstream integration | The default branch `refactor/20260930` is integrated through `ae4f785c`. The latest merge adds explicit inactive-affix recognition and corrects capitalization matching; the required Debug build and 10 scripted OCR cases passed. Earlier integration cohorts recorded 539 distinct UnitTest cases and 527 Agent cases across their source trees. Live feature validation remains deferred. |
-| Prepared local builds | R53 is a self-contained `win-x64` Release package from clean commit `70f8dd8f`. The required Debug build, Release publish, launcher validation and 87 focused capture/stream/readiness/freshness tests passed. It gives the live stream exclusive capture while retaining timer housekeeping. Older packages remain intact. |
+| Prepared local builds | R54 is a self-contained `win-x64` Release package from clean commit `2655d153`. The required Debug build, Release publish and launcher validation passed. Its controller/capture cohort has 731 distinct passing cases. It adds immediate first-step dispatch and capture phase diagnostics to R53's exclusive stream capture. Older packages remain intact. |
 | Root upgrade staging | Commit `5f9ad00e` adds opt-in, byte-preserving Pulonia staging for a quiescent source and inactive, exclusive target. Twenty new tests and three existing regressions passed; independent source review found no actionable issue. Live use remains deferred. |
 | Coordinated root/child upgrade | The new explicit transaction uses the existing approved launcher and a one-shot startup binding, preserves the game/session, and ends with scheduling held. Required Debug validation, 129 distinct C# cases and 91 Python cases passed. Source and saved validation evidence passed independent readback. Actual task registration, cold launch, cross-session handoff and explicit resume remain untested. |
-| Deployed application | R53 child PID 56788 in RDP session 3, instance `1d3be77cf2384d2db368b0789e2f166b`, assembly SHA256 `abc7e96d77f7e894fd8fb33d0f21d99991367cff3987b40c9811f6ca5cbe65ca`. Root PID 28072 and Genshin PID 27728 were preserved. At 15:15 UTC, all owned live-model workers were independently confirmed retired and the same game remained in session 3. |
+| Deployed application | R54 child PID 9264 in RDP session 3, instance `257157d1cc3c41d7850e61404f0926e4`, assembly SHA256 `58e9a5e7f36e1a45302d1b75d6c05743e0743b6078ff20a52fab6d1c13ece36d`. Root PID 28072 and Genshin PID 27728 were preserved. Both 90-second DesktopDc and WGC blocking runs completed with no held keys. The latter applied all 1,707 accepted actions; its worker was independently confirmed retired at 16:05 UTC. |
 | Native navigation | A fresh R52 seed and four immediately linked courtyard legs completed with 254 position observations and no recorded recovery, recognition, release or execution faults. All 15 journal/screenshot hashes and 140 listed evidence checks passed. This is exploratory native route acceptance, not general autonomous gameplay or a rebinding of the frozen R47 proof. |
 | Reusable command | Bounded continuation and the reviewed schema3 envelope checker are in primary. Explicit v5 client support passed 279 Python tests. The separate H03 reader package remains bound to R47. Current live runs use fresh instance and predecessor identities; the direct CLI successfully validated the R52 cycle. |
 | Endpoint repair | Deployed in R46 with input telemetry and Right Shift support. Both R47 routes and the return's endpoint/continuation evidence pass their full audits. Physical input acknowledgment and training eligibility remain false. |
@@ -87,7 +91,7 @@ below 1 ms. Reducing decisions to 15 Hz increased receipt-to-prediction waiting
 and deadline rejection, so 20 Hz remains the current diagnostic setting.
 
 The 90-second R53 goal-switch run recorded 1,593 frames without drops and made
-1,511 predictions, with 1,315 accepted and 1,239 applied actions. One model load
+1,501 predictions, with 1,315 accepted and 1,239 applied actions. One model load
 served walk/stand/walk goals. The status observer saw matching goal-application
 acknowledgments 188 and 140 ms after the corresponding control CLI returned
 (50 ms observation polling). Tracked held keys were empty after stop.
@@ -109,13 +113,13 @@ artifact directory.
 All 76 accepted-but-unapplied actions in that run expired before their first
 dispatch. Their remaining deadline slack at acceptance had median 3.84 ms;
 applied actions waited median 4.51 ms and p95 14.30 ms from acceptance to first
-software dispatch. The next package immediately dispatches the first eligible
+software dispatch. R54 immediately dispatches the first eligible
 standard step after acceptance, through the existing guarded controller path.
 A shared failure latch prevents retrying partially failed input. The 150 ms
 limit and experimental queued scheduler are unchanged. Additive DesktopDc
 phase timings retain the exact captured snapshot identity and authoritative
 clock boundaries, making capture costs measurable without changing input
-eligibility. These changes are validated but not yet deployed.
+eligibility. These changes are deployed and live-tested in R54.
 
 The combined controller/capture cohort has 731 distinct passing tests across
 the initial run and a permissions-aware rerun. The initial sandbox blocked
@@ -123,6 +127,70 @@ three named-pipe label cases and one atomic snapshot write; all four passed
 with normal Windows permissions, along with all 18 immediate-dispatch cases.
 The scalar recorder-only microbenchmark averaged 0.854 microseconds and 312
 allocated bytes per call over 10,000 samples; this excludes GDI and pixels.
+
+R54 repeated the same 90-second walk/stand/walk configuration with 1,561 frames,
+1,461 predictions and 1,361 accepted/applied actions. There were zero
+first-dispatch expirations. Acceptance-to-first-software-dispatch time had
+median 0.0163 ms, p95 0.0252 ms and maximum 1.256 ms; the corresponding R53
+median/p95 were 4.512/14.304 ms. Every applied start remained within the
+150 ms host-source-age limit. One later receipt ended for stale world
+observation; all tracked keys were released at shutdown. The recording
+completed without dropped frames, events or observations.
+
+Movement keys occurred in 394/436, 42/508 and 294/417 applied actions across
+the three goal phases. Saved frames show street movement, standing beside a
+wall, and a final view pressed against that wall. This is not successful
+goal-directed navigation. The source fidelity check found no text-template,
+RGB channel, W/S mapping or mouse-scaling mismatch. Official inference uses
+BF16, H200 and 50 ms holds; this local setting uses FP16, H41 and 100 ms holds.
+The official README states most paper experiments used no text, and Genshin
+is absent from its listed tested games. Those differences remain quality
+considerations rather than established causes of the observed behavior.
+
+All 1,561 R54 frames retained matching diagnostic/snapshot identity. Median
+DesktopDc total was 51.356 ms: BitBlt alone was 45.640 ms, clone 3.103 ms,
+pre/post target checks 0.708/0.741 ms, cleanup 0.676 ms and allocation 0.098 ms.
+Gate waiting was 0.0004 ms. Complete capture/preprocessing remained 60.183 ms.
+This localizes the dominant cost to desktop pixel acquisition; weakening
+target/session checks would not address it.
+
+WGC V2 comparisons used retained source surfaces and CPU color conversion.
+The initial 30-second `poll_single_v1` shadow run had 447 frames, 134 predictions
+and 453 pending readbacks. Capture/preprocessing median was 9.66 ms, but reported
+source age at response was 110.50 ms and estimated age after prediction was
+147.14 ms. Pending already avoids direct readiness invalidation; the stream
+waited a full capture cadence before polling again, while the client's hold
+path could release and invalidate older in-flight sources. A bounded retry
+candidate now yields 2 ms for at most eight retries within the original
+33.33 ms turn. Genuine failures, timestamps and freshness guards are unchanged.
+Its focused cohort passed all 147 tests, including 17 new retry cases; deployment
+and measurement are pending.
+
+The same WGC backend in blocking mode produced 853 frames and 591 predictions
+in a separate 30-second shadow run. Capture/preprocessing median was 13.27 ms,
+estimated source age after prediction was 63.31 ms, and readiness was positive
+on 852 frames after one confirming frame. Every prediction's estimated age was
+under 150 ms. Both shadow recordings completed without drops and used no model
+input. Neither observation-only admission nor reported compositor timestamps
+establish physical-input or true game-render latency.
+
+The subsequent 90-second blocking WGC live walk/stand/walk run captured 2,542
+frames and made 1,728 predictions. All 1,707 accepted actions were applied,
+with zero first-dispatch expirations. Median/p95 model evaluation was
+38.70/47.48 ms; capture/preprocessing was 14.18/22.41 ms. Reported compositor
+source age at first software dispatch was 74.16/96.45 ms, maximum 112.81 ms.
+Acceptance-to-first-dispatch median was 0.0162 ms. Five predictions were too
+old, fourteen requested excluded keys, and two crossed goal-control epochs.
+The applied movement-key counts were 561/582, 36/568 and 428/557 across the
+three phases. Saved frames show the character at a wall, beside a building,
+and on stairs; movement-key counts do not establish route completion.
+The recording retained all frames/events/observations, used 352,776,510 counted
+bytes and closed completely. Shutdown held keys were empty. The worker was
+independently absent at 16:05 UTC, preserving Genshin's original session-3
+process. Shared load and trajectories differ across trials; DesktopDc host
+acquisition and WGC compositor-age measurements also have different boundaries.
+Evidence: `p2p-r54-wgc-goal-switch-segments/00001.json`,
+`dispatch-capture-comparison.json`, and `post-r54-wgc-live-process-check.json`.
 
 GameScaling's live observation-only trial used the validated greedy graph,
 history0 and image width384. It recorded 337 frames and generated 14 valid but

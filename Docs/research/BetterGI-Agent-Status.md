@@ -1,8 +1,21 @@
 # BetterGI agent status
 
-Updated October 26, 2026, 18:49 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 26, 2026, 19:35 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
 
 The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
+
+New GPU experiments are temporarily deferred while investigating reported
+desktop lag. At 19:03:49 UTC, `nvidia-smi` showed 43% GPU use, 87°C and active software
+thermal slowdown, with 4,615 MiB free. No model or gameplay-controller worker from
+this task was running. Three aggregate CPU intervals at 19:05:43–46 UTC measured
+22.60–25.52% busy, with about 12,071–12,121 MiB physical memory available. These
+brief device-wide samples do not identify a responsible process or measure disk
+latency. At 19:23 UTC, CPU intervals were 16.46–24.61% with about 12.6 GiB of
+physical memory available; GPU thermal slowdown remained active. A single-worker,
+below-normal-priority Debug build started at 19:24 UTC and passed in 279 seconds.
+The focused recorder/resampler/wire suite then passed all 97 cases (14 seconds of
+test execution). The current RDP session and game remain open.
+Evidence: `host-lag-aggregate-readonly-01.json` and `host-lag-summary-01.json`.
 
 Daniel explicitly resumed live testing through BetterGI RDP at 14:18 UTC on
 October 26. R56 now runs in session 3 while preserving Genshin and the minimized
@@ -56,6 +69,51 @@ transition remains historical evidence, not a current restriction.
 | GameScaling device-greedy decoding | A loaded-model run completed four setup calls and four balanced pairs. Saved records pass exact token/action checks and 236 exact recorded common-state comparisons; both graphs fit with 2,580 MiB peak PyTorch reservation. The candidate saved only 8.66–53.04 ms (0.19–1.42%) under heavy GPU load. Independent process verification was blocked, so full qualification and promotion remain withheld. |
 | Model optimization | Skipping unused final decoder work passed 1,733 correctness checks across two history41 evictions. A separate 40-pair experiment reduced median prediction time from 165.30 ms to 155.07 ms; paired actions/random states and final cache checks passed. |
 | Training | Not started. The pinned public P2P metadata has no Genshin labels; local demonstrations remain needed. The current recorder captures automated receipts, not human input. Model proposals and incomplete recordings are not expert action labels. |
+
+## Latest WGC recorder load check
+
+`r56-native-shadow-cycle-v4-01` completed four verified native legs: seed,
+return, forward and return. Durations were 5.127, 5.516, 5.369 and 5.889 seconds.
+The exact predecessor chain, endpoint continuity and software input cleanup
+passed 3,571 saved-evidence checks. All 445 retained RGB hashes matched.
+
+The first three image archives were complete (126, 144 and 137 frames). The
+fourth retained 38 images but stopped admission with `shadow_buffer_exhausted`:
+one rejected offer and 288 subsequent ignored offers. Its journal contains 112
+distinct sources without archived RGB, so `framesLost=1` is not a complete
+coverage-loss count. The native route still completed and the archive worker
+retired; the overall command correctly failed and never started the fifth leg.
+Evidence: `r56-native-shadow-cycle-v4-01-independent-audit-01/audit-02.json`.
+
+The source fix passes the required Debug build and 97 focused tests. It returns a raw
+slot immediately after resizing and partitions the existing 66,355,200-byte
+reserve into eight 1080p BGRA slots or two 4K BGRA slots. There is still one
+writer, a fixed two-second retirement bound, and truthful failure on overflow.
+New timing and high-water fields separate queued, resizing and writing work.
+All 14 recorder cases passed, alongside 83 related resampler/wire cases, with no
+failures or skips. Release packaging and live qualification are pending. R56
+continues running the previous binary. Evidence:
+`recorder-buffer-primary-validation-01.json`.
+
+A separate read-only process-access matrix confirmed that the ordinary host
+can retain the root lifetime but cannot even query the child/game. The ordinary
+RDP worker can retain child/game lifetimes but cannot query the root. Thus the
+current child-side root-retirement implementation also needs an architectural
+correction; relaxing the Python preflight would not make it work. No root
+retirement or permission change was attempted. Evidence:
+`r56-process-access-matrix-01-host.json` and `r56-process-access-matrix-01-rdp.json`.
+An additional ordinary-host probe obtained termination/query/synchronize rights on
+the exact existing R1 lifetime and closed the handle without using those rights.
+This supports retiring R1 from the host while an independent RDP sentinel retains
+the child/game lifetimes; the coordinated transaction still needs implementation.
+Evidence: `r1-host-termination-rights-readonly-01.json`.
+
+The training preparation identifies 52 causal image-to-scripted-intent pairs
+in the earlier short-route archive, not fixed-duration expert demonstrations.
+All existing training-eligibility flags remain false. An isolated synthetic
+head-gradient smoke is being prepared for the original four P2P output heads
+(65,600 parameters). Its file-only preflight verified 20 source pins; no gradient
+update or model deployment has run.
 
 ## Live climb-recovery prototype
 

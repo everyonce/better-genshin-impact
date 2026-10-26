@@ -16,7 +16,7 @@ namespace BetterGenshinImpact.GameTask.NavigationBaseline;
 internal sealed class NavigationBaselineShadowCapture : IAsyncDisposable
 {
     /// <summary>Independent shadow limits never increase native capture, observation, journal, or owner budgets.</summary>
-    internal const int MaximumFrames = 1024, BufferCount = 2, MaximumManifestBytes = 8 * 1024 * 1024;
+    internal const int MaximumFrames = 1024, RawBankCount = 2, MaximumBufferSlots = 8, MaximumManifestBytes = 8 * 1024 * 1024;
     /// <summary>Two worst-case packed BGRA buffers are reserved before the first baseline input.</summary>
     internal const int MaximumRawBytes = 3840 * 2160 * 4;
     /// <summary>One absolute post-input drain bound; a timed-out worker retains the process reservation until retirement.</summary>
@@ -26,9 +26,11 @@ internal sealed class NavigationBaselineShadowCapture : IAsyncDisposable
     /// <summary>Protect admission/close only; no worker IO or transform occurs while holding this gate.</summary>
     private readonly object _gate = new();
     /// <summary>Fixed buffers move exclusively between free, queued, and worker-owned states.</summary>
-    private readonly Queue<byte[]> _free = new(BufferCount);
-    /// <summary>At most two jobs including a worker-owned job; every successful admission owns its bytes.</summary>
-    private readonly Queue<(NavigationBaselineShadowFrame Frame, byte[] Pixels)> _pending = new(BufferCount);
+    private readonly Queue<Memory<byte>> _free = new(MaximumBufferSlots);
+    /// <summary>The same two fixed banks are reserved before input; geometry only partitions their existing bytes.</summary>
+    private readonly byte[][] _rawBanks = new byte[RawBankCount][];
+    /// <summary>At most eight disjoint raw slots including the active resizer; the writer's RGB output is separately owned.</summary>
+    private readonly Queue<(NavigationBaselineShadowFrame Frame, Memory<byte> Pixels)> _pending = new(MaximumBufferSlots);
     /// <summary>Wake the sole worker after publication or final close.</summary>
     private readonly SemaphoreSlim _wake = new(0);
     /// <summary>Only a retirement timeout cancels file IO; ordinary native cancellation still permits bounded evidence drain.</summary>
@@ -43,10 +45,16 @@ internal sealed class NavigationBaselineShadowCapture : IAsyncDisposable
     private readonly int _gameProcessId, _windowsSessionId;
     /// <summary>Worker-only asynchronous test seam; null in production, never invoked by the capture hook.</summary>
     private readonly Func<CancellationToken, Task>? _beforeWrite;
+    /// <summary>Worker-only test seam after raw return; permits deterministic IO stalls without blocking capture.</summary>
+    private readonly Func<CancellationToken, Task>? _afterResizeBeforeWrite;
     /// <summary>Fresh returned-image high-water is shadow-only and never updates native accepted sources or barriers.</summary>
     private GameCaptureSourceInfo? _lastSource;
     /// <summary>Fixed geometry/format after the first admitted copy.</summary>
     private int _width, _height, _channels;
+    /// <summary>Bounded geometry-specific capacity and scalar pressure diagnostics, always accessed under the gate.</summary>
+    private int _rawSlots, _rawSlotsInUse, _rawSlotsHighWater, _pendingHighWater;
+    /// <summary>Worker-only completed-phase timings; these include scheduling delay and do not claim CPU or durable IO time.</summary>
+    private double _resizeTotalMs, _resizeMaxMs, _writeTotalMs, _writeMaxMs;
     /// <summary>Bounded first failure and counters remain available even when final manifest publication fails.</summary>
     private string? _error, _manifestPath, _manifestHash, _journalPath, _journalHash;
     /// <summary>Stop admission independently of final close so a failed shadow cannot stop native control.</summary>
@@ -58,17 +66,18 @@ internal sealed class NavigationBaselineShadowCapture : IAsyncDisposable
 
     /// <summary>Reserve memory/worker once before native control; reject a still-unretired prior shadow.</summary>
     internal NavigationBaselineShadowCapture(string directory, string runId, int gameProcessId, int windowsSessionId,
-        string readbackMode, Func<CancellationToken, Task>? beforeWrite = null)
+        string readbackMode, Func<CancellationToken, Task>? beforeWrite = null,
+        Func<CancellationToken, Task>? afterResizeBeforeWrite = null)
     {
         if (!Guid.TryParseExact(runId, "N", out var id) || id == Guid.Empty) throw new ArgumentException("invalid_shadow_run_id");
         if (readbackMode is not ("blocking" or "poll_single_v1")) throw new ArgumentException("shadow_readback_mode_required");
         if (gameProcessId <= 0 || windowsSessionId <= 0) throw new ArgumentException("shadow_owner_identity_required");
         if (!WorkerSlot.Wait(0)) throw new InvalidOperationException("shadow_previous_worker_not_retired");
         _directory = directory; _runId = runId; _gameProcessId = gameProcessId; _windowsSessionId = windowsSessionId;
-        _readbackMode = readbackMode; _beforeWrite = beforeWrite;
+        _readbackMode = readbackMode; _beforeWrite = beforeWrite; _afterResizeBeforeWrite = afterResizeBeforeWrite;
         try
         {
-            for (var i = 0; i < BufferCount; i++) _free.Enqueue(GC.AllocateUninitializedArray<byte>(MaximumRawBytes));
+            for (var i = 0; i < RawBankCount; i++) _rawBanks[i] = GC.AllocateUninitializedArray<byte>(MaximumRawBytes);
             _worker = Task.Run(WorkAsync);
         }
         catch { _ioStop.Dispose(); _wake.Dispose(); WorkerSlot.Release(); throw; }
@@ -111,29 +120,62 @@ internal sealed class NavigationBaselineShadowCapture : IAsyncDisposable
                     || poll.Result is not ("admitted" or "duplicate" or "response_barrier" or "duplicate_and_response_barrier"))
                     throw new InvalidOperationException("shadow_capture_join_invalid");
                 if (_accepted >= MaximumFrames) throw new InvalidOperationException("shadow_frame_capacity_exceeded");
-                if (_free.Count == 0) throw new InvalidOperationException("shadow_buffer_exhausted");
                 var stride = checked(width * channels);
                 var sourceStride = pixels.Step();
                 var sourceBytes = checked(sourceStride * (height - 1) + stride);
                 if (sourceStride < stride || sourceBytes > int.MaxValue || pixels.Data == IntPtr.Zero)
                     throw new InvalidOperationException("shadow_stride_invalid");
+                // Binding creates only value-type views in pre-sized queues, never more raw storage on the capture path.
+                if (_rawSlots == 0) BindRawSlots(checked(stride * height));
+                if (_free.Count == 0) throw new InvalidOperationException("shadow_buffer_exhausted");
                 var buffer = _free.Dequeue();
+                _rawSlotsInUse++;
+                _rawSlotsHighWater = Math.Max(_rawSlotsHighWater, _rawSlotsInUse);
                 try
                 {
                     var started = Stopwatch.GetTimestamp();
                     var borrowed = new ReadOnlySpan<byte>((void*)pixels.Data, (int)sourceBytes);
                     for (var row = 0; row < height; row++)
-                        borrowed.Slice(checked((int)(row * sourceStride)), stride).CopyTo(buffer.AsSpan(row * stride, stride));
+                        borrowed.Slice(checked((int)(row * sourceStride)), stride).CopyTo(buffer.Span.Slice(row * stride, stride));
                     var frame = new NavigationBaselineShadowFrame(_accepted, pollIndex, poll.ObservationIndex, source,
                         width, height, channels, stride, poll.CaptureStartedAtMs, poll.CaptureReturnedAtMs.Value,
                         poll.SourceAgeMs.Value, poll.Result, started, Stopwatch.GetTimestamp());
                     _pending.Enqueue((frame, buffer));
+                    _pendingHighWater = Math.Max(_pendingHighWater, _pending.Count);
                     _width = width; _height = height; _channels = channels; _lastSource = source; _accepted++;
                     _wake.Release();
                 }
-                catch { _free.Enqueue(buffer); throw; }
+                catch { ReturnRaw(buffer); throw; }
             }
             catch (Exception error) { _rejected++; FailLocked(error.GetBaseException().Message); }
+        }
+    }
+
+    /// <summary>Partition each bank into at most four equal, nonoverlapping views after geometry validation.</summary>
+    private void BindRawSlots(int frameBytes)
+    {
+        var slotsPerBank = Math.Min(MaximumBufferSlots / RawBankCount, MaximumRawBytes / frameBytes);
+        if (slotsPerBank < 1) throw new InvalidOperationException("shadow_geometry_unsupported");
+        foreach (var bank in _rawBanks)
+            for (var slot = 0; slot < slotsPerBank; slot++)
+                _free.Enqueue(bank.AsMemory(checked(slot * frameBytes), frameBytes));
+        _rawSlots = slotsPerBank * RawBankCount;
+    }
+
+    /// <summary>Return an exclusively owned raw view once; only the worker-owned RGB copy survives a successful resize.</summary>
+    private void ReturnRaw(Memory<byte> pixels)
+    {
+        lock (_gate) { _free.Enqueue(pixels); _rawSlotsInUse--; }
+    }
+
+    /// <summary>Scalar owned-pool snapshot for deterministic validation; no buffer reference escapes.</summary>
+    internal (int Capacity, int InUse, int Free, int ReservedBytes) BufferStateForValidation()
+    {
+        lock (_gate)
+        {
+            var bytes = 0;
+            foreach (var bank in _rawBanks) bytes += bank?.Length ?? 0;
+            return (_rawSlots, _rawSlotsInUse, _free.Count, bytes);
         }
     }
 
@@ -204,7 +246,7 @@ internal sealed class NavigationBaselineShadowCapture : IAsyncDisposable
             var rgb = new byte[AgentHamming192Plan.OutputBytes];
             while (true)
             {
-                (NavigationBaselineShadowFrame Frame, byte[] Pixels)? next = null;
+                (NavigationBaselineShadowFrame Frame, Memory<byte> Pixels)? next = null;
                 lock (_gate)
                 {
                     if (_pending.Count > 0) next = _pending.Dequeue();
@@ -212,19 +254,37 @@ internal sealed class NavigationBaselineShadowCapture : IAsyncDisposable
                 }
                 if (next is null) { await _wake.WaitAsync(_ioStop.Token).ConfigureAwait(false); continue; }
                 var (frame, pixels) = next.Value;
+                var workerDequeuedAtTicks = Stopwatch.GetTimestamp();
+                var rawReturned = false;
                 try
                 {
                     if (_beforeWrite is not null) await _beforeWrite(_ioStop.Token).ConfigureAwait(false);
+                    var resizeStartedAtTicks = Stopwatch.GetTimestamp();
                     plan ??= new(frame.Width, frame.Height);
-                    plan.ResizeInto(pixels.AsSpan(0, frame.PackedStride * frame.Height), frame.PackedStride, frame.Channels, true, rgb);
+                    plan.ResizeInto(pixels.Span, frame.PackedStride, frame.Channels, true, rgb);
+                    var resizeCompletedAtTicks = Stopwatch.GetTimestamp();
+                    var resizeMs = Stopwatch.GetElapsedTime(resizeStartedAtTicks, resizeCompletedAtTicks).TotalMilliseconds;
+                    _resizeTotalMs += resizeMs; _resizeMaxMs = Math.Max(_resizeMaxMs, resizeMs);
+                    // RGB is a separate sole-worker buffer. IO, hashing and metadata must not retain a scarce raw slot.
+                    ReturnRaw(pixels); rawReturned = true;
+                    var rawReturnedAtTicks = Stopwatch.GetTimestamp();
                     var name = $"{frame.FrameIndex:D4}.rgb";
+                    var writeStartedAtTicks = Stopwatch.GetTimestamp();
+                    if (_afterResizeBeforeWrite is not null) await _afterResizeBeforeWrite(_ioStop.Token).ConfigureAwait(false);
                     await WriteAsync(name, rgb, _ioStop.Token).ConfigureAwait(false);
+                    var writeCompletedAtTicks = Stopwatch.GetTimestamp();
+                    var writeMs = Stopwatch.GetElapsedTime(writeStartedAtTicks, writeCompletedAtTicks).TotalMilliseconds;
+                    _writeTotalMs += writeMs; _writeMaxMs = Math.Max(_writeMaxMs, writeMs);
                     var digest = Convert.ToHexString(SHA256.HashData(rgb));
                     rows.Add(new { frame, file = name, bytes = rgb.Length, sha256 = digest, pixelFormat = "rgb24", width = 192, height = 192,
-                        poseAdmission = "not_evaluated_at_copy", inputAuthority = false });
+                        poseAdmission = "not_evaluated_at_copy", inputAuthority = false,
+                        processing = new { workerDequeuedAtTicks, resizeStartedAtTicks, resizeCompletedAtTicks,
+                            rawReturnedAtTicks, writeStartedAtTicks, writeCompletedAtTicks,
+                            queueWaitMs = Stopwatch.GetElapsedTime(frame.CopyCompletedAtTicks, workerDequeuedAtTicks).TotalMilliseconds,
+                            resizeMs, writeMs } });
                     lock (_gate) _written++;
                 }
-                finally { lock (_gate) _free.Enqueue(pixels); }
+                finally { if (!rawReturned) ReturnRaw(pixels); }
             }
             if (_journalPath is not null && _journalHash is not null)
             {
@@ -248,7 +308,12 @@ internal sealed class NavigationBaselineShadowCapture : IAsyncDisposable
                 duplicateFrames = _duplicates, framesRejected = _rejected, offersIgnoredAfterStop = _ignored,
                 framesLost = _accepted - _written + _rejected, error = _error,
                 complete = _error is null && _written == _accepted && _written > 0,
-                maximumFrames = MaximumFrames, maximumRawBuffers = BufferCount, frames = rows
+                maximumFrames = MaximumFrames, maximumRawBuffers = MaximumBufferSlots,
+                rawBufferSlots = _rawSlots, rawBankCount = RawBankCount, maximumRawBytes = RawBankCount * MaximumRawBytes,
+                rawSlotsHighWater = _rawSlotsHighWater, pendingHighWater = _pendingHighWater, rawSlotsInUse = _rawSlotsInUse,
+                workerResizeTotalMs = _resizeTotalMs, workerResizeMaxMs = _resizeMaxMs,
+                workerWriteTotalMs = _writeTotalMs, workerWriteMaxMs = _writeMaxMs,
+                workerTimingKind = "qpc-wall-including-scheduling", frames = rows
             }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             if (manifest.Length > MaximumManifestBytes) throw new IOException("shadow_manifest_capacity_exceeded");
             await WriteAsync("manifest.json", manifest, _ioStop.Token).ConfigureAwait(false);
@@ -264,8 +329,8 @@ internal sealed class NavigationBaselineShadowCapture : IAsyncDisposable
             lock (_gate)
             {
                 _accepting = false;
-                while (_pending.Count > 0) _free.Enqueue(_pending.Dequeue().Pixels);
-                _free.Clear(); _retired = true;
+                while (_pending.Count > 0) ReturnRaw(_pending.Dequeue().Pixels);
+                _free.Clear(); Array.Clear(_rawBanks); _retired = true;
             }
             _ioStop.Dispose(); _wake.Dispose();
             WorkerSlot.Release();

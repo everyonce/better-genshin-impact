@@ -83,9 +83,9 @@ public sealed class NavigationBaselineShadowCaptureTests
         finally { release.TrySetResult(); await session.DisposeAsync(); if (session.Snapshot().WorkerRetired) Directory.Delete(folder, true); }
     }
 
-    /// <summary>Two retained buffers include the active worker; overflow is visible and never blocks the capture producer.</summary>
+    /// <summary>Eight bounded raw slots include the active resizer; overflow stays visible and never waits for the writer.</summary>
     [Fact]
-    public async Task TwoBuffersOverflowOnceAndIgnoreFurtherOffersWithoutHidingLoss()
+    public async Task BoundedSlotsOverflowOnceAndIgnoreFurtherOffersWithoutHidingLoss()
     {
         var folder = Folder(); var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -97,16 +97,17 @@ public sealed class NavigationBaselineShadowCaptureTests
             using var pixels = new Mat(8, 12, MatType.CV_8UC3, Scalar.White);
             session.Offer(pixels, Source(0), 0, Poll(0)); await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
             session.Offer(pixels, Source(0), 1, Poll(0)); // Exact same immutable pixels are not copied twice.
-            session.Offer(pixels, Source(1), 2, Poll(1));
-            session.Offer(pixels, Source(2), 3, Poll(2));
-            session.Offer(pixels, Source(3), 4, Poll(3));
+            for (var i = 1; i < NavigationBaselineShadowCapture.MaximumBufferSlots; i++)
+                session.Offer(pixels, Source(i), i + 1, Poll(i));
+            session.Offer(pixels, Source(8), 9, Poll(8));
+            session.Offer(pixels, Source(9), 10, Poll(9));
             release.TrySetResult(); var native = Journal(folder);
             var result = await session.CompleteAsync(native.Path, native.Hash);
             Assert.False(result.Complete); Assert.True(result.WorkerRetired);
             Assert.Equal("shadow_buffer_exhausted", result.Error);
-            Assert.Equal((5, 2, 2, 1, 1, 1, 1), (result.FramesSeen, result.FramesAccepted, result.FramesWritten,
+            Assert.Equal((11, 8, 8, 1, 1, 1, 1), (result.FramesSeen, result.FramesAccepted, result.FramesWritten,
                 result.DuplicateFrames, result.FramesRejected, result.OffersIgnoredAfterStop, result.FramesLost));
-            session.Offer(pixels, Source(4), 5, Poll(4));
+            session.Offer(pixels, Source(10), 11, Poll(10));
             Assert.Equal(result, session.Snapshot()); // Final close fixes counts; no late admission/publication.
         }
         finally { release.TrySetResult(); await session.DisposeAsync(); if (session.Snapshot().WorkerRetired) Directory.Delete(folder, true); }
@@ -193,4 +194,157 @@ public sealed class NavigationBaselineShadowCaptureTests
             finally { await session.DisposeAsync(); if (session.Snapshot().WorkerRetired) Directory.Delete(folder, true); }
         }
     }
+
+    /// <summary>Fixed banks yield eight 1080p BGRA slots or two 4K slots without reserving another raw byte.</summary>
+    [Theory]
+    [InlineData(1920, 1080, 8)]
+    [InlineData(3840, 2160, 2)]
+    public async Task GeometryPartitionsTheSameReservedRawBudget(int width, int height, int slots)
+    {
+        var folder = Folder(); var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var session = new NavigationBaselineShadowCapture(Path.Combine(folder, "shadow"), Run, 123, 3, "blocking",
+            async ct => { entered.TrySetResult(); await release.Task.WaitAsync(ct); });
+        try
+        {
+            Assert.Equal((0, 0, 0, 66_355_200), session.BufferStateForValidation());
+            await session.InitializeAsync(CancellationToken.None);
+            using var pixels = new Mat(height, width, MatType.CV_8UC4, new Scalar(11, 22, 33, 99));
+            session.Offer(pixels, Source(0), 0, Poll(0));
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal((slots, 1, slots - 1, 66_355_200), session.BufferStateForValidation());
+            for (var i = 1; i < slots; i++) session.Offer(pixels, Source(i), i, Poll(i));
+            Assert.Equal((slots, slots, 0, 66_355_200), session.BufferStateForValidation());
+            session.Offer(pixels, Source(slots), slots, Poll(slots));
+            release.TrySetResult(); var native = Journal(folder);
+            var result = await session.CompleteAsync(native.Path, native.Hash);
+            Assert.False(result.Complete); Assert.True(result.WorkerRetired);
+            Assert.Equal("shadow_buffer_exhausted", result.Error);
+            Assert.Equal(slots, result.FramesAccepted); Assert.Equal(slots, result.FramesWritten);
+            Assert.Equal(1, result.FramesRejected); Assert.Equal(1, result.FramesLost);
+            Assert.Equal((slots, 0, 0, 0), session.BufferStateForValidation());
+            using var manifest = JsonDocument.Parse(File.ReadAllBytes(result.ManifestPath!));
+            Assert.Equal(slots, manifest.RootElement.GetProperty("rawBufferSlots").GetInt32());
+            Assert.Equal(66_355_200, manifest.RootElement.GetProperty("maximumRawBytes").GetInt32());
+            Assert.Equal(2, manifest.RootElement.GetProperty("rawBankCount").GetInt32());
+            Assert.Equal(slots, manifest.RootElement.GetProperty("rawSlotsHighWater").GetInt32());
+            Assert.Equal(0, manifest.RootElement.GetProperty("rawSlotsInUse").GetInt32());
+        }
+        finally { release.TrySetResult(); await session.DisposeAsync(); if (session.Snapshot().WorkerRetired) Directory.Delete(folder, true); }
+    }
+
+    /// <summary>All raw slots, including the first, can be overwritten during a write stall without altering its RGB bytes.</summary>
+    [Fact]
+    public async Task EarlyRawReturnAllowsReuseWhileWriterOwnsSeparateRgb()
+    {
+        var folder = Folder(); var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var session = new NavigationBaselineShadowCapture(Path.Combine(folder, "shadow"), Run, 123, 3, "blocking",
+            afterResizeBeforeWrite: async ct => { entered.TrySetResult(); await release.Task.WaitAsync(ct); });
+        try
+        {
+            await session.InitializeAsync(CancellationToken.None);
+            using (var pixels = new Mat(8, 12, MatType.CV_8UC3, new Scalar(11, 22, 33)))
+            {
+                session.Offer(pixels, Source(0), 0, Poll(0));
+                await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.Equal((8, 0, 8, 66_355_200), session.BufferStateForValidation());
+                for (var i = 1; i <= 8; i++)
+                {
+                    pixels.SetTo(new Scalar(11 + i, 22 + i, 33 + i));
+                    session.Offer(pixels, Source(i), i, Poll(i));
+                }
+                Assert.Equal((8, 8, 0, 66_355_200), session.BufferStateForValidation());
+                pixels.SetTo(Scalar.Black);
+            }
+            release.TrySetResult(); var native = Journal(folder);
+            var result = await session.CompleteAsync(native.Path, native.Hash);
+            Assert.True(result.Complete); Assert.True(result.WorkerRetired);
+            Assert.Equal(9, result.FramesAccepted); Assert.Equal(9, result.FramesWritten); Assert.Equal(0, result.FramesLost);
+            Assert.Equal((8, 0, 0, 0), session.BufferStateForValidation());
+            using var manifest = JsonDocument.Parse(File.ReadAllBytes(result.ManifestPath!));
+            var root = manifest.RootElement;
+            Assert.Equal(8, root.GetProperty("rawSlotsHighWater").GetInt32());
+            Assert.Equal(8, root.GetProperty("pendingHighWater").GetInt32());
+            Assert.Equal(0, root.GetProperty("rawSlotsInUse").GetInt32());
+            var totalResize = 0d; var totalWrite = 0d;
+            foreach (var row in root.GetProperty("frames").EnumerateArray())
+            {
+                var index = row.GetProperty("frame").GetProperty("frameIndex").GetInt32();
+                var expected = new byte[192 * 192 * 3];
+                for (var i = 0; i < expected.Length; i += 3)
+                { expected[i] = (byte)(33 + index); expected[i + 1] = (byte)(22 + index); expected[i + 2] = (byte)(11 + index); }
+                var bytes = File.ReadAllBytes(Path.Combine(folder, "shadow", row.GetProperty("file").GetString()!));
+                Assert.Equal(expected, bytes);
+                Assert.Equal(row.GetProperty("sha256").GetString(), Convert.ToHexString(SHA256.HashData(bytes)));
+                var timing = row.GetProperty("processing");
+                var resize = timing.GetProperty("resizeMs").GetDouble(); var write = timing.GetProperty("writeMs").GetDouble();
+                Assert.True(double.IsFinite(resize) && resize >= 0); Assert.True(double.IsFinite(write) && write >= 0);
+                Assert.True(timing.GetProperty("queueWaitMs").GetDouble() >= 0);
+                Assert.True(timing.GetProperty("workerDequeuedAtTicks").GetInt64() <= timing.GetProperty("resizeStartedAtTicks").GetInt64());
+                Assert.True(timing.GetProperty("resizeStartedAtTicks").GetInt64() <= timing.GetProperty("resizeCompletedAtTicks").GetInt64());
+                Assert.True(timing.GetProperty("resizeCompletedAtTicks").GetInt64() <= timing.GetProperty("rawReturnedAtTicks").GetInt64());
+                Assert.True(timing.GetProperty("rawReturnedAtTicks").GetInt64() <= timing.GetProperty("writeStartedAtTicks").GetInt64());
+                Assert.True(timing.GetProperty("writeStartedAtTicks").GetInt64() <= timing.GetProperty("writeCompletedAtTicks").GetInt64());
+                totalResize += resize; totalWrite += write;
+            }
+            Assert.Equal(totalResize, root.GetProperty("workerResizeTotalMs").GetDouble(), 6);
+            Assert.Equal(totalWrite, root.GetProperty("workerWriteTotalMs").GetDouble(), 6);
+        }
+        finally { release.TrySetResult(); await session.DisposeAsync(); if (session.Snapshot().WorkerRetired) Directory.Delete(folder, true); }
+    }
+
+    /// <summary>Returning all raw memory does not release the global worker slot or reset the original two-second drain.</summary>
+    [Fact]
+    public async Task PostResizeWriteStallStillRetainsWorkerReservation()
+    {
+        var folder = Folder(); var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var session = new NavigationBaselineShadowCapture(Path.Combine(folder, "shadow"), Run, 123, 3, "blocking",
+            afterResizeBeforeWrite: _ => { entered.TrySetResult(); return release.Task; });
+        try
+        {
+            await session.InitializeAsync(CancellationToken.None);
+            using var pixels = new Mat(8, 12, MatType.CV_8UC3, Scalar.White);
+            session.Offer(pixels, Source(0), 0, Poll(0)); await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal((8, 0, 8, 66_355_200), session.BufferStateForValidation());
+            var native = Journal(folder); var result = await session.CompleteAsync(native.Path, native.Hash);
+            Assert.False(result.Complete); Assert.False(result.WorkerRetired);
+            Assert.Equal("shadow_worker_retirement_timeout", result.Error);
+            Assert.Equal(66_355_200, session.BufferStateForValidation().ReservedBytes);
+            Assert.Throws<InvalidOperationException>(() => new NavigationBaselineShadowCapture(Path.Combine(folder, "other"), Run, 123, 3, "blocking"));
+            // A second close uses the original deadline rather than granting another drain window.
+            var second = await session.CompleteAsync(native.Path, native.Hash);
+            Assert.False(second.WorkerRetired); Assert.Equal(result.Error, second.Error);
+        }
+        finally
+        {
+            release.TrySetResult(); var elapsed = Stopwatch.StartNew();
+            while (!session.Snapshot().WorkerRetired && elapsed.Elapsed < TimeSpan.FromSeconds(5)) await Task.Delay(1);
+            await session.DisposeAsync(); Assert.True(session.Snapshot().WorkerRetired);
+            Assert.Equal((8, 0, 0, 0), session.BufferStateForValidation()); Directory.Delete(folder, true);
+        }
+    }
+
+    /// <summary>A write failure after early return cannot double-return raw slots or produce a complete archive.</summary>
+    [Fact]
+    public async Task PostResizeWriteFailureReturnsRawExactlyOnce()
+    {
+        var folder = Folder();
+        await using var session = new NavigationBaselineShadowCapture(Path.Combine(folder, "shadow"), Run, 123, 3, "blocking",
+            afterResizeBeforeWrite: _ => Task.FromException(new IOException("synthetic post-resize failure")));
+        try
+        {
+            await session.InitializeAsync(CancellationToken.None);
+            using var pixels = new Mat(8, 12, MatType.CV_8UC3, Scalar.White);
+            session.Offer(pixels, Source(0), 0, Poll(0)); var native = Journal(folder);
+            var result = await session.CompleteAsync(native.Path, native.Hash);
+            Assert.False(result.Complete); Assert.True(result.WorkerRetired); Assert.Equal(1, result.FramesLost);
+            Assert.Equal(0, result.FramesWritten); Assert.Null(result.ManifestPath);
+            Assert.Contains("synthetic post-resize failure", result.Error);
+            Assert.Equal((8, 0, 0, 0), session.BufferStateForValidation());
+        }
+        finally { await session.DisposeAsync(); if (session.Snapshot().WorkerRetired) Directory.Delete(folder, true); }
+    }
+
 }

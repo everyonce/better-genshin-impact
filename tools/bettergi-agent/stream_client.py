@@ -366,6 +366,15 @@ def resolve_input_keys(configured, server_keys):
     return keys, set(keys)
 
 
+def recording_frame_metadata(metadata, execution_mode):
+    """Avoid repeating the controller's rolling journal in every ordinary recorded frame."""
+    result = dict(metadata)
+    if execution_mode == 'off' and 'executionContext' in result:
+        result.pop('executionContext')
+        result['executionContextOmitted'] = True
+    return result
+
+
 def rgb_frame_quality(pixels):
     """Reject only wholly black/white RGB buffers; this does not establish game visibility."""
     if not pixels:
@@ -1042,6 +1051,12 @@ def parse_arguments(argv=None):
                         help='Require the server game-world recognition capability; always enabled in resident mode')
     parser.add_argument('--navigation-progress', action='store_true',
                         help='Record minimap stall evidence against actual applied movement receipts')
+    parser.add_argument('--navigation-guidance', action='store_true',
+                        help='Opt in to same-frame, read-only native courtyard pose metadata')
+    parser.add_argument('--hybrid-navigation', action='store_true',
+                        help='Combine Open P2P with native fixed-courtyard heading/progress corrections')
+    parser.add_argument('--hybrid-legs', type=int,
+                        help='Stop after this many verified courtyard legs; requires hybrid-navigation')
     parser.add_argument('--navigation-idle-reset-seconds', type=float,
                         help='Opt-in one-shot history reset after accepted navigation no-ops; disabled by default, trial value 8')
     parser.add_argument('--navigation-climb-recovery', action='store_true',
@@ -1124,6 +1139,15 @@ def parse_arguments(argv=None):
         args.fresh_frame_at_decision = args.resident
     if args.model != 'observe' and (not args.source or not args.checkpoint):
         parser.error('A real model source and checkpoint are required')
+    if args.hybrid_legs is not None and (not args.hybrid_navigation or args.hybrid_legs <= 0):
+        parser.error('hybrid-legs requires hybrid-navigation and a positive count')
+    if args.hybrid_navigation:
+        if (not args.resident or args.model != 'open-p2p' or not args.enable_input
+                or args.goal_intent != 'ground-navigation' or args.navigation_idle_reset_seconds is not None):
+            parser.error('hybrid-navigation requires resident Open P2P input, ground-navigation intent, and no separate idle reset')
+        args.navigation_guidance = True
+        if args.input_keys is None:
+            args.input_keys = 'W,A,S,D'
     return args
 
 
@@ -1201,6 +1225,7 @@ def run_episode(args, policy=None, control=None):
                                   if getattr(policy, 'execution_feedback', False) else 'not-applicable'},
               'observationProfile': profile_contract['profile'], 'preprocessingContract': profile_contract,
               'inputRequested': args.enable_input, 'model': args.model, 'decisions': [], 'receipts': [], 'framesReceived': 0,
+              'recordedExecutionContext': execution_mode != 'off',
               'maxInputActions': args.max_input_actions, 'acceptedInputActions': 0,
               'softCadence': args.soft_cadence, 'actionHoldMs': args.action_hold_ms,
               'freshFrameAtDecision': args.fresh_frame_at_decision,
@@ -1255,8 +1280,22 @@ def run_episode(args, policy=None, control=None):
     report['navigationIdleRecovery'] = idle_recovery.snapshot()
     report['motionEvidenceCapability'] = motion_capability
     climb = None
+    hybrid = None
     terminal_climb_error = None
     try:
+        if getattr(args, 'navigation_guidance', False):
+            from hybrid_navigation import HybridNavigation
+            # Validate the advertised fixed geometry before enabling native recognition.
+            candidate = HybridNavigation(bridge.hello.get('navigationGuidance') or {})
+            configured = bridge.request('enableNavigationGuidance')[0]
+            if configured.get('type') != 'navigationGuidance' or configured.get('enabled') is not True:
+                raise RuntimeError('The bridge did not acknowledge native navigation guidance')
+            HybridNavigation(configured.get('capability') or {})
+            report['navigationGuidance'] = configured['capability']
+            if getattr(args, 'hybrid_navigation', False):
+                hybrid = candidate
+                report['hybridNavigation'] = hybrid.snapshot()
+                report['hybridNavigationEvents'] = []
         if idle_recovery.threshold is not None and (bridge.hello.get('supportsRelease') is not True
                 or not getattr(policy, 'execution_feedback', False) or not callable(getattr(policy, 'reset', None))):
             raise RuntimeError('Navigation idle recovery requires acknowledged release and a resettable feedback policy')
@@ -1397,7 +1436,9 @@ def run_episode(args, policy=None, control=None):
                 report['framesReceived'] += 1
                 latest.publish(metadata, pixels)
                 if recorder:
-                    recorder.put(metadata, pixels)
+                    # Proposal/receipt events and source/pose clocks remain complete.
+                    # Full rolling context is retained only when explicitly requested.
+                    recorder.put(recording_frame_metadata(metadata, execution_mode), pixels)
                 received_frame_id = metadata['frameId']
 
     # Keep one actual reader failure; strings alone cannot authorize another lease.
@@ -1430,10 +1471,13 @@ def run_episode(args, policy=None, control=None):
     seen_recovery_interruptions = 0
     recording_error_reported = False
 
-    def hold(reason, force_release=False):
+    def hold(reason, force_release=False, preserve_navigation=False):
         """Release once per interruption and clear stale context without unloading weights."""
         nonlocal hold_reason
         idle_recovery.interrupt(reason)
+        if hybrid and reason != 'hybridEndpoint' and not preserve_navigation:
+            hybrid.interrupt(reason)
+        released = None
         if hold_reason is None or force_release:
             if force_release and not bridge.hello.get('supportsRelease'):
                 raise RuntimeError('Live goal switching requires acknowledged bridge input release')
@@ -1456,6 +1500,19 @@ def run_episode(args, policy=None, control=None):
             control.publish(state='paused' if reason in ('userPause', 'controlError', 'goalChange', 'goalChangeFailed')
                             else 'waitingForWorld', reason=reason,
                             framesReceived=report['framesReceived'], acceptedInputActions=report['acceptedInputActions'])
+        return released
+
+    def publish_hybrid():
+        """Keep sparse native verification and selected-controller attribution in each evidence segment."""
+        if hybrid is None:
+            return
+        report['hybridNavigation'] = hybrid.snapshot()
+        for event in hybrid.drain_events():
+            report['hybridNavigationEvents'].append(event)
+            if recorder:
+                recorder.event(event)
+        if control:
+            control.publish(hybridNavigation=report['hybridNavigation'])
 
     def recovery_event(event):
         """Record sparse trigger/rearm outcomes on the policy thread only."""
@@ -1564,6 +1621,8 @@ def run_episode(args, policy=None, control=None):
             noop_history_reset = idle_recovery.matched_noop_expiries(unapplied_history_receipts(pending_receipts))
             for receipt in pending_receipts:
                 recovery_event(idle_recovery.receipt(receipt))
+                if hybrid:
+                    hybrid.receipt(receipt)
             if recovery_interruption_sequence != seen_recovery_interruptions:
                 idle_recovery.interrupt('ineligibleCapture')
                 seen_recovery_interruptions = recovery_interruption_sequence
@@ -1573,6 +1632,10 @@ def run_episode(args, policy=None, control=None):
             if command == 'pause':
                 hold('goalChangeFailed' if control and control.goal_state()['goalError'] else
                      'controlError' if control_error else 'userPause')
+                cadence.advance(time.perf_counter())
+                continue
+            if hybrid and goal_state.get('goalIntent') != 'ground-navigation':
+                hold('hybridGoalIntentChanged')
                 cadence.advance(time.perf_counter())
                 continue
             # Control and goal changes are settled before selecting the next world observation.
@@ -1596,6 +1659,8 @@ def run_episode(args, policy=None, control=None):
                                           pending_receipts, report['serverDroppedReceipts'])
                 if consumed:
                     # Includes release reconfirmation and pending X; do not call generic hold().
+                    if hybrid:
+                        hybrid.interrupt('climbRecovery')
                     cadence.advance(time.perf_counter())
                     continue
             received_at, current_status = server_snapshot
@@ -1630,6 +1695,26 @@ def run_episode(args, policy=None, control=None):
                     if idle_recovery.barrier is not None else True):
                 cadence.advance(time.perf_counter())
                 continue
+            if hybrid:
+                if not fresh_frame(frame, time.perf_counter_ns(), args.max_observation_age_ms):
+                    hold('hybridStalePose')
+                    cadence.advance(time.perf_counter())
+                    continue
+                hybrid_wait = hybrid.prepare(frame)
+                if hybrid_wait == 'releaseRequired':
+                    hybrid.released(hold('hybridEndpoint', force_release=True))
+                elif hybrid_wait not in (None, 'endpointVerified', 'verifyingEndpoint', 'waitingAfterRelease'):
+                    # Stable-start sampling and duplicate source frames are waits,
+                    # not interruptions of the navigation evidence being gathered.
+                    hold('hybrid:' + hybrid_wait, preserve_navigation=hybrid_wait in (
+                        'confirmingStart', 'duplicatePose', 'sourceNotIncreasing'))
+                publish_hybrid()
+                if args.hybrid_legs is not None and hybrid.legs >= args.hybrid_legs:
+                    report['endReason'] = 'hybridLegLimit'
+                    break
+                if hybrid_wait is not None:
+                    cadence.advance(time.perf_counter())
+                    continue
             if hold_reason is not None:
                 transition = {'type': 'controlTransition', 'state': 'running', 'reason': 'freshGameWorld',
                               'clientTimeNs': time.perf_counter_ns(), 'frameId': previous}
@@ -1697,6 +1782,15 @@ def run_episode(args, policy=None, control=None):
                 result['rawPolicySteps'] = [dict(step) for step in result['steps']]
                 result['steps'] = [dict(result['steps'][0], durationMs=args.action_hold_ms)]
                 result['controllerResampling'] = 'explicit-bounded-key-hold; mouse applied once'
+            action_model_id = args.model
+            if hybrid:
+                selection = hybrid.choose(frame, result)
+                result['hybridNavigation'] = selection
+                result['steps'] = [selection['step']]
+                result['parseValid'] = True
+                result['controllerResampling'] = 'explicit-hybrid-selection; original modelSteps retained'
+                action_model_id = selection['owner']
+                publish_hybrid()
             rejection = proposal_rejection(result, server_keys, args.enable_input, age,
                                            args.max_observation_age_ms, policy_ms, cadence.period * 1000,
                                            trial_keys=effective_keys, enforce_compute_budget=not args.soft_cadence)
@@ -1707,6 +1801,8 @@ def run_episode(args, policy=None, control=None):
             if newest and newest[0]['frameQuality'] != 'usable':
                 rejection = 'latestFrameBlank'
                 report['captureQuality']['rejectedPredictions'] += 1
+            if hybrid and newest and not hybrid.latest_pose_usable(newest[0]):
+                rejection = 'latestNavigationPoseUnavailable'
             _, latest_status = server_snapshot
             latest_gate = latest_status.get('worldReadiness', {})
             if capability.get('requiredForInput') and (latest_gate.get('ready') is not True
@@ -1719,7 +1815,7 @@ def run_episode(args, policy=None, control=None):
                 rejection = 'unappliedActionHistory'
             if stopped.is_set():
                 rejection = 'streamStopped'
-            # Do not silently strip keys or execute a different action than evaluated.
+            # Hybrid corrections are explicitly attributed above; ordinary proposals remain unchanged.
             if rejection is None:
                 start_deadline = {'startBeforeMs': observed_at+args.max_observation_age_ms} if supports_start_deadline else {}
                 if start_deadline:
@@ -1732,7 +1828,7 @@ def run_episode(args, policy=None, control=None):
                     'expiresAtMs': observed_at+700, **start_deadline}
                 result['acceptance'], response_payload = bridge.request('action', requestId=request_id,
                     frameId=frame['frameId'], observedAtMs=frame['capturedAtMs'],
-                    expiresAtMs=observed_at+700, modelId=args.model,
+                    expiresAtMs=observed_at+700, modelId=action_model_id,
                     steps=result['steps'], **start_deadline)
                 committed = action_response_accepted(result['acceptance'], request_id, response_payload)
                 report.pop('unacknowledgedAction', None)
@@ -1740,21 +1836,26 @@ def run_episode(args, policy=None, control=None):
                 result['acceptance'] = {'type': 'notSubmitted', 'reason': rejection}
                 committed = False  # This branch proves no action request was submitted.
                 if execution_mode != 'off':
-                    bridge.not_submitted(result, model_id=args.model, frame_id=frame['frameId'], reason=rejection)
+                    bridge.not_submitted(result, model_id=action_model_id, frame_id=frame['frameId'], reason=rejection)
             if committed:
                 report['acceptedInputActions'] += 1
                 last_accepted_at = time.perf_counter()
                 history_gap_reset = False
             if getattr(policy, 'execution_feedback', False):
-                policy.finish_action(committed)
-                result['historyCommitted'] = committed
+                model_committed = committed and action_model_id == args.model
+                policy.finish_action(model_committed)
+                result['historyCommitted'] = model_committed
+                if hybrid and action_model_id != args.model:
+                    # The unexecuted model prediction is not the native correction's action history.
+                    policy.reset()
             report['decisions'].append(result)
             if recorder:
                 recorder.event({'type': 'proposal', 'frameId': frame['frameId'],
                                 'proposalJournalVersion': 2,
                                 # Null explicitly means this policy has no acceptance feedback.
                                 'historyCommitted': result.get('historyCommitted'),
-                                'observedAtMs': frame['capturedAtMs'], 'model': args.model,
+                                'observedAtMs': frame['capturedAtMs'], 'model': action_model_id,
+                                **({'hybridNavigation': result['hybridNavigation']} if hybrid else {}),
                                 'observationTimestampMs': observed_at,
                                 'startBeforeMs': result.get('startBeforeMs'),
                                 'steps': result['steps'], 'acceptance': result['acceptance'],
@@ -1868,6 +1969,10 @@ def run_episode(args, policy=None, control=None):
         # cache state accumulated by later predictions (including failed ones).
         report['finalPolicyMetadata'] = copy.deepcopy(policy.metadata) if policy else None
         report['navigationIdleRecovery'] = idle_recovery.snapshot()
+        if hybrid:
+            publish_hybrid()
+            if args.hybrid_legs is not None and hybrid.legs < args.hybrid_legs and report['endReason'] != 'userStop':
+                report.setdefault('error', 'Requested hybrid route legs were not completed')
         if execution_mode != 'off':
             # Include terminal reports that arrived after the last model decision.
             final_frame = latest.newer_than(None)

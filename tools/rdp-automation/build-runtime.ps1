@@ -47,7 +47,7 @@ if (-not (Test-Path -LiteralPath $dotnetExe -PathType Leaf)) {
     throw "The installed .NET SDK is missing at $dotnetExe. This script does not install dependencies."
 }
 
-# Select a fresh version directory. Existing releases, including failed builds, are retained.
+# Select a fresh version before retention can retire any superseded release.
 if ($Release -eq 0) {
     $numbers = @(Get-ChildItem -LiteralPath $artifactRoot -Directory | ForEach-Object {
         if ($_.Name -match '^release-r([0-9]+)$') { [int]$Matches[1] }
@@ -58,6 +58,15 @@ $releaseRoot = Join-Path $artifactRoot "release-r$Release"
 $target = Join-Path $releaseRoot 'BetterGI-English-win-x64'
 if (Test-Path -LiteralPath $releaseRoot) {
     throw "Release directory already exists: $releaseRoot. Choose an unused release number."
+}
+
+# The retention manager owns only this repository's managed artifacts tree.
+# Shared external artifact roots retain their existing caller-managed policy.
+$retentionScript = Join-Path $repoRoot 'Build\Scripts\manage-release-retention.ps1'
+$managedArtifacts = $artifactRoot.TrimEnd('\', '/') -eq (Join-Path $repoRoot 'artifacts').TrimEnd('\', '/')
+if ($managedArtifacts) {
+    & $retentionScript -Repository $repoRoot -Action Apply -PublishDirectory $target
+    & (Join-Path $repoRoot 'tools\quest-pilot\check-storage-headroom.ps1') -Repository $repoRoot
 }
 
 # Keep the SDK and package cache local; restore the caller's process environment afterward.
@@ -102,6 +111,10 @@ try {
     }
     $json = $manifest | ConvertTo-Json -Depth 4
     [IO.File]::WriteAllText((Join-Path $releaseRoot 'build-manifest.json'), $json, [Text.UTF8Encoding]::new($false))
+    if ($managedArtifacts) {
+        & $retentionScript -Repository $repoRoot -Action Register -PublishDirectory $target
+        & $retentionScript -Repository $repoRoot -Action Apply -PublishDirectory $target
+    }
     Write-Output $json
 }
 finally {

@@ -3,6 +3,7 @@ using BetterGenshinImpact.Core.Capture;
 using BetterGenshinImpact.Core.Config;
 using BetterGenshinImpact.Core.Pipes;
 using BetterGenshinImpact.GameTask.Runtime;
+using BetterGenshinImpact.GameTask.NavigationBaseline;
 using BetterGenshinImpact.Service.Instance;
 using Fischless.GameCapture;
 using Fischless.GameCapture.DesktopDc;
@@ -80,6 +81,8 @@ public sealed class AgentStreamSession
     private readonly string? _producerBuildSha256;
     /// <summary>Transport-thread-owned one-shot latch; failed or lost confirmation cannot renew the channel.</summary>
     private bool _queuedEnableAttempted;
+    /// <summary>Explicit same-owner opt-in to read-only native pose metadata; ordinary streams keep their existing capture cost.</summary>
+    private bool _navigationGuidanceEnabled;
 
     /// <summary>Authenticated opt-in configuration uses the existing exact session QPC origin, never paired approximate samples.</summary>
     internal JObject StepApplicationConfiguration(RuntimeAgentInput input, string producerBuildSha256, int version = 1)
@@ -162,10 +165,16 @@ public sealed class AgentStreamSession
     private async Task CaptureLoopAsync(AgentActionController controller, CancellationToken ct)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(CaptureCadenceMs));
+        AgentNavigationRecognizer? navigation = null;
         AgentSourceFrame? previousSource = null;
+        try
+        {
         while (await timer.WaitForNextTickAsync(ct))
         {
             if (!_runtime.Window.IsAlive || _runtime.IsStopping) return;
+            // Warm the opt-in local map before capturing, so warmup cannot renew an old image's timestamp.
+            if (Volatile.Read(ref _navigationGuidanceEnabled) && navigation is null)
+                navigation = new AgentNavigationRecognizer(_runtime.SystemInfo.DpiScale);
             var capturedAt = NowMs;
             // Expected GPU readback may finish before the next cadence. Real failures still skip/invalidate immediately.
             // Preserve this original request time across polls; neither retry nor delay renews source authority.
@@ -193,7 +202,9 @@ public sealed class AgentStreamSession
             previousSource = sourceFrame;
             var frameId = Interlocked.Increment(ref _frameId);
             var recognitionStarted = Stopwatch.GetTimestamp();
-            var evidence = AgentWorldRecognizer.Recognize(source);
+            var evidence = navigation is null ? AgentWorldRecognizer.Recognize(source)
+                : NavigationBaselineCapturePolicy.RecognizeWorld(source,
+                    NavigationBaselineCapturePolicy.TaskOwnedTimer, _ => { });
             var recognitionMs = Stopwatch.GetElapsedTime(recognitionStarted).TotalMilliseconds;
             var observation = new AgentObservation(frameId, capturedAt, source.Width, source.Height, evidence, recognitionMs, sourceFrame)
             { HostSnapshot = hostSnapshot };
@@ -201,6 +212,7 @@ public sealed class AgentStreamSession
             var readiness = controller.RegisterFrame(observation, NowMs);
             // Inspect these same native pixels after the safety gate; never take another capture for motion hints.
             var motion = AgentMotionRecognizer.Recognize(source, readiness.Ready);
+            var navigationPose = navigation?.Recognize(source, observation, readiness, motion);
             _snapshots.Observe(source, observation, readiness);
             var resizeStarted = Stopwatch.GetTimestamp();
             var bytes = EncodeObservation(source, out var width, out var height, out var payloadBytes);
@@ -210,7 +222,7 @@ public sealed class AgentStreamSession
                 next = new CapturedFrame(observation, width, height, bytes, payloadBytes,
                     NowMs - capturedAt, readiness, motion)
                 { ObservationResizeMs = Stopwatch.GetElapsedTime(resizeStarted).TotalMilliseconds,
-                    DesktopDcTiming = captureTiming };
+                    DesktopDcTiming = captureTiming, NavigationPose = navigationPose };
             }
             catch { ArrayPool<byte>.Shared.Return(bytes); throw; }
             lock (_frameGate)
@@ -220,6 +232,8 @@ public sealed class AgentStreamSession
                 previous?.Release();
             }
         }
+        }
+        finally { navigation?.Dispose(); }
     }
 
     /// <summary>Transfer one ready frame, retrying only validated expected-pending outcomes inside a finite capture turn.</summary>
@@ -355,6 +369,12 @@ public sealed class AgentStreamSession
             }
             switch (request.Command)
             {
+                case "enableNavigationGuidance":
+                    // This command only enables evidence. Input still requires both original explicit opt-ins.
+                    Volatile.Write(ref _navigationGuidanceEnabled, true);
+                    await WriteAsync(pipe, new { type = "navigationGuidance", enabled = true,
+                        capability = AgentNavigationRecognizer.Capability }, null, ct);
+                    break;
                 case "enableStepApplications":
                     JObject confirmation;
                     try
@@ -394,6 +414,7 @@ public sealed class AgentStreamSession
                                     frame.Readiness.Epoch == currentReadiness.Epoch,
                                 worldReadiness = currentReadiness, frameWorldReadiness = frame.Readiness,
                                 motionEvidence = MotionForReadiness(frame.MotionEvidence, frame.Readiness, currentReadiness),
+                                navigationPose = frame.NavigationPose,
                                 frame.Observation.SourceFrame,
                                 sourceTimestampKind = frame.Observation.SourceFrame is null ? "unknown" : "wgc_reported_compositor_qpc",
                                 sourceFrameAgeMs = frame.Observation.SourceFrame is { } sourceTiming
@@ -504,6 +525,7 @@ public sealed class AgentStreamSession
             freshnessAnchor = "min(reported_compositor_qpc, immutable_first_acquisition_qpc)",
             freshnessClockKinds = new[] { "reported_compositor_qpc", "first_acquisition_qpc" }, measuresGameRenderAge = false },
         supportsReadinessSnapshots = true, diagnostics = _snapshots.Snapshot(),
+        navigationGuidance = AgentNavigationRecognizer.Capability,
         worldReadiness = new
         {
             version = 1, requiredForInput = true, method = "paimon_hud_and_modal_templates",
@@ -701,6 +723,8 @@ public sealed class AgentStreamSession
         public AgentWorldReadiness Readiness { get; } = readiness;
         /// <summary>Keyboard-hint evidence derived from this publication's native source before downsampling.</summary>
         public AgentMotionEvidence MotionEvidence { get; } = motionEvidence;
+        /// <summary>Optional localization from these same native pixels, with no carried-over pose on skipped recognition.</summary>
+        public AgentNavigationPose? NavigationPose { get; init; }
         /// <summary>Acquire under the publication lock before reading the buffer.</summary>
         public void Retain() => Interlocked.Increment(ref _references);
         /// <summary>Recycle only after the publication slot and transport have both finished.</summary>

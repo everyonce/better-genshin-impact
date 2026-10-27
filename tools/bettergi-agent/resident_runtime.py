@@ -472,8 +472,8 @@ def run_resident(args, load_policy, run_episode):
             if args.max_input_actions is not None and summary['acceptedInputActions'] >= args.max_input_actions:
                 summary['endReason'] = 'maxInputActions'
                 break
-            if segment.get('endReason') == 'userStop':
-                summary['endReason'] = 'userStop'
+            if segment.get('endReason') in ('userStop', 'hybridLegLimit'):
+                summary['endReason'] = segment['endReason']
                 break
             # Allow the previous TaskRunner owner to finish before rediscovery/start.
             time.sleep(.1)

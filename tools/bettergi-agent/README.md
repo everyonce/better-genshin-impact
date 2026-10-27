@@ -155,6 +155,38 @@ BF16/FP16 equivalence.
 
 ## Verification
 
+### Native navigation with GPU feedback
+
+`stream_client.py --resident --model open-p2p --hybrid-navigation
+--goal-intent ground-navigation --hybrid-legs 2` opts into the fixed
+Mondstadt courtyard qualification route. Supply the usual checkpoint, source,
+CUDA graph, fast-start, RDP session, input and output arguments. Omitting
+`--hybrid-legs` uses the existing finite run duration. `--navigation-guidance`
+alone exposes read-only native poses and is suitable for an observation-only
+check before enabling movement.
+
+BetterGI recognizes position and camera yaw from the exact native image that
+produces each policy observation. The GPU still evaluates the image stream;
+route-compatible forward proposals retain `open-p2p` attribution. Native
+heading corrections and replacements for idle/off-route proposals are labeled
+`hybrid-native`, with the original model proposal retained. An overridden model
+proposal is not committed to its action history. Both sources share the same
+input owner, freshness limits and world-readiness gate.
+
+Three distinct stable observations admit the starting endpoint. Every completed
+leg requires an acknowledged release followed by three fresh stable endpoint
+poses. Receipt-confirmed movement without displacement triggers a bounded
+retreat and side-step; two unsuccessful recoveries or departure from the fixed
+corridor ends the run. No teleport or model reload is performed by this planner.
+The evidence includes endpoint samples, recovery attempts and controller
+selection counts. Ordinary recordings omit the repeated rolling
+`executionContext` snapshot from each image header, while retaining source
+clocks, poses, proposal events and all terminal receipts. Use
+`--execution-context record` to retain the full snapshots for diagnostics.
+These checks qualify this route only; normal motion hints
+are not proof of grounded movement, and software input receipts are not proof
+of physical input delivery.
+
 The experimental step-application bridge, queued successor, native history owner
 and checkpoint load scope have 237 portable, CPU-only checks. From the repository root, run them
 with Python 3.11; no model, GPU or running BetterGI instance is required:

@@ -42,7 +42,7 @@ class StreamSegments:
     """
     LISTS = ('decisions', 'receipts', 'controlTransitions', 'goalChanges',
              'navigationProgress', 'navigationIdleRecoveryEvents',
-             'navigationClimbRecoveryEvents', 'navigationClimbActions')
+             'navigationClimbRecoveryEvents', 'navigationClimbActions', 'hybridNavigationEvents')
     COUNTERS = ('framesReceived', 'acceptedInputActions', 'unappliedAcceptedActions', 'receiptHistoryResets')
     MAX_SEGMENTS = 4096
     MAX_CONTEXT = 256

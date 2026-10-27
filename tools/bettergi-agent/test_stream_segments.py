@@ -34,6 +34,22 @@ def proposal(request, frame_id):
             'acceptance': {'type': 'accepted', 'requestId': request}}
 
 
+class RecordingMetadataTests(unittest.TestCase):
+    def test_ordinary_recording_omits_only_redundant_context_without_mutating_live_frame(self):
+        original = dict(header(1), navigationPose={'state': 'valid', 'frameId': 1},
+                        executionContext={'rolling': ['prior-input']}, receipts=[{'requestId': 'a'}])
+        result = client.recording_frame_metadata(original, 'off')
+        self.assertNotIn('executionContext', result)
+        self.assertTrue(result.pop('executionContextOmitted'))
+        self.assertEqual(result, {k:v for k,v in original.items() if k != 'executionContext'})
+        self.assertEqual(original['executionContext'], {'rolling': ['prior-input']})
+
+    def test_explicit_context_recording_and_model_modes_preserve_full_context(self):
+        original = dict(header(1), executionContext={'rolling': ['prior-input']})
+        for mode in ('record', 'model'):
+            self.assertEqual(client.recording_frame_metadata(original, mode), original)
+
+
 class Recorder:
     """Model independently draining encoders without spawning a process."""
     def __init__(self, directory, *args, **kwargs):

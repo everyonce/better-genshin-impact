@@ -1,10 +1,14 @@
 # BetterGI agent status
 
-Updated October 26, 2026, 19:35 UTC. See the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for evidence and historical checkpoints.
+Updated October 27, 2026. See the [hybrid gameplay qualification](BetterGI-Hybrid-Gameplay-2026-10-27.md) for the current result and the [measured sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) for historical checkpoints.
 
-The local prototype supports launching BetterGI and Genshin inside minimized RDP, issuing commands in that session, and replacing the child BetterGI build. It has demonstrated automatic continuation along a fixed courtyard route. General autonomous gameplay and learned-model task completion remain unverified.
+The local R57 prototype now combines same-frame native navigation with a resident GPU model inside minimized RDP. It completed 60 verified courtyard legs in 259.80 seconds, with one model load, 2,272 applied actions, approximately 30 ms median model evaluation and a 64°C peak GPU temperature. An independent source/endpoint/receipt audit passed. A separate plinth-edge offset trial rejoined and completed eight legs. Physical obstacle escape, general autonomous gameplay and independent learned-model task completion remain unverified.
 
-New GPU experiments are temporarily deferred while investigating reported
+R57 is the current child package at `artifacts/release-r57/BetterGI-English-win-x64/BetterGI.exe`; the existing R56 primary host was retained. The October 27 evidence is under `artifacts/live/2026-10-27-hybrid`. The current reproduction profile uses H41, 10 Hz decisions, native RGB192 and the 150 ms first-input deadline. Release retention preserves pinned R1/R55/R56 and useful recordings/test results. The following October 26 details are historical, including process identities and the temporary GPU-testing deferral.
+
+## Historical October 26 checkpoint
+
+New GPU experiments were temporarily deferred while investigating reported
 desktop lag. At 19:03:49 UTC, `nvidia-smi` showed 43% GPU use, 87°C and active software
 thermal slowdown, with 4,615 MiB free. No model or gameplay-controller worker from
 this task was running. Three aggregate CPU intervals at 19:05:43–46 UTC measured

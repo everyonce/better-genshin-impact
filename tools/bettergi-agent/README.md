@@ -165,6 +165,13 @@ CUDA graph, fast-start, RDP session, input and output arguments. Omitting
 alone exposes read-only native poses and is suitable for an observation-only
 check before enabling movement.
 
+Choose a surveyed segment with `--hybrid-route`. The default is
+`mondstadt-courtyard-hybrid-v1`. The streetlamp, flower box and stone stair post
+use `mondstadt-lamppost-v1`, `mondstadt-planter-v1` and
+`mondstadt-stair-post-v1`. Begin within two map units of either endpoint.
+The street routes check their coordinate orientation against BetterGI's two
+native bearings on each usable frame before steering.
+
 BetterGI recognizes position and camera yaw from the exact native image that
 produces each policy observation. The GPU still evaluates the image stream;
 route-compatible forward proposals retain `open-p2p` attribution. Native
@@ -175,9 +182,29 @@ input owner, freshness limits and world-readiness gate.
 
 Three distinct stable observations admit the starting endpoint. Every completed
 leg requires an acknowledged release followed by three fresh stable endpoint
-poses. Receipt-confirmed movement without displacement triggers a bounded
-retreat and side-step; two unsuccessful recoveries or departure from the fixed
-corridor ends the run. No teleport or model reload is performed by this planner.
+poses. The stall detector requires two seconds of distinct, aligned observations
+within half a map unit and at least 600 ms of confirmed forward input.
+Retreat requires 200 ms of confirmed backward input. Turning back toward the
+route requires both a confirmed sidestep and 1.5 map units of lateral clearance.
+Input and time budgets bound each attempt. The planner stops on exhausted
+recovery attempts or departure from its corridor.
+
+For the stair post, add `--navigation-climb-recovery --remember-hybrid-bypass`.
+If Genshin begins climbing, BetterGI confirms the drop command completed and
+waits for two new normal-motion frames before the controller backs away.
+After a successful detour, the controller can retain three measured positions
+for that RDP stream and follow them in reverse on the return leg. Saving a path
+requires forward progress past contact and a confirmed endpoint.
+A late image releases input. During an established detour, three fresh stable
+positions in the same capture and the acknowledged readiness epoch can confirm
+the current waypoint again. A change in location or motion discards the detour.
+
+Run `audit_hybrid_run.py` on the saved report and recordings to check a trial.
+`--minimum-obstacle-passages` checks stationary forward attempts followed by
+passage. `--minimum-climb-passages` checks a drop followed by passage.
+`--minimum-bypass-replays` checks completed traversals of the taught path.
+`--minimum-bypass-rebinds` requires a recorded stale-frame release and
+reconfirmation during a completed replay.
 The evidence includes endpoint samples, recovery attempts and controller
 selection counts. Ordinary recordings omit the repeated rolling
 `executionContext` snapshot from each image header, while retaining source

@@ -3,6 +3,7 @@ import copy
 from contextlib import redirect_stdout
 import io
 import json
+import math
 from pathlib import Path
 import tempfile
 import time
@@ -22,7 +23,8 @@ def frame(number, at, point=START, yaw=47, heading=47, **changes):
                 positionConfidence=.996, yawConfidence=.6, layerId='City_102',
                 headingToStartDegrees=(heading + 180) % 360, headingToEndDegrees=heading,
                 mouseToStart=350, mouseToEnd=0)
-    result = dict(frameId=number, capturedAtMs=at, sourceFrame=dict(captureEpoch='capture-a', capturedAtMs=at),
+    result = dict(frameId=number, capturedAtMs=at,
+                  sourceFrame=dict(captureEpoch='capture-a', capturedAtMs=at, timestamp100ns=round(at * 10000)),
                   navigationPose=pose, motionEvidence=dict(status='normal', spaceKeyMatched=False))
     result.update(changes)
     return result
@@ -194,27 +196,24 @@ class HybridNavigationTests(unittest.TestCase):
 
     def test_no_progress_requires_applied_movement_not_accepted_actions(self):
         nav = self.ready()
-        nav.choose(frame(3, 300), proposal())
-        nav.receipt(dict(requestId='accepted-only', appliedSteps=[], endedAtMs=2300))
-        item = frame(4, 2400)
-        nav.prepare(item)
-        nav.choose(item, proposal())
+        nav.receipt(dict(requestId='accepted-only', appliedSteps=[], endedAtMs=300))
+        for at in range(300, 2400, 100):
+            item = frame(at, at)
+            nav.prepare(item)
+            nav.choose(item, proposal())
         self.assertEqual(nav.total_recoveries, 0)
-        receipt = dict(requestId='actual-movement', appliedSteps=[dict(startedAtMs=2500, keys=['W'])], endedAtMs=4300)
+        receipt = dict(requestId='actual-movement', appliedSteps=[dict(startedAtMs=1500, keys=['W'])], endedAtMs=2300)
         nav.receipt(receipt)
         nav.receipt(receipt)
-        item = frame(5, 4500)
+        item = frame(2400, 2400)
         nav.prepare(item)
         selected = nav.choose(item, proposal())
         self.assertEqual(nav.total_recoveries, 1)
         self.assertEqual(selected['step']['keys'], ['S'])
-        self.assertEqual(nav.drain_events()[-1]['movementMs'], 1800)
-        item = frame(6, 4800)
+        self.assertEqual(nav.drain_events()[-1]['movementMs'], 800)
+        item = frame(3000, 3000)
         nav.prepare(item)
-        self.assertEqual(nav.choose(item, proposal())['step']['keys'], ['A'])
-        item = frame(7, 5100)
-        nav.prepare(item)
-        self.assertEqual(nav.choose(item, proposal())['step']['keys'], ['W'])
+        self.assertEqual(nav.choose(item, proposal())['step']['keys'], ['S'])
 
     def test_unreviewed_route_is_rejected_before_native_recognition_enable(self):
         value = capability()
@@ -224,22 +223,36 @@ class HybridNavigationTests(unittest.TestCase):
 
     def test_repeated_obstruction_exhausts_two_attempts_instead_of_looping_forever(self):
         nav = self.ready()
-        nav.choose(frame(3, 300), proposal())
-        for number, at in ((4, 2400), (6, 5200)):
-            nav.receipt(dict(requestId=str(number),
-                appliedSteps=[dict(startedAtMs=at-1800, keys=['W'])], endedAtMs=at-100))
-            item = frame(number, at)
+        point = START
+
+        def choose(at):
+            item = frame(at, at, point)
             nav.prepare(item)
-            self.assertEqual(nav.choose(item, proposal())['step']['keys'], ['S'])
-            item = frame(number+1, at+600)
-            nav.prepare(item)
-            nav.choose(item, proposal())
-        nav.receipt(dict(requestId='third-stall',
-            appliedSteps=[dict(startedAtMs=6000, keys=['W'])], endedAtMs=7900))
-        item = frame(8, 8000)
-        nav.prepare(item)
-        with self.assertRaisesRegex(RuntimeError, 'obstacle_recovery_exhausted'):
-            nav.choose(item, proposal())
+            return nav.choose(item, proposal())['step']['keys']
+
+        def receipt(start, end, key):
+            nav.receipt(dict(requestId=f'{key}-{start}', appliedSteps=[
+                dict(startedAtMs=start, keys=[key])], endedAtMs=end))
+
+        at = 300
+        for side in ('A', 'D', None):
+            for t in range(at, at+2000, 100):
+                choose(t)
+                receipt(t+30, t+100, 'W')
+            at += 2000
+            if side is None:
+                with self.assertRaisesRegex(RuntimeError, 'obstacle_recovery_exhausted'):
+                    choose(at)
+                break
+            self.assertEqual(choose(at), ['S'])
+            receipt(at+30, at+250, 'S')
+            self.assertEqual(choose(at+300), [side])
+            receipt(at+330, at+620, side)
+            radians = math.radians(47)
+            sign = 1 if side == 'D' else -1
+            point = point[0]+sign*2*math.sin(radians), point[1]-sign*2*math.cos(radians)
+            self.assertEqual(choose(at+650), ['W'])
+            at += 950
         self.assertEqual(nav.total_recoveries, 2)
 
 

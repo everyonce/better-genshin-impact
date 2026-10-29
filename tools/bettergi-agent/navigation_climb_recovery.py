@@ -270,11 +270,21 @@ class NavigationClimbRecovery:
             if self.phase == 'monitoring':
                 self._confirmation = None
                 return None
+            previous = self._confirmation
             if self._confirmed(sample, token):
+                # A spontaneous return to normal before X has no executed drop
+                # to hand to the hybrid controller. Only join a confirmed X exit.
+                evidence = {}
+                if self.phase == 'await_exit' and self._receipt is not None:
+                    evidence['climbExit'] = dict(climbAttempt=self.attempts, dropRequestId=self._request['requestId'],
+                        dropFrameId=self._request['frameId'], dropEndedAtMs=self._receipt['endedAtMs'],
+                        cleanupReleaseAtMs=self._barrier[0], exitFrameIds=[previous[0][3], sample[3]],
+                        resumeFrameId=sample[3], resumeAtMs=sample[0], sourceEpoch=sample[2][0],
+                        resumeSourceId=sample[2][1], resumeWorldEpoch=sample[1])
                 self.phase = 'monitoring'
                 self._deadline = self._token = self._confirmation = self._source = None
                 self._retry_after_ns = 0
-                return self._event('resume', meaning='fresh_normal_hints_not_grounded_proof')
+                return self._event('resume', meaning='fresh_normal_hints_not_grounded_proof', **evidence)
             return None
         if self.phase in ('await_drop_frame', 'drop_ready'):
             self.phase = 'drop_ready'

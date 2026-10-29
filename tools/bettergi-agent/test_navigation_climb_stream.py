@@ -203,6 +203,62 @@ class Fixture:
 
 
 class ClimbStreamTests(unittest.TestCase):
+    def test_confirmed_drop_starts_hybrid_retreat_on_the_next_qualified_pose(self):
+        from hybrid_navigation import HybridNavigation
+        from test_hybrid_navigation import capability, frame as native_frame, proposal
+        f = Fixture()
+        nav = HybridNavigation(capability())
+        f.value.drop_resumed = nav.latch_climb_exit
+
+        def ground(stamp):
+            item = frame(stamp, epoch=f.bridge.epoch, motion='normal')
+            item['navigationPose'] = native_frame(stamp, stamp)['navigationPose']
+            return item
+
+        for stamp in (700, 800, 900):
+            nav.prepare(ground(stamp))
+        self.assertEqual(nav.phase, 'walking')
+        f.action()
+        f.clock.ns = 1_270_000_000
+        f.tick(1260, receipts=f.bridge.terminal())
+        f.tick(1330, 'normal')
+        self.assertIsNone(nav.pending_climb_exit)
+        f.tick(1390, 'normal')
+        nav.interrupt('climbRecovery')  # The serial loop skips prediction on the resume tick.
+        self.assertEqual(nav.prepare(ground(1390)), 'waitingAfterClimbResume')
+        invalid = ground(1400)
+        invalid['navigationPose']['state'] = 'unavailable'
+        self.assertEqual(nav.prepare(invalid), 'poseUnavailable')
+        self.assertEqual(nav.phase, 'awaitingClimbPose')
+        next_frame = ground(1490)
+        self.assertIsNone(nav.prepare(next_frame))
+        selected = nav.choose(next_frame, proposal(['W']))
+        self.assertEqual((selected['owner'], selected['reason'], selected['step']['keys']),
+                         ('hybrid-native', 'obstacleRetreat', ['S']))
+        events = nav.drain_events()
+        self.assertEqual([event['type'] for event in events], ['hybridStartVerified', 'hybridClimbRecovery'])
+        event = events[-1]
+        self.assertEqual((event['frameId'], event['preClimbFrameId'], event['attempt']), (1490, 900, 1))
+        proof = event['climbExit']
+        self.assertEqual(proof, f.report['navigationClimbRecoveryEvents'][-1]['climbExit'])
+        self.assertEqual(proof['exitFrameIds'], [1330, 1390])
+        self.assertEqual(proof['dropRequestId'], f.report['navigationClimbActions'][0]['requestId'])
+        self.assertEqual(proof['dropFrameId'], f.report['navigationClimbActions'][0]['frameId'])
+        self.assertLessEqual(proof['dropEndedAtMs'], proof['cleanupReleaseAtMs'])
+        self.assertGreater(proof['resumeAtMs'], proof['cleanupReleaseAtMs'])
+
+    def test_normal_exit_before_an_x_was_applied_cannot_start_hybrid_escape(self):
+        f = Fixture()
+        resumes = []
+        f.value.drop_resumed = resumes.append
+        f.tick(1000)
+        f.tick(1060)
+        f.tick(1130, 'normal')
+        f.tick(1190, 'normal')
+        self.assertEqual(f.value.helper.phase, 'monitoring')
+        self.assertEqual(resumes, [])
+        self.assertNotIn('climbExit', f.report['navigationClimbRecoveryEvents'][-1])
+
     """Exercise the composed driver and actual run_episode control ordering."""
     def test_changed_token_before_guarded_submit_refuses_without_unknown_transmission(self):
         for document in (dict(command='pause'), dict(command='run', goalRequestId='a'*32,

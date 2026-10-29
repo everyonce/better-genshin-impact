@@ -6,6 +6,7 @@ video presentation time is an index, not an assumption about capture cadence.
 """
 import argparse
 import copy
+from contextlib import nullcontext
 import json
 import math
 import os
@@ -21,6 +22,7 @@ import uuid
 
 from observation_timing import frame_timing, observation_timestamp
 from host_observation import HostObservationContract
+from hybrid_routes import COURTYARD_ROUTE, ROUTE_IDS, STAIR_POST_ROUTE
 from navigation_idle_recovery import (GOAL_INTENTS, NavigationIdleRecovery, RecoverySuperseded,
                                       capture_context, eligible_frame, fresh_frame)
 from observation_profiles import LEGACY, P2P_NATIVE, PROFILES, validate_model_profile, verify_hello, verify_frame
@@ -797,7 +799,8 @@ class ClimbRecoveryStream:
     The caller holds its ingestion lock while tick runs. No model prediction or
     feedback commit occurs here. The capture worker only appends receipt facts.
     """
-    def __init__(self, args, bridge, policy, control, report, recorder, *, collect, reset, clear, released):
+    def __init__(self, args, bridge, policy, control, report, recorder, *, collect, reset, clear, released,
+                 drop_resumed=None):
         """Pin the owned connection and carry the resident's finite budget across clean leases."""
         from navigation_climb_recovery import NavigationClimbRecovery
         validate_navigation_climb_options(args)
@@ -818,6 +821,7 @@ class ClimbRecoveryStream:
         self.hello_value = copy.deepcopy(bridge.hello)
         self.control, self.report, self.recorder = control, report, recorder
         self.collect, self.reset, self.clear, self.released = collect, reset, clear, released
+        self.drop_resumed = drop_resumed
         self.token = None
         self.first_error = None
         self.cleanup_attempted = False
@@ -955,6 +959,8 @@ class ClimbRecoveryStream:
                 continue
             if kind == 'resume':
                 self.token = None
+                if self.drop_resumed and 'climbExit' in event:
+                    self.drop_resumed(event['climbExit'])
             event = None
 
     def tick(self, frame, status, status_received_ns, receipts, dropped_receipts):
@@ -1054,9 +1060,13 @@ def parse_arguments(argv=None):
     parser.add_argument('--navigation-guidance', action='store_true',
                         help='Opt in to same-frame, read-only native courtyard pose metadata')
     parser.add_argument('--hybrid-navigation', action='store_true',
-                        help='Combine Open P2P with native fixed-courtyard heading/progress corrections')
+                        help='Combine Open P2P with same-frame BetterGI guidance on a fixed route')
+    parser.add_argument('--hybrid-route', choices=ROUTE_IDS,
+                        help='Choose a surveyed fixed route; defaults to the original courtyard segment')
+    parser.add_argument('--remember-hybrid-bypass', action='store_true',
+                        help='Reuse a verified stair-post passage within the current controller lease')
     parser.add_argument('--hybrid-legs', type=int,
-                        help='Stop after this many verified courtyard legs; requires hybrid-navigation')
+                        help='Stop after this many verified route legs; requires hybrid-navigation')
     parser.add_argument('--navigation-idle-reset-seconds', type=float,
                         help='Opt-in one-shot history reset after accepted navigation no-ops; disabled by default, trial value 8')
     parser.add_argument('--navigation-climb-recovery', action='store_true',
@@ -1141,6 +1151,10 @@ def parse_arguments(argv=None):
         parser.error('A real model source and checkpoint are required')
     if args.hybrid_legs is not None and (not args.hybrid_navigation or args.hybrid_legs <= 0):
         parser.error('hybrid-legs requires hybrid-navigation and a positive count')
+    if args.hybrid_route is not None and not args.hybrid_navigation:
+        parser.error('hybrid-route requires hybrid-navigation')
+    if args.remember_hybrid_bypass and args.hybrid_route != STAIR_POST_ROUTE:
+        parser.error('remember-hybrid-bypass requires the surveyed stair-post hybrid route')
     if args.hybrid_navigation:
         if (not args.resident or args.model != 'open-p2p' or not args.enable_input
                 or args.goal_intent != 'ground-navigation' or args.navigation_idle_reset_seconds is not None):
@@ -1286,7 +1300,9 @@ def run_episode(args, policy=None, control=None):
         if getattr(args, 'navigation_guidance', False):
             from hybrid_navigation import HybridNavigation
             # Validate the advertised fixed geometry before enabling native recognition.
-            candidate = HybridNavigation(bridge.hello.get('navigationGuidance') or {})
+            route_id = getattr(args, 'hybrid_route', None) or COURTYARD_ROUTE
+            candidate = HybridNavigation(bridge.hello.get('navigationGuidance') or {}, route_id,
+                                         remember_bypass=getattr(args, 'remember_hybrid_bypass', False))
             configured = bridge.request('enableNavigationGuidance')[0]
             if configured.get('type') != 'navigationGuidance' or configured.get('enabled') is not True:
                 raise RuntimeError('The bridge did not acknowledge native navigation guidance')
@@ -1313,7 +1329,8 @@ def run_episode(args, policy=None, control=None):
         if getattr(args, 'navigation_climb_recovery', False):
             climb = ClimbRecoveryStream(args, bridge, policy, control, report, None,
                 collect=lambda value: collect_receipts(value), reset=lambda: reset_for_climb(),
-                clear=lambda: latest.clear(), released=lambda value: climb_released(value))
+                clear=lambda: latest.clear(), released=lambda value: climb_released(value),
+                drop_resumed=hybrid.latch_climb_exit if hybrid else None)
         archive = None
         if getattr(args, 'lease_output', None):
             from stream_segments import StreamSegments
@@ -1466,6 +1483,7 @@ def run_episode(args, policy=None, control=None):
     hold_reason = None
     last_readiness_epoch = None
     last_accepted_at = None
+    last_hybrid_action = None
     history_gap_reset = False
     seen_unapplied_receipts = 0
     seen_recovery_interruptions = 0
@@ -1478,20 +1496,45 @@ def run_episode(args, policy=None, control=None):
         if hybrid and reason != 'hybridEndpoint' and not preserve_navigation:
             hybrid.interrupt(reason)
         released = None
+        stale_replay = hybrid and hybrid.bypass and reason == 'hybridStalePose'
         if hold_reason is None or force_release:
             if force_release and not bridge.hello.get('supportsRelease'):
                 raise RuntimeError('Live goal switching requires acknowledged bridge input release')
             if bridge.hello.get('supportsRelease'):
-                released = bridge.request('release')[0]
-                if released.get('type') != 'released':
-                    raise RuntimeError('The bridge did not acknowledge input release')
-                collect_receipts(released)
+                # The frame reader may already have taken the last terminal off
+                # the bridge after this tick drained its inbox. Pin that inbox
+                # and the actual release reply to the same ingestion boundary.
+                with (receive_lock if stale_replay else nullcontext()):
+                    if stale_replay:
+                        pending_count = len(receipt_inbox)
+                        pending_hybrid_receipts = receipt_inbox[:] if pending_count <= 12 else []
+                    released = bridge.request('release')[0]
+                    if released.get('type') != 'released':
+                        raise RuntimeError('The bridge did not acknowledge input release')
+                    collect_receipts(released)
+                    if stale_replay:
+                        if pending_count > 12 or report['serverDroppedReceipts']:
+                            hybrid.bypass.invalidate(hybrid, 'staleHoldReceiptContinuityLost')
+                        else:
+                            # Hybrid receipt IDs are idempotent. Leave the inbox
+                            # intact for the normal history, climb and idle owners.
+                            for receipt in pending_hybrid_receipts:
+                                hybrid.receipt(receipt)
+                            hybrid.bypass.acknowledge_stale_hold(hybrid, released, last_hybrid_action)
             if policy is not None and hasattr(policy, 'reset'):
                 policy.reset()
             if progress:
                 progress.reset()
             transition = {'type': 'controlTransition', 'state': 'held', 'reason': reason,
                           'clientTimeNs': time.perf_counter_ns(), 'frameId': previous}
+            if stale_replay and released:
+                # Keep the exact release barrier and terminal identities so a
+                # later route audit can verify the gap during re-localization.
+                transition['release'] = dict(serverNowMs=released['serverNowMs'],
+                    worldReadiness=copy.deepcopy(released['worldReadiness']), inputAvailable=released.get('inputAvailable'),
+                    receiptIds=[r['requestId'] for r in released.get('receipts', [])],
+                    priorInboxReceiptCount=pending_count, priorInboxReceiptIds=[r['requestId'] for r in pending_hybrid_receipts],
+                    lastAcceptedAction=copy.deepcopy(last_hybrid_action))
             report['controlTransitions'].append(transition)
             if recorder:
                 recorder.event(transition)
@@ -1669,8 +1712,12 @@ def run_episode(args, policy=None, control=None):
                 epoch = gate.get('epoch')
                 changed = last_readiness_epoch is not None and epoch != last_readiness_epoch
                 last_readiness_epoch = epoch
-                if changed or gate.get('ready') is not True or current_status.get('inputAvailable') is not True or time.perf_counter()-received_at > .25:
-                    hold('worldTransition' if changed else gate.get('reason', 'worldNotReady'))
+                status_fresh = time.perf_counter()-received_at <= .25
+                if changed or gate.get('ready') is not True or current_status.get('inputAvailable') is not True or not status_fresh:
+                    own_release = (status_fresh and hybrid and hybrid.bypass
+                                   and hybrid.bypass.release_wait(hybrid, current_status, 'worldReadiness'))
+                    hold('worldTransition' if changed else gate.get('reason', 'worldNotReady'),
+                         preserve_navigation=own_release)
                     cadence.advance(time.perf_counter())
                     continue
             item = latest.newer_than(previous)
@@ -1687,7 +1734,8 @@ def run_episode(args, policy=None, control=None):
                 cadence.advance(time.perf_counter())
                 continue
             if capability.get('requiredForInput') and frame.get('frameWorldReadiness', {}).get('ready') is not True:
-                hold('payloadNotGameWorld')
+                own_release = hybrid and hybrid.bypass and hybrid.bypass.release_wait(hybrid, frame, 'frameWorldReadiness')
+                hold('payloadNotGameWorld', preserve_navigation=own_release)
                 cadence.advance(time.perf_counter())
                 continue
             if not idle_recovery.allows_frame(frame, current_status,
@@ -1703,7 +1751,8 @@ def run_episode(args, policy=None, control=None):
                 hybrid_wait = hybrid.prepare(frame)
                 if hybrid_wait == 'releaseRequired':
                     hybrid.released(hold('hybridEndpoint', force_release=True))
-                elif hybrid_wait not in (None, 'endpointVerified', 'verifyingEndpoint', 'waitingAfterRelease'):
+                elif hybrid_wait not in (None, 'endpointVerified', 'verifyingEndpoint', 'waitingAfterRelease',
+                                         'waitingAfterClimbResume', 'confirmingBypassReentry'):
                     # Stable-start sampling and duplicate source frames are waits,
                     # not interruptions of the navigation evidence being gathered.
                     hold('hybrid:' + hybrid_wait, preserve_navigation=hybrid_wait in (
@@ -1832,6 +1881,15 @@ def run_episode(args, policy=None, control=None):
                     steps=result['steps'], **start_deadline)
                 committed = action_response_accepted(result['acceptance'], request_id, response_payload)
                 report.pop('unacknowledgedAction', None)
+                if committed and hybrid and hybrid.bypass:
+                    # Keep one actual admission across recorder rotation. Every
+                    # accepted action supersedes the earlier one, including turns.
+                    selection = result['hybridNavigation']
+                    last_hybrid_action = dict(requestId=request_id, frameId=frame['frameId'], modelId=action_model_id,
+                        observedAtMs=observed_at, sourceEpoch=(frame.get('sourceFrame') or {}).get('captureEpoch'),
+                        acceptedAtMs=result['acceptance'].get('acceptedAtMs'), step=copy.deepcopy(result['steps'][0]),
+                        reason=selection['reason'], target=selection.get('target'), completedLegs=selection.get('completedLegs'),
+                        bypassPointIndex=selection.get('bypassPointIndex'))
             else:
                 result['acceptance'] = {'type': 'notSubmitted', 'reason': rejection}
                 committed = False  # This branch proves no action request was submitted.

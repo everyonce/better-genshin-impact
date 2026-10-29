@@ -42,6 +42,25 @@ def read_rows(path):
 
 
 class RecorderMetadataTests(unittest.TestCase):
+    def test_rgb192_burst_is_drained_losslessly_and_exact_peak_is_retained(self):
+        with tempfile.TemporaryDirectory() as root, \
+                patch.object(client.subprocess, 'Popen', return_value=MemoryEncoder()):
+            recorder = HeldRecorder(Path(root)/'episode', 'synthetic-encoder', 20, 1024*1024, frame_capacity=32)
+            pixels = bytes(192*192*3)
+            try:
+                for index in range(1, 33):
+                    self.assertTrue(recorder.put(dict(observed_frame(index), width=192, height=192), pixels))
+                self.assertEqual(recorder.queue.qsize(), 32)
+                self.assertFalse(recorder.status()['lossless'])
+            finally:
+                recorder.release_writer.set()
+                result = recorder.close()
+            self.assertEqual((result['frameQueueCapacity'], result['maxFrameQueueDepth']), (32, 32))
+            self.assertTrue(result['complete'] and result['lossless'])
+            self.assertEqual((result['encodedFrames'], result['droppedFrames'], result['recordedObservations']), (32, 0, 32))
+            disk = json.loads((recorder.directory/'recording.json').read_bytes())
+            self.assertEqual((disk['frameQueueCapacity'], disk['maxFrameQueueDepth'], disk['lossless']), (32, 32, True))
+
     def test_dropped_video_retains_source_readiness_and_actual_video_indices(self):
         with tempfile.TemporaryDirectory() as root, \
                 patch.object(client.subprocess, 'Popen', return_value=MemoryEncoder()):
@@ -66,6 +85,8 @@ class RecorderMetadataTests(unittest.TestCase):
                 recorder.release_writer.set()
                 result = recorder.close()
             self.assertTrue(result['complete'], result)
+            self.assertFalse(result['lossless'])
+            self.assertEqual((result['frameQueueCapacity'], result['maxFrameQueueDepth']), (1, 1))
             self.assertEqual(result['encodedFrames'], 2)
             self.assertEqual(result['droppedFrames'], 1)
             self.assertEqual(result['recordedObservations'], 3)
@@ -130,7 +151,7 @@ class RecorderMetadataTests(unittest.TestCase):
     def test_close_drains_observation_arriving_after_last_metadata_drain(self):
         reached_empty_check, release_empty_check = threading.Event(), threading.Event()
 
-        class PausedEmptyQueue(client.queue.Queue):
+        class PausedEmptyQueue(client.RecordingFrameQueue):
             def get_nowait(self):
                 reached_empty_check.set()
                 if not release_empty_check.wait(2):

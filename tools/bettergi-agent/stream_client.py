@@ -23,7 +23,7 @@ import uuid
 
 from observation_timing import frame_timing, observation_timestamp
 from host_observation import HostObservationContract
-from hybrid_routes import COURTYARD_ROUTE, ROUTE_IDS, STAIR_POST_ROUTE, STREET_PATROL_ROUTE
+from hybrid_routes import COURTYARD_ROUTE, PATROL_STATIONS, ROUTE_IDS, STAIR_POST_ROUTE, STREET_PATROL_ROUTE
 from navigation_idle_recovery import (GOAL_INTENTS, NavigationIdleRecovery, RecoverySuperseded,
                                       capture_context, eligible_frame, fresh_frame)
 from observation_profiles import (LEGACY, P2P_NATIVE, PROFILES, FrameProfileError,
@@ -443,6 +443,18 @@ def sleep_until(deadline, cancelled):
     return False
 
 
+class RecordingFrameQueue(queue.Queue):
+    """Measure exact peak depth under the queue's existing mutex without delaying image admission."""
+    def __init__(self, maxsize):
+        super().__init__(maxsize)
+        self.max_depth = 0
+
+    def _put(self, item):
+        """Count every admitted image before the writer can take it off the queue."""
+        super()._put(item)
+        self.max_depth = max(self.max_depth, self._qsize())
+
+
 class AsyncVideoRecorder:
     """Bound image, observation and event queues; only the worker performs recording IO."""
     def __init__(self, directory, ffmpeg, fps, max_bytes, frame_capacity=8, event_capacity=256, preview=False,
@@ -450,7 +462,7 @@ class AsyncVideoRecorder:
         if not math.isfinite(fps) or fps <= 0 or max_bytes <= 0 or min(frame_capacity, event_capacity, metadata_capacity) < 1:
             raise ValueError('Recording rate, budget, and queue capacities must be positive')
         self.directory = Path(directory)
-        self.queue = queue.Queue(maxsize=frame_capacity)
+        self.queue = RecordingFrameQueue(frame_capacity)
         self.event_queue = queue.Queue(maxsize=event_capacity)
         self.metadata_queue = queue.Queue(maxsize=metadata_capacity)
         self.ffmpeg, self.fps, self.max_bytes = ffmpeg, fps, max_bytes
@@ -528,14 +540,17 @@ class AsyncVideoRecorder:
 
     def status(self):
         with self.state_lock:
+            complete = self.closed and self.error is None
             return {'encodedFrames': self.encoded, 'droppedFrames': self.dropped,
+                    'frameQueueCapacity': self.queue.maxsize, 'maxFrameQueueDepth': self.queue.max_depth,
                     'droppedEvents': self.dropped_events, 'abandonedFrames': self.abandoned_frames,
                     'recordedObservations': self.recorded_observations,
                     'droppedObservations': self.dropped_observations,
                     'recordedBytes': self.recorded_bytes,
                     'error': self.error, 'closed': self.closed,
                     'previewFrameId': self.preview_frame_id, 'previewError': self.preview_error,
-                    'complete': self.closed and self.error is None}
+                    'complete': complete, 'lossless': complete and not any((
+                        self.dropped, self.dropped_events, self.dropped_observations, self.abandoned_frames))}
 
     def observation(self, metadata, continuity=False):
         """Persist a source header carried across rollover without inventing a video index."""
@@ -1050,6 +1065,7 @@ def parse_arguments(argv=None):
                         help='Keep the model loaded across pauses, bridge reconnects, and child replacement')
     parser.add_argument('--rdp-session-id', type=int,
                         help='Required resident target; must equal this process actual RDP Windows session')
+    parser.add_argument('--patrol-series-binding', help=argparse.SUPPRESS)
     parser.add_argument('--control-file', help='Resident pause/run/stop JSON command file; must not already exist')
     parser.add_argument('--segment-seconds', type=float, default=300,
                         help='Rotate resident evidence files without restarting a healthy bridge or policy history')
@@ -1069,6 +1085,10 @@ def parse_arguments(argv=None):
                         help='Record a trained steering prediction after each hybrid decision has settled')
     parser.add_argument('--landmark-shadow', metavar='CHECKPOINT',
                         help='Identify verified patrol stations from unannotated RGB192 frames')
+    parser.add_argument('--photo-station', action='append', choices=PATROL_STATIONS, default=[],
+                        help='Collect one source photo when the native station and its visual prediction agree')
+    parser.add_argument('--photo-directory', help='Fresh directory for original station photos and their source IDs')
+    parser.add_argument('--photo-qualification', help='Sealed observer qualification for the selected checkpoint')
     parser.add_argument('--camera-calibration', metavar='CHECKPOINT',
                         help='Trial a holdout-qualified camera response on the street patrol')
     parser.add_argument('--remember-hybrid-bypass', action='store_true',
@@ -1140,6 +1160,14 @@ def parse_arguments(argv=None):
         args.navigation_progress = True
         if args.model == 'open-p2p' and args.enable_input:
             args.p2p_execution_feedback = True
+    if args.patrol_series_binding is not None:
+        from resident_runtime import parse_series_binding
+        if not (args.resident and args.hybrid_navigation and args.hybrid_route == STREET_PATROL_ROUTE):
+            parser.error('A series binding requires a resident street patrol')
+        try:
+            args.patrol_series_binding = parse_series_binding(args.patrol_series_binding)
+        except ValueError as error:
+            parser.error(str(error))
     if args.p2p_execution_feedback and (not args.p2p_fast_start or not args.enable_input):
         parser.error('p2p-execution-feedback requires p2p-fast-start and enable-input')
     if args.navigation_idle_reset_seconds is not None:
@@ -1166,6 +1194,10 @@ def parse_arguments(argv=None):
     if args.landmark_shadow and (not args.hybrid_navigation or args.hybrid_route != STREET_PATROL_ROUTE
                                  or args.observation_profile != P2P_NATIVE):
         parser.error('landmark-shadow requires the street patrol and native RGB192 input')
+    if args.photo_station or args.photo_directory or args.photo_qualification:
+        if not (args.photo_station and args.photo_directory and args.photo_qualification
+                and args.landmark_shadow and args.resident and args.enable_input):
+            parser.error('A photo survey requires named stations, fresh output, the qualified landmark observer and a live resident')
     if args.camera_calibration and (args.hybrid_route != STREET_PATROL_ROUTE or not args.enable_input
                                     or not args.resident or args.max_observation_age_ms != 150):
         parser.error('camera-calibration requires the resident live street patrol and its 150 ms input deadline')
@@ -1232,6 +1264,9 @@ def load_policy(args):
         if getattr(args, 'landmark_shadow', None):
             from landmark_recognizer import LandmarkRecognizer
             policy.landmark_shadow = LandmarkRecognizer.load(args.landmark_shadow)
+            if getattr(args, 'photo_qualification', None):
+                from patrol_photo_survey import require_qualified_observer
+                require_qualified_observer(args.photo_qualification, policy.landmark_shadow.checkpoint_id)
         if getattr(args, 'camera_calibration', None):
             from camera_response import CameraCalibration
             policy.camera_calibration = CameraCalibration.load(args.camera_calibration)
@@ -1369,6 +1404,11 @@ def run_episode(args, policy=None, control=None):
         configured_keys, effective_keys = resolve_input_keys(args.input_keys, server_keys)
         report['configuredInputKeys'] = configured_keys
         report['effectiveInputKeys'] = sorted(effective_keys)
+        photo_survey = None
+        if getattr(args, 'photo_station', None):
+            from patrol_photo_survey import PatrolPhotoSurvey
+            photo_survey = PatrolPhotoSurvey(Path(args.photo_directory), args.photo_station,
+                                            policy.landmark_shadow.checkpoint_id)
         if getattr(args, 'navigation_climb_recovery', False):
             climb = ClimbRecoveryStream(args, bridge, policy, control, report, None,
                 collect=lambda value: collect_receipts(value), reset=lambda: reset_for_climb(),
@@ -1600,6 +1640,11 @@ def run_episode(args, policy=None, control=None):
         for event in hybrid.drain_events():
             if getattr(args, 'landmark_shadow', None):
                 observe_station(policy.landmark_shadow, event, station_frame, station_pixels)
+                if photo_survey and 'visualStation' in event:
+                    visit = photo_survey.observe(event, station_frame, station_pixels)
+                    if visit is not None:
+                        event['photoSurveyVisit'] = visit
+                    report['stationPhotoSurvey'] = photo_survey.snapshot()
             report['hybridNavigationEvents'].append(event)
             if recorder:
                 recorder.event(event)

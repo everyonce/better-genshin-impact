@@ -637,7 +637,7 @@ class RecorderTests(unittest.TestCase):
         reached_frame_queue = threading.Event()
         release_frame_check = threading.Event()
 
-        class PausedEmptyQueue(client.queue.Queue):
+        class PausedEmptyQueue(client.RecordingFrameQueue):
             def get_nowait(self):
                 reached_frame_queue.set()
                 if not release_frame_check.wait(2):

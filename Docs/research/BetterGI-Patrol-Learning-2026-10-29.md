@@ -30,6 +30,24 @@ The next ten circuits completed 40 legs in 153.68 seconds, with one model load, 
 
 **Generation four qualified as the station observer.** It learned from 168 unique views and scored 40/41 on a further ten-circuit holdout. Per-station scores were 20/20 at the junction, 11/11 at the stairs and 9/10 at the lamp. Generation one scored 20/41, with zero correct at the stairs and lamp. Every station therefore met the gate. Frozen generation three produced the same class scores as generation four on this particular lease. Independent decoding reproduced all 41 live G4 predictions. This run took 154.58 seconds, dispatched all 1,336 accepted actions and peaked at 62 °C. Its median image-to-dispatch time was 80.55 ms.
 
+## A task the recognizer can perform
+
+The photo collector accepts named stations on this route. When the character arrives, it compares the independent image prediction with the native station and saves the original RGB image only on agreement. Before collection, the runtime recomputes the observer's promotion from the hash-bound paired evaluation. After the task, another verifier joins the photo to the original native event, checks the decoded PNG pixels against the RGB hash and runs the frozen recognizer on those pixels again.
+
+The first live task collected the stair front on frame 24, the junction on frame 103, and the west lamp on frame 218. All three matched at the first opportunity. The patrol finished three full circuits in 44.69 seconds with 384 applied actions. The source photos and journal are under `photo-task/20261029T153050Z-e1db23ae3523/station-photos`.
+
+## Continuing on SIREN
+
+The [series command](../../tools/bettergi-agent/README.md#repeat-a-qualified-photo-task) repeats this named task under the existing controller limits. Each batch must finish, release input and pass both audits before the next can start. A stop file cancels the current resident and all future batches. The supervisor checks the original host and child process, Windows session and instance identity, and stops on a lost identity check. The upper limit is three batches within 30 minutes, and each batch keeps its original circuit, wall-clock and temperature limits.
+
+In the first two-batch attempt, batch one verified four circuits and three photos. Batch two finished its route, but its encoder dropped five frames in the final segment. The supervisor refused credit for that batch and stopped. The original dispatch receipts and an independent reconstruction from capture timestamps measured a 25.81-second gap between batches, including a 20.34-second model load. Within-batch timing and between-batch startup are reported separately.
+
+The segmented recorder now admits up to 32 verified RGB192 frames while the encoder catches up, approximately 3.4 MiB or 1.6 seconds at 20 Hz. The live controller continues to consume the newest frame. A delayed-writer regression filled all 32 slots and drained them without loss. The repaired series at `continuation/series-20261029T153926Z-a830841ef303` completed both four-circuit batches and verified six original station photos across 32 legs. Both batches recorded zero dropped frames and reached a maximum observed queue depth of two. Their GPU temperature peaks were 63 °C and 62 °C. The original host remained minimized and the child reported game-ready with input released.
+
+The two repaired batches applied 1,063 actions in total. Their measured last-to-first dispatch interval was 24.84 seconds across the batch boundary, including 18.47 seconds of model loading. The lease-adjusted Windows clock and the independent capture clock gave the same result.
+
+The next experiment for uninterrupted operation is to carry the CUDA model across two independently graded photo requests in one bounded resident lease. Each request needs a separate target list, source-frame journal and completion check. Switch at a verified station release. Require one model load, at most one second between the previous and next request's dispatches, zero actions attributed to the retired request after the switch and the same 150 ms source-age ceiling. Exercise the operator stop during a separate second-request trial. Keep the zero-loss and thermal requirements for both requests. For a different neighborhood, first survey its positions and collect a separate held-out lease before using its photos as task evidence.
+
 ## Reproduce on SIREN
 
 The [launcher guide](../../tools/bettergi-agent/README.md) gives the thermal-limited command. The [training guide](../../tools/bettergi-agent/STEERING-HEAD.md) covers independent training and evaluation leases. Model files live under `artifacts/agent/steering` and `artifacts/agent/landmarks`. Recordings, source-indexed station sheets, receipts and the failed attempt live under `artifacts/live/2026-10-29-patrol`. Large local recordings and downloaded model weights stay outside Git.

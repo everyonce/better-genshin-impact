@@ -97,6 +97,24 @@ class SegmentTests(unittest.TestCase):
             record_dir=str(Path(folder)/'video'/'00001') if record else None,
             ffmpeg='unused', fps=30, preview=False, record_max_mib=1, segment_seconds=1)
 
+    def test_only_negotiated_native_p2p_segments_receive_the_larger_image_queue(self):
+        for model, contract, expected in (
+                ('open-p2p', {'profile': client.P2P_NATIVE, 'serverAdvertised': True}, 32),
+                ('open-p2p', {'profile': client.LEGACY, 'serverAdvertised': True}, 8),
+                ('open-p2p', {'profile': client.P2P_NATIVE, 'serverAdvertised': False}, 8),
+                ('open-p2p', {}, 8), ('observe', {'profile': client.P2P_NATIVE, 'serverAdvertised': True}, 8)):
+            with self.subTest(model=model, contract=contract), tempfile.TemporaryDirectory() as folder:
+                capacities = []
+                def factory(*args, **kwargs):
+                    capacities.append(kwargs['frame_capacity'])
+                    return Recorder(*args, **kwargs)
+                state = dict(report(), model=model, preprocessingContract=contract)
+                archive = StreamSegments(self.args(folder), factory, state, now=0)
+                archive.rotate(state, 2)
+                state['endReason'] = 'durationElapsed'
+                archive.finish(state)
+                self.assertEqual(capacities, [expected, expected])
+
     def test_slow_finalizer_keeps_active_capture_and_carries_original_join_context(self):
         with tempfile.TemporaryDirectory() as folder:
             recorders = []

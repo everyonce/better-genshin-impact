@@ -13,7 +13,7 @@ import sys
 import time
 import uuid
 
-from hybrid_routes import STREET_PATROL_ROUTE
+from hybrid_routes import PATROL_STATIONS, STREET_PATROL_ROUTE
 from resident_runtime import atomic_json, control_module, read_control_document, select_child
 
 
@@ -23,9 +23,9 @@ STOP_C = 78
 POLL_SECONDS = 2
 
 
-def options(argv=None):
+def options(argv=None, parser=None):
     """All model assets and executables must already be installed on this host."""
-    p = argparse.ArgumentParser(description=__doc__)
+    p = parser if parser is not None else argparse.ArgumentParser(description=__doc__)
     p.add_argument('--circuits', type=int, default=1, help='Number of A-B-C-B-A circuits (1 to 32)')
     p.add_argument('--seconds', type=int, default=180, help='Wall time limit including model loading (15 to 600)')
     p.add_argument('--evidence-root', type=Path, default=ROOT/'artifacts/live/patrol')
@@ -39,8 +39,14 @@ def options(argv=None):
                    Path(os.environ.get('SystemRoot', 'C:/Windows'))/'System32/nvidia-smi.exe'))
     p.add_argument('--steering-shadow', type=Path, help='Observe and audit predictions from this steering checkpoint')
     p.add_argument('--landmark-shadow', type=Path, help='Observe station predictions and audit recorded frames against them')
+    p.add_argument('--photo-station', choices=PATROL_STATIONS, action='append', default=[],
+                   help='Collect a verified photo at this station during the patrol')
+    p.add_argument('--photo-qualification', type=Path, help='Sealed qualification for the photo observer')
     p.add_argument('--camera-calibration', type=Path, help='Use and independently audit this local camera checkpoint')
     args = p.parse_args(argv)
+    if (args.photo_station or args.photo_qualification) and not (
+            args.photo_station and args.photo_qualification and args.landmark_shadow):
+        p.error('Photo stations require both --landmark-shadow and --photo-qualification')
     if not (1 <= args.circuits <= 32 and 15 <= args.seconds <= 600):
         p.error('Set --circuits between 1 and 32 and --seconds between 15 and 600.')
     return args
@@ -88,6 +94,11 @@ def patrol_argv(args, session, folder):
         command.append('--steering-shadow=' + str(args.steering_shadow.resolve()))
     if args.landmark_shadow:
         command.append('--landmark-shadow=' + str(args.landmark_shadow.resolve()))
+    if args.photo_station:
+        command.extend(['--photo-directory', str(folder/'station-photos'),
+                        '--photo-qualification', str(args.photo_qualification.resolve())])
+        for station in args.photo_station:
+            command.extend(['--photo-station', station])
     if args.camera_calibration:
         command.append('--camera-calibration=' + str(args.camera_calibration.resolve()))
     return command
@@ -163,7 +174,7 @@ def stop_resident(folder, run_id):
         atomic_json(path, {**doc, 'command': 'stop'})
 
 
-def supervise(future, folder, executable, deadline, state):
+def supervise(future, folder, executable, deadline, state, series=None):
     """Latch the first stop condition, including when it occurs before the resident publishes an ID."""
     while not future.done():
         try:
@@ -178,6 +189,8 @@ def supervise(future, folder, executable, deadline, state):
                 state['stopReason'] = state['stopReason'] or 'temperatureLimit'
             if time.monotonic() >= deadline:
                 state['stopReason'] = state['stopReason'] or 'wallTimeLimit'
+            if series is not None and not state['stopReason']:
+                state['stopReason'] = series.stop_reason()
             try:
                 # After a failed initial identity check, a later occupant of these
                 # paths must never inherit the first job's stop authority.
@@ -193,7 +206,7 @@ def supervise(future, folder, executable, deadline, state):
             state['stopReason'] = state['stopReason'] or 'interrupted'
 
 
-def run(args, folder):
+def run(args, folder, *, series=None):
     """Dispatch a single bounded child job and retain the broker, GPU and independently audited route evidence."""
     for resource in (args.gpu_python, args.runner_python, args.ffmpeg, args.nvidia_smi, args.goal_embedding,
                      args.checkpoint, args.steering_shadow, args.landmark_shadow, args.camera_calibration):
@@ -208,16 +221,26 @@ def run(args, folder):
                  circuits=args.circuits, wallTimeLimitSeconds=args.seconds, stopAtC=STOP_C,
                  runId=None, stopReason=None, stopRequested=False, verified=False)
     try:
+        if series is not None:
+            series.admit(lifecycle, root, child)
         sample = log_sample(folder, args.nvidia_smi)
         if 'error' in sample or sample['temperatureC'] >= STOP_C:
             state['stopReason'] = 'telemetryLost' if 'error' in sample else 'temperatureLimit'
             raise RuntimeError('GPU startup check refused this patrol. See gpu.jsonl.')
         command = patrol_argv(args, session, folder)
         deadline = time.monotonic() + args.seconds
+        broker_timeout = args.seconds + 30
+        if series is not None:
+            state['stopReason'] = series.stop_reason()
+            if state['stopReason']:
+                raise RuntimeError(state['stopReason'])
+            deadline = min(deadline, series.deadline_ns/1e9)
+            broker_timeout = min(broker_timeout, max(1, math.ceil(series.deadline_ns/1e9 - time.monotonic())))
+            command.append('--patrol-series-binding=' + series.binding())
         with ThreadPoolExecutor(max_workers=1) as pool:
             future = pool.submit(lifecycle.run_command, root, command, str(ROOT), str(args.runner_python.resolve()),
-                                 args.seconds + 30, str(folder/'jobs'), 65536)
-            supervise(future, folder, args.nvidia_smi, deadline, state)
+                                 broker_timeout, str(folder/'jobs'), 65536)
+            supervise(future, folder, args.nvidia_smi, deadline, state, series)
             result = future.result()
         atomic_json(folder/'broker.json', result)
         if state['runId'] or 'controlError' not in state:
@@ -239,6 +262,14 @@ def run(args, folder):
         evidence = audit(output, folder/'patrol-recording', repository=ROOT, minimum_legs=4*args.circuits,
                          minimum_circuits=args.circuits, **checkpoints)
         atomic_json(folder/'audit.json', evidence)
+        if args.photo_station:
+            from patrol_photo_survey import verify_photo_survey
+            survey = verify_photo_survey(folder/'station-photos', output, folder/'patrol-recording',
+                                         repository=ROOT, landmark_checkpoint=args.landmark_shadow.resolve(),
+                                         authenticated_report=evidence)
+            atomic_json(folder/'photo-audit.json', survey)
+            if not survey.get('complete') or set(survey['targets']) != set(args.photo_station):
+                raise RuntimeError('The named photo objective is incomplete. See photo-audit.json.')
         state['verified'] = True
     finally:
         atomic_json(folder/'launcher.json', state)

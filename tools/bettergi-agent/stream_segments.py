@@ -6,6 +6,8 @@ from pathlib import Path
 import threading
 import time
 
+from observation_profiles import P2P_NATIVE
+
 
 class EvidencePublicationError(RuntimeError):
     """Terminal evidence was not published; retain totals and forbid transport retry."""
@@ -50,6 +52,11 @@ class StreamSegments:
     def __init__(self, args, recorder_factory, report, now=None):
         self.args = args
         self.factory = recorder_factory
+        # The producer constructs this contract from the negotiated hello and checks
+        # the RGB dimensions before offering any frame to the recorder.
+        contract = report.get('preprocessingContract') or {}
+        self.frame_capacity = (32 if report.get('model') == 'open-p2p' and contract.get('serverAdvertised') is True
+                               and contract.get('profile') == P2P_NATIVE else 8)
         self.number = int(getattr(args, 'segment_start_index', 1))
         self.report_parent = Path(args.output).parent
         self.record_parent = Path(args.record_dir).parent if args.record_dir else None
@@ -84,7 +91,7 @@ class StreamSegments:
             return None
         return self.factory(str(self.record_parent / f'{self.number:05d}'), self.args.ffmpeg,
                             self.args.fps, self.budget.maximum, preview=self.args.preview,
-                            shared_budget=self.budget)
+                            shared_budget=self.budget, frame_capacity=self.frame_capacity)
 
     def _context(self, previous):
         """Carry original evidence, explicitly as context rather than new decisions/video."""

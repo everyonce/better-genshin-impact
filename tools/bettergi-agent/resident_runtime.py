@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import re
+import socket
 import sys
 import threading
 import time
@@ -305,9 +306,22 @@ def verify_bridge_identity(handle, process_id, session_id):
     api.verify_same_user(native)
 
 
+def parse_series_binding(value):
+    """Decode an immutable root/child PID and nonce pair plus the shared host monotonic deadline."""
+    if not re.fullmatch(r'[1-9][0-9]{0,9}:[0-9a-f]{32}:[1-9][0-9]{0,9}:[0-9a-f]{32}:[1-9][0-9]{0,18}', value):
+        raise ValueError('Invalid patrol series identity or deadline')
+    root_pid, root_nonce, child_pid, child_nonce, deadline_ns = value.split(':')
+    if root_pid == child_pid or int(deadline_ns) > time.monotonic_ns() + 1800_000_000_000:
+        raise ValueError('Invalid patrol series identities or duration')
+    return int(root_pid), root_nonce, int(child_pid), child_nonce, int(deadline_ns)
+
+
 def run_resident(args, load_policy, run_episode):
     """Own one bounded run, retaining weights/graphs through pause and bridge replacement."""
     require_current_rdp(args.rdp_session_id)
+    binding = getattr(args, 'patrol_series_binding', None)
+    if binding and (socket.gethostname().split('.')[0].upper() != 'SIREN' or time.monotonic_ns() >= binding[4]):
+        raise RuntimeError('Series lease is outside its SIREN host or time bound')
     from observation_profiles import LEGACY, validate_model_profile
     observation_profile = validate_model_profile(getattr(args, 'observation_profile', LEGACY), args.model)
     lifecycle = control_module()
@@ -332,6 +346,8 @@ def run_resident(args, load_policy, run_episode):
         summary['modelLoadSeconds'] = time.monotonic()-loading_started
         summary['modelLoads'] = int(policy is not None)
         deadline = time.monotonic() + args.seconds
+        if binding:
+            deadline = min(deadline, binding[4]/1e9)
         summary['status'] = 'running'
         atomic_json(output, summary)
         while time.monotonic() < deadline:
@@ -347,7 +363,18 @@ def run_resident(args, load_policy, run_episode):
                 control.publish(state='paused', reason=control_error or 'userPause')
                 time.sleep(.1)
                 continue
-            child = select_child(lifecycle.discover()['instances'], args.rdp_session_id)
+            discovery = lifecycle.discover()
+            child = select_child(discovery['instances'], args.rdp_session_id)
+            if binding:
+                # A bounded series never joins a replacement host, child or model-input owner.
+                roots = [s for s in discovery['instances'] if (s.get('processId'), s.get('instanceNonce')) == binding[:2]]
+                if (discovery.get('unavailable') or len(roots) != 1 or child is None
+                        or (child.get('processId'), child.get('instanceNonce')) != binding[2:4]
+                        or child.get('automationState') != 'game_ready' or child.get('runtimeRunning') is not True
+                        or child.get('taskRunning') is not False or child.get('agentStreamRunning') is not False
+                        or roots[0].get('uiStatus') != 'current' or roots[0].get('childWindowMinimized') is not True):
+                    raise RuntimeError('Pinned patrol series instance changed or became unavailable')
+                lifecycle._require_connected_root(roots[0], child)
             if unavailable_since is not None and time.monotonic()-unavailable_since >= args.reconnect_timeout:
                 raise RuntimeError('RDP bridge did not become available before reconnect timeout')
             current_identity = (child['processId'], child['instanceNonce']) if child else None
@@ -378,6 +405,8 @@ def run_resident(args, load_policy, run_episode):
                     child = lifecycle.start_agent(child, min(15, max(1, remaining)), enable_input=args.enable_input,
                                                   observation_profile=observation_profile)
                 except lifecycle.ControlError as error:
+                    if binding:
+                        raise
                     pending_start_identity = current_identity
                     unavailable_since = unavailable_since or time.monotonic()
                     summary['connectionErrors'] = (summary['connectionErrors'] + [str(error)])[-128:]
@@ -385,6 +414,8 @@ def run_resident(args, load_policy, run_episode):
                     time.sleep(.5)
                     continue
             pending_start_identity = None
+            if binding and (child['processId'], child['instanceNonce']) != binding[2:4]:
+                raise RuntimeError('Series agent listener belongs to a different child')
             segment_args = copy.copy(args)
             segment_args.pipe = child['agentPipeName']
             segment_args.expected_process_id = child['processId']
@@ -475,6 +506,8 @@ def run_resident(args, load_policy, run_episode):
             if segment.get('endReason') in ('userStop', 'hybridLegLimit'):
                 summary['endReason'] = segment['endReason']
                 break
+            if binding:
+                raise RuntimeError('Patrol series lease ended before completing the requested route')
             # Allow the previous TaskRunner owner to finish before rediscovery/start.
             time.sleep(.1)
         summary.setdefault('endReason', 'durationElapsed')

@@ -19,6 +19,22 @@ Start at the stair-front station with the existing BetterGI RDP child in the gam
 
 Each circuit visits the sidewalk junction, the west lamp, the junction again and the foot of the stairs. The launcher locates the authenticated child and starts one resident CUDA policy there. BetterGI steers from its native pose and accepts compatible Open P2P actions. The two optional observers score steering decisions and station images. The launcher checks the first GPU every two seconds, stops at 78 °C or on missing telemetry, and releases input when the target or deadline is reached. Each launch creates a separate evidence directory. See the [patrol measurements](../../Docs/research/BetterGI-Patrol-Learning-2026-10-29.md) and [training instructions](STEERING-HEAD.md).
 
+### Repeat a qualified photo task
+
+On SIREN the series launcher can repeat a task on the same minimized RDP connection. This example requests one source photo at each named station in each batch. The collector saves the original RGB image when the native station, verified frame and qualified image prediction agree. At the end of the batch a separate verifier decodes each saved PNG, checks its raw pixels against the live hash and classifies it again. A failed objective ends the series.
+
+```powershell
+& 'C:/Programs/Python/Python311/python.exe' -B tools/bettergi-agent/run_patrol_series.py `
+    --batches 2 --circuits 4 --seconds 145 --series-seconds 330 `
+    --evidence-root artifacts/live/photo-series `
+    --steering-shadow=artifacts/agent/steering/gen-01.json `
+    --landmark-shadow=artifacts/agent/landmarks/gen-04.json `
+    --photo-qualification=artifacts/agent/landmarks/qualify-g4-fresh-10.json `
+    --photo-station stair-front --photo-station sidewalk-junction --photo-station west-lamp
+```
+
+To cancel, create the `STOP` file at the path printed on launch. The supervisor addresses the active resident, cancels later batches and saves `series.json`. A new batch requires the same authenticated root and child, the preceding batch's completed audit and a fresh GPU check. Each batch releases input before its audit. The next batch pays the CUDA model startup cost again.
+
 ### Start an individual stream
 
 1. Use the approved **Start Genshin in RDP** launcher to start or reuse the minimized RDP host and child game runtime. The [RDP automation guide](../rdp-automation/README.md) covers the stable shortcuts, saved Windows sign-in, commands inside the child session and child-only hot replacement.

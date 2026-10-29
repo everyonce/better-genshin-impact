@@ -6,7 +6,7 @@ from pathlib import Path
 import statistics
 
 from audit_camera_patrol import audit_camera, compare_patrols, yaw_reversals
-from audit_destination_retries import RETRY, verify_retry_poses
+from audit_destination_retries import RELEASE_REJECTED, RELEASE_RETRY, RETRY, verify_release_reissues, verify_retry_poses
 from hybrid_routes import (COURTYARD_ROUTE, PATROL_STATIONS, STAIR_POST_ROUTE, STREET_PATROL_ROUTE,
                            camera_correction, route_heading, route_points)
 from observation_timing import observation_timestamp
@@ -41,6 +41,20 @@ def destination_edges(plan):
         for index in range(here, goal, step):
             edges.append((stations[index], stations[index+step], ordinal, destination))
         here = goal
+    return edges
+
+
+def batch_edges(plans):
+    """Expand the separately committed plans in sequence, preserving global request and segment numbers."""
+    require(isinstance(plans,list) and 1 <= len(plans) <= 12, 'Invalid destination batch budget')
+    edges, ordinal, station = [], 0, None
+    for i,plan in enumerate(plans):
+        require(i == 0 or plan.get('start') == station and not plan.get('confirmFirstArrival'),
+                'Successor plan starts at another station or requests an undeclared confirmation')
+        directed = destination_edges(plan)
+        edges.extend((a,b,n+ordinal,g) for a,b,n,g in directed)
+        ordinal += len(plan['requests'])
+        station = directed[-1][1]
     return edges
 
 
@@ -745,7 +759,7 @@ def audit_bypasses(events, attempts, frames, accepted, receipts, route_id, epoch
 def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_passages=0,
           minimum_climb_passages=0, minimum_bypass_replays=0, minimum_bypass_rebinds=0, minimum_circuits=0,
           camera_checkpoint=None, minimum_calibrated_actions=0, shadow_checkpoint=None,
-          landmark_checkpoint=None, ffmpeg='ffmpeg', ffprobe='ffprobe', destination_plan=None):
+          landmark_checkpoint=None, ffmpeg='ffmpeg', ffprobe='ffprobe', destination_plan=None, destination_batches=None):
     """Join endpoint samples to retained same-frame poses and actions to terminal receipts."""
     require(minimum_legs >= 1 and min(minimum_obstacle_passages, minimum_climb_passages,
                                       minimum_bypass_replays, minimum_bypass_rebinds, minimum_circuits,
@@ -755,6 +769,10 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
     if isinstance(destination_plan, (str, Path)):
         destination_plan = json.loads(Path(destination_plan).read_bytes())
     edges = destination_edges(destination_plan) if destination_plan is not None else None
+    if destination_batches is not None:
+        require(destination_plan is not None and destination_batches and destination_batches[0] == destination_plan,
+                'Initial plan does not match the first authorized batch')
+        edges = batch_edges(destination_batches)
     require(run.get('status') == 'completed' and run.get('evidenceComplete') is True,
             'Resident run did not finish with complete evidence')
     require(run.get('modelLoads') == 1 and run.get('inputRequested') is True,
@@ -891,8 +909,10 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
     require(parts[-1]['hybridNavigation']['completedLegs'] == len(endpoints), 'Final leg total differs')
     circuits, partial = audit_patrol(starts[0], endpoints, events, frames, parts, run, accepted, receipts,
                                      source_epoch, edges) if patrol else ([], [])
-    require(edges is not None or not any(e['type'] == RETRY for e in events), 'Photo retries require a directed route')
+    require(edges is not None or not any(e['type'] in (RETRY,RELEASE_REJECTED,RELEASE_RETRY) for e in events),
+            'Release and photo retries require a directed route')
     retries = verify_retry_poses(events,frames,parts,receipts,destination_plan.get('confirmFirstArrival',False)) if edges is not None else {}
+    reissues = verify_release_reissues(events,frames,parts,receipts) if edges is not None else []
     cameras = audit_camera(parts, run['segments'], recordings, frames, route_id, camera_checkpoint)
     shadow = (audit_shadow(decisions, frames, receipts, run['segments'], recordings, route_id, shadow_checkpoint, edges)
               if shadow_checkpoint else None)
@@ -934,7 +954,7 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
                 else 'fixed-route-endpoint-and-software-input-joins', routeId=route_id,
                 verifiedLegs=len(endpoints), controllerLeases=1, modelLoads=1,
                 verifiedCircuits=len(circuits), patrolCircuits=circuits, partialPatrolLegs=[] if edges is not None else partial,
-                **({'directedLegs':partial,'stationaryPhotoRetries':[dict(originalFrameId=fid,
+                **({'directedLegs':partial,'releaseReissues':reissues,'stationaryPhotoRetries':[dict(originalFrameId=fid,
                     frameIds=[e['frameId'] for e in attempts]) for fid,attempts in retries.items()]} if edges is not None else {}),
                 cameraCalibration=cameras, steeringShadow=shadow, landmarkShadow=landmarks,
                 verifiedRouteSeconds=(endpoints[-1]['samples'][-1]['atMs']-starts[0]['atMs'])/1000,
@@ -959,6 +979,8 @@ def main():
     parser.add_argument('--repository', default=str(Path(__file__).resolve().parents[2]))
     parser.add_argument('--minimum-legs', type=int, default=1)
     parser.add_argument('--destination-plan', help='Verify the exact directed edges of this frozen destination plan')
+    parser.add_argument('--batch-intent', action='append', type=Path,
+                        help='Published successor .intent.json in order, after the initial --destination-plan')
     parser.add_argument('--minimum-circuits', type=int, default=0,
                         help='Require completed stair-front → junction → west-lamp → junction → stair-front circuits')
     parser.add_argument('--camera-checkpoint', help='Require exact local checkpoint bytes for a calibrated turn')
@@ -981,9 +1003,15 @@ def main():
     args = parser.parse_args()
     if bool(args.baseline_run) != bool(args.baseline_recordings):
         parser.error('--baseline-run and --baseline-recordings must be supplied together')
+    batches = None
+    if args.batch_intent:
+        if not args.destination_plan:
+            parser.error('--batch-intent requires the original --destination-plan')
+        batches = [json.loads(Path(args.destination_plan).read_bytes()),
+                   *(json.loads(p.read_bytes())['plan'] for p in args.batch_intent)]
     result = audit(args.run, args.recordings, repository=args.repository, minimum_legs=args.minimum_legs,
                    minimum_obstacle_passages=args.minimum_obstacle_passages,
-                   minimum_circuits=args.minimum_circuits, destination_plan=args.destination_plan,
+                   minimum_circuits=args.minimum_circuits, destination_plan=args.destination_plan, destination_batches=batches,
                    camera_checkpoint=args.camera_checkpoint, minimum_calibrated_actions=args.minimum_calibrated_actions,
                    shadow_checkpoint=args.shadow_checkpoint,
                    landmark_checkpoint=args.landmark_checkpoint, ffmpeg=args.ffmpeg, ffprobe=args.ffprobe,

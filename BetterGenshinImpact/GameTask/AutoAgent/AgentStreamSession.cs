@@ -470,10 +470,8 @@ public sealed class AgentStreamSession
                         diagnostics = _snapshots.Snapshot() }, null, ct);
                     break;
                 case "release":
-                    var releasedAt = NowMs;
-                    controller.Release(releasedAt);
                     // The acknowledgement is also the client's fresh-source barrier, so sample it after release finishes.
-                    var releasedReadiness = controller.GetWorldReadinessAndExecutionSnapshot(out var releaseAcknowledgedAt, out var releaseExecutionContext);
+                    var releasedReadiness = controller.ReleaseAndGetSnapshot(NowMs, out var releaseAcknowledgedAt, out var releaseExecutionContext);
                     await WriteAsync(pipe, new { type = "released", serverNowMs = releaseAcknowledgedAt,
                         worldReadiness = releasedReadiness, executionContext = releaseExecutionContext,
                         receipts = controller.DrainReceipts(), droppedReceipts = controller.DroppedReceipts }, null, ct);

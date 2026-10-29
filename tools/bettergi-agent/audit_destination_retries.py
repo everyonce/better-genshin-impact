@@ -8,6 +8,103 @@ from observation_timing import observation_timestamp
 
 
 RETRY = 'hybridDestinationPhotoRetry'
+RELEASE_REJECTED = 'hybridEndpointReleaseRejected'
+RELEASE_RETRY = 'hybridEndpointReleaseRetryReady'
+
+
+def verify_release_order(trace, endpoints):
+    """Check cross-type order in the original journal, which the separate summary arrays cannot prove."""
+    from audit_hybrid_run import require
+    for end in endpoints:
+        if end['type'] != 'hybridEndpointVerified' or 'firstArrivalFrameId' not in end:
+            continue
+        first, second = end['firstArrivalFrameId'],end['arrivalFrameId']
+        expected=[('held',first),(RELEASE_REJECTED,first),(RELEASE_RETRY,second),('held',second),
+                  ('hybridEndpointVerified',second)]
+        require([t for t in trace if t in expected]==expected, 'Original rejected/retried release journal order differs')
+
+
+def verify_release_reissues(events,frames,parts,receipts):
+    """Require a real rejected R57 readback, stopped input and an independently acknowledged fresh release."""
+    from audit_hybrid_run import require
+    rejected = [e for e in events if e['type']==RELEASE_REJECTED]
+    ready = [e for e in events if e['type']==RELEASE_RETRY]
+    ends = [e for e in events if e['type']=='hybridEndpointVerified' and 'firstArrivalFrameId' in e]
+    require(len(rejected)==len(ready)==len(ends), 'Endpoint release retry is unpaired or repeated')
+    transitions = [t for p in parts for t in p['controlTransitions'] if t.get('state')=='held'
+                   and t.get('reason')=='hybridEndpoint']
+    anomalous = [t['frameId'] for t in transitions if 'warmRelease' in t
+                 and t['warmRelease'].get('readinessReason') != 'client_release']
+    require(anomalous == [e['firstArrivalFrameId'] for e in rejected], 'Unreported or fabricated rejected release')
+    proposals = [d for p in parts for d in [*p['decisions'],*p.get('navigationClimbActions',[])]]
+    proofs=[]
+    for bad, retry, end in zip(rejected,ready,ends):
+        first, second = bad['firstArrivalFrameId'], end['arrivalFrameId']
+        require(events.index(bad) < events.index(retry) < events.index(end) and first < second
+                and end['firstArrivalFrameId']==retry['firstArrivalFrameId']==first and retry['retryArrivalFrameId']==second
+                and end['completedLegs']==bad['completedLegs']+1 and retry['completedLegs']==bad['completedLegs'],
+                'Retry did not belong to one originally failed arrival on the same edge')
+        binding = ('routeId','station','sourceEpoch','navigationMode','segmentIndex','fromStation','toStation',
+                   'destinationOrdinal','requestedDestination','warmRequestId')
+        require(all(k in end and bad.get(k)==retry.get(k)==end[k] for k in binding),
+                'Release retry changed its request, target or capture')
+        original,accepted = ([t for t in transitions if t['frameId']==f] for f in (first,second))
+        require(len(original)==len(accepted)==1 and original[0]['warmRequestId']==accepted[0]['warmRequestId']==end['warmRequestId'],
+                'Release retry lacks two owned held transitions')
+        rejected_ack, accepted_ack = original[0]['warmRelease'], accepted[0]['warmRelease']
+        gate,x = bad['rejectedReadiness'],bad['rejectedExecution']
+        last, tracked = x['lastInputEvent'],x['trackedState']
+        before, after = bad['arrivalEpoch'],end['releaseEpoch']
+        at = bad['rejectedAtMs']
+        require(original[0].get('rejectedReadiness')==gate and original[0].get('rejectedExecution')==x
+                and rejected_ack['type']=='released' and rejected_ack['policyHistoryReset'] is True
+                and rejected_ack['arrivalFrameId']==first and rejected_ack['serverNowMs']==at
+                and rejected_ack['readinessEpoch']==gate['epoch']==before+1 and gate['epoch']+1==after
+                and rejected_ack['captureEpoch']==gate['sourceFrame']['captureEpoch']==end['sourceEpoch']
+                and gate['ready'] is False and rejected_ack['readinessReady'] is False
+                and rejected_ack['readinessReason']==gate['reason']=='world_observation_invalidated'
+                and x.get('telemetryComplete') is True and 'active' in x and x['active'] is None and tracked.get('heldKeys')==[]
+                and tracked.get('telemetryIncomplete') is False and tracked.get('releaseOutcome')=='returned_unverified'
+                and last.get('origin')=='release:client_release' and last['call'].get('operation')=='releaseAll'
+                and last['call'].get('stage')=='returned_unverified' and last['call'].get('error') is None
+                and observation_timestamp(frames[first]) <= last['atMs'] <= x['sampledAtMs'] <= at+.001,
+                'Rejected R57 readback lacks its original stale gate and acknowledged empty software state')
+        require(accepted_ack['type']=='released' and accepted_ack['arrivalFrameId']==second
+                and accepted_ack['readinessReason']=='client_release' and accepted_ack['readinessReady'] is False
+                and accepted_ack['serverNowMs']==end['releaseAtMs'] and accepted_ack['captureEpoch']==end['sourceEpoch']
+                and accepted_ack['readinessEpoch']==after and accepted_ack.get('policyHistoryReset') is True,
+                'Retry never earned a genuine second client_release acknowledgement')
+        samples=retry['samples']
+        require(len(samples)==2 and first<samples[0]['frameId']<samples[1]['frameId']==second
+                and at<samples[0]['atMs'] and samples[1]['atMs']-samples[0]['atMs']>=80
+                and samples[1]['atMs'] <= end['releaseAtMs'] <= at+650,
+                'Second release lacks two distinct fresh post-rejection poses inside the wait budget')
+        origin=frames[first]['navigationPose']
+        for fid in (first,*[s['frameId'] for s in samples]):
+            f=frames[fid]
+            p,g,src,m=(f[k] for k in ('navigationPose','frameWorldReadiness','sourceFrame','motionEvidence'))
+            require(f['frameId']==p['frameId']==g['sourceFrameId']==fid and p['state']=='valid' and p['layerId']=='City_102'
+                    and .99<=p['positionConfidence']<=1 and .2<=p['yawConfidence']<=1 and g.get('ready') is True
+                    and g['sourceFrame']==src and g['epoch']==(before if fid==first else before+1)
+                    and f['inputAvailable'] is True and src['captureEpoch']==end['sourceEpoch']
+                    and m['status']=='normal' and m['spaceKeyMatched'] is False
+                    and math.dist((p['x'],p['y']),PATROL_STATIONS[end['station']])<=1.1
+                    and math.dist((p['x'],p['y']),(origin['x'],origin['y']))<=1.5
+                    and abs((p['yawDegrees']-origin['yawDegrees']+180)%360-180)<=3,
+                    'Release retry source does not prove fresh stationary poses at the original target')
+        for s in samples:
+            f=frames[s['frameId']]
+            require(s['atMs']==observation_timestamp(f) and all(s[k]==f['navigationPose'][k] for k in ('x','y','yawDegrees')),
+                    'Release retry pose differs from its original ready source')
+        require(observation_timestamp(frames[first]) <= at and
+                not any(first <= d['frameId'] <= second for d in proposals)
+                and not any(at < r['acceptedAtMs'] <= end['releaseAtMs'] or at < r['endedAtMs'] <= end['releaseAtMs']
+                            or any(at <= s['startedAtMs'] <= end['releaseAtMs'] for s in r['appliedSteps'])
+                            for r in receipts.values())
+                and not any(first<t['frameId']<second for t in transitions), 'New input or another release during retry hold')
+        proofs.append(dict(firstArrivalFrameId=first,retryArrivalFrameId=second,rejectedEpoch=before+1,
+                           acceptedEpoch=after,station=end['station'],rejectedAtMs=at,acceptedReleaseAtMs=end['releaseAtMs']))
+    return proofs
 
 
 def verify_retry_poses(events, frames, parts, receipts, confirm_first=False):

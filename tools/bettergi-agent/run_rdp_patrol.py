@@ -13,7 +13,7 @@ import sys
 import time
 import uuid
 
-from hybrid_routes import PATROL_STATIONS, STREET_PATROL_ROUTE
+from hybrid_routes import PATROL_STATIONS, STREET_PATROL_ROUTE, itinerary_legs
 from resident_runtime import atomic_json, control_module, read_control_document, select_child
 
 
@@ -107,6 +107,8 @@ def patrol_argv(args, session, folder):
         command.extend(['--warm-photo-plan=' + str(args.warm_photo_plan),
                         '--photo-directory=' + str(folder/'station-photos'),
                         '--photo-qualification=' + str(args.photo_qualification.resolve())])
+        if getattr(args, 'batches', None):
+            command.append('--warm-batch-count=' + str(args.batches))
     if args.camera_calibration:
         command.append('--camera-calibration=' + str(args.camera_calibration.resolve()))
     return command
@@ -297,7 +299,15 @@ def run(args, folder, *, series=None):
             checkpoints.update(landmark_checkpoint=args.landmark_shadow.resolve(), ffmpeg=str(args.ffmpeg.resolve()))
         if getattr(args, 'destination_legs', None):
             checkpoints['destination_plan'] = args.plan
-        evidence = audit(output, folder/'patrol-recording', repository=ROOT, minimum_legs=getattr(args, 'destination_legs', 4*args.circuits),
+        minimum_legs = getattr(args, 'destination_legs', 4*args.circuits)
+        if getattr(args, 'warm_photo_plan', None) and getattr(args, 'batches', None):
+            from destination_batch_sender import admitted_plans
+            plans = admitted_plans(folder)
+            if len(plans) != args.batches:
+                raise RuntimeError('The resident ended before every external batch was published')
+            checkpoints['destination_batches'] = plans
+            minimum_legs = sum(len(itinerary_legs(p['start'],[r['destination'] for r in p['requests']])) for p in plans)
+        evidence = audit(output, folder/'patrol-recording', repository=ROOT, minimum_legs=minimum_legs,
                          minimum_circuits=args.circuits, **checkpoints)
         atomic_json(folder/'audit.json', evidence)
         if args.photo_station:

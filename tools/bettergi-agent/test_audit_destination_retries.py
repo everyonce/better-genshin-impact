@@ -8,7 +8,8 @@ from unittest.mock import Mock
 
 from PIL import Image
 
-from audit_destination_retries import RETRY, verify_retry_images, verify_retry_poses
+from audit_destination_retries import (RELEASE_REJECTED, RELEASE_RETRY, RETRY, verify_release_order, verify_release_reissues,
+                                      verify_retry_images, verify_retry_poses)
 from hybrid_routes import PATROL_STATIONS, STREET_PATROL_ROUTE
 
 
@@ -123,3 +124,74 @@ class StationaryRetryAuditTests(unittest.TestCase):
                     else:
                         with self.assertRaises(ValueError):
                             checked()
+
+    def test_rejected_release_needs_its_original_telemetry_then_a_fresh_accepted_release(self):
+        for case in ('valid','unearned','wrong-reason','bad-telemetry','wrong-release','one-frame','stale',
+                     'late','moving','epoch','input','proposal','fabricated','missing','another-release'):
+            with self.subTest(case=case):
+                base,frames,parts,receipts=self.evidence()
+                binding={k:v for k,v in base[0].items() if k in ('routeId','station','sourceEpoch','navigationMode',
+                    'segmentIndex','fromStation','toStation','destinationOrdinal','requestedDestination','warmRequestId')}
+                done=dict(binding,type='hybridEndpointVerified',firstArrivalFrameId=4,arrivalFrameId=6,
+                          completedLegs=1,releaseEpoch=4,releaseAtMs=625)
+                for fid in (5,6):
+                    frames[fid]['frameWorldReadiness']['epoch']=3
+                gate=dict(epoch=3,ready=False,reason='world_observation_invalidated',sourceFrame=frames[4]['sourceFrame'])
+                execution=dict(telemetryComplete=True,active=None,sampledAtMs=425,trackedState=dict(heldKeys=[],
+                    telemetryIncomplete=False,releaseOutcome='returned_unverified'),lastInputEvent=dict(atMs=420,
+                    origin='release:client_release',call=dict(operation='releaseAll',stage='returned_unverified',error=None)))
+                bad=dict(binding,type=RELEASE_REJECTED,completedLegs=0,firstArrivalFrameId=4,arrivalEpoch=2,
+                         rejectedAtMs=425,rejectedReadiness=gate,rejectedExecution=execution)
+                ready=dict(binding,type=RELEASE_RETRY,completedLegs=0,firstArrivalFrameId=4,retryArrivalFrameId=6,
+                           samples=deepcopy(base[2]['samples'][:2]))
+                events=[bad,ready,done]
+                def held(fid,reason,at,epoch):
+                    return dict(state='held',reason='hybridEndpoint',frameId=fid,warmRequestId='first',
+                        warmRelease=dict(type='released',arrivalFrameId=fid,serverNowMs=at,readinessEpoch=epoch,
+                            captureEpoch='wgc',readinessReason=reason,readinessReady=False,policyHistoryReset=True))
+                first=held(4,'world_observation_invalidated',425,3)
+                first.update(rejectedReadiness=deepcopy(gate),rejectedExecution=deepcopy(execution))
+                last=held(6,'client_release',625,4)
+                parts[0]['controlTransitions']=[first,last]
+                if case=='unearned':
+                    events.pop(1)
+                elif case=='wrong-reason':
+                    bad['rejectedReadiness']['reason']='client_release'
+                elif case=='bad-telemetry':
+                    first['rejectedExecution']['trackedState']['heldKeys']=['W']
+                elif case=='wrong-release':
+                    last['warmRelease']['readinessReason']='world_observation_invalidated'
+                elif case=='one-frame':
+                    ready['samples'][1]=ready['samples'][0]
+                elif case=='stale':
+                    ready['samples'][0]['atMs']=420
+                elif case=='late':
+                    ready['samples'][1]['atMs']=1300
+                elif case=='moving':
+                    frames[6]['navigationPose']['x']+=3
+                elif case=='epoch':
+                    frames[5]['frameWorldReadiness']['epoch']=2
+                elif case=='input':
+                    receipts['bad']=dict(acceptedAtMs=490,endedAtMs=520,appliedSteps=[dict(startedAtMs=500)])
+                elif case=='proposal':
+                    parts[0]['decisions'].append(dict(frameId=5))
+                elif case=='fabricated':
+                    first['rejectedReadiness']['sourceFrame']={}
+                elif case=='missing':
+                    events[:]=[]
+                elif case=='another-release':
+                    parts[0]['controlTransitions'].insert(1,held(5,'client_release',550,3))
+                if case=='valid':
+                    proof,=verify_release_reissues(events,frames,parts,receipts)
+                    self.assertEqual((proof['rejectedEpoch'],proof['acceptedEpoch']),(3,4))
+                else:
+                    with self.assertRaises(ValueError):
+                        verify_release_reissues(events,frames,parts,receipts)
+
+    def test_ready_source_must_precede_second_ack_in_the_original_mixed_event_journal(self):
+        end=dict(type='hybridEndpointVerified',firstArrivalFrameId=4,arrivalFrameId=6)
+        trace=[('held',4),(RELEASE_REJECTED,4),(RELEASE_RETRY,6),('held',6),('hybridEndpointVerified',6)]
+        verify_release_order(trace,[end])
+        trace[2],trace[3]=trace[3],trace[2]
+        with self.assertRaises(ValueError):
+            verify_release_order(trace,[end])

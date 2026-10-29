@@ -1,6 +1,7 @@
 """Attribute predeclared photo requests to disjoint frames and actions on one verified patrol lease."""
 import hashlib
 import json
+import math
 from pathlib import Path
 import re
 import time
@@ -16,6 +17,27 @@ def read_plan(path):
     plan = json.loads(raw)
     validate_plan(plan)
     return plan, hashlib.sha256(raw).hexdigest()
+
+
+def batch_plan_digest(plan):
+    """Digest a nested JSON plan independently of its envelope's whitespace and byte digest."""
+    return hashlib.sha256(json.dumps(plan, sort_keys=True, separators=(',', ':')).encode('ascii')).hexdigest()
+
+
+def request_leg_counts(plan):
+    """Derive exact per-request edge budgets from the reviewed ordered station graph."""
+    destinations = [row['destination'] for row in plan['requests']]
+    edges = itinerary_legs(plan['start'], destinations)
+    return [sum(owner == i for _, _, owner in edges) for i in range(1, len(destinations)+1)]
+
+
+def batch_bytes(path):
+    """Read an addressed queue document under the resident's fixed memory cap."""
+    with path.open('rb') as source:
+        raw = source.read(16385)
+    if len(raw) > 16384:
+        raise ValueError('Oversized destination batch document')
+    return raw
 
 
 def validate_plan(plan):
@@ -54,7 +76,7 @@ def validate_plan(plan):
 class WarmPhotoRequests:
     """Serial policy-thread state for the current request, its outstanding actions and native release barrier."""
 
-    def __init__(self, plan, directory, checkpoint_id, embedding, hello, run_id, legs):
+    def __init__(self, plan, directory, checkpoint_id, embedding, hello, run_id, legs, *, batch_count=None):
         """Bind the plan, embedding and request journals to this one resident/bridge identity."""
         definition, self.plan_sha = read_plan(plan)
         self.requests = definition['requests']
@@ -64,11 +86,26 @@ class WarmPhotoRequests:
         if definition['version'] == 2:
             self.itinerary_start = definition['start']
             self.destinations = tuple(r['destination'] for r in self.requests)
-            edges = itinerary_legs(self.itinerary_start, self.destinations)
-            self.request_legs = [sum(owner == i for _, _, owner in edges) for i in range(1, len(self.requests) + 1)]
+            self.request_legs = request_leg_counts(definition)
         else:
             self.request_legs = [4 * r['circuits'] for r in self.requests]
-        if sum(self.request_legs) != legs:
+        self.batch_count, self.max_legs = batch_count, legs
+        self.batch_boundary = None
+        self.batch_witnesses = {}
+        self.batch_scope = {}
+        self.batch_dispatch_before_ms = None
+        if batch_count is not None:
+            if (not self.destinations or type(batch_count) is not int or not 2 <= batch_count <= 12
+                    or type(legs) is not int or not sum(self.request_legs) + 2*(batch_count-1) <= legs <= 96):
+                raise ValueError('Successive destination batches require feasible batch and total edge limits')
+            if (set(definition) - {'version','mode','start','requests','confirmFirstArrival'}
+                    or any(set(r) != {'id','name','destination','targets'} for r in self.requests)):
+                raise ValueError('Initial batch must use the reviewed destination request schema')
+            self.batch_directory = Path(plan).resolve().parent/'batches'
+            if any((self.batch_directory/f'{n:05}.json').exists() for n in range(2,batch_count+1)):
+                raise ValueError('Successor batches cannot be published before gameplay')
+            self.batch_scope = dict(batchOrdinal=1,batchSha256=self.plan_sha,batchPlanSha256=batch_plan_digest(definition))
+        elif sum(self.request_legs) != legs:
             raise ValueError('Warm plan does not match the resident leg limit')
         self.directory = Path(directory)
         self.directory.mkdir(parents=True, exist_ok=False)
@@ -78,6 +115,7 @@ class WarmPhotoRequests:
         self.index = 0
         self.active_after = None
         self.release = None
+        self.release_retry_blocked = False
         self.retry_endpoint = None
         self.retry_deadline_ns = None
         self.retry_count = 0
@@ -100,6 +138,7 @@ class WarmPhotoRequests:
                                         start_station=start)
         self.pending = set()
         self.first_accepted = self.first_applied = self.last_accepted = None
+        self.last_applied_at_ms = None
         self._status()
 
     @property
@@ -111,13 +150,14 @@ class WarmPhotoRequests:
         """Publish only sparse request milestones for the external operator-stop probe."""
         accepted, applied = self.first_accepted or (None, None), self.first_applied or (None, None)
         atomic_json(self.directory/'warm-status.json', dict(version=1, runId=self.identity['runId'],
+                    sessionId=self.identity['sessionId'], ownerEpoch=self.identity['ownerEpoch'], **self.batch_scope,
                     activeRequestId=self.current['id'], activeOrdinal=self.index+1, complete=self.finished,
                     activeFirstAcceptedRequestId=accepted[0], activeFirstAcceptedFrameId=accepted[1],
                     activeFirstAppliedRequestId=applied[0], activeFirstAppliedFrameId=applied[1]))
 
     def require_action_frame(self, frame_id):
         """Check ownership and receipt capacity before the bridge can receive any new input."""
-        if (not self.started or self.finished or self.retry_endpoint is not None
+        if (not self.started or self.finished or self.release_retry_blocked or self.retry_endpoint is not None or self.batch_boundary is not None
                 or (self.active_after is not None and frame_id <= self.active_after)):
             raise RuntimeError('Warm action is outside its request frame boundary')
         if len(self.pending) >= 32:
@@ -132,29 +172,45 @@ class WarmPhotoRequests:
             self.first_accepted = (request_id, frame_id)
             self._status()
 
+    def require_batch_dispatch_window(self, start_before_ms):
+        """Keep the bridge's full 150 ms source deadline inside the previous batch's one-second handoff."""
+        if self.batch_dispatch_before_ms is not None and (type(start_before_ms) not in (int,float)
+                or not math.isfinite(start_before_ms) or start_before_ms >= self.batch_dispatch_before_ms):
+            raise RuntimeError('Successor dispatch would exceed the one-second warm handoff')
+
     def receipt(self, receipt):
         """Retire pending IDs on the policy thread, after the serial action transaction."""
         key = receipt['requestId']
         if key in self.pending:
             self.pending.remove(key)
+            if self.batch_count and receipt.get('appliedSteps'):
+                times = [s['startedAtMs'] for s in receipt['appliedSteps']]
+                if any(type(t) not in (int,float) or not math.isfinite(t) for t in times):
+                    raise ValueError('Invalid batch native dispatch time')
+                self.last_applied_at_ms = max(times) if self.last_applied_at_ms is None else max(self.last_applied_at_ms, *times)
+                self.batch_dispatch_before_ms = None
             if self.first_applied is None and receipt.get('appliedSteps'):
                 self.first_applied = (key, receipt['frameId'])
+                if self.batch_count:
+                    self.batch_witnesses[self.current['id']] = self.first_applied
                 self._status()
 
     def released(self, frame_id, reply):
         """Retain the endpoint release response after the existing policy-history reset has succeeded."""
         gate = reply['worldReadiness']
-        self.release = dict(type=reply['type'], arrivalFrameId=frame_id, serverNowMs=reply['serverNowMs'],
+        evidence = dict(type=reply['type'], arrivalFrameId=frame_id, serverNowMs=reply['serverNowMs'],
                             readinessEpoch=gate['epoch'], readinessReason=gate['reason'], readinessReady=gate['ready'],
                             captureEpoch=gate['sourceFrame']['captureEpoch'], policyHistoryReset=True)
-        return dict(self.release)
+        self.release = evidence if gate['reason'] == 'client_release' else None
+        self.release_retry_blocked = self.release is None
+        return dict(evidence)
 
     def _event(self, kind, native, legs, **detail):
         """Persist causal frame, lease and request identity on every lifecycle transition."""
         goal = dict(destination=self.current['destination']) if self.destinations else dict(circuits=self.current['circuits'])
         return dict(type=kind, warmRequestId=self.current['id'], ordinal=self.index+1, name=self.current['name'],
                     targets=list(self.current['targets']), **goal, frameId=native['frameId'],
-                    sourceEpoch=native['sourceEpoch'], completedLegs=legs, **self.identity, **detail)
+                    sourceEpoch=native['sourceEpoch'], completedLegs=legs, **self.identity, **self.batch_scope, **detail)
 
     def check_photo_deadline(self):
         """A missing frame must not extend the stationary observation window."""
@@ -228,7 +284,9 @@ class WarmPhotoRequests:
             self.retry_endpoint = self.retry_deadline_ns = None
             self.retry_count = 0
         rows = [self._event('warmPhotoRequestCompleted', native, legs, **proof)]
-        if self.index + 1 == len(self.requests):
+        if self.index + 1 == len(self.requests) and self.batch_count and self.batch_scope['batchOrdinal'] < self.batch_count:
+            self.batch_boundary = (native, proof, (received_ns or time.perf_counter_ns()) + 1_000_000_000)
+        elif self.index + 1 == len(self.requests):
             self.finished = True
             self._status()
         else:
@@ -240,3 +298,83 @@ class WarmPhotoRequests:
             self._open()
             rows.append(self._event('warmPhotoRequestStarted', native, legs, previousRequestId=previous))
         return rows
+
+    def check_batch_deadline(self):
+        """A missing successor or capture cannot extend the released boundary wait."""
+        if self.batch_boundary and time.perf_counter_ns() > self.batch_boundary[2]:
+            raise RuntimeError('No qualified destination batch within the 1000 ms released boundary')
+
+    def consume_batch(self, admission_frame):
+        """Read only the next append-only envelope at a verified boundary, authenticating its applied-action witness."""
+        if not self.batch_boundary:
+            raise RuntimeError('Successor needs a verified, released request boundary')
+        self.check_batch_deadline()
+        native, proof, _ = self.batch_boundary
+        if type(admission_frame) is not int or admission_frame < native['frameId']:
+            raise ValueError('Successor admission needs a fresh frame at the released station')
+        number = self.batch_scope['batchOrdinal'] + 1
+        prefix = self.batch_directory/f'{number:05}'
+        try:
+            published = json.loads(batch_bytes(prefix.with_suffix('.publication.json')))
+        except FileNotFoundError:
+            return None
+        raw = batch_bytes(prefix.with_suffix('.json'))
+        envelope = json.loads(raw)
+        intent = json.loads(batch_bytes(prefix.with_suffix('.intent.json')))
+        fixed = dict(version=1, mode='destination-batch', batchOrdinal=number,
+                     previousSha256=self.batch_scope['batchSha256'],
+                     **{key:self.identity[key] for key in ('runId','sessionId','ownerEpoch')})
+        if (not isinstance(envelope, dict) or set(envelope) != set(fixed) | {'witness','plan'}
+                or any(type(envelope[k]) is not type(value) or envelope[k] != value for k,value in fixed.items())):
+            raise ValueError('Misaddressed destination batch envelope')
+        witness = envelope['witness']
+        if (not isinstance(witness, dict) or set(witness) != {'batchOrdinal','requestId','nativeRequestId','frameId'}
+                or type(witness['batchOrdinal']) is not int or witness['batchOrdinal'] != number-1
+                or type(witness['frameId']) is not int or not isinstance(witness['requestId'],str)
+                or self.batch_witnesses.get(witness['requestId']) != (witness['nativeRequestId'],witness['frameId'])):
+            raise ValueError('Successor is missing its predecessor gameplay witness')
+        plan = envelope['plan']
+        requests = validate_plan(plan)
+        if (set(plan) != {'version','mode','start','requests'} or plan['version'] != 2
+                or any(set(r) != {'id','name','destination','targets'} for r in requests)
+                or plan['start'] != self.current['destination']
+                or any({r[key] for r in requests} & {r[key] for r in self.requests} for key in ('id','name'))):
+            raise ValueError('Successor must start at the released station with fresh request identities and names')
+        counts = request_leg_counts(plan)
+        if sum(self.request_legs) + sum(counts) + 2*(self.batch_count-number) > self.max_legs:
+            raise ValueError('Successor exceeds the resident edge budget')
+        from run_rdp_patrol import native_qpc_sample
+        qpc = native_qpc_sample()
+        self.check_batch_deadline()
+        if qpc is None:
+            raise RuntimeError('A native monotonic timestamp is required for successor admission')
+        scope = dict(batchOrdinal=number, batchSha256=hashlib.sha256(raw).hexdigest(), batchPlanSha256=batch_plan_digest(plan))
+        # The producer seals the exact selected plan before publishing the envelope and writes its receipt last.
+        address = {k:v for k,v in fixed.items() if k != 'mode'}
+        address.update(witness=witness, batchSha256=scope['batchSha256'])
+        observed = intent.get('observedAtMonotonicNs')
+        bracket = published.get('publicationQpc') or {}
+        if (type(observed) is not int or observed <= 0
+                or intent != dict(address,type='destinationBatchIntent',plan=plan,observedAtMonotonicNs=observed)
+                or any(published.get(k) != v for k,v in address.items())
+                or published.get('type') != 'destinationBatchPublished' or published.get('observedAtMonotonicNs') != observed
+                or type(published.get('publishedAtMonotonicNs')) is not int or published['publishedAtMonotonicNs'] < observed
+                or bracket.get('clock') != 'windows-query-performance-counter' or bracket.get('frequencyHz') != qpc[0]
+                or not all(type(bracket.get(k)) is int for k in ('beforeTicks','afterTicks'))
+                or not 0 < bracket['beforeTicks'] <= bracket['afterTicks'] <= qpc[1]):
+            raise ValueError('Destination batch differs from the sealed external selection or publication')
+        previous, following, legs = self.current['id'], requests[0]['id'], native['completedLegs']
+        self.requests.extend(requests)
+        self.request_legs.extend(counts)
+        rows = [self._event('warmBatchAccepted', native, legs, nextRequestId=following, nextBatchOrdinal=number,
+                            nextBatchSha256=scope['batchSha256'], nextBatchPlanSha256=scope['batchPlanSha256'],
+                            nextBatchBytes=len(raw), publicationWitness=witness, admissionFrameId=admission_frame,
+                            consumedQpc=dict(clock='windows-query-performance-counter', frequencyHz=qpc[0], ticks=qpc[1]), **proof),
+                self._event('warmPhotoHandoff', native, legs, nextRequestId=following, **proof)]
+        self.batch_scope, self.batch_witnesses, self.batch_boundary = scope, {}, None
+        self.batch_dispatch_before_ms = self.last_applied_at_ms + 1000
+        self.index += 1
+        self.active_after, self.release = admission_frame, None
+        self._open()
+        rows.append(self._event('warmPhotoRequestStarted', native, legs, previousRequestId=previous))
+        return [r['destination'] for r in requests], rows

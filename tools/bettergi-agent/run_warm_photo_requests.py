@@ -131,9 +131,13 @@ def audit_result(args, folder, guard):
                 or patrol.addressed_control(folder/'patrol.json.control.json', state['runId'])['command'] != 'run'):
             raise RuntimeError('Warm request ownership or prior route audit failed')
         authenticated = json.loads((folder/'audit.json').read_bytes())
+    extra = {}
+    if getattr(args, 'batches', None):
+        from destination_batch_sender import admitted_plans
+        extra['batch_plans'] = admitted_plans(folder)
     audit = audit_photo_handoff(folder/'patrol.json', folder/'patrol-recording', repository=patrol.ROOT,
         photo_root=folder/'station-photos', requests=args.plan, landmark_checkpoint=args.landmark_shadow,
-        qualification=args.photo_qualification, authenticated_report=authenticated, allow_incomplete=args.stop_drill)
+        qualification=args.photo_qualification, authenticated_report=authenticated, allow_incomplete=args.stop_drill, **extra)
     patrol.atomic_json(folder/'handoff-audit.json', audit)
     if args.stop_drill:
         if audit.get('stopVerified') is not True or audit.get('passed') is not False:
@@ -143,18 +147,21 @@ def audit_result(args, folder, guard):
     return audit
 
 
-def run(args, folder):
+def run(args, folder, *, guard_type=WarmGuard):
     """Submit exactly one pinned resident job and persist the supervisor result even on refusal."""
     plan_path = folder/'photo-requests.json'
     with plan_path.open('x', encoding='utf-8') as output:
         json.dump(args.plan, output, indent=2)
     args.warm_photo_plan = plan_path.resolve()
-    guard = WarmGuard(folder, args)
+    guard = guard_type(folder, args)
     requests = args.plan['requests']
     planned = [dict(oldRequestId=old['id'], newRequestId=new['id']) for old, new in zip(requests, requests[1:])]
     summary = dict(status='running', computer=socket.gethostname(), stopFile=str(guard.stop_file),
                    stopDrill=args.stop_drill, planSha256=hashlib.sha256(plan_path.read_bytes()).hexdigest(),
                    plannedHandoffs=planned, verifiedHandoffs=[])
+    if getattr(args, 'batches', None):
+        summary.update(batchCount=args.batches, maxLegs=args.destination_legs, manualSubmission=args.manual,
+                       stopInBatch=args.stop_in_batch, stopRule='first-request-first-applied' if args.stop_drill else None)
     print(f'Warm request evidence: {folder}\nTo cancel, create: {guard.stop_file}', flush=True)
     patrol.atomic_json(folder/'warm-launcher.json', summary)
     try:
@@ -172,6 +179,13 @@ def run(args, folder):
         audit = audit_result(args, folder, guard)
         handoffs = audit['handoffs']
         audited = [dict(oldRequestId=row['oldRequestId'], newRequestId=row['newRequestId']) for row in handoffs]
+        if getattr(args, 'batches', None):
+            from destination_batch_sender import admitted_plans
+            requests = [r for plan in admitted_plans(folder) for r in plan['requests']]
+            if args.stop_drill:
+                requests = requests[:guard.stop_observation['requestOrdinal']]
+            planned = [dict(oldRequestId=a['id'], newRequestId=b['id']) for a,b in zip(requests,requests[1:])]
+            summary['plannedHandoffs'] = planned
         if audited != planned:
             raise RuntimeError('Audited handoffs differ from the prescribed request sequence')
         summary['verifiedHandoffs'] = [dict(pair, dispatchGapMs=row['dispatchGapMs'])

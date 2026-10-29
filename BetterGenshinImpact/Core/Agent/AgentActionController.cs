@@ -317,6 +317,16 @@ public sealed partial class AgentActionController(IAgentInput input, bool inputE
         }
     }
 
+    /// <summary>Return the post-release barrier before a delayed capture can replace its readiness reason.</summary>
+    internal AgentWorldReadiness ReleaseAndGetSnapshot(double now, out double acknowledgedAtMs, out AgentExecutionContext context)
+    {
+        lock (_gate)
+        {
+            Release(now);
+            return GetWorldReadinessAndExecutionSnapshot(out acknowledgedAtMs, out context);
+        }
+    }
+
     /// <summary>Validate an immutable proposal before it can become the current input plan.</summary>
     public string? Submit(AgentRequest request, double now) => Submit(request, now, out _);
 

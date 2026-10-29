@@ -54,6 +54,31 @@ Declare two to four named requests. To admit a new run at a previous destination
 
 When the image classifier disagrees at a requested destination, the controller holds the existing input release and checks up to three new sets of stable frames within 1.5 seconds. An unresolved photo ends the run. To exercise this hold deliberately, add `--confirm-first-arrival` to require two matching views at the first destination. The photo journal records whether a second view was requested or the classifier actually missed.
 
+### Send more destinations to the loaded model
+
+On SIREN, `run_destination_batches.py` keeps the GPU model and input lease active across batches. Supply only the first two to four goals at launch. This example authorizes two batches and four surveyed legs in total.
+
+```powershell
+& 'C:/Programs/Python/Python311/python.exe' -B tools/bettergi-agent/run_destination_batches.py launch `
+    --manual --batches 2 --leg-limit 4 --seconds 110 --start-station stair-front `
+    --destination initial-junction sidewalk-junction --destination initial-lamp west-lamp `
+    --evidence-root artifacts/live/manual-destination-batches `
+    --steering-shadow artifacts/agent/steering/gen-01.json `
+    --landmark-shadow artifacts/agent/landmarks/gen-04.json `
+    --photo-qualification artifacts/agent/landmarks/qualify-g4-fresh-10.json
+```
+
+In another PowerShell process, pass the exact evidence folder printed by that launch. The sender checks the live RDP pair and waits for an applied input from the preceding batch before publishing. Submit while the first batch is moving so the following goals are ready at its final destination.
+
+```powershell
+$runFolder = Read-Host 'Paste the evidence folder printed by the running launcher'
+& 'C:/Programs/Python/Python311/python.exe' -B tools/bettergi-agent/run_destination_batches.py submit `
+    --folder $runFolder --batch 2 --destination return-junction sidewalk-junction `
+    --destination return-stairs stair-front --wait-seconds 55
+```
+
+The resident admits the new list only at the released, photographed endpoint of the previous list. Each request gets fresh policy history and its own photo directory. A missing successor expires after one second at that boundary with input released. The printed `STOP` file cancels the entire lease. The built-in qualification sender can issue four goals per batch during gameplay. Use `launch` without `--manual` or `--destination` and allow seven legs per batch. For a separate cancellation trial, `--stop-in-batch 2` stops after an applied input in the second batch.
+
 ### Separate resident batches
 
 On SIREN the series launcher can repeat a task on the same minimized RDP connection. This example requests one source photo at each named station in each batch. The collector saves the original RGB image when the native station, verified frame and qualified image prediction agree. At the end of the batch a separate verifier decodes each saved PNG, checks its raw pixels against the live hash and classifies it again. A failed objective ends the series.

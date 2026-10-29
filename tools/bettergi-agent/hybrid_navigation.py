@@ -6,6 +6,7 @@ Native poses and receipts establish progress; accepted commands alone do not.
 from collections import Counter, deque
 import copy
 import math
+import time
 
 from observation_timing import observation_timestamp
 from hybrid_bypass import HybridBypass
@@ -20,6 +21,14 @@ START, END = route_points(COURTYARD_ROUTE)
 def yaw_error(a, b):
     """Return the unsigned shortest heading difference."""
     return abs((a - b + 180) % 360 - 180)
+
+
+def rejected_release_record(reply):
+    """Retain the exact gate and the native software-release telemetry from a raced acknowledgement."""
+    ctx = reply.get('executionContext') or {}
+    return dict(rejectedReadiness=copy.deepcopy(reply.get('worldReadiness')),
+                rejectedExecution={k:copy.deepcopy(ctx[k]) for k in
+                    ('sampledAtMs','telemetryComplete','trackedState','active','lastInputEvent') if k in ctx})
 
 
 class HybridNavigation:
@@ -63,6 +72,8 @@ class HybridNavigation:
         self.failure = None
         self.segment = {}
         self.arrival_frame = self.arrival_epoch = self.release_epoch = None
+        self.arrival_source_stamp = None
+        self.release_retry = None
         self.destinations = ()
         self.completed_destinations = 0
         self.stationary_photo_retries = stationary_photo_retries
@@ -120,10 +131,15 @@ class HybridNavigation:
         self.photo_hold['retryOrdinal'] += 1
         self.phase = 'awaitingDestinationPhoto'
 
-    def finish_destination_photo(self):
+    def finish_destination_photo(self, *, await_batch=False):
         """Let the warm owner advance only after the original or retried photo qualifies."""
         if self.phase != 'destinationPhotoDecision' or self.photo_hold is None:
             self._fail('destination_photo_result_unbound')
+        if await_batch:
+            if self.completed_destinations != len(self.destinations):
+                self._fail('destination_batch_boundary_unbound')
+            self.phase = 'awaitingDestinationBatch'
+            return
         self.photo_hold = None
         self.photo_resume_after = self.last_frame_id
         if self.completed_destinations == len(self.destinations):
@@ -132,12 +148,24 @@ class HybridNavigation:
             self._set_patrol_leg(self.target_name)
             self.phase = 'walking'
 
+    def append_destination_batch(self, destinations):
+        """Continue from the same released station after the resident authenticates new requests."""
+        if self.phase != 'awaitingDestinationBatch' or not self.photo_hold:
+            self._fail('destination_batch_boundary_unbound')
+        itinerary_legs(self.target_name, destinations)
+        self.destinations += tuple(destinations)
+        self.photo_hold = None
+        self.photo_resume_after = self.last_frame_id
+        self._set_patrol_leg(self.target_name)
+        self.phase, self.leg_started = 'walking', self.last_at
+
     def _observe_destination_photo(self, frame, pose, at, distance):
         """Stay within the released endpoint across every fresh sample, including earlier attempts."""
         hold, source = self.photo_hold, frame['sourceFrame']
         gate = frame.get('frameWorldReadiness') or {}
         stamp = source.get('timestamp100ns')
-        if (self.phase != 'awaitingDestinationPhoto' or type(stamp) is not int or stamp <= hold['lastStamp']
+        if (self.phase not in ('awaitingDestinationPhoto', 'awaitingDestinationBatch')
+                or type(stamp) is not int or stamp <= hold['lastStamp']
                 or type(gate.get('epoch')) is not int or gate['epoch'] != self.release_epoch
                 or gate.get('ready') is not True or gate.get('sourceFrameId') != pose['frameId']
                 or gate.get('sourceFrame') != source):
@@ -147,6 +175,8 @@ class HybridNavigation:
         if distance > 2 or any(math.hypot(pose['x'] - old['x'], pose['y'] - old['y']) > 1.5
                                or yaw_error(pose['yawDegrees'], old['yawDegrees']) > 3 for old in samples):
             self._fail('destination_photo_pose_moved')
+        if self.phase == 'awaitingDestinationBatch':
+            return 'batchEndpointStillVerified'
         if at - samples[-1]['atMs'] < 80:
             return 'waitingForDestinationPhoto'
         samples.append(dict(frameId=pose['frameId'], atMs=at, x=pose['x'], y=pose['y'], yawDegrees=pose['yawDegrees']))
@@ -179,6 +209,8 @@ class HybridNavigation:
         """Require fresh confirmation after interruption without inventing completed legs."""
         if self.photo_hold is not None:
             self._fail('destination_photo_interrupted')
+        if self.phase == 'awaitingEndpointReleaseRetry':
+            self._fail('endpoint_release_retry_interrupted')
         self.samples.clear()
         self.stall_samples.clear()
         if self.bypass and not (reason == 'hybridStalePose' and self.bypass.suspend_stale(self)):
@@ -322,13 +354,81 @@ class HybridNavigation:
             epoch = gate.get('epoch')
             if (self.phase != 'releaseRequired' or type(self.arrival_epoch) is not int or type(epoch) is not int
                     or epoch != self.arrival_epoch + 1 or gate.get('ready') is not False
-                    or gate.get('reason') != 'client_release'
                     or (gate.get('sourceFrame') or {}).get('captureEpoch') != self.source_epoch):
                 self._fail('patrol_release_unbound')
+            if (gate.get('reason') == 'world_observation_invalidated' and self.stationary_photo_retries
+                    and self.release_retry is None):
+                evidence = rejected_release_record(response)
+                ctx = evidence['rejectedExecution']
+                state, last = ctx.get('trackedState') or {}, ctx.get('lastInputEvent') or {}
+                call = last.get('call') or {}
+                if (type(self.arrival_source_stamp) is not int or ctx.get('telemetryComplete') is not True
+                        or 'active' not in ctx or ctx['active'] is not None
+                        or state.get('heldKeys') != [] or state.get('telemetryIncomplete') is not False
+                        or state.get('releaseOutcome') != 'returned_unverified' or last.get('origin') != 'release:client_release'
+                        or call.get('operation') != 'releaseAll' or call.get('stage') != 'returned_unverified'
+                        or call.get('error') is not None or type(last.get('atMs')) not in (int,float)
+                        or type(ctx.get('sampledAtMs')) not in (int,float)
+                        or not self.last_at <= last['atMs'] <= ctx['sampledAtMs'] <= stamp+.001):
+                    self._fail('patrol_release_unbound')
+                record = dict(routeId=self.route_id, station=self.target_name, sourceEpoch=self.source_epoch,
+                              firstArrivalFrameId=self.arrival_frame, arrivalEpoch=self.arrival_epoch, rejectedAtMs=stamp,
+                              completedLegs=self.legs, **self.segment)
+                self.events.append(dict(type='hybridEndpointReleaseRejected', **record, **evidence))
+                self.release_retry = dict(record=record, epoch=epoch, samples=[], pose=self.last_pose,
+                                          deadlineNs=time.perf_counter_ns()+650_000_000, lastStamp=self.arrival_source_stamp)
+                self.phase = 'awaitingEndpointReleaseRetry'
+                return
+            if gate.get('reason') != 'client_release':
+                self._fail('patrol_release_unbound')
+            if self.release_retry and (stamp - self.release_retry['record']['rejectedAtMs'] > 650
+                                       or time.perf_counter_ns() > self.release_retry['deadlineNs']):
+                self._fail('endpoint_release_retry_deadline')
             self.release_epoch = epoch
         self.release_at = stamp
         self.phase = 'verifying'
         self.samples.clear()
+
+    def permit_release_reconfirmation(self, gate):
+        """Ignore ordinary reconfirmation only in the exact raced generation while control stays held."""
+        return (self.phase == 'awaitingEndpointReleaseRetry' and gate.get('epoch') == self.release_retry['epoch']
+                and (gate.get('sourceFrame') or {}).get('captureEpoch') == self.source_epoch
+                and gate.get('reason') in ('world_observation_invalidated','world_confirming','world_ready'))
+
+    def check_release_retry_time(self):
+        """No missing capture or blocked poll may prolong the reacknowledgement window."""
+        if self.phase == 'awaitingEndpointReleaseRetry' and time.perf_counter_ns() > self.release_retry['deadlineNs']:
+            self._fail('endpoint_release_retry_deadline')
+
+    def _prepare_release_retry(self, frame, pose, at, distance):
+        """Require two independent post-refusal ready views of the original stationary arrival before one reissue."""
+        retry, source = self.release_retry, frame['sourceFrame']
+        gate, original = frame.get('frameWorldReadiness') or {}, retry['pose']
+        stamp, samples = source.get('timestamp100ns'), retry['samples']
+        if at <= retry['record']['rejectedAtMs']:
+            return 'waitingForEndpointReleaseRetry'
+        if (distance > 1.1 or math.hypot(pose['x']-original['x'],pose['y']-original['y']) > 1.5
+                or yaw_error(pose['yawDegrees'],original['yawDegrees']) > 3 or frame.get('inputAvailable') is not True
+                or not self.permit_release_reconfirmation(gate) or gate.get('ready') is not True
+                or gate.get('sourceFrameId') != frame['frameId'] or gate.get('sourceFrame') != source or type(stamp) is not int):
+            self._fail('endpoint_release_retry_source_or_pose_changed')
+        if at - retry['record']['rejectedAtMs'] > 650:
+            self._fail('endpoint_release_retry_deadline')
+        if stamp <= retry['lastStamp']:
+            self._fail('endpoint_release_retry_source_not_increasing')
+        retry['lastStamp'] = stamp
+        if any(math.hypot(pose['x']-s['x'],pose['y']-s['y']) > 1.5
+               or yaw_error(pose['yawDegrees'],s['yawDegrees']) > 3 for s in samples):
+            self._fail('endpoint_release_retry_source_or_pose_changed')
+        if not samples or at - samples[-1]['atMs'] >= 80:
+            samples.append(dict(frameId=pose['frameId'], atMs=at, x=pose['x'], y=pose['y'], yawDegrees=pose['yawDegrees']))
+        if len(samples) < 2:
+            return 'waitingForEndpointReleaseRetry'
+        self.events.append(dict(type='hybridEndpointReleaseRetryReady', **retry['record'],
+                                retryArrivalFrameId=pose['frameId'], samples=copy.deepcopy(samples)))
+        self.arrival_frame, self.arrival_epoch = pose['frameId'], retry['epoch']
+        self.phase = 'releaseRequired'
+        return 'retryReleaseRequired'
 
     def _sample(self, pose, at):
         """Retain three separated, stable, distinct observations rather than three polls of one frame."""
@@ -356,8 +456,12 @@ class HybridNavigation:
             self._fail(self.failure)
         if self.phase == 'complete':
             return 'itineraryComplete'
+        self.check_release_retry_time()
         if self.photo_hold is not None:
-            if observation_timestamp(frame) - self.photo_hold['samples'][2]['atMs'] > 1500:
+            if self.phase == 'awaitingDestinationBatch':
+                if observation_timestamp(frame) - self.photo_hold['samples'][-1]['atMs'] > 1000:
+                    self._fail('destination_batch_deadline')
+            elif observation_timestamp(frame) - self.photo_hold['samples'][2]['atMs'] > 1500:
                 self._fail('destination_photo_deadline')
             if not self.latest_pose_usable(frame):
                 self._fail('destination_photo_pose_unavailable')
@@ -392,6 +496,8 @@ class HybridNavigation:
             if (frame.get('frameWorldReadiness') or {}).get('epoch') != exit_proof['resumeWorldEpoch']:
                 self._fail('climb_resume_world_epoch_changed')
         if self.last_frame_id is not None and pose['frameId'] <= self.last_frame_id:
+            if self.phase == 'awaitingEndpointReleaseRetry':
+                return 'waitingForEndpointReleaseRetry'
             return 'waitingForDestinationPhoto' if self.photo_hold is not None else 'duplicatePose'
         self.last_frame_id = pose['frameId']
         if self.last_at is not None and at <= self.last_at:
@@ -451,6 +557,8 @@ class HybridNavigation:
             self.pending_climb_exit = None
             return None
         distance = math.hypot(x - self.target[0], y - self.target[1])
+        if self.phase == 'awaitingEndpointReleaseRetry':
+            return self._prepare_release_retry(frame, pose, at, distance)
         if self.photo_hold is not None:
             return self._observe_destination_photo(frame, pose, at, distance)
         if self.phase == 'verifying':
@@ -477,6 +585,9 @@ class HybridNavigation:
             if self.segment:
                 self.events[-1].update(routeId=self.route_id, station=self.target_name, arrivalFrameId=self.arrival_frame,
                                        releaseEpoch=self.release_epoch, **self.segment)
+                if self.release_retry is not None:
+                    self.events[-1]['firstArrivalFrameId'] = self.release_retry['record']['firstArrivalFrameId']
+                    self.release_retry = None
                 if self.destinations:
                     if self.target_name == self.segment['requestedDestination']:
                         self.completed_destinations += 1
@@ -508,7 +619,11 @@ class HybridNavigation:
         if distance <= 1.1 and (not self.bypass or self.bypass.waypoint is None):
             if self.segment:
                 self.arrival_frame = pose['frameId']
-                self.arrival_epoch = (frame.get('frameWorldReadiness') or {}).get('epoch')
+                gate = frame.get('frameWorldReadiness') or {}
+                self.arrival_epoch = gate.get('epoch')
+                self.arrival_source_stamp = (source.get('timestamp100ns') if frame.get('inputAvailable') is True
+                    and gate.get('ready') is True and gate.get('sourceFrameId') == self.arrival_frame
+                    and gate.get('sourceFrame') == source else None)
             self.phase = 'releaseRequired'
             return 'releaseRequired'
         return None

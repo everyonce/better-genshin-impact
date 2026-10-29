@@ -954,6 +954,7 @@ class ClimbRecoveryStream:
                     """Only evidence retention and owned bridge I/O; never re-enter control methods."""
                     if self.warm:
                         self.warm.require_action_frame(arguments['frameId'])
+                        self.warm.require_batch_dispatch_window(arguments.get('startBeforeMs'))
                     self.report['unacknowledgedRecoveryAction'] = copy.deepcopy(arguments)
                     return self.bridge.request('action', **arguments)
                 # The monitor cannot change the token between this final check and the write.
@@ -1099,6 +1100,7 @@ def parse_arguments(argv=None):
     parser.add_argument('--photo-directory', help='Fresh directory for original station photos and their source IDs')
     parser.add_argument('--photo-qualification', help='Sealed observer qualification for the selected checkpoint')
     parser.add_argument('--warm-photo-plan', help='Two to four independently verified photo requests on the same native patrol lease')
+    parser.add_argument('--warm-batch-count', type=int, help='Total addressed destination batches on this bounded lease (2 to 12)')
     parser.add_argument('--camera-calibration', metavar='CHECKPOINT',
                         help='Trial a holdout-qualified camera response on the street patrol')
     parser.add_argument('--remember-hybrid-bypass', action='store_true',
@@ -1213,6 +1215,9 @@ def parse_arguments(argv=None):
         parser.error('Warm photos require the receipt-backed resident P2P policy, walking embedding and recorded leg budget')
     if args.warm_photo_plan and (not args.patrol_series_binding or args.seconds > 600 or args.max_observation_age_ms > 150):
         parser.error('Warm photos require pinned patrol owners, a 600 second maximum and a 150 ms source-age ceiling')
+    if args.warm_batch_count is not None and (not args.warm_photo_plan or not 2 <= args.warm_batch_count <= 12
+                                             or not 2*args.warm_batch_count <= args.hybrid_legs <= 96):
+        parser.error('Warm batch count requires a bounded warm destination lease and at most 96 total legs')
     if args.camera_calibration and (args.hybrid_route != STREET_PATROL_ROUTE or not args.enable_input
                                     or not args.resident or args.max_observation_age_ms != 150):
         parser.error('camera-calibration requires the resident live street patrol and its 150 ms input deadline')
@@ -1402,7 +1407,8 @@ def run_episode(args, policy=None, control=None):
         if getattr(args, 'warm_photo_plan', None):
             from warm_photo_requests import WarmPhotoRequests
             warm = WarmPhotoRequests(args.warm_photo_plan, args.photo_directory, policy.landmark_shadow.checkpoint_id,
-                                     args.goal_embedding, bridge.hello, control.run_id, args.hybrid_legs)
+                                     args.goal_embedding, bridge.hello, control.run_id, args.hybrid_legs,
+                                     batch_count=getattr(args, 'warm_batch_count', None))
             if warm.identity['goalEmbeddingSha256'] != policy.warm_goal_sha:
                 raise RuntimeError('Warm goal embedding changed since model load')
             if warm.destinations:
@@ -1652,6 +1658,9 @@ def run_episode(args, policy=None, control=None):
                 transition['warmRequestId'] = warm.current['id']
                 if reason == 'hybridEndpoint':
                     transition['warmRelease'] = warm.released(previous, released)
+                    if warm.destinations and released['worldReadiness']['reason'] == 'world_observation_invalidated':
+                        from hybrid_navigation import rejected_release_record
+                        transition.update(rejected_release_record(released))
             if stale_replay and released:
                 # Keep the exact release barrier and terminal identities so a
                 # later route audit can verify the gap during re-localization.
@@ -1700,12 +1709,24 @@ def run_episode(args, policy=None, control=None):
                     if warm.retry_endpoint is not None:
                         hybrid.retry_destination_photo()
                     else:
-                        hybrid.finish_destination_photo()
+                        hybrid.finish_destination_photo(await_batch=warm.batch_boundary is not None)
                 for transition in transitions:
                     report['hybridNavigationEvents'].append(transition)
                     recorder.event(transition)
         report['hybridNavigation'] = hybrid.snapshot()
         if control:
+            control.publish(hybridNavigation=report['hybridNavigation'])
+
+    def admit_successor(frame):
+        """Poll only after native validation of the released station. The next frame starts any new action."""
+        batch = warm.consume_batch(frame['frameId'])
+        if batch:
+            destinations, transitions = batch
+            hybrid.append_destination_batch(destinations)
+            for row in transitions:
+                report['hybridNavigationEvents'].append(row)
+                recorder.event(row)
+            report['hybridNavigation'] = hybrid.snapshot()
             control.publish(hybridNavigation=report['hybridNavigation'])
 
     def recovery_event(event):
@@ -1835,6 +1856,12 @@ def run_episode(args, policy=None, control=None):
             awaiting_photo = bool(warm and warm.retry_endpoint is not None)
             if awaiting_photo:
                 warm.check_photo_deadline()
+            awaiting_batch = bool(warm and warm.batch_boundary is not None)
+            if awaiting_batch:
+                warm.check_batch_deadline()
+            awaiting_release_retry = bool(hybrid and hybrid.phase == 'awaitingEndpointReleaseRetry')
+            if awaiting_release_retry:
+                hybrid.check_release_retry_time()
             if command == 'pause':
                 hold('goalChangeFailed' if control and control.goal_state()['goalError'] else
                      'controlError' if control_error else 'userPause')
@@ -1857,7 +1884,7 @@ def run_episode(args, policy=None, control=None):
                 refresh_started = time.perf_counter_ns()
                 poll_frame()
                 refresh_ms = (time.perf_counter_ns()-refresh_started)/1e6
-            if climb and not awaiting_photo:
+            if climb and not awaiting_photo and not awaiting_batch and not awaiting_release_retry:
                 with receive_lock:
                     received_at, current_status = server_snapshot
                     item = latest.newer_than(None)
@@ -1877,12 +1904,18 @@ def run_episode(args, policy=None, control=None):
                 last_readiness_epoch = epoch
                 status_fresh = time.perf_counter()-received_at <= .25
                 if changed or gate.get('ready') is not True or current_status.get('inputAvailable') is not True or not status_fresh:
-                    own_release = (status_fresh and hybrid and hybrid.bypass
-                                   and hybrid.bypass.release_wait(hybrid, current_status, 'worldReadiness'))
-                    hold('worldTransition' if changed else gate.get('reason', 'worldNotReady'),
-                         preserve_navigation=own_release)
-                    cadence.advance(time.perf_counter())
-                    continue
+                    if (awaiting_release_retry and status_fresh and current_status.get('inputAvailable') is True
+                            and hybrid.permit_release_reconfirmation(gate)):
+                        if gate.get('ready') is not True:
+                            cadence.advance(time.perf_counter())
+                            continue
+                    else:
+                        own_release = (status_fresh and hybrid and hybrid.bypass
+                                       and hybrid.bypass.release_wait(hybrid, current_status, 'worldReadiness'))
+                        hold('worldTransition' if changed else gate.get('reason', 'worldNotReady'),
+                             preserve_navigation=own_release)
+                        cadence.advance(time.perf_counter())
+                        continue
             item = latest.newer_than(previous)
             if item is None:
                 cadence.advance(time.perf_counter())
@@ -1897,6 +1930,10 @@ def run_episode(args, policy=None, control=None):
                 cadence.advance(time.perf_counter())
                 continue
             if capability.get('requiredForInput') and frame.get('frameWorldReadiness', {}).get('ready') is not True:
+                if (awaiting_release_retry and frame.get('inputAvailable') is True
+                        and hybrid.permit_release_reconfirmation(frame['frameWorldReadiness'])):
+                    cadence.advance(time.perf_counter())
+                    continue
                 own_release = hybrid and hybrid.bypass and hybrid.bypass.release_wait(hybrid, frame, 'frameWorldReadiness')
                 hold('payloadNotGameWorld', preserve_navigation=own_release)
                 cadence.advance(time.perf_counter())
@@ -1914,15 +1951,24 @@ def run_episode(args, policy=None, control=None):
                 hybrid_wait = hybrid.prepare(frame)
                 if hybrid_wait == 'releaseRequired':
                     hybrid.released(hold('hybridEndpoint', force_release=True))
+                elif hybrid_wait == 'retryReleaseRequired':
+                    # Journal the exact post-refusal pose samples before recording the reissued native release.
+                    publish_hybrid(frame, pixels)
+                    hybrid.released(hold('hybridEndpoint', force_release=True))
                 elif hybrid_wait not in (None, 'endpointVerified', 'verifyingEndpoint', 'waitingAfterRelease',
                                          'waitingAfterClimbResume', 'confirmingBypassReentry',
-                                         'waitingForDestinationPhoto', 'destinationPhotoRetry'):
+                                         'waitingForDestinationPhoto', 'destinationPhotoRetry', 'batchEndpointStillVerified',
+                                         'waitingForEndpointReleaseRetry'):
                     # Stable-start sampling and duplicate source frames are waits,
                     # not interruptions of the navigation evidence being gathered.
                     hold('hybrid:' + hybrid_wait, preserve_navigation=hybrid_wait in (
                         'confirmingStart', 'duplicatePose', 'sourceNotIncreasing'))
                 publish_hybrid(frame, pixels)
-                if (args.hybrid_legs is not None and hybrid.legs >= args.hybrid_legs
+                if (warm and warm.batch_boundary is not None
+                        and hybrid_wait in ('endpointVerified','destinationPhotoRetry','batchEndpointStillVerified')):
+                    admit_successor(frame)
+                if (warm and warm.batch_count and warm.finished
+                        or args.hybrid_legs is not None and hybrid.legs >= args.hybrid_legs
                         and not (warm and warm.retry_endpoint is not None)):
                     if warm and not warm.finished:
                         raise RuntimeError('Native route ended with an unfinished warm request')
@@ -2058,6 +2104,7 @@ def run_episode(args, policy=None, control=None):
                     """Finish this policy transaction under the current resident authority."""
                     if warm:
                         warm.require_action_frame(frame['frameId'])
+                        warm.require_batch_dispatch_window(start_deadline.get('startBeforeMs'))
                     return bridge.request('action', requestId=request_id, frameId=frame['frameId'],
                         observedAtMs=frame['capturedAtMs'], expiresAtMs=observed_at+700, modelId=action_model_id,
                         steps=result['steps'], **start_deadline)
@@ -2237,7 +2284,8 @@ def run_episode(args, policy=None, control=None):
         report['navigationIdleRecovery'] = idle_recovery.snapshot()
         if hybrid:
             publish_hybrid()
-            if args.hybrid_legs is not None and hybrid.legs < args.hybrid_legs and report['endReason'] != 'userStop':
+            reached = warm.finished if warm and warm.batch_count else (args.hybrid_legs is None or hybrid.legs >= args.hybrid_legs)
+            if not reached and report['endReason'] != 'userStop':
                 report.setdefault('error', 'Requested hybrid route legs were not completed')
         if execution_mode != 'off':
             # Include terminal reports that arrived after the last model decision.

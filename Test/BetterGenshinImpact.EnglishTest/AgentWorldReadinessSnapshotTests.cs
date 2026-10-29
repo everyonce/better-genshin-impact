@@ -74,6 +74,31 @@ public sealed class AgentWorldReadinessSnapshotTests
         Assert.Equal(readiness.Epoch, resumed.Epoch);
     }
 
+    /// <summary>An in-flight frame can update the live gate but cannot alter an issued release acknowledgement.</summary>
+    [Fact]
+    public void DelayedCaptureCannotReplaceAcknowledgedReleaseBarrier()
+    {
+        var now = 130d;
+        var input = new DelayedInput();
+        var controller = ReadyController(input, () => now);
+        var baseline = controller.GetWorldReadinessSnapshot(out _);
+        input.OnRelease = () => now = 200;
+
+        // A camera frame acquired during key-up may reach registration before the pipe writes this reply.
+        var acknowledgement = controller.ReleaseAndGetSnapshot(130, out var acknowledgedAt, out _);
+        now = 210;
+        var delayed = controller.RegisterFrame(new(3, 160, 1920, 1080, AgentWorldEvidence.WorldHud), now);
+
+        Assert.Equal(200, acknowledgedAt);
+        Assert.Equal(baseline.Epoch + 1, acknowledgement.Epoch);
+        Assert.Equal("client_release", acknowledgement.Reason);
+        Assert.False(acknowledgement.Ready);
+        Assert.Equal("world_observation_invalidated", delayed.Reason);
+        Assert.False(delayed.Ready);
+        Assert.Equal(acknowledgement.Epoch, delayed.Epoch);
+        Assert.Equal(delayed, controller.GetWorldReadinessSnapshot(out _));
+    }
+
     /// <summary>Two distinct fresh world observations establish the fixture without Windows input.</summary>
     private static AgentActionController ReadyController(DelayedInput input, Func<double> clock)
     {

@@ -171,16 +171,26 @@ def run(args, folder, *, guard_type=WarmGuard):
         json.dump(args.plan, output, indent=2)
     args.warm_photo_plan = plan_path.resolve()
     guard = guard_type(folder, args)
-    if getattr(args, 'inspect_junction_map', False) or getattr(args,'recover_junction_map',False):
-        from map_owner import load_map_owner
-        guard.required_identity = load_map_owner(args.map_owner_from)
+    recover_map = getattr(args, 'recover_junction_map', False)
+    map_visit = getattr(args, 'inspect_junction_map', False) or recover_map
+    if map_visit:
+        if getattr(args,'open_queue',False):
+            from map_owner import evidence, replacement
+            receipt, _ = evidence(args.map_owner_from, 'map-owner-lineage.json')
+            expected = replacement(receipt['prior'], args.map_owner_from.resolve().parent)
+            if receipt != expected or not expected.get('protectedGame') or not expected.get('priorLineageSha256'):
+                raise ValueError('A map queue requires the verified R59 replacement and protected game')
+            guard.required_identity = expected['identity']
+        else:
+            from map_owner import load_map_owner
+            guard.required_identity = load_map_owner(args.map_owner_from)
+            receipt=json.loads(args.map_owner_from.read_bytes())
         with (folder/'map-required-owner.json').open('x',encoding='utf-8') as out:
             json.dump(guard.required_identity,out,indent=2)
-        receipt=json.loads(args.map_owner_from.read_bytes())
         if receipt.get('protectedGame'):
             with (folder/'map-required-game.json').open('x',encoding='utf-8') as out:
                 json.dump(receipt['protectedGame'],out,indent=2)
-        if args.recover_junction_map:
+        if recover_map:
             from audit_map_recovery import verify_failed_map_origin
             predecessor=Path(receipt['prior'])
             if predecessor.name!='map-owner-lineage.json':
@@ -203,7 +213,10 @@ def run(args, folder, *, guard_type=WarmGuard):
         owner = json.loads(owner_raw)
         if owner.get('status') not in ('completed','stopVerified') or set(owner.get('identity') or {})!={'root','child'}:
             raise ValueError('Open queue requires a sealed historical RDP owner')
-        guard.required_identity = owner['identity']
+        if guard.required_identity is None:
+            guard.required_identity = owner['identity']
+        elif owner['identity'] != guard.required_identity:
+            raise ValueError('The sealed destination queue owner differs from the verified map owner')
         owner_sha = hashlib.sha256(owner_raw).hexdigest()
         planner = dict(version=1,mode='manual' if args.manual else BALANCED,
                        targetGameplaySeconds=args.target_gameplay_seconds,goalsPerBatch=4)
@@ -251,8 +264,31 @@ def run(args, folder, *, guard_type=WarmGuard):
     finally:
         guard.finished.set()
         summary['identity'] = guard.identity
+        if map_visit and summary['status']=='completed':
+            # The map replay reads the final owner; expose it before publishing a completed supervisor.
+            patrol.atomic_json(folder/'warm-launcher.json',dict(summary,status='auditingMap'))
+            audit_map_result(args, folder, summary)
         patrol.atomic_json(folder/'warm-launcher.json', summary)
     return summary
+
+
+def audit_map_result(args, folder, summary):
+    """Seal the separate map replay only after the requested walking or queue handoff audit succeeds."""
+    key = 'mapRecoveryVerified' if getattr(args,'recover_junction_map',False) else 'mapInspectionVerified'
+    try:
+        from audit_map_inspection import audit_map
+        auditor=audit_map
+        if key == 'mapRecoveryVerified':
+            from audit_map_recovery import audit_recovery_visit
+            auditor = audit_recovery_visit
+        proof = auditor(folder,args.map_owner_from,args.landmark_shadow,args.photo_qualification,patrol.ROOT)
+        if proof.get('passed') is not True:
+            raise ValueError('Map-to-lamp audit did not pass')
+        patrol.atomic_json(folder/'map-audit.json',proof)
+        summary[key]=True
+    except Exception as exc:
+        summary.update(status='stopped',reason='Map audit failed: '+str(exc))
+        summary[key]=False
 
 
 def main():
@@ -262,23 +298,6 @@ def main():
     folder = args.evidence_root.resolve()/f'warm-{stamp}-{uuid.uuid4().hex[:12]}'
     folder.mkdir(parents=True, exist_ok=False)
     summary = run(args, folder)
-    if (args.inspect_junction_map or args.recover_junction_map) and summary['status']=='completed':
-        from audit_map_inspection import audit_map
-        auditor=audit_map
-        key='mapInspectionVerified'
-        if args.recover_junction_map:
-            from audit_map_recovery import audit_recovery_visit
-            auditor,key=audit_recovery_visit,'mapRecoveryVerified'
-        try:
-            proof = auditor(folder,args.map_owner_from,args.landmark_shadow,args.photo_qualification,patrol.ROOT)
-            if proof.get('passed') is not True:
-                raise ValueError('Map-to-lamp audit did not pass')
-            patrol.atomic_json(folder/'map-audit.json',proof)
-            summary[key]=True
-        except Exception as exc:
-            summary.update(status='stopped',reason='Map audit failed: '+str(exc))
-            summary[key]=False
-        patrol.atomic_json(folder/'warm-launcher.json',summary)
     print(summary.get('reason', summary['status']))
     return int(summary['status'] not in ('completed', 'stopVerified'))
 

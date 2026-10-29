@@ -27,6 +27,8 @@ def launch_options(argv):
     parser.add_argument('--open-queue',action='store_true',help='Require an explicit finish in the next shared queue slot')
     parser.add_argument('--target-gameplay-seconds',type=int,help='Finish after this span of positively witnessed native dispatches')
     parser.add_argument('--owner-from',type=Path,help='Sealed prior launcher/series manifest with the original RDP owner')
+    parser.add_argument('--inspect-junction-map', action='store_true', help='Inspect the junction map before the first automatic queue destination')
+    parser.add_argument('--map-owner-from', type=Path, help='Verified R59 replacement receipt for the same RDP pair and protected game')
     parser.add_argument('--destination', nargs=2, action='append', metavar=('NAME','STATION'), help='Initial batch goals')
     parser.add_argument('--stop-in-batch', type=int, help='Stop after the first applied action of this later batch')
     args = patrol.options(argv, parser, warm=True)
@@ -42,6 +44,11 @@ def launch_options(argv):
     try:
         destinations = args.destination or qualification_goals(args.start_station,1,0)
         args.plan = create_plan(args.start_station,destinations)
+        if args.inspect_junction_map != bool(args.map_owner_from) or (args.inspect_junction_map and (
+                not args.open_queue or args.manual or args.stop_in_batch is not None
+                or args.start_station != 'sidewalk-junction'
+                or [r['destination'] for r in args.plan['requests']] != ['west-lamp','sidewalk-junction'])):
+            raise ValueError('A map visit requires both map flags, an automatic open queue, and exactly junction to lamp to junction')
         legs = len(itinerary_legs(args.start_station,[r['destination'] for r in args.plan['requests']]))
         reserve = 0 if args.open_queue else (2 if args.manual else 7)*(args.batches-1)
         if legs+reserve > args.leg_limit:

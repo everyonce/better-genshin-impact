@@ -125,7 +125,7 @@ A graceful finish completes the accepted batch and seals its final station photo
 
 ### Inspect the junction world map on SIREN
 
-The map runner uses the existing minimized BetterGI RDP child, one resident GPU model and the qualified G4 observer. Its fixed itinerary starts at the sidewalk junction, visits the west lamp and returns to the junction. The original warm-owner or verified replacement receipt must match the current authenticated RDP pair. For R59 use the `map-owner-lineage.json` produced by the [source-pinned child replacement](../rdp-automation/README.md#replace-only-the-verified-map-test-child-on-siren). The launcher joins the native game PID and window binding to the protected game from that handoff.
+The map runner uses the existing minimized BetterGI RDP child, one resident GPU model and the qualified G4 observer. Its fixed itinerary starts at the sidewalk junction, visits the west lamp and returns to the junction. The verified R59 receipt binds host PID 10124 to child PID 5520 in RDP session 3 and protects Genshin PID 26240. The launcher checks the live owner and native game binding before walking. In the verified runs, the game window handle was 197360. The same receipt can be used while that exact pair and game are still present. [R59 ownership and deployment evidence](../rdp-automation/README.md#verified-r59-map-test-child-on-siren)
 
 **Inspect from the world HUD.** Start only when the character is at the junction in the playable world. BetterGI verifies the junction pose and G4 photo, opens the configured world map, recognizes the map and close control on fresh frames, and closes it once. It requires a fresh world HUD, settled junction pose and matching photo before handing walking back to the controller. Normal walking proposals are fenced during the UI operation. The standard thermal, stale-frame, owner and operator STOP gates remain active throughout the run.
 
@@ -133,25 +133,42 @@ The map runner uses the existing minimized BetterGI RDP child, one resident GPU 
 $py = 'C:/Programs/Python/Python311/python.exe'
 $runner = 'tools/bettergi-agent/run_warm_photo_requests.py'
 $mapRoot = 'artifacts/live/2026-10-29-map-inspection'
-$mapOwner = (Resolve-Path (Read-Host 'Verified map-owner-lineage.json for the current child')).Path
+$mapOwner = (Resolve-Path "$mapRoot/lineage59-admin/map-owner-lineage.json").Path
 $route = @('--map-owner-from', $mapOwner, '--start-station', 'sidewalk-junction',
     '--destination', 'photograph-lamp', 'west-lamp', '--destination', 'return-junction', 'sidewalk-junction',
     '--seconds', '120', '--steering-shadow', 'artifacts/agent/steering/gen-01.json',
     '--landmark-shadow', 'artifacts/agent/landmarks/gen-04.json',
     '--photo-qualification', 'artifacts/agent/landmarks/qualify-g4-fresh-10.json')
-& $py -B -X utf8 $runner @route --inspect-junction-map --evidence-root "$mapRoot/inspection"
+& $py -B -X utf8 $runner @route --inspect-junction-map --evidence-root "$mapRoot/r59-live"
 ```
 
-**Recover an already-open map.** The R58 inspection reached its map but refused a stale frame before closing. Its original evidence directory is `live/warm-20261029T180711Z-9e347a5c89dc` below `$mapRoot`. A separate input-disabled observation in `r58-after-attempt` recorded the map still open. For this case, use the R59 recovery capability and the sealed R58 to R59 lineage. The recovery runner checks both original records, recognizes the still-open map again on fresh native frames, and allows one close. It requires the same world and junction checks before walking. Selecting recovery starts a separate lease with a fresh model and a new evidence folder.
+R59 completed the fresh inspection and both walking legs in `r59-live/warm-20261029T191756Z-b633a0566524`. The audit verified the world-map visit, return to the junction and the first west-lamp frame. [Inspection audit](../../artifacts/live/2026-10-29-map-inspection/r59-live/warm-20261029T191756Z-b633a0566524/map-audit.json) · [Completed route](../../artifacts/live/2026-10-29-map-inspection/r59-live/warm-20261029T191756Z-b633a0566524/warm-launcher.json)
+
+**Recover an already-open map.** R58 opened the map but refused a stale frame before closing. A separate input-disabled observation recorded the map still open. R59 used both original records in a separate lease, recognized the open map on fresh native frames, closed it once, verified the world HUD and junction, then completed both walking legs. The arguments below document that completed recovery. A new interruption needs its own failed inspection and independent passive observation.
 
 ```powershell
-# Use the shared variables and R59 route arguments above. Run recovery as its own trial.
+# Recorded R59 recovery, using the shared variables and route above.
 & $py -B -X utf8 $runner @route --recover-junction-map `
     --map-failure "$mapRoot/live/warm-20261029T180711Z-9e347a5c89dc" `
     --map-passive "$mapRoot/r58-after-attempt" --evidence-root "$mapRoot/recovery"
 ```
 
-The launcher prints a run-specific `STOP` file. On a completed run, `map-audit.json` records either a complete inspection or recovery of the earlier map, with native image, input, release and west-lamp evidence. Use `warm-launcher.json` and the terminal audit together to determine the outcome. An interruption remains a separate failed or stopped run.
+The recovery audit records zero map opens, one close, software input release and two route legs. Both run modes print a run-specific `STOP` path. [Recovery audit](../../artifacts/live/2026-10-29-map-inspection/recovery/warm-20261029T191651Z-9d5b3c8f7c36/map-audit.json) · [Completed recovery route](../../artifacts/live/2026-10-29-map-inspection/recovery/warm-20261029T191651Z-9d5b3c8f7c36/warm-launcher.json)
+
+**Continue walking after the map.** From a world-ready junction, the automatic queue can start with this same map inspection. Its first two destinations are the west lamp and the junction. It chooses subsequent goals only after an applied action in the preceding batch. Supply a completed run on the current process pair along with the protected map-owner receipt. The 210-second gameplay clock begins with the walking dispatches. The 400-second deadline covers the whole invocation.
+
+```powershell
+$mapRoot = 'artifacts/live/2026-10-29-map-inspection'
+& 'C:/Programs/Python/Python311/python.exe' -B -X utf8 tools/bettergi-agent/run_destination_batches.py launch `
+    --open-queue --inspect-junction-map --map-owner-from "$mapRoot/lineage59-admin/map-owner-lineage.json" `
+    --owner-from "$mapRoot/r59-repeat/warm-20261029T191916Z-189862af5a80/warm-launcher.json" `
+    --start-station sidewalk-junction --destination first-lamp west-lamp --destination first-return sidewalk-junction `
+    --batches 12 --leg-limit 96 --seconds 400 --target-gameplay-seconds 210 --evidence-root "$mapRoot/r59-sustained" `
+    --steering-shadow artifacts/agent/steering/gen-01.json --landmark-shadow artifacts/agent/landmarks/gen-04.json `
+    --photo-qualification artifacts/agent/landmarks/qualify-g4-fresh-10.json
+```
+
+Success requires both `handoff-audit.json` and `map-audit.json`. The latter checks the captured map, verified world return, first lamp photo, and the completed successor batches under the original owner. An explicit finish completes the current batch. Use the printed `STOP` file for immediate cancellation.
 
 ### Separate resident batches
 

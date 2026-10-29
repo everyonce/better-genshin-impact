@@ -176,6 +176,56 @@ class DestinationBatchTests(unittest.TestCase):
         _,(last,) = self.owner.consume_batch(80)
         self.assertEqual((last['decisionOrdinal'],last['batchOrdinal'],last['ordinal']),(3,2,4))
 
+    def pending_first_successor(self):
+        """Accept the first ordinary action of a new batch before its terminal receipt is available."""
+        self.open_queue(count=2,legs=5)
+        self.finish(1,20,1)
+        self.finish(2,40,2)
+        self.publish()
+        self.owner.consume_batch(40)
+        self.assertFalse(self.owner.awaiting_batch_dispatch_receipt(905))
+        self.owner.require_batch_dispatch_window(1000)
+        self.owner.accepted('3'*32,50)
+        return dict(requestId='3'*32,frameId=50,status='completed',acceptedAtMs=910,endedAtMs=1045,
+                    appliedSteps=[dict(startedAtMs=911)])
+
+    def test_delayed_terminal_proves_first_applied_successor_without_a_second_proposal(self):
+        receipt=self.pending_first_successor()
+        bound=self.owner.batch_dispatch_before_ms
+        self.assertTrue(self.owner.awaiting_batch_dispatch_receipt(bound+10))
+        self.assertIsNone(self.owner.first_applied)
+        with self.assertRaisesRegex(RuntimeError,'one-second'):
+            self.owner.require_batch_dispatch_window(bound+44)
+        self.owner.receipt(receipt)
+        self.assertEqual(self.owner.first_applied,('3'*32,50))
+        self.assertFalse(self.owner.awaiting_batch_dispatch_receipt(bound+14))
+        self.owner.require_batch_dispatch_window(bound+150)
+
+    def test_unapplied_or_late_first_dispatch_never_earns_the_handoff(self):
+        receipt=self.pending_first_successor()
+        bound=self.owner.batch_dispatch_before_ms
+        with self.assertRaisesRegex(ValueError,'one-second'):
+            self.owner.receipt(dict(receipt,appliedSteps=[dict(startedAtMs=bound)]))
+        self.assertTrue(self.owner.awaiting_batch_dispatch_receipt(bound+1))
+        self.owner.receipt(dict(receipt,status='expired',appliedSteps=[]))
+        self.assertIsNone(self.owner.first_applied)
+        self.assertFalse(self.owner.awaiting_batch_dispatch_receipt(bound+2))
+        with self.assertRaisesRegex(RuntimeError,'one-second'):
+            self.owner.require_batch_dispatch_window(bound+2)
+
+    def test_missing_terminal_has_bounded_wait_and_operator_stop_wins(self):
+        self.pending_first_successor()
+        bound=self.owner.batch_dispatch_before_ms
+        self.assertTrue(self.owner.awaiting_batch_dispatch_receipt(bound+699))
+        for now in (None,float('nan'),bound+700):
+            with self.subTest(now=now),self.assertRaisesRegex(RuntimeError,'bounded wait'):
+                self.owner.awaiting_batch_dispatch_receipt(now)
+        (self.root/'STOP').touch()
+        with self.assertRaisesRegex(WarmQueueInterrupted,'userStop'):
+            self.owner.awaiting_batch_dispatch_receipt(bound+700)
+        self.assertIsNone(self.owner.first_applied)
+        self.assertEqual(self.owner.batch_dispatch_before_ms,bound)
+
     def test_native_finish_requires_the_released_final_endpoint_and_emits_no_more_legs(self):
         nav = itinerary.ItineraryNavigationTests().at_first_photo((B,))
         nav.finish_destination_photo(await_batch=True)

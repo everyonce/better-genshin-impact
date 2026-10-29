@@ -206,6 +206,18 @@ class WarmPhotoRequests:
                 or not math.isfinite(start_before_ms) or start_before_ms >= self.batch_dispatch_before_ms):
             raise RuntimeError('Successor dispatch would exceed the one-second warm handoff')
 
+    def awaiting_batch_dispatch_receipt(self, server_now_ms):
+        """Observe without proposing until the first accepted successor yields an actual terminal receipt."""
+        if self.batch_dispatch_before_ms is None or not self.pending:
+            return False
+        self.check_batch_interruption()
+        # The request has an existing 700 ms native lifetime. A delayed receipt can prove an
+        # earlier dispatch, but waiting for it never extends the deadline for that dispatch.
+        if (type(server_now_ms) not in (int,float) or not math.isfinite(server_now_ms) or server_now_ms < 0
+                or server_now_ms >= self.batch_dispatch_before_ms + 700):
+            raise RuntimeError('First successor dispatch receipt did not settle within its bounded wait')
+        return True
+
     def receipt(self, receipt):
         """Retire pending IDs on the policy thread, after the serial action transaction."""
         key = receipt['requestId']
@@ -218,15 +230,19 @@ class WarmPhotoRequests:
                         or not 0 <= accepted <= ended):
                     raise ValueError('Open queue requires the accepted frame and genuine terminal receipt')
                 self.last_terminal_ms = max(self.last_terminal_ms or ended,ended)
-            del self.pending[key]
             if self.batch_count and receipt.get('appliedSteps'):
                 times = [s['startedAtMs'] for s in receipt['appliedSteps']]
                 if any(type(t) not in (int,float) or not math.isfinite(t) for t in times):
                     raise ValueError('Invalid batch native dispatch time')
                 if self.open_queue and (times != sorted(times) or not accepted <= times[0] <= times[-1] <= ended):
                     raise ValueError('Open queue dispatch is outside its terminal receipt')
+                if self.batch_dispatch_before_ms is not None and (
+                        self.pending[key] != receipt.get('frameId')
+                        or not self.batch_dispatch_before_ms - 1000 < times[0] < self.batch_dispatch_before_ms):
+                    raise ValueError('First successor dispatch is outside its original frame or one-second handoff')
                 self.last_applied_at_ms = max(times) if self.last_applied_at_ms is None else max(self.last_applied_at_ms, *times)
                 self.batch_dispatch_before_ms = None
+            del self.pending[key]
             if self.first_applied is None and receipt.get('appliedSteps'):
                 self.first_applied = (key, receipt['frameId'])
                 if self.batch_count:
@@ -351,7 +367,8 @@ class WarmPhotoRequests:
 
     def check_batch_interruption(self):
         """Honor the original addressed command or operator STOP marker before interpreting a boundary failure."""
-        if not self.open_queue or self.batch_boundary is None:
+        if not self.open_queue or (self.batch_boundary is None and (
+                self.batch_dispatch_before_ms is None or not self.pending)):
             return
         from resident_runtime import read_control_document
         doc,error = read_control_document(self.control_path,self.identity['runId'])

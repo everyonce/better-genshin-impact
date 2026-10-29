@@ -157,6 +157,13 @@ def inspect_before_navigation(bridge, args, policy, control, profile):
                 and policy.landmark_shadow.checkpoint_id == G4_SHA256 and profile['profile']=='p2p-native-hamming-192-v1',
                 'This visit requires the native map capability, qualified G4 and RGB192')
         cap=hello['mapInspection']
+        if getattr(args,'warm_open_queue',False):
+            from destination_queue_policy import BALANCED
+            queue=json.loads((root/'queue-policy.json').read_bytes())
+            queue_owner=json.loads((root/'required-owner.json').read_bytes())
+            require(not recovery and cap.get('recoveryVersion')==1 and queue.get('mode')==BALANCED
+                    and queue_owner.get('status')=='completed' and queue_owner.get('identity')==identity,
+                    'Map visit requires an automatic queue on the same proven R59 owner')
         if cap.get('recoveryVersion')==1 or recovery:
             game=json.loads((root/'map-required-game.json').read_bytes())
             require(game['windowsSessionId']==identity['child']['windowsSessionId'] and game['processId']==cap['gameProcessId']

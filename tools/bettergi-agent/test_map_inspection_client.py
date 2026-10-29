@@ -2,7 +2,10 @@
 import copy
 from pathlib import Path
 import tempfile
+import time
 import unittest
+import io
+from contextlib import redirect_stderr
 from unittest.mock import Mock
 
 from hybrid_routes import PATROL_STATIONS
@@ -31,6 +34,21 @@ class MapClientTests(unittest.TestCase):
     def test_visual_junction_at_native_stairs_is_refused(self):
         self.assertFalse(junction_sample(frame(station='stair-front'),b'',self.head,0,None,17))
         self.assertTrue(junction_sample(frame(),b'',self.head,0,'original',17))
+
+    def test_stream_allows_only_inspection_on_a_bounded_open_queue(self):
+        import run_rdp_patrol as patrol
+        from stream_client import parse_arguments
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            args = patrol.options([])
+            args.warm_photo_plan = args.landmark_shadow = args.photo_qualification = root/'fixture.json'
+            cli = patrol.patrol_argv(args,3,root)[5:]
+            cli += [f"--patrol-series-binding=111:{'a'*32}:222:{'b'*32}:{time.monotonic_ns()+60_000_000_000}",
+                    '--warm-batch-count=2']
+            self.assertTrue(parse_arguments(cli+['--warm-open-queue','--inspect-junction-map']).inspect_junction_map)
+            for flags in (['--inspect-junction-map'],['--warm-open-queue','--recover-junction-map']):
+                with self.subTest(flags=flags), redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                    parse_arguments(cli+flags)
 
     def test_stale_world_or_missing_return_barrier_cannot_authorize(self):
         original=frame()

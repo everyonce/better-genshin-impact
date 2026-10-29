@@ -62,6 +62,82 @@ def fixture():
 
 
 class MapTransactionTests(unittest.TestCase):
+    def test_runtime_queue_proves_actual_native_span_and_preserves_stopped_archived_launcher(self):
+        """A timed native finish needs its terminal witness even when an old manual-only auditor rejected it."""
+        policy={'mode':'balanced-native-visits-v1','targetGameplaySeconds':210}
+        batch=[dict(requests=[dict(id='a')]),dict(requests=[dict(id='b')])]
+        observed=dict(batchOrdinal=2,requestId='b',nativeRequestId='second',frameId=400)
+        finish=dict(reason='gameplayTargetReached',decisionOrdinal=3,selectedStations=[],elapsedGameplaySeconds=211.5,witness=observed)
+        result=dict(outcome='gameplayTargetReached',decisions=[finish])
+        warm=dict(planner=policy,manualSubmission=False,status='auditingMap',auditStatus='runtime-target-achieved',openQueueResult=result)
+        route=dict(status='runtime-target-achieved',clock=dict(frequency=1000),openQueue=result,requests=[
+            dict(id='a',first=dict(nativeRequestId='first',frameId=12,firstDispatchTicks=1000)),
+            dict(id='b',first=dict(nativeRequestId='second',frameId=400,firstDispatchTicks=212500))])
+        self.assertEqual(audit.map_queue_finish(warm,route,batch,False)['verifiedGameplayWitnessSeconds'],211.5)
+        failed=dict(warm,status='stopped',reason='Map audit failed: Expected a completed operator-finished R59 map queue',mapInspectionVerified=False)
+        with self.assertRaises(ValueError): audit.map_queue_finish(failed,route,batch,False)
+        self.assertEqual(audit.map_queue_finish(failed,route,batch,True)['targetGameplaySeconds'],210)
+        manual=dict(outcome='operatorFinish')
+        with self.assertRaises(ValueError):
+            audit.map_queue_finish(dict(warm,planner=dict(mode='manual',targetGameplaySeconds=None),manualSubmission=True,
+                                        auditStatus='operator-finished',openQueueResult=manual),
+                                   dict(route,status='operator-finished',openQueue=manual),batch,False)
+        for old,alternate,archived in [(dict(failed,reason='thermalStop'),route,True),(warm,route,True),
+                (dict(failed,mapInspectionVerified=True),route,True),(dict(warm,manualSubmission=True),route,False),
+                (dict(warm,planner=dict(policy,targetGameplaySeconds=212)),route,False),
+                (dict(warm,auditStatus='operator-finished'),dict(route,status='operator-finished'),False)]:
+            with self.assertRaises(ValueError): audit.map_queue_finish(old,alternate,batch,archived)
+        for change in [dict(reason='operatorFinish'),dict(elapsedGameplaySeconds=999),dict(decisionOrdinal=2),
+                       dict(witness=dict(observed,nativeRequestId='foreign')),dict(witness=dict(observed,batchOrdinal=1))]:
+            q=dict(result,decisions=[dict(finish,**change)])
+            with self.assertRaises(ValueError): audit.map_queue_finish(dict(warm,openQueueResult=q),dict(route,openQueue=q),batch,False)
+
+    def test_dynamic_map_queue_needs_actual_verified_successors_before_finish(self):
+        """Only the extended queue can consume its complete warm handoff proof as a map-queue outcome."""
+        j,l=audit.JUNCTION,audit.LAMP
+        points=[j,l,j,'stair-front',l]
+        req=[dict(id=f'goal{i}',start=a,destination=b,complete=True,plannedLegs=1,verifiedLegs=1,actions=2,
+                  photos=dict(decodedStation=b,checkpointId=audit.G4_SHA256,complete=True)) for i,(a,b) in enumerate(zip(points,points[1:]))]
+        plans=[dict(start=req[i]['start'],requests=[dict(id=x['id'],destination=x['destination']) for x in req[i:i+2]]) for i in (0,2)]
+        switches=[dict(oldRequestId=a['id'],newRequestId=b['id'],pendingOldActions=0,dispatchGapMs=600,
+                       oldLast=dict(lastStepTicks=i*1000),newFirst=dict(firstDispatchTicks=i*1000+600))
+                  for i,(a,b) in enumerate(zip(req,req[1:]))]
+        req[0]['first']=dict(nativeRequestId='native0',frameId=12,firstDispatchTicks=100)
+        req[2]['first']=dict(nativeRequestId='native2',frameId=200,firstDispatchTicks=1600)
+        witness=dict(requestId='goal2',nativeRequestId='native2',frameId=200,batchOrdinal=2)
+        finish=dict(reason='gameplayTargetReached',decisionOrdinal=3,selectedStations=[],elapsedGameplaySeconds=1.5,witness=witness)
+        q=dict(outcome='gameplayTargetReached',decisions=[finish])
+        route=dict(start=j,clock=dict(frequency=1000),status='runtime-target-achieved',stopVerified=False,passed=True,stop=None,
+                   modelLoads=1,controllerLeases=1,openQueue=q,publishedBatches=2,admittedBatches=2,
+                   requests=req,handoffs=switches,batchContinuations=[dict(newRequestId='goal2',status='accepted')])
+        warm=dict(status='completed',auditStatus='runtime-target-achieved',stopDrill=False,manualSubmission=False,
+                  planner=dict(mode='balanced-native-visits-v1',targetGameplaySeconds=1),openQueueResult=q)
+        window=dict(gameProcessId=123,gameWindowHandle=456)
+        self.assertEqual(audit.completed_map_queue(warm,route,plans,window),
+                         dict(outcome='gameplayTargetReached',admittedBatches=2,verifiedGoals=4,successorGoals=2,maximumHandoffMs=600,
+                              targetGameplaySeconds=1,verifiedGameplayWitnessSeconds=1.5,firstAppliedTicks=100,witnessAppliedTicks=1600,
+                              clockFrequencyHz=1000,firstNativeRequestId='native0',witnessNativeRequestId='native2'))
+        for label,change in [
+                ('unprotected target',lambda w,r,b,g:g.update(gameWindowHandle=0)),
+                ('initial plan missing return',lambda w,r,b,g:b[0]['requests'][1].update(destination='stair-front')),
+                ('no successor',lambda w,r,b,g:b.pop()),
+                ('successor rejected',lambda w,r,b,g:r['batchContinuations'][0].update(status='pending')),
+                ('wrong successor id',lambda w,r,b,g:r['batchContinuations'][0].update(newRequestId='goal1')),
+                ('stop',lambda w,r,b,g:r.update(stopVerified=True)),
+                ('successor lease',lambda w,r,b,g:r.update(controllerLeases=2)),
+                ('model reloaded',lambda w,r,b,g:r.update(modelLoads=2)),
+                ('operator finish label',lambda w,r,b,g:r.update(status='operator-finished')),
+                ('manual planner',lambda w,r,b,g:w.update(planner=dict(mode='manual',targetGameplaySeconds=None),manualSubmission=True)),
+                ('capacity',lambda w,r,b,g:r['openQueue'].update(outcome='batchLimitReached')),
+                ('unverified goal',lambda w,r,b,g:r['requests'][-1].update(complete=False)),
+                ('wrong photo',lambda w,r,b,g:r['requests'][2]['photos'].update(decodedStation=j)),
+                ('over one second',lambda w,r,b,g:r['handoffs'][-1]['newFirst'].update(firstDispatchTicks=3000)),
+                ('unresolved action',lambda w,r,b,g:r['handoffs'][1].update(pendingOldActions=1))]:
+            with self.subTest(label):
+                args=[copy.deepcopy(x) for x in (warm,route,plans,window)]
+                change(*args)
+                with self.assertRaises(ValueError): audit.completed_map_queue(*args)
+
     def test_normal_r59_targets_original_game_and_rejects_recovery_or_identity_substitution(self):
         """The ordinary two-pulse path must retain the original R59 game lifetime as well as the input HWND."""
         proof,hello=fixture()

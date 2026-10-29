@@ -799,6 +799,15 @@ def validate_p2p_temperature_options(args):
     return float(temperature)
 
 
+def transmit_bound_action(bridge, warm, report, arguments, evidence_key, evidence):
+    """Record an unknown outcome only after the local guards pass and immediately before the wire call."""
+    if warm:
+        warm.require_action_frame(arguments['frameId'])
+        warm.require_batch_dispatch_window(arguments.get('startBeforeMs'))
+    report[evidence_key] = evidence
+    return bridge.request('action', **arguments)
+
+
 def validate_navigation_climb_options(args):
     """Authorize only the explicit standard-channel P2P recovery combination."""
     if not getattr(args, 'navigation_climb_recovery', False):
@@ -952,11 +961,8 @@ class ClimbRecoveryStream:
                 arguments = event['arguments']
                 def submit_recovery():
                     """Only evidence retention and owned bridge I/O; never re-enter control methods."""
-                    if self.warm:
-                        self.warm.require_action_frame(arguments['frameId'])
-                        self.warm.require_batch_dispatch_window(arguments.get('startBeforeMs'))
-                    self.report['unacknowledgedRecoveryAction'] = copy.deepcopy(arguments)
-                    return self.bridge.request('action', **arguments)
+                    return transmit_bound_action(self.bridge, self.warm, self.report, arguments,
+                                                 'unacknowledgedRecoveryAction', copy.deepcopy(arguments))
                 # The monitor cannot change the token between this final check and the write.
                 # Interpret/refuse/clean up only after the plain control lock is released.
                 submitted, result = self.control.guarded_submit(self.token, submit_recovery)
@@ -1225,9 +1231,11 @@ def parse_arguments(argv=None):
         parser.error('Warm photos require the receipt-backed resident P2P policy, walking embedding and recorded leg budget')
     if args.warm_photo_plan and (not args.patrol_series_binding or args.seconds > 600 or args.max_observation_age_ms > 150):
         parser.error('Warm photos require pinned patrol owners, a 600 second maximum and a 150 ms source-age ceiling')
-    if (args.inspect_junction_map or args.recover_junction_map) and (not args.warm_photo_plan or not args.enable_input
-            or args.warm_batch_count or (args.inspect_junction_map and args.recover_junction_map)):
-        parser.error('Map inspection requires a bounded input-enabled warm destination plan')
+    if args.inspect_junction_map or args.recover_junction_map:
+        if not args.warm_photo_plan or not args.enable_input or (args.inspect_junction_map and args.recover_junction_map):
+            parser.error('Map inspection requires one operation and an input-enabled warm destination plan')
+        if args.warm_batch_count is not None and (args.recover_junction_map or not args.warm_open_queue):
+            parser.error('Only a fresh map inspection may precede a bounded open destination queue')
     if args.warm_open_queue and args.warm_batch_count is None:
         parser.error('An open queue requires bounded warm destination batches')
     if args.warm_batch_count is not None and (not args.warm_photo_plan or not 2 <= args.warm_batch_count <= 12
@@ -1979,7 +1987,9 @@ def run_episode(args, policy=None, control=None):
                 refresh_started = time.perf_counter_ns()
                 poll_frame()
                 refresh_ms = (time.perf_counter_ns()-refresh_started)/1e6
-            if climb and not awaiting_photo and not awaiting_batch and not awaiting_release_retry:
+            # Keep observing while the admitted first successor action produces its original terminal receipt.
+            awaiting_dispatch = warm and warm.awaiting_batch_dispatch_receipt(server_snapshot[1].get('serverNowMs'))
+            if climb and not awaiting_dispatch and not awaiting_photo and not awaiting_batch and not awaiting_release_retry:
                 with receive_lock:
                     received_at, current_status = server_snapshot
                     item = latest.newer_than(None)
@@ -2031,6 +2041,9 @@ def run_episode(args, policy=None, control=None):
                     continue
                 own_release = hybrid and hybrid.bypass and hybrid.bypass.release_wait(hybrid, frame, 'frameWorldReadiness')
                 hold('payloadNotGameWorld', preserve_navigation=own_release)
+                cadence.advance(time.perf_counter())
+                continue
+            if awaiting_dispatch:
                 cadence.advance(time.perf_counter())
                 continue
             if not idle_recovery.allows_frame(frame, current_status,
@@ -2192,17 +2205,15 @@ def run_episode(args, policy=None, control=None):
                 request_id = uuid.uuid4().hex
                 # A failed or unbound response is an unknown outcome in every report,
                 # never an invitation to replay on another connection or segment.
-                report['unacknowledgedAction'] = {'requestId': request_id, 'frame': dict(frame),
+                evidence = {'requestId': request_id, 'frame': dict(frame),
                     'steps': result['steps'], 'observedAtMs': frame['capturedAtMs'],
                     'expiresAtMs': observed_at+700, **start_deadline}
                 def submit_action():
                     """Finish this policy transaction under the current resident authority."""
-                    if warm:
-                        warm.require_action_frame(frame['frameId'])
-                        warm.require_batch_dispatch_window(start_deadline.get('startBeforeMs'))
-                    return bridge.request('action', requestId=request_id, frameId=frame['frameId'],
+                    arguments = dict(requestId=request_id, frameId=frame['frameId'],
                         observedAtMs=frame['capturedAtMs'], expiresAtMs=observed_at+700, modelId=action_model_id,
                         steps=result['steps'], **start_deadline)
+                    return transmit_bound_action(bridge,warm,report,arguments,'unacknowledgedAction',evidence)
                 submitted, response = control.guarded_submit(control_token, submit_action) if warm else (True, submit_action())
                 if submitted:
                     result['acceptance'], response_payload = response

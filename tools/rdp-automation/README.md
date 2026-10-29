@@ -312,51 +312,23 @@ It then stops child automation, waits for idle, writes the hash-pinned restart m
 
 Once the game runtime is ready, the [headless agent bridge commands](../../Docs/design/agent-stream.md#headless-launch) start or stop the capture/model connection without replacing the game. Input remains opt-in on both ends.
 
-### Replace only the verified map-test child on SIREN
+### Verified R59 map-test child on SIREN
 
-The map test uses `ensure-child` with the original host nonce, child PID and nonce, target binary hashes, and exact target configuration hash. With `--require-existing-target-config`, a missing, busy or changed child aborts before startup or staging. The target configuration is held read-only through restart acknowledgement. The only old-release files provisioned by replacement are the managed `User/ExternalControl/enable-quest-control.json` and `User/ExternalControl/pending-restart.json`. Supply the new release's own clean capture settings. The game PID and native creation FILETIME switches hold the same game process through replacement readiness.
+The approved idle replacement moved the map test from R58 child PID 38028 to R59 child PID 5520 in RDP session 3. The original minimized R56 host, PID 10124 in session 1, stayed connected. The transaction held Genshin PID 26240 through readiness and recorded its native creation FILETIME. The subsequent recovery independently reported game PID 26240 and HWND 197360. [Replacement acknowledgement](../../artifacts/live/2026-10-29-map-inspection/lineage59-admin/ensure-child.json) · [Recovery audit](../../artifacts/live/2026-10-29-map-inspection/recovery/warm-20261029T191651Z-9d5b3c8f7c36/map-audit.json)
 
-The original R57 to R58 handoff is already recorded under `artifacts/live/2026-10-29-map-inspection/lineage`. Its `map-owner-lineage.json` binds R58 to the original R56 host and RDP session. Use it as the predecessor for R59. A saved PID alone cannot identify the current occupant. The verifier checks the sealed original broker evidence, both binary hashes and the acknowledged replacement chain. The original R57 program payload may be retired by retention after this chain is sealed.
+The earlier unelevated attempt in `artifacts/live/2026-10-29-map-inspection/lineage59` stopped before replacement. Windows returned `WinError 5` when the verifier requested a query and synchronize handle for Genshin. That folder preserves discovery and an empty `game-before.json`. After one approved Windows UAC prompt, the helper collected fresh evidence in `lineage59-admin` and used the stock `ensure-child` transaction to replace the idle child. The completed transaction consumed the original R58 PID and nonce.
 
-For a **fresh R59 preparation**, the managed build command is `tools/rdp-automation/build-runtime.ps1 -Release 59 -PublishConfiguration Release`. It requires the Debug solution build and writes `artifacts/release-r59/build-manifest.json`. Once R59 exists, use its manifest. The build script refuses to overwrite a numbered release. Retention pins R1, R55 and R56, keeps the two latest successful releases, and preserves recordings and test results. `Build/Scripts/manage-release-retention.ps1 -Action Plan` previews the policy.
+The stock command pinned the host PID and nonce, source child PID and nonce, R59 executable and assembly hashes, and the target's exact config hash. It required existing target capture settings, held them read-only through acknowledgement and passed the game's PID and creation FILETIME. The managed old-release files used for restart were `User/ExternalControl/enable-quest-control.json` and `User/ExternalControl/pending-restart.json`. The original R57-to-R58 receipt is preserved in `lineage`, and the R59 package manifest is `artifacts/release-r59/build-manifest.json`. [R58 predecessor receipt](../../artifacts/live/2026-10-29-map-inspection/lineage/map-owner-lineage.json) · [R59 preflight](../../artifacts/live/2026-10-29-map-inspection/lineage59-admin/preflight.json)
 
-Run the following from the SIREN repository root in PowerShell 7.4 or later. This version preserves native stdout bytes on redirection. Use a new evidence folder for this one replacement and a freshly observed Genshin PID in the original RDP session. Prepare the target configuration once, before the new package has run.
+To verify the recorded chain from the repository root, use the following read-only command. It replays the original source records and checks the R59 receipt. The map launcher separately authenticates the live owner and game binding before it can act.
 
 ```powershell
-$ErrorActionPreference = 'Stop'
-$PSNativeCommandUseErrorActionPreference = $true
 $py = 'C:/Programs/Python/Python311/python.exe'
-$ctl = 'tools/rdp-automation/rdp_control.py'
-$verify = 'tools/bettergi-agent/map_owner.py'
-$prior = 'artifacts/live/2026-10-29-map-inspection/lineage/map-owner-lineage.json'
-$target = (Resolve-Path 'artifacts/release-r59/BetterGI-English-win-x64').Path
-$folder = (New-Item -ItemType Directory -Path ('artifacts/live/2026-10-29-map-inspection/lineage-r59-' + [guid]::NewGuid().ToString('N'))).FullName
-$gameProcessId = [int](Read-Host 'Verified Genshin process ID in the original RDP session')
-$settings = '{"captureMode":"WindowsGraphicsCaptureV2","wgcV2ReadbackMode":"blocking","wgcV2SourceRetention":"hold-until-readback-v1","wgcV2UseCpuConvert":true}'
-[void][IO.Directory]::CreateDirectory((Join-Path $target 'User'))
-$stream = [IO.File]::Open((Join-Path $target 'User/config.json'), 'CreateNew', 'Write', 'None')
-try { $bytes = [Text.Encoding]::UTF8.GetBytes($settings); $stream.Write($bytes, 0, $bytes.Length) } finally { $stream.Dispose() }
-& $py -B -X utf8 $verify game-before $prior --game-process-id $gameProcessId --folder $folder > "$folder/game-before.json"
-& $py -B -X utf8 $ctl discover > "$folder/before.json"
-& $py -B -X utf8 $verify preflight $prior --folder $folder > "$folder/preflight.json"
+$receipt = 'artifacts/live/2026-10-29-map-inspection/lineage59-admin/map-owner-lineage.json'
+& $py -B -X utf8 tools/bettergi-agent/map_owner.py verify $receipt
 ```
 
-After reviewing that preflight and obtaining any required deployment approval, use its pins in the supported transaction. Keep the output, including a failed attempt, in this folder. The final command independently replays the recorded ownership change.
-
-```powershell
-$pre = Get-Content -Raw -LiteralPath "$folder/preflight.json" | ConvertFrom-Json
-$hostOwner = $pre.source.root
-$childOwner = $pre.source.child
-& $py -B -X utf8 $ctl ensure-child --process-id $hostOwner.processId --windows-session-id $hostOwner.windowsSessionId `
-    --instance-nonce $hostOwner.instanceNonce --source-process-id $childOwner.processId --source-nonce $childOwner.instanceNonce `
-    --require-existing-target-config --target-config-sha256 $pre.targetConfigSha256 --target-directory $pre.targetDirectory `
-    --exe-sha256 $pre.exeSha256 --dll-sha256 $pre.dllSha256 --game-process-id $pre.protectedGame.processId `
-    --game-started-file-time $pre.protectedGame.startedFileTime --start-game --timeout 120 > "$folder/ensure-child.json"
-& $py -B -X utf8 $verify seal $prior --folder $folder > "$folder/sealed-owner.json"
-& $py -B -X utf8 $verify verify "$folder/map-owner-lineage.json"
-```
-
-`game-before.json` and `ensure-child.json` establish game lifetime continuity across this R58 to R59 replacement. The earlier R58 opening receipt contains no game PID. The R59 map runner also joins the current native binding to the protected game. [Run the map inspection or recovery](../bettergi-agent/README.md#inspect-the-junction-world-map-on-siren)
+For further map tests on this same R59 instance, pass that receipt with `--map-owner-from`. [Run the map inspection](../bettergi-agent/README.md#inspect-the-junction-world-map-on-siren)
 
 `start-agent` keeps `legacy-area-640x360-v1` as its default observation profile.
 For an explicitly compatible P2P client, select the native-image Hamming profile:

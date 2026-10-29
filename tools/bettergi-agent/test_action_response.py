@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import stream_client as client
 
@@ -19,6 +19,22 @@ def reply(kind, request_id):
 
 class ResponseIdentityTests(unittest.TestCase):
     """Do not derive settlement from unrecognized or unbound server metadata."""
+    def test_local_handoff_refusal_never_registers_an_unknown_wire_action(self):
+        arguments = dict(frameId=2153, requestId='next', startBeforeMs=79134.391)
+        for key in ('unacknowledgedAction','unacknowledgedRecoveryAction'):
+            with self.subTest(key=key):
+                bridge, warm, report = Mock(), Mock(), {}
+                warm.require_batch_dispatch_window.side_effect = RuntimeError('handoff deadline')
+                with self.assertRaisesRegex(RuntimeError,'handoff deadline'):
+                    client.transmit_bound_action(bridge,warm,report,arguments,key,arguments)
+                bridge.request.assert_not_called()
+                self.assertNotIn(key,report)
+                warm.require_batch_dispatch_window.side_effect = None
+                bridge.request.side_effect = EOFError('lost response')
+                with self.assertRaises(EOFError):
+                    client.transmit_bound_action(bridge,warm,report,arguments,key,arguments)
+                self.assertEqual(report[key],arguments)
+
     def test_current_accepted_and_rejected_shapes(self):
         for kind, expected in [('accepted', True), ('rejected', False)]:
             self.assertIs(client.action_response_accepted(reply(kind, 'r1'), 'r1'), expected)

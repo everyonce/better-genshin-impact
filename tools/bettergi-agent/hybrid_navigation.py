@@ -164,7 +164,9 @@ class HybridNavigation:
         self.photo_hold = None
         self.photo_resume_after = self.last_frame_id
         self._set_patrol_leg(self.target_name)
-        self.phase, self.leg_started = 'walking', self.last_at
+        # The verified endpoint already started this leg's clock. Keep waiting for the
+        # batch or a qualified photo inside that budget, and require a newer input frame.
+        self.phase = 'walking'
 
     def _observe_destination_photo(self, frame, pose, at, distance):
         """Stay within the released endpoint across every fresh sample, including earlier attempts."""

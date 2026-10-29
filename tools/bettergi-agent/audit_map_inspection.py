@@ -301,7 +301,69 @@ def resumed_goal(route, inspection, last):
     return goal['photos']['frameId']
 
 
-def audit_map(folder, owner_from, checkpoint, qualification, repository):
+def map_queue_finish(warm,route,batches,replay_stopped_runtime):
+    """Join the supported automatic map queue to its native finish and declared applied-input duration."""
+    policy=warm.get('planner') or {}
+    require(policy.get('mode')=='balanced-native-visits-v1' and warm.get('manualSubmission') is False,
+            'Combined map queues support only automatic balanced native visits')
+    queue=route['openQueue']
+    if replay_stopped_runtime:
+        require(warm.get('status')=='stopped' and warm.get('mapInspectionVerified') is False
+                and warm.get('reason')=='Map audit failed: Expected a completed operator-finished R59 map queue',
+                'Archived replay requires the original isolated manual-finish classification error')
+    else:
+        require(warm.get('status') in ('auditingMap','completed'),'Unexpected map queue launcher state')
+    require(warm.get('auditStatus')==route.get('status')=='runtime-target-achieved'
+            and warm.get('openQueueResult')==queue and queue['outcome']=='gameplayTargetReached', 'Policy and recorded queue finish disagree')
+    seconds=policy.get('targetGameplaySeconds')
+    require(type(seconds) in (int,float) and math.isfinite(seconds) and seconds>0 and batches and queue['decisions'],
+            'Missing positive declared native gameplay span')
+    finish=queue['decisions'][-1]
+    witness=finish['witness']
+    require(finish['reason']=='gameplayTargetReached' and finish['decisionOrdinal']==len(batches)+1 and finish['selectedStations']==[]
+            and witness['batchOrdinal']==len(batches) and witness['requestId'] in {p['id'] for p in batches[-1]['requests']},
+            'Finish was not witnessed by a real destination of the final admitted batch')
+    goal=next((g for g in route['requests'] if g['id']==witness['requestId']),None)
+    require(goal and (goal['first']['nativeRequestId'],goal['first']['frameId'])==(witness['nativeRequestId'],witness['frameId']),
+            'The final gameplay clock refers to another native action')
+    first=route['requests'][0]['first']
+    start,end,hz=first['firstDispatchTicks'],goal['first']['firstDispatchTicks'],route['clock']['frequency']
+    require(all(type(v) is int and v>0 for v in (start,end,hz)) and end-start>=seconds*hz
+            and finish['elapsedGameplaySeconds']==(end-start)/hz, 'Applied input witness fell short of the declared gameplay target')
+    return dict(targetGameplaySeconds=seconds,verifiedGameplayWitnessSeconds=(end-start)/hz,firstAppliedTicks=start,
+                witnessAppliedTicks=end,clockFrequencyHz=hz,firstNativeRequestId=first['nativeRequestId'],witnessNativeRequestId=witness['nativeRequestId'])
+
+
+def completed_map_queue(warm,route,batches,target,*,replay_stopped_runtime=False):
+    """Require a protected R59 visit, the two initial goals, photographed successors and the declared finish."""
+    require(target and target['gameProcessId']>0 and target['gameWindowHandle']>0
+            and warm.get('stopDrill') is False and route['passed'] is True and route['stopVerified'] is False and route['stop'] is None
+            and route['modelLoads']==route['controllerLeases']==1, 'Expected a single protected completed map queue lease')
+    require(batches and route['publishedBatches']==route['admittedBatches']==len(batches)>=2
+            and batches[0]['start']==route['start']==JUNCTION
+            and [r['destination'] for r in batches[0]['requests']]==[LAMP,JUNCTION],
+            'Queue did not continue the initial junction to west-lamp and back plan')
+    plans=[r for b in batches for r in b['requests']]
+    proven=route['requests']
+    require(len(proven)==len(plans)>2 and len(route['handoffs'])==len(plans)-1
+            and all(a['id']==p['id'] and a['destination']==p['destination']==a['photos']['decodedStation']
+                    and a['photos']['checkpointId']==G4_SHA256 and a['photos']['complete'] is True and a['complete'] is True
+                    and a['actions']>0 and a['plannedLegs']==a['verifiedLegs']>0 for a,p in zip(proven,plans)),
+            'An initial or successor goal lacks a verified movement and station photo')
+    for a,b,handoff in zip(proven,proven[1:],route['handoffs']):
+        elapsed=(handoff['newFirst']['firstDispatchTicks']-handoff['oldLast']['lastStepTicks'])*1000/route['clock']['frequency']
+        require(a['destination']==b['start'] and (a['id'],b['id'])==(handoff['oldRequestId'],handoff['newRequestId'])
+                and handoff['pendingOldActions']==0 and 0<elapsed==handoff['dispatchGapMs']<1000,
+                'Map queue has an unresolved successor or a handoff of one second or longer')
+    continuations=route['batchContinuations']
+    require([c['newRequestId'] for c in continuations]==[b['requests'][0]['id'] for b in batches[1:]]
+            and all(c['status']=='accepted' for c in continuations),'Missing accepted successor batch')
+    witness=map_queue_finish(warm,route,batches,replay_stopped_runtime)
+    return dict(outcome=route['openQueue']['outcome'],admittedBatches=len(batches),verifiedGoals=len(proven),successorGoals=len(proven)-2,
+                maximumHandoffMs=max(h['dispatchGapMs'] for h in route['handoffs']),**witness)
+
+
+def audit_map(folder, owner_from, checkpoint, qualification, repository, *, replay_stopped_runtime=False):
     """Replay the native UI evidence, qualified junction images, ordinary walking and final photographed arrival."""
     directory=folder/'map-inspection'
     tx=read(directory/'transaction.json')
@@ -344,9 +406,22 @@ def audit_map(folder, owner_from, checkpoint, qualification, repository):
                         dict(atMs=native['finalReleaseAtMs'],epoch=native['finalReadiness']['epoch']),profile)
     plan=read(folder/'photo-requests.json')
     from destination_batch_sender import admitted_plans
+    batches=admitted_plans(folder) if warm.get('batchCount') else None
     route=audit_photo_handoff(folder/'patrol.json',folder/'patrol-recording',repository=repository,
                               photo_root=folder/'station-photos',requests=plan,landmark_checkpoint=checkpoint,
-                              qualification=qualification,batch_plans=admitted_plans(folder) if warm.get('batchCount') else None)
+                              qualification=qualification,batch_plans=batches)
+    queue={}
+    scope='junction-world-map-return-and-first-west-lamp'
+    require(not replay_stopped_runtime or warm.get('openQueue') is True, 'Stopped-runtime replay requires the original queue')
+    if warm.get('openQueue') is True:
+        require(route==read(folder/'handoff-audit.json'),'Sealed queue audit differs from replaying the original handoffs')
+        queue['openQueue']=completed_map_queue(warm,route,batches,target,replay_stopped_runtime=replay_stopped_runtime)
+        scope='junction-world-map-return-and-'+route['status']+'-queue'
+        if replay_stopped_runtime:
+            require(not (folder/'map-audit.json').exists(),'The original combined audit already exists')
+            sources=('warm-launcher.json','handoff-audit.json','queue-policy.json','map-inspection/transaction.json')
+            queue['offlineReplay']=dict(originalLauncherStatus=warm['status'],originalReason=warm['reason'],
+                originalMapInspectionVerified=warm['mapInspectionVerified'],sourceSha256={s:hashlib.sha256((folder/s).read_bytes()).hexdigest() for s in sources})
     require(route['runId']==tx['runId'] and route['rootPid']==owner['root']['processId']
             and route['childPid']==owner['child']['processId'] and route['windowsSessionId']==owner['child']['windowsSessionId'],
             'Walking receipts have another RDP owner')
@@ -362,18 +437,22 @@ def audit_map(folder, owner_from, checkpoint, qualification, repository):
         part=read(Path(s['report']))
         proposals=[*part['decisions'],*part.get('navigationClimbActions',[])]
         require(all(p['frameId']>=returned['frameId'] for p in proposals), 'Ordinary proposal during map transaction')
-    return dict(passed=True,scope='junction-world-map-return-and-first-west-lamp',runId=tx['runId'],
+    return dict(passed=True,scope=scope,runId=tx['runId'],
                 requestId=native['requestId'],before=before,returned=returned,knownMapFrame=native['map'][-1]['frameId'],
                 nativeMarkerScores=scores,westLampFrame=west,routeLegs=route['verifiedLegs'],
-                softwareReleaseVerified=True,physicalExecutionProven=False,**(target or {}))
+                softwareReleaseVerified=True,physicalExecutionProven=False,**(target or {}),**queue)
 
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     for flag in ('folder','owner-from','landmark-checkpoint','qualification','output'):
         parser.add_argument('--'+flag,type=Path,required=True)
+    parser.add_argument('--replay-stopped-runtime',action='store_true',help='Independently replay the prior automatic queue finish classification')
     args=parser.parse_args()
-    report=audit_map(args.folder,args.owner_from,args.landmark_checkpoint,args.qualification,Path(__file__).resolve().parents[2])
+    if args.replay_stopped_runtime and args.output.resolve()!=(args.folder/'map-replay.json').resolve():
+        parser.error('Archived runtime replay must write a separate map-replay.json beside the original launcher')
+    report=audit_map(args.folder,args.owner_from,args.landmark_checkpoint,args.qualification,Path(__file__).resolve().parents[2],
+                     replay_stopped_runtime=args.replay_stopped_runtime)
     with args.output.open('x',encoding='utf-8') as stream:
         json.dump(report,stream,indent=2,allow_nan=False)
     print(report['scope'],args.output)

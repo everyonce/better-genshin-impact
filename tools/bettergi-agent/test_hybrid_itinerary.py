@@ -40,6 +40,29 @@ class ItineraryNavigationTests(unittest.TestCase):
             nav.prepare(station_frame(index, B, 2))
         return nav
 
+    def test_successor_leg_budget_starts_at_original_endpoint_including_stationary_wait(self):
+        for retry,late in ((False,False),(False,True),(True,True)):
+            with self.subTest(photo_retry=retry,delayed_admission=late):
+                nav=self.at_first_photo((B,))
+                endpoint=nav.drain_events()[0]['samples'][-1]
+                admission=endpoint['frameId']
+                if retry:
+                    nav.retry_destination_photo()
+                    for _ in range(3):
+                        admission+=1
+                        nav.prepare(station_frame(admission,B,2))
+                nav.finish_destination_photo(await_batch=True)
+                if late:
+                    admission+=1
+                    self.assertEqual(nav.prepare(station_frame(admission,B,2)),'batchEndpointStillVerified')
+                nav.append_destination_batch([A,B])
+                self.assertEqual(nav.leg_started,endpoint['atMs'])
+                self.assertEqual(nav.photo_resume_after,admission)
+                with self.assertRaisesRegex(RuntimeError,'newer navigable frame'):
+                    nav.choose(station_frame(admission,B,2),proposal(['W']))
+                with self.assertRaisesRegex(RuntimeError,'leg_progress_deadline'):
+                    nav.prepare(station_frame(endpoint['frameId']+351,B,2))
+
     def test_photo_hold_only_at_a_requested_station_and_only_when_enabled(self):
         transit = self.at_first_photo((C,))
         self.assertEqual([e['type'] for e in transit.drain_events()], ['hybridEndpointVerified'])

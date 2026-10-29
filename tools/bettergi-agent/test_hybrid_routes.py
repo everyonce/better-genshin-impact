@@ -5,7 +5,8 @@ import io
 import unittest
 
 from hybrid_navigation import HybridNavigation
-from hybrid_routes import COURTYARD_ROUTE, LAMPPOST_ROUTE, camera_correction, route_heading, route_points
+from hybrid_routes import (COURTYARD_ROUTE, LAMPPOST_ROUTE, PATROL_STATIONS, STREET_PATROL_ROUTE,
+                           camera_correction, route_heading, route_points)
 from stream_client import parse_arguments
 from test_hybrid_navigation import capability, frame, proposal
 
@@ -65,12 +66,90 @@ class HybridRouteTests(unittest.TestCase):
             self.assertEqual(nav.recovery_side('end', attempt), 'A')
             self.assertEqual(nav.recovery_side('start', attempt), 'D')
 
+    def patrol_frame(self, index, point, epoch=1):
+        """Use the live gate shape with a known capture and incrementing release generation."""
+        item = self.lamp_frame(index, point, 90)
+        item['frameWorldReadiness'] = dict(epoch=epoch, ready=True, sourceFrame=dict(captureEpoch='capture-a'))
+        return item
+
+    def test_patrol_can_begin_only_at_the_stair_front(self):
+        nav = HybridNavigation(capability(), STREET_PATROL_ROUTE)
+        for other in ('sidewalk-junction', 'west-lamp'):
+            with self.subTest(other=other), self.assertRaises(RuntimeError):
+                HybridNavigation(capability(), STREET_PATROL_ROUTE).prepare(self.patrol_frame(1, PATROL_STATIONS[other]))
+        for i in range(1, 4):
+            nav.prepare(self.patrol_frame(i, PATROL_STATIONS['stair-front']))
+        start = nav.drain_events()[0]
+        self.assertEqual((start['station'], start['target']), ('stair-front', 'sidewalk-junction'))
+        self.assertEqual([s['frameId'] for s in start['samples']], [1, 2, 3])
+
+    def test_two_circuits_verify_eight_ordered_station_releases_and_active_segment_steering(self):
+        nav = HybridNavigation(capability(), STREET_PATROL_ROUTE)
+        a, b, c = 'stair-front', 'sidewalk-junction', 'west-lamp'
+        path = (a, b, c, b, a, b, c, b, a)
+        index, epoch = 0, 1
+        for _ in range(3):
+            index += 1
+            nav.prepare(self.patrol_frame(index, PATROL_STATIONS[a]))
+        nav.drain_events()
+        for leg, (origin, dest) in enumerate(zip(path, path[1:])):
+            index += 1
+            start = self.patrol_frame(index, PATROL_STATIONS[origin], epoch)
+            self.assertIsNone(nav.prepare(start))  # Staying at the previous station never completes this leg.
+            choice = nav.choose(start, proposal(['W']))
+            self.assertEqual((choice['target'], choice['segmentIndex'], choice['circuit']), (dest, leg%4, leg//4+1))
+            self.assertEqual((choice['fromStation'], choice['toStation']), (origin, dest))
+            self.assertEqual((nav.start, nav.end), (PATROL_STATIONS[origin], PATROL_STATIONS[dest]))
+            index += 1
+            self.assertEqual(nav.prepare(self.patrol_frame(index, PATROL_STATIONS[dest], epoch)), 'releaseRequired')
+            epoch += 1
+            nav.released(dict(type='released', serverNowMs=index*100+5, worldReadiness=dict(epoch=epoch,
+                ready=False, reason='client_release', sourceFrame=dict(captureEpoch='capture-a'))))
+            for _ in range(3):
+                index += 1
+                state = nav.prepare(self.patrol_frame(index, PATROL_STATIONS[dest], epoch))
+            self.assertEqual(state, 'endpointVerified')
+            events = nav.drain_events()
+            self.assertEqual((events[0]['endpoint'], events[0]['station'], events[0]['releaseEpoch']), (dest, dest, epoch))
+            self.assertEqual(events[0]['arrivalFrameId'], index-3)
+            self.assertEqual(len(events), 2 if (leg+1)%4 == 0 else 1)
+            if len(events) == 2:
+                self.assertEqual((events[1]['type'], events[1]['completedCircuits'], events[1]['frameId']),
+                                 ('hybridCircuitVerified', (leg+1)//4, index))
+        self.assertEqual((nav.legs, nav.snapshot()['completedCircuits']), (8, 2))
+
+    def test_patrol_rejects_other_segments_and_unrelated_releases(self):
+        for failure in ('wrongSegment', 'unrelatedAck', 'changedAfterRelease'):
+            with self.subTest(failure=failure):
+                nav = HybridNavigation(capability(), STREET_PATROL_ROUTE)
+                for i in range(1, 4):
+                    nav.prepare(self.patrol_frame(i, PATROL_STATIONS['stair-front']))
+                if failure == 'wrongSegment':
+                    with self.assertRaisesRegex(RuntimeError, 'corridor'):
+                        nav.prepare(self.patrol_frame(4, PATROL_STATIONS['west-lamp']))
+                    continue
+                nav.prepare(self.patrol_frame(4, PATROL_STATIONS['sidewalk-junction']))
+                ack = dict(type='released', serverNowMs=405, worldReadiness=dict(epoch=2,
+                           ready=False, reason='client_release', sourceFrame=dict(captureEpoch='capture-a')))
+                if failure == 'unrelatedAck':
+                    ack['worldReadiness']['epoch'] = 5
+                    with self.assertRaisesRegex(RuntimeError, 'release_unbound'):
+                        nav.released(ack)
+                else:
+                    nav.released(ack)
+                    with self.assertRaisesRegex(RuntimeError, 'readiness_changed'):
+                        nav.prepare(self.patrol_frame(5, PATROL_STATIONS['sidewalk-junction'], epoch=3))
+
     def test_route_requires_hybrid_mode_and_a_registered_id(self):
         base = ['--resident', '--rdp-session-id', '3', '--model', 'open-p2p', '--source', 'test',
                 '--checkpoint', 'test', '--p2p-fast-start', '--cuda-graph', '--enable-input',
                 '--goal-intent', 'ground-navigation', '--output', 'unused.json']
         args = parse_arguments(base + ['--hybrid-navigation', '--hybrid-route', LAMPPOST_ROUTE])
         self.assertEqual(args.hybrid_route, LAMPPOST_ROUTE)
+        for count in (4, 8):
+            args = parse_arguments(base + ['--hybrid-navigation', '--hybrid-route', STREET_PATROL_ROUTE,
+                                          '--hybrid-legs', str(count)])
+            self.assertEqual((args.hybrid_route, args.hybrid_legs), (STREET_PATROL_ROUTE, count))
         for options in (['--hybrid-route', LAMPPOST_ROUTE], ['--hybrid-navigation', '--hybrid-route', 'custom']):
             with self.subTest(options=options), redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
                 parse_arguments(base + options)

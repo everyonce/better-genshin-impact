@@ -5,7 +5,9 @@ import math
 from pathlib import Path
 import statistics
 
-from hybrid_routes import COURTYARD_ROUTE, STAIR_POST_ROUTE, camera_correction, route_heading, route_points
+from audit_camera_patrol import audit_camera, compare_patrols, yaw_reversals
+from hybrid_routes import (COURTYARD_ROUTE, PATROL_STATIONS, STAIR_POST_ROUTE, STREET_PATROL_ROUTE,
+                           camera_correction, route_heading, route_points)
 from observation_timing import observation_timestamp
 
 
@@ -13,6 +15,195 @@ def require(condition, message):
     """Fail closed on incomplete evidence rather than inferring successful gameplay."""
     if not condition:
         raise ValueError(message)
+
+
+# Derive the expected sequence independently of the planner's leg-advance logic.
+PATROL_ORDER = ('stair-front', 'sidewalk-junction', 'west-lamp', 'sidewalk-junction', 'stair-front')
+
+
+def check_patrol_leg(row, completed):
+    """Bind source and target names to a particular traversal, including the two visits to B."""
+    index = completed % 4
+    require((row.get('segmentIndex'), row.get('circuit'), row.get('fromStation'), row.get('toStation')) ==
+            (index, completed//4+1, PATROL_ORDER[index], PATROL_ORDER[index+1]), 'Patrol segment identity differs')
+
+
+def audit_shadow(decisions, frames, receipts, entries, recordings, route, checkpoint):
+    """Reproduce archived shadow predictions directly from the named weights and original proposal inputs."""
+    from steering_head import SteeringHead
+    from train_steering import applied_label, steering_point
+    head = SteeringHead.load(checkpoint)
+    journal = {}
+    for e in entries:
+        with (Path(recordings)/f"{e['number']:05d}"/'events.jsonl').open(encoding='utf-8') as stream:
+            for line in stream:
+                row = json.loads(line)
+                if row.get('type') == 'proposal':
+                    require(row['frameId'] not in journal, 'Duplicate shadow evaluation source')
+                    journal[row['frameId']] = row
+    elapsed, predictions, labelled, correct = [], 0, 0, 0
+    for d in decisions:
+        h, s, f = d['hybridNavigation'], d.get('steeringShadow') or {}, frames[d['frameId']]
+        j = journal.pop(d['frameId'], {})
+        require(s.get('checkpointId') == head.checkpoint_id and j.get('steeringShadow') == s
+                and j.get('rawPolicySteps') == d.get('rawPolicySteps') and j.get('hybridNavigation') == h
+                and j.get('model') == h.get('owner') and j.get('acceptance') == d.get('acceptance')
+                and h.get('owner') in ('hybrid-native','open-p2p','calibrated-camera'),
+                'Shadow result, source proposal, input ownership or checkpoint differs')
+        point = steering_point(route, h)
+        require(point is not None and type(s.get('elapsedUs')) in (float,int) and math.isfinite(s['elapsedUs'])
+                and s['elapsedUs'] >= 0, 'Missing shadow target or timing')
+        prediction = head.predict(f, point, d.get('rawPolicySteps',h.get('modelSteps',[])))
+        require('prediction' in s and s['prediction'] == prediction, 'Shadow score differs from exact checkpoint replay')
+        elapsed.append(s['elapsedUs'])
+        predictions += int(prediction is not None)
+        label = applied_label(d, f, receipts.get((d.get('acceptance') or {}).get('requestId')))
+        if label and prediction:
+            labelled += 1
+            correct += int(prediction['actionClass'] == label)
+    require(not journal and elapsed, 'A shadow proposal is missing from the decision report')
+    return dict(checkpointId=head.checkpoint_id, verifiedEvaluations=len(elapsed), classified=predictions,
+                abstained=len(elapsed)-predictions, medianElapsedUs=statistics.median(elapsed),
+                eligibleNativeLabels=labelled, nativeLabelMatches=correct)
+
+
+def audit_patrol(start, endpoints, events, frames, parts, run, accepted, receipts, epoch):
+    """Require an actual arrival, release, traversal and software forward input for each directed leg."""
+    require(run.get('runId') and all(p.get('residentRunId') == run['runId'] and p.get('model') == 'open-p2p'
+            and p.get('policyMetadata', {}).get('graphCaptureValidated') is True
+            and p.get('serverDroppedReceipts') == 0 for p in parts), 'Patrol lacks one resident GPU policy trial')
+    ordered = sorted(frames.values(), key=lambda f: f['frameId'])
+    require(all((f.get('sourceFrame') or {}).get('captureEpoch') == epoch for f in ordered)
+            and all(a['sourceFrame']['timestamp100ns'] < b['sourceFrame']['timestamp100ns']
+                    and observation_timestamp(a) < observation_timestamp(b) for a,b in zip(ordered, ordered[1:])),
+            'Patrol recording changed capture generation or reused a source')
+    check_patrol_leg(start, 0)
+    require(start.get('sourceEpoch') == epoch and start.get('station') == PATROL_ORDER[0] and start.get('target') == PATROL_ORDER[1],
+            'Patrol must start at the stair front')
+    samples = start.get('samples') or []
+    require(len(samples) == 3 and samples[-1]['frameId'] == start['frameId'] and samples[-1]['atMs'] == start['atMs'],
+            'Patrol admission lacks three source poses')
+    for i, s in enumerate(samples):
+        f = frames.get(s['frameId']) or {}
+        p = f.get('navigationPose') or {}
+        require(p.get('frameId') == s['frameId'] and p.get('state') == 'valid' and p.get('layerId') == 'City_102'
+                and .99 <= p['positionConfidence'] <= 1 and .2 <= p['yawConfidence'] <= 1
+                and (f.get('frameWorldReadiness') or {}).get('ready') is True
+                and (f.get('motionEvidence') or {}).get('status') == 'normal'
+                and f['motionEvidence'].get('spaceKeyMatched') is False and observation_timestamp(f) == s['atMs']
+                and all(p[k] == s[k] for k in ('x','y','yawDegrees')) and math.dist((p['x'],p['y']), PATROL_STATIONS[PATROL_ORDER[0]]) <= 2,
+                'Unqualified or misplaced initial patrol sample')
+        require(all(math.dist((s['x'],s['y']), (a['x'],a['y'])) <= 1.5 and
+                    abs((s['yawDegrees']-a['yawDegrees']+180)%360-180) <= 3 for a in samples[:i])
+                and (not i or s['frameId'] > samples[i-1]['frameId'] and s['atMs']-samples[i-1]['atMs'] >= 80),
+                'Patrol admission samples are stale or unstable')
+    held = {t['frameId'] for p in parts for t in p.get('controlTransitions', [])
+            if t.get('state') == 'held' and t.get('reason') == 'hybridEndpoint'}
+    walks = [[] for _ in endpoints]
+    mouse_commands = [[] for _ in endpoints]
+    applied_actions = [0 for _ in endpoints]
+    require(all(request in accepted or r.get('modelId') == 'navigation-climb-drop-v1' for request,r in receipts.items()
+                if r.get('appliedSteps')), 'Patrol includes unattributed input')
+    for request, decision in accepted.items():
+        selected = decision['hybridNavigation']
+        leg = selected['completedLegs']
+        require(type(leg) is int and 0 <= leg <= len(endpoints), 'Patrol decision belongs to an unknown leg')
+        check_patrol_leg(selected, leg)
+        require(selected['target'] == selected['toStation'], 'Patrol decision steered toward another station')
+        if leg == len(endpoints):
+            continue  # No credit for work begun on an unfinished leg.
+        lower = start['atMs'] if leg == 0 else endpoints[leg-1]['samples'][-1]['atMs']
+        upper = endpoints[leg]['releaseAtMs']
+        f = frames[decision['frameId']]
+        p = f['navigationPose']
+        require(lower <= observation_timestamp(f) < upper and p['state'] == 'valid' and p['frameId'] == f['frameId']
+                and f['frameWorldReadiness']['ready'] is True, 'Patrol action is outside its active segment')
+        steps = receipts[request].get('appliedSteps') or []
+        applied_actions[leg] += int(bool(steps))
+        for s in steps:
+            if s.get('mouseDx'):
+                mouse_commands[leg].append((s['startedAtMs'], 1 if s['mouseDx'] > 0 else -1))
+            if s.get('keys') != ['W']:
+                continue
+            heading = route_heading(p, PATROL_STATIONS[selected['toStation']])
+            require(s.get('mouseDy') == 0 and abs(s.get('mouseDx', 0)) <= 3 and
+                    abs((p['yawDegrees']-heading+180)%360-180) <= 5,
+                    'Applied patrol W was not aligned to the expected station')
+            if receipts[request]['endedAtMs'] > s['startedAtMs']:
+                walks[leg].append(s['startedAtMs'])
+    circuit_events = [e for e in events if e['type'] == 'hybridCircuitVerified']
+    milestones = [e for e in events if e['type'] in ('hybridStartVerified','hybridEndpointVerified','hybridCircuitVerified')]
+    expected = [start]
+    legs, circuits = [], []
+    prior_at = start['atMs']
+    for i, e in enumerate(endpoints):
+        check_patrol_leg(e, i)
+        expected.append(e)
+        station = PATROL_ORDER[i%4+1]
+        require(e.get('routeId') == STREET_PATROL_ROUTE and e.get('station') == e['endpoint'] == station and walks[i],
+                'Patrol station lacks a directed walk')
+        arrival = frames.get(e.get('arrivalFrameId')) or {}
+        pose = arrival.get('navigationPose') or {}
+        gate = arrival.get('frameWorldReadiness') or {}
+        require(e.get('arrivalFrameId') in held and pose.get('state') == 'valid' and pose.get('frameId') == arrival['frameId']
+                and pose.get('layerId') == 'City_102' and .99 <= pose['positionConfidence'] <= 1
+                and .2 <= pose['yawConfidence'] <= 1 and arrival['motionEvidence']['status'] == 'normal'
+                and arrival['motionEvidence']['spaceKeyMatched'] is False
+                and gate.get('ready') is True and type(gate.get('epoch')) is int and gate['epoch']+1 == e['releaseEpoch']
+                and math.dist((pose['x'],pose['y']), PATROL_STATIONS[station]) <= 1.1
+                and prior_at < observation_timestamp(arrival) <= e['releaseAtMs'], 'Unbound patrol arrival or release epoch')
+        # A pair of stationary screenshots and an applied W could conceal a
+        # jump between stations. Join a post-dispatch sample inside this leg.
+        ax, ay = PATROL_STATIONS[e['fromStation']]
+        bx, by = PATROL_STATIONS[station]
+        length = math.hypot(bx-ax, by-ay)
+        reaction_at, arrival_at = min(walks[i])+60, observation_timestamp(arrival)
+        middle = None
+        for f in ordered:
+            if not reaction_at <= observation_timestamp(f) < arrival_at:
+                continue
+            p = f.get('navigationPose') or {}
+            if (p.get('state') != 'valid' or p.get('frameId') != f['frameId'] or p.get('layerId') != 'City_102'
+                    or not .99 <= p['positionConfidence'] <= 1 or f['frameWorldReadiness']['ready'] is not True
+                    or f['motionEvidence']['status'] != 'normal' or f['motionEvidence']['spaceKeyMatched'] is not False):
+                continue
+            x, y = p['x']-ax, p['y']-ay
+            if (.2 <= (x*(bx-ax)+y*(by-ay))/length**2 <= .8 and abs(x*(by-ay)-y*(bx-ax))/length <= 4):
+                middle = f['frameId']
+                break
+        require(middle, 'Missing post-dispatch position inside the active patrol leg')
+        for s in e['samples']:
+            f = frames[s['frameId']]
+            require(f['frameWorldReadiness']['epoch'] == e['releaseEpoch'] and f['motionEvidence']['status'] == 'normal'
+                    and f['motionEvidence']['spaceKeyMatched'] is False, 'Patrol station sample is outside its release epoch')
+        end_at = e['samples'][-1]['atMs']
+        require(0 < end_at-prior_at <= 35000 and abs(e['legElapsedMs']-(end_at-prior_at)) < .01,
+                'Patrol leg elapsed time or deadline differs')
+        require(not any(e['releaseAtMs'] <= s['startedAtMs'] <= end_at
+                        for r in receipts.values() for s in r.get('appliedSteps', [])),
+                'Patrol dispatched input before station verification finished')
+        turns = [sign for _, sign in sorted(mouse_commands[i])]
+        leg_frames = (f for f in ordered if prior_at <= observation_timestamp(f) <= arrival_at)
+        helpers = [r for r in receipts.values() if r.get('modelId') == 'navigation-climb-drop-v1'
+                   and r['appliedSteps'] and prior_at <= r['appliedSteps'][0]['startedAtMs'] < end_at]
+        legs.append(dict(fromStation=e['fromStation'], toStation=station, inTransitFrameId=middle, arrivalFrameId=arrival['frameId'],
+                         verifiedFrameId=e['samples'][-1]['frameId'], appliedForwardActions=len(walks[i]),
+                         elapsedMs=end_at-prior_at, appliedActions=applied_actions[i]+len(helpers), yawReversals=yaw_reversals(leg_frames),
+                         commandReversals=sum(a!=b for a,b in zip(turns,turns[1:]))))
+        if (i+1) % 4 == 0:
+            number = (i+1)//4
+            require(number <= len(circuit_events), 'No circuit completion at the return to A')
+            c = circuit_events[number-1]
+            require(c.get('station') == PATROL_ORDER[0] and c.get('routeId') == STREET_PATROL_ROUTE
+                    and c.get('sourceEpoch') == epoch and c.get('completedLegs') == i+1
+                    and c.get('completedCircuits') == number and c.get('atMs') == end_at
+                    and c.get('frameId') == legs[-1]['verifiedFrameId'], 'Patrol circuit marker differs from final A arrival')
+            expected.append(c)
+            circuits.append(dict(circuit=number, endingFrameId=c['frameId'], legs=legs[-4:]))
+        prior_at = end_at
+    require(expected == milestones and parts[-1]['hybridNavigation'].get('completedCircuits') == len(circuits),
+            'Patrol milestone sequence or final circuit count differs')
+    return circuits, legs[len(circuits)*4:]
 
 
 def verify_climb_exit(event, frames, actions, receipts, climb_events, epoch):
@@ -490,10 +681,13 @@ def audit_bypasses(events, attempts, frames, accepted, receipts, route_id, epoch
 
 
 def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_passages=0,
-          minimum_climb_passages=0, minimum_bypass_replays=0, minimum_bypass_rebinds=0):
+          minimum_climb_passages=0, minimum_bypass_replays=0, minimum_bypass_rebinds=0, minimum_circuits=0,
+          camera_checkpoint=None, minimum_calibrated_actions=0, shadow_checkpoint=None,
+          landmark_checkpoint=None, ffmpeg='ffmpeg', ffprobe='ffprobe'):
     """Join endpoint samples to retained same-frame poses and actions to terminal receipts."""
     require(minimum_legs >= 1 and min(minimum_obstacle_passages, minimum_climb_passages,
-                                      minimum_bypass_replays, minimum_bypass_rebinds) >= 0,
+                                      minimum_bypass_replays, minimum_bypass_rebinds, minimum_circuits,
+                                      minimum_calibrated_actions) >= 0,
             'Require at least one route leg and nonnegative minimum passage counts')
     run = json.loads(Path(run_path).read_text(encoding='utf-8-sig'))
     require(run.get('status') == 'completed' and run.get('evidenceComplete') is True,
@@ -534,7 +728,8 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
     require(all(p['hybridNavigation'].get('routeId', COURTYARD_ROUTE) == route_id for p in parts),
             'Fixed route changed within the run')
     start, end = route_points(route_id)
-    goals = dict(start=start, end=end)
+    patrol = route_id == STREET_PATROL_ROUTE
+    goals = PATROL_STATIONS if patrol else dict(start=start, end=end)
     target = starts[0]['target']
     require(target in goals, 'Starting target is unknown')
     prior_frame, prior_at = starts[0]['frameId'], starts[0]['atMs']
@@ -545,9 +740,11 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
             and pose.get('state') == 'valid' and pose.get('frameId') == prior_frame
             and observation_timestamp(origin) == prior_at and pose.get('layerId') == 'City_102'
             and .99 <= pose['positionConfidence'] <= 1 and .2 <= pose['yawConfidence'] <= 1
-            and math.dist((pose['x'], pose['y']), end if target == 'start' else start) <= 2,
+            and math.dist((pose['x'], pose['y']), end if not patrol and target == 'start' else start) <= 2,
             'Admission frame does not match the reviewed starting endpoint')
     for count, endpoint in enumerate(endpoints, 1):
+        if patrol:
+            target = PATROL_ORDER[(count-1)%4+1]
         require(endpoint['completedLegs'] == count and endpoint['endpoint'] == target,
                 'Endpoint count or alternating route order differs')
         target_point = goals[target]
@@ -622,6 +819,18 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
             require(0 <= age <= 150, 'First software input exceeded the source deadline')
             dispatch_ages.append(age)
     require(parts[-1]['hybridNavigation']['completedLegs'] == len(endpoints), 'Final leg total differs')
+    circuits, partial = audit_patrol(starts[0], endpoints, events, frames, parts, run, accepted, receipts,
+                                     source_epoch) if patrol else ([], [])
+    cameras = audit_camera(parts, run['segments'], recordings, frames, route_id, camera_checkpoint)
+    shadow = (audit_shadow(decisions, frames, receipts, run['segments'], recordings, route_id, shadow_checkpoint)
+              if shadow_checkpoint else None)
+    landmarks = None
+    if landmark_checkpoint:
+        from audit_patrol_landmarks import audit_landmarks
+        require(patrol, 'Visual station validation requires the street patrol')
+        landmarks = audit_landmarks(run, parts, events, frames, recordings, source_epoch, landmark_checkpoint, ffmpeg, ffprobe)
+    require(cameras['applied'] >= minimum_calibrated_actions, f"Only {cameras['applied']} verified calibrated actions")
+    require(len(circuits) >= minimum_circuits, f'Only {len(circuits)} verified patrol circuits')
     attempts = []
     leg_start, pending = starts[0]['atMs'], []
     for event in events:
@@ -651,6 +860,8 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
     require(rebinds >= minimum_bypass_rebinds, f'Only {rebinds} verified bypass rebinds')
     return dict(version=1, passed=True, scope='fixed-route-endpoint-and-software-input-joins', routeId=route_id,
                 verifiedLegs=len(endpoints), controllerLeases=1, modelLoads=1,
+                verifiedCircuits=len(circuits), patrolCircuits=circuits, partialPatrolLegs=partial,
+                cameraCalibration=cameras, steeringShadow=shadow, landmarkShadow=landmarks,
                 verifiedRouteSeconds=(endpoints[-1]['samples'][-1]['atMs']-starts[0]['atMs'])/1000,
                 sourceFrames=len(frames), acceptedActions=len(accepted), appliedActions=len(dispatch_ages),
                 climbDropAppliedActions=len(climb_ages), totalAppliedActions=len(dispatch_ages)+len(climb_ages),
@@ -672,6 +883,16 @@ def main():
     parser.add_argument('--recordings', required=True)
     parser.add_argument('--repository', default=str(Path(__file__).resolve().parents[2]))
     parser.add_argument('--minimum-legs', type=int, default=1)
+    parser.add_argument('--minimum-circuits', type=int, default=0,
+                        help='Require completed stair-front → junction → west-lamp → junction → stair-front circuits')
+    parser.add_argument('--camera-checkpoint', help='Require exact local checkpoint bytes for a calibrated turn')
+    parser.add_argument('--shadow-checkpoint', help='Recompute every shadow score from this exact checkpoint')
+    parser.add_argument('--landmark-checkpoint', help='Join every live station classification and rescore its archived video frame')
+    parser.add_argument('--ffmpeg', default='ffmpeg')
+    parser.add_argument('--ffprobe', default='ffprobe')
+    parser.add_argument('--minimum-calibrated-actions', type=int, default=0)
+    parser.add_argument('--baseline-run', help='Compare against a separately sealed uncalibrated patrol')
+    parser.add_argument('--baseline-recordings')
     parser.add_argument('--minimum-obstacle-passages', type=int, default=0,
                         help='Require receipt-backed stalls followed by recovery and forward endpoint passage')
     parser.add_argument('--minimum-bypass-replays', type=int, default=0,
@@ -682,11 +903,20 @@ def main():
                         help='Require independently verified X-drop exits, lateral clearance and endpoint passage')
     parser.add_argument('--output', required=True)
     args = parser.parse_args()
+    if bool(args.baseline_run) != bool(args.baseline_recordings):
+        parser.error('--baseline-run and --baseline-recordings must be supplied together')
     result = audit(args.run, args.recordings, repository=args.repository, minimum_legs=args.minimum_legs,
                    minimum_obstacle_passages=args.minimum_obstacle_passages,
+                   minimum_circuits=args.minimum_circuits,
+                   camera_checkpoint=args.camera_checkpoint, minimum_calibrated_actions=args.minimum_calibrated_actions,
+                   shadow_checkpoint=args.shadow_checkpoint,
+                   landmark_checkpoint=args.landmark_checkpoint, ffmpeg=args.ffmpeg, ffprobe=args.ffprobe,
                    minimum_climb_passages=args.minimum_climb_passages,
                    minimum_bypass_rebinds=args.minimum_bypass_rebinds,
                    minimum_bypass_replays=args.minimum_bypass_replays)
+    if args.baseline_run:
+        baseline = audit(args.baseline_run, args.baseline_recordings, repository=args.repository, minimum_circuits=1)
+        result['patrolComparison'] = compare_patrols(baseline, result)
     Path(args.output).write_text(json.dumps(result, indent=2), encoding='utf-8')
     print(json.dumps(result, indent=2))
 

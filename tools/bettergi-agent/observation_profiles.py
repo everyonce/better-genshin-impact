@@ -5,6 +5,10 @@ P2P_NATIVE = 'p2p-native-hamming-192-v1'
 PROFILES = (LEGACY, P2P_NATIVE)
 
 
+class FrameProfileError(ValueError):
+    """A received frame violates the profile negotiated with BetterGI."""
+
+
 def validate_model_profile(profile, model):
     """Keep native policy pixels opt-in and reject incompatible model geometry."""
     if profile not in PROFILES:
@@ -44,13 +48,13 @@ def verify_frame(frame, pixels, contract):
     if advertised is None and not contract['serverAdvertised'] and profile == LEGACY:
         advertised = LEGACY
     if advertised != profile:
-        raise ValueError('Frame observation profile changed or is missing')
+        raise FrameProfileError('Frame observation profile changed or is missing')
     width, height = frame.get('width'), frame.get('height')
     if (type(width) is not int or type(height) is not int or width <= 0 or height <= 0
             or frame.get('pixelFormat') != 'rgb24' or len(pixels) != width * height * 3):
-        raise ValueError('RGB payload does not match its declared profile/dimensions')
+        raise FrameProfileError('RGB payload does not match its declared profile/dimensions')
     if profile == P2P_NATIVE and (width, height) != (192, 192):
-        raise ValueError('Native P2P profile requires exact RGB192 payloads')
+        raise FrameProfileError('Native P2P profile requires exact RGB192 payloads')
 
 
 def p2p_preprocessing(profile):

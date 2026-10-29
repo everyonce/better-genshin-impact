@@ -6,7 +6,8 @@ COURTYARD_ROUTE = 'mondstadt-courtyard-hybrid-v1'
 LAMPPOST_ROUTE = 'mondstadt-lamppost-v1'
 PLANTER_ROUTE = 'mondstadt-planter-v1'
 STAIR_POST_ROUTE = 'mondstadt-stair-post-v1'
-ROUTE_IDS = (COURTYARD_ROUTE, LAMPPOST_ROUTE, PLANTER_ROUTE, STAIR_POST_ROUTE)
+STREET_PATROL_ROUTE = 'mondstadt-street-patrol-v1'
+ROUTE_IDS = (COURTYARD_ROUTE, LAMPPOST_ROUTE, PLANTER_ROUTE, STAIR_POST_ROUTE, STREET_PATROL_ROUTE)
 
 # The default segment is also advertised as the bridge's native heading anchors.
 _POINTS = {
@@ -19,9 +20,23 @@ _POINTS = {
     STAIR_POST_ROUTE: ((-844.93, 2255.29), (-844.30, 2245.50)),
 }
 
+# Reuse the surveyed street endpoints. Entry is always at the stair front.
+PATROL_STATIONS = {'stair-front': _POINTS[STAIR_POST_ROUTE][0],
+                   'sidewalk-junction': _POINTS[LAMPPOST_ROUTE][1], 'west-lamp': _POINTS[LAMPPOST_ROUTE][0]}
+PATROL_SEGMENTS = (('stair-front', 'sidewalk-junction'), ('sidewalk-junction', 'west-lamp'),
+                   ('west-lamp', 'sidewalk-junction'), ('sidewalk-junction', 'stair-front'))
+
+
+def patrol_leg(completed_legs):
+    """Return the directed segment that follows this many verified arrivals."""
+    return PATROL_SEGMENTS[completed_legs % len(PATROL_SEGMENTS)]
+
 
 def route_points(route_id):
-    """Return fixed start and end pairs. Reject arbitrary coordinates or unknown IDs."""
+    """Return the first fixed segment. Patrol legs are advanced explicitly after release."""
+    if route_id == STREET_PATROL_ROUTE:
+        start, end = patrol_leg(0)
+        return PATROL_STATIONS[start], PATROL_STATIONS[end]
     if route_id not in _POINTS:
         raise ValueError(f'Unknown hybrid route {route_id!r}')
     return _POINTS[route_id]

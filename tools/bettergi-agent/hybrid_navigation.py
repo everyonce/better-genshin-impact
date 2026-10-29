@@ -9,7 +9,8 @@ import math
 
 from observation_timing import observation_timestamp
 from hybrid_bypass import HybridBypass
-from hybrid_routes import COURTYARD_ROUTE, camera_correction, route_heading, route_points
+from hybrid_routes import (COURTYARD_ROUTE, PATROL_SEGMENTS, PATROL_STATIONS, STREET_PATROL_ROUTE,
+                           camera_correction, patrol_leg, route_heading, route_points)
 
 
 PROFILE = COURTYARD_ROUTE
@@ -59,14 +60,29 @@ class HybridNavigation:
         self.pending_climb_exit = None
         self.leg_started = None
         self.failure = None
+        self.segment = {}
+        self.arrival_frame = self.arrival_epoch = self.release_epoch = None
+        if route_id == STREET_PATROL_ROUTE:
+            self._set_patrol_leg()
+
+    def _set_patrol_leg(self):
+        """Update all corridor and steering geometry together, after the preceding station verifies."""
+        origin, destination = patrol_leg(self.legs)
+        self.start, self.end = PATROL_STATIONS[origin], PATROL_STATIONS[destination]
+        self.target_name, self.target = destination, self.end
+        self.segment = dict(fromStation=origin, toStation=destination, segmentIndex=self.legs % len(PATROL_SEGMENTS),
+                            circuit=self.legs // len(PATROL_SEGMENTS) + 1)
 
     def snapshot(self):
         """Return scalar progress without exposing mutable internal collections."""
-        return dict(profileId=PROFILE, routeId=self.route_id, rememberBypass=self.bypass is not None,
+        result = dict(profileId=PROFILE, routeId=self.route_id, rememberBypass=self.bypass is not None,
                     phase=self.phase, target=self.target_name,
                     completedLegs=self.legs, selections=dict(self.selections),
                     recoveryAttempts=self.total_recoveries, failure=self.failure,
                     lastPose=copy.deepcopy(self.last_pose))
+        if self.segment:
+            result.update(completedCircuits=self.legs // len(PATROL_SEGMENTS), **self.segment)
+        return result
 
     def drain_events(self):
         """Transfer sparse verified endpoint/recovery events to the evidence writer."""
@@ -75,6 +91,9 @@ class HybridNavigation:
 
     def recovery_side(self, target, attempt):
         """Use the open pavement on surveyed street routes in both directions."""
+        if self.segment:
+            # Preserve the surveyed road side on B-C and reverse the strafe on the return.
+            return 'A' if target == 'sidewalk-junction' else 'D'
         if self.route_id != COURTYARD_ROUTE:
             return 'A' if target == 'end' else 'D'
         return self.first_recovery_side if attempt == 1 else {'A': 'D', 'D': 'A'}[self.first_recovery_side]
@@ -226,6 +245,15 @@ class HybridNavigation:
         # its readiness gate; releasedAtMs is an evidence-event field, not wire data.
         if self.bypass:
             self.bypass.released(self, response)
+        if self.segment:
+            gate = response.get('worldReadiness') or {}
+            epoch = gate.get('epoch')
+            if (self.phase != 'releaseRequired' or type(self.arrival_epoch) is not int or type(epoch) is not int
+                    or epoch != self.arrival_epoch + 1 or gate.get('ready') is not False
+                    or gate.get('reason') != 'client_release'
+                    or (gate.get('sourceFrame') or {}).get('captureEpoch') != self.source_epoch):
+                self._fail('patrol_release_unbound')
+            self.release_epoch = epoch
         self.release_at = stamp
         self.phase = 'verifying'
         self.samples.clear()
@@ -305,18 +333,24 @@ class HybridNavigation:
                 if math.dist((x, y), anchor) > 2 and yaw_error(route_heading(pose, anchor), pose[key]) > 1.1:
                     self._fail('native_bearing_mismatch')
         if self.phase == 'admitting':
-            near = min(math.hypot(x - p[0], y - p[1]) for p in (self.start, self.end))
+            allowed_starts = (self.start,) if self.segment else (self.start, self.end)
+            near = min(math.hypot(x - p[0], y - p[1]) for p in allowed_starts)
             if near > 2:
                 self._fail('verified_endpoint_start_required')
             if not self._sample(pose, at):
                 return 'confirmingStart'
-            self.target_name = 'end' if math.hypot(x - self.start[0], y - self.start[1]) <= 2 else 'start'
-            self.target = self.end if self.target_name == 'end' else self.start
+            admission = {}
+            if self.segment:
+                admission = dict(sourceEpoch=epoch, station=self.segment['fromStation'],
+                                 samples=copy.deepcopy(self.samples), **self.segment)
+            else:
+                self.target_name = 'end' if math.hypot(x - self.start[0], y - self.start[1]) <= 2 else 'start'
+                self.target = self.end if self.target_name == 'end' else self.start
             self.phase = 'walking'
             self.leg_started = at
             self.samples.clear()
             self.events.append(dict(type='hybridStartVerified', routeId=self.route_id,
-                                    frameId=pose['frameId'], atMs=at, target=self.target_name))
+                                    frameId=pose['frameId'], atMs=at, target=self.target_name, **admission))
         if at - self.leg_started > 35000:
             self._fail('leg_progress_deadline')
         if self.bypass:
@@ -337,6 +371,11 @@ class HybridNavigation:
         if self.phase == 'verifying':
             if at < self.release_at + 80:
                 return 'waitingAfterRelease'
+            if self.segment:
+                gate = frame.get('frameWorldReadiness') or {}
+                if (gate.get('epoch') != self.release_epoch or gate.get('ready') is not True
+                        or (gate.get('sourceFrame') or {}).get('captureEpoch') != epoch):
+                    self._fail('patrol_endpoint_readiness_changed')
             if distance > 2:
                 self._fail('endpoint_moved_after_release')
             if not self._sample(pose, at):
@@ -349,8 +388,17 @@ class HybridNavigation:
                 if self.bypass.release_epoch is not None:
                     self.events[-1]['releaseEpoch'] = self.bypass.release_epoch
                 self.bypass.endpoint(self)
-            self.target_name = 'start' if self.target_name == 'end' else 'end'
-            self.target = self.start if self.target_name == 'start' else self.end
+            if self.segment:
+                self.events[-1].update(routeId=self.route_id, station=self.target_name, arrivalFrameId=self.arrival_frame,
+                                       releaseEpoch=self.release_epoch, **self.segment)
+                if self.legs % len(PATROL_SEGMENTS) == 0:
+                    self.events.append(dict(type='hybridCircuitVerified', routeId=self.route_id, sourceEpoch=epoch,
+                        atMs=at, frameId=pose['frameId'], station=self.target_name, completedLegs=self.legs,
+                        completedCircuits=self.legs // len(PATROL_SEGMENTS)))
+                self._set_patrol_leg()
+            else:
+                self.target_name = 'start' if self.target_name == 'end' else 'end'
+                self.target = self.start if self.target_name == 'start' else self.end
             self.phase, self.leg_started = 'walking', at
             self.samples.clear()
             self.stall_samples.clear()
@@ -358,6 +406,9 @@ class HybridNavigation:
             self.movements.clear()
             return 'endpointVerified'
         if distance <= 1.1 and (not self.bypass or self.bypass.waypoint is None):
+            if self.segment:
+                self.arrival_frame = pose['frameId']
+                self.arrival_epoch = (frame.get('frameWorldReadiness') or {}).get('epoch')
             self.phase = 'releaseRequired'
             return 'releaseRequired'
         return None
@@ -397,7 +448,7 @@ class HybridNavigation:
         self.selections[reason] += 1
         step = dict(durationMs=100, keys=keys, mouseDx=dx, mouseDy=0)
         selection = dict(owner=owner, reason=reason, target=self.target_name, pose=copy.deepcopy(pose),
-                         completedLegs=self.legs, modelSteps=copy.deepcopy(proposal.get('steps', [])), step=step)
+                         completedLegs=self.legs, modelSteps=copy.deepcopy(proposal.get('steps', [])), step=step, **self.segment)
         if self.bypass:
             selection['steeringPoint'] = dict(x=steering[0], y=steering[1], kind='bypass' if waypoint else 'endpoint')
             if waypoint:

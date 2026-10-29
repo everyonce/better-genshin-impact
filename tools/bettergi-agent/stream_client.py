@@ -7,6 +7,7 @@ video presentation time is an index, not an assumption about capture cadence.
 import argparse
 import copy
 from contextlib import nullcontext
+import hashlib
 import json
 import math
 import os
@@ -22,10 +23,11 @@ import uuid
 
 from observation_timing import frame_timing, observation_timestamp
 from host_observation import HostObservationContract
-from hybrid_routes import COURTYARD_ROUTE, ROUTE_IDS, STAIR_POST_ROUTE
+from hybrid_routes import COURTYARD_ROUTE, ROUTE_IDS, STAIR_POST_ROUTE, STREET_PATROL_ROUTE
 from navigation_idle_recovery import (GOAL_INTENTS, NavigationIdleRecovery, RecoverySuperseded,
                                       capture_context, eligible_frame, fresh_frame)
-from observation_profiles import LEGACY, P2P_NATIVE, PROFILES, validate_model_profile, verify_hello, verify_frame
+from observation_profiles import (LEGACY, P2P_NATIVE, PROFILES, FrameProfileError,
+                                  validate_model_profile, verify_hello, verify_frame)
 from p2p_startup import validate_startup_options
 from bridge_transport import forbid_reconnect, is_transport_failure, transport_origin
 
@@ -1063,6 +1065,12 @@ def parse_arguments(argv=None):
                         help='Combine Open P2P with same-frame BetterGI guidance on a fixed route')
     parser.add_argument('--hybrid-route', choices=ROUTE_IDS,
                         help='Choose a surveyed fixed route; defaults to the original courtyard segment')
+    parser.add_argument('--steering-shadow', metavar='CHECKPOINT',
+                        help='Record a trained steering prediction after each hybrid decision has settled')
+    parser.add_argument('--landmark-shadow', metavar='CHECKPOINT',
+                        help='Identify verified patrol stations from unannotated RGB192 frames')
+    parser.add_argument('--camera-calibration', metavar='CHECKPOINT',
+                        help='Trial a holdout-qualified camera response on the street patrol')
     parser.add_argument('--remember-hybrid-bypass', action='store_true',
                         help='Reuse a verified stair-post passage within the current controller lease')
     parser.add_argument('--hybrid-legs', type=int,
@@ -1153,6 +1161,14 @@ def parse_arguments(argv=None):
         parser.error('hybrid-legs requires hybrid-navigation and a positive count')
     if args.hybrid_route is not None and not args.hybrid_navigation:
         parser.error('hybrid-route requires hybrid-navigation')
+    if args.steering_shadow and not args.hybrid_navigation:
+        parser.error('steering-shadow requires hybrid-navigation')
+    if args.landmark_shadow and (not args.hybrid_navigation or args.hybrid_route != STREET_PATROL_ROUTE
+                                 or args.observation_profile != P2P_NATIVE):
+        parser.error('landmark-shadow requires the street patrol and native RGB192 input')
+    if args.camera_calibration and (args.hybrid_route != STREET_PATROL_ROUTE or not args.enable_input
+                                    or not args.resident or args.max_observation_age_ms != 150):
+        parser.error('camera-calibration requires the resident live street patrol and its 150 ms input deadline')
     if args.remember_hybrid_bypass and args.hybrid_route != STAIR_POST_ROUTE:
         parser.error('remember-hybrid-bypass requires the surveyed stair-post hybrid route')
     if args.hybrid_navigation:
@@ -1163,6 +1179,24 @@ def parse_arguments(argv=None):
         if args.input_keys is None:
             args.input_keys = 'W,A,S,D'
     return args
+
+
+def observe_station(head, event, frame, pixels):
+    """Join a visual hypothesis to the verified start or final stable arrival frame."""
+    if event['type'] == 'hybridStartVerified':
+        source_id = event['frameId']
+    elif event['type'] == 'hybridEndpointVerified':
+        source_id = event['samples'][-1]['frameId']
+    else:
+        return
+    if frame is None or source_id != frame['frameId']:
+        raise RuntimeError('Visual station check requires the exact verified source frame')
+    started = time.perf_counter_ns()
+    prediction = head.predict(pixels)
+    elapsed_us = (time.perf_counter_ns() - started) / 1000
+    event['visualStation'] = dict(checkpointId=head.checkpoint_id, frameId=source_id,
+                                  prediction=prediction, elapsedUs=elapsed_us,
+                                  rgbSha256=hashlib.sha256(pixels).hexdigest())
 
 
 def load_policy(args):
@@ -1192,6 +1226,15 @@ def load_policy(args):
         if prewarm:
             from p2p_startup import prepare_startup_graph
             prepare_startup_graph(policy)
+        if getattr(args, 'steering_shadow', None):
+            from steering_head import SteeringHead
+            policy.steering_shadow = SteeringHead.load(args.steering_shadow)
+        if getattr(args, 'landmark_shadow', None):
+            from landmark_recognizer import LandmarkRecognizer
+            policy.landmark_shadow = LandmarkRecognizer.load(args.landmark_shadow)
+        if getattr(args, 'camera_calibration', None):
+            from camera_response import CameraCalibration
+            policy.camera_calibration = CameraCalibration.load(args.camera_calibration)
     return policy
 
 
@@ -1484,6 +1527,10 @@ def run_episode(args, policy=None, control=None):
     last_readiness_epoch = None
     last_accepted_at = None
     last_hybrid_action = None
+    camera_trial = None
+    if getattr(args, 'camera_calibration', None):
+        from patrol_camera_trial import PatrolCameraTrial
+        camera_trial = PatrolCameraTrial(policy.camera_calibration)
     history_gap_reset = False
     seen_unapplied_receipts = 0
     seen_recovery_interruptions = 0
@@ -1545,12 +1592,14 @@ def run_episode(args, policy=None, control=None):
                             framesReceived=report['framesReceived'], acceptedInputActions=report['acceptedInputActions'])
         return released
 
-    def publish_hybrid():
+    def publish_hybrid(station_frame=None, station_pixels=None):
         """Keep sparse native verification and selected-controller attribution in each evidence segment."""
         if hybrid is None:
             return
         report['hybridNavigation'] = hybrid.snapshot()
         for event in hybrid.drain_events():
+            if getattr(args, 'landmark_shadow', None):
+                observe_station(policy.landmark_shadow, event, station_frame, station_pixels)
             report['hybridNavigationEvents'].append(event)
             if recorder:
                 recorder.event(event)
@@ -1664,6 +1713,8 @@ def run_episode(args, policy=None, control=None):
             noop_history_reset = idle_recovery.matched_noop_expiries(unapplied_history_receipts(pending_receipts))
             for receipt in pending_receipts:
                 recovery_event(idle_recovery.receipt(receipt))
+                if camera_trial:
+                    camera_trial.receipt(receipt)
                 if hybrid:
                     hybrid.receipt(receipt)
             if recovery_interruption_sequence != seen_recovery_interruptions:
@@ -1757,7 +1808,7 @@ def run_episode(args, policy=None, control=None):
                     # not interruptions of the navigation evidence being gathered.
                     hold('hybrid:' + hybrid_wait, preserve_navigation=hybrid_wait in (
                         'confirmingStart', 'duplicatePose', 'sourceNotIncreasing'))
-                publish_hybrid()
+                publish_hybrid(frame, pixels)
                 if args.hybrid_legs is not None and hybrid.legs >= args.hybrid_legs:
                     report['endReason'] = 'hybridLegLimit'
                     break
@@ -1834,6 +1885,16 @@ def run_episode(args, policy=None, control=None):
             action_model_id = args.model
             if hybrid:
                 selection = hybrid.choose(frame, result)
+                if camera_trial:
+                    started = time.perf_counter_ns()
+                    candidate = camera_trial.propose(selection, hybrid.target, observed_at)
+                    if candidate:
+                        candidate['elapsedUs'] = (time.perf_counter_ns() - started) / 1000
+                        result['cameraCalibration'] = candidate
+                        hybrid.selections[selection['reason']] -= 1
+                        selection.update(owner='calibrated-camera', reason='calibratedHeading',
+                                         step=dict(selection['step'], mouseDx=candidate['proposedMouseDx']))
+                        hybrid.selections[selection['reason']] += 1
                 result['hybridNavigation'] = selection
                 result['steps'] = [selection['step']]
                 result['parseValid'] = True
@@ -1880,6 +1941,8 @@ def run_episode(args, policy=None, control=None):
                     expiresAtMs=observed_at+700, modelId=action_model_id,
                     steps=result['steps'], **start_deadline)
                 committed = action_response_accepted(result['acceptance'], request_id, response_payload)
+                if committed and camera_trial:
+                    camera_trial.accepted(request_id, observed_at, result['steps'][0])
                 report.pop('unacknowledgedAction', None)
                 if committed and hybrid and hybrid.bypass:
                     # Keep one actual admission across recorder rotation. Every
@@ -1906,6 +1969,17 @@ def run_episode(args, policy=None, control=None):
                 if hybrid and action_model_id != args.model:
                     # The unexecuted model prediction is not the native correction's action history.
                     policy.reset()
+            # The candidate observes the original image-derived proposal and current
+            # waypoint only after dispatch or rejection. It never owns input.
+            shadow = policy.steering_shadow if hybrid and getattr(args, 'steering_shadow', None) else None
+            if shadow is not None:
+                selection = result['hybridNavigation']
+                point = selection.get('steeringPoint') or dict(zip(('x', 'y'), hybrid.target))
+                shadow_start = time.perf_counter_ns()
+                prediction = shadow.predict(frame, (point['x'], point['y']),
+                                            result.get('rawPolicySteps', selection['modelSteps']))
+                result['steeringShadow'] = dict(checkpointId=shadow.checkpoint_id, prediction=prediction,
+                    elapsedUs=(time.perf_counter_ns()-shadow_start)/1000)
             report['decisions'].append(result)
             if recorder:
                 recorder.event({'type': 'proposal', 'frameId': frame['frameId'],
@@ -1914,6 +1988,8 @@ def run_episode(args, policy=None, control=None):
                                 'historyCommitted': result.get('historyCommitted'),
                                 'observedAtMs': frame['capturedAtMs'], 'model': action_model_id,
                                 **({'hybridNavigation': result['hybridNavigation']} if hybrid else {}),
+                                **({'steeringShadow': result['steeringShadow']} if shadow is not None else {}),
+                                **({'cameraCalibration': result['cameraCalibration']} if 'cameraCalibration' in result else {}),
                                 'observationTimestampMs': observed_at,
                                 'startBeforeMs': result.get('startBeforeMs'),
                                 'steps': result['steps'], 'acceptance': result['acceptance'],
@@ -2101,7 +2177,12 @@ def main():
     if args.resident:
         from resident_runtime import run_resident
         return run_resident(args, load_policy, run_episode)
-    return run_episode(args, load_policy(args))
+    try:
+        return run_episode(args, load_policy(args))
+    except FrameProfileError as exc:
+        # The single-lease runner has already released input and written its failed report.
+        print(str(exc), file=sys.stderr)
+        return 1
 
 
 if __name__ == '__main__':

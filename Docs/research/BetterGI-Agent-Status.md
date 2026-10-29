@@ -1,6 +1,6 @@
 # BetterGI agent status
 
-Updated October 29, 2026. The [stair-post gameplay report](BetterGI-Obstacle-Gameplay-2026-10-29.md) covers physical obstacle recovery and detour learning. The [courtyard qualification](BetterGI-Hybrid-Gameplay-2026-10-27.md) and [sprint results](BetterGI-Agent-Sprint-Results-2026-10-23.md) retain the earlier benchmarks.
+Updated October 29, 2026. The latest work adds a three-station street patrol, a steering observer and an image-only station recognizer. See the [patrol learning report](BetterGI-Patrol-Learning-2026-10-29.md). Earlier trials cover [physical obstacle recovery](BetterGI-Obstacle-Gameplay-2026-10-29.md), [courtyard navigation](BetterGI-Hybrid-Gameplay-2026-10-27.md) and [model latency](BetterGI-Agent-Sprint-Results-2026-10-23.md).
 
 R57 and the resident Open P2P GPU model completed 24 crossings of the Mondstadt stair post in 210.98 seconds inside minimized RDP on October 29. The first climb escape taught a detour. All 23 subsequent crossings reused it, including four that paused for stale images and resumed. Median model evaluation was 30.38 ms and median image-to-first-input dispatch was 81.14 ms. A separate 5 Hz run verified four ground-stall escapes. The October 27 courtyard run completed 60 legs in 259.80 seconds. The evidence covers fixed local navigation courses. Combat, quests and independent learned-model task completion still need in-game qualification.
 

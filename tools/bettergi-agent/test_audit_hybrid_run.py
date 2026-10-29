@@ -6,11 +6,11 @@ import unittest
 
 from audit_hybrid_run import audit, audit_bypasses, audit_rebind
 from hybrid_navigation import START, END
-from hybrid_routes import LAMPPOST_ROUTE, STAIR_POST_ROUTE, route_heading, route_points
+from hybrid_routes import LAMPPOST_ROUTE, PATROL_STATIONS, STAIR_POST_ROUTE, STREET_PATROL_ROUTE, route_heading, route_points
 
 
 class HybridAuditTests(unittest.TestCase):
-    def fixture(self, root, change=None, minimum_obstacle_passages=0):
+    def fixture(self, root, change=None, minimum_obstacle_passages=0, **minimums):
         frames = []
         samples = []
         for number, at in enumerate((50, 200, 300, 400), 1):
@@ -43,7 +43,111 @@ class HybridAuditTests(unittest.TestCase):
         (root/'part.json').write_text(json.dumps(part), encoding='utf-8')
         (root/'run.json').write_text(json.dumps(run), encoding='utf-8')
         return audit(root/'run.json', root/'recording', repository=root,
-                     minimum_obstacle_passages=minimum_obstacle_passages)
+                     minimum_obstacle_passages=minimum_obstacle_passages, **minimums)
+
+    @staticmethod
+    def patrol_run(run, part, frames, legs=8):
+        """Make independent source frames, applied events and release barriers for two circuits."""
+        route = ('stair-front','sidewalk-junction','west-lamp','sidewalk-junction','stair-front')
+        epoch = 1
+        frames.clear()
+        def sample(at, point, heading=0):
+            fid = len(frames)+1
+            s = dict(frameId=fid, atMs=at, x=point[0], y=point[1], yawDegrees=heading)
+            frames.append(dict(frameId=fid, sourceFrame=dict(captureEpoch='epoch', timestamp100ns=at*10000, capturedAtMs=at),
+                               navigationPose=dict(**s, state='valid', layerId='City_102', positionConfidence=.999,
+                                                   yawConfidence=.6), motionEvidence=dict(status='normal', spaceKeyMatched=False),
+                               frameWorldReadiness=dict(ready=True, epoch=epoch)))
+            return s
+        def leg_info(i):
+            return dict(fromStation=route[i%4], toStation=route[i%4+1], segmentIndex=i%4, circuit=i//4+1)
+        admission = [sample(at, PATROL_STATIONS[route[0]]) for at in (100,200,300)]
+        events = [dict(type='hybridStartVerified', target=route[1], station=route[0], routeId=STREET_PATROL_ROUTE,
+                       sourceEpoch='epoch', frameId=admission[-1]['frameId'], atMs=300, samples=admission, **leg_info(0))]
+        decisions, receipts, transitions = [], [], []
+        began = 300
+        for i in range(legs):
+            leg = leg_info(i)
+            origin, target = PATROL_STATIONS[leg['fromStation']], PATROL_STATIONS[leg['toStation']]
+            midpoint = tuple((a+b)/2 for a,b in zip(origin,target))
+            heading = route_heading(dict(x=midpoint[0], y=midpoint[1]), target)
+            s = sample(began+100, midpoint, heading)
+            request = str(i+1)
+            selection = dict(owner='hybrid-native', completedLegs=i, target=leg['toStation'], **leg)
+            decisions.append(dict(frameId=s['frameId'], observationTimestampMs=s['atMs'], hybridNavigation=selection,
+                                  acceptance=dict(type='accepted', requestId=request)))
+            receipts.append(dict(requestId=request, frameId=s['frameId'], modelId='hybrid-native', endedAtMs=s['atMs']+120,
+                                 appliedSteps=[dict(keys=['W'], mouseDx=0, mouseDy=0, startedAtMs=s['atMs']+20)]))
+            sample(began+250, tuple(.4*a+.6*b for a,b in zip(origin,target)), heading)
+            arrival = sample(began+400, target, heading)
+            transitions.append(dict(reason='hybridEndpoint', state='held', frameId=arrival['frameId']))
+            epoch += 1
+            release = arrival['atMs']+25
+            stable = [sample(release+offset, target, heading) for offset in (100,200,300)]
+            events.append(dict(type='hybridEndpointVerified', routeId=STREET_PATROL_ROUTE, sourceEpoch='epoch', **leg,
+                               station=leg['toStation'], endpoint=leg['toStation'], releaseEpoch=epoch,
+                               sourceFrameId=stable[-1]['frameId'], arrivalFrameId=arrival['frameId'], releaseAtMs=release,
+                               samples=stable, legElapsedMs=stable[-1]['atMs']-began, completedLegs=i+1))
+            began = stable[-1]['atMs']
+            if (i+1)%4 == 0:
+                events.append(dict(type='hybridCircuitVerified', routeId=STREET_PATROL_ROUTE, sourceEpoch='epoch',
+                                   frameId=stable[-1]['frameId'], atMs=began, station=route[0],
+                                   completedLegs=i+1, completedCircuits=(i+1)//4))
+        part.update(hybridNavigation=dict(routeId=STREET_PATROL_ROUTE, completedLegs=legs, completedCircuits=legs//4),
+                    model='open-p2p', residentRunId='gpu-run', policyMetadata=dict(graphCaptureValidated=True),
+                    serverDroppedReceipts=0, hybridNavigationEvents=events, receipts=receipts,
+                    decisions=decisions, controlTransitions=transitions)
+        run.update(runId='gpu-run', acceptedInputActions=legs)
+
+    def test_count_only_complete_four_leg_patrols(self):
+        for count in (4,6,8):
+            with self.subTest(count=count), tempfile.TemporaryDirectory() as root:
+                result = self.fixture(Path(root), lambda r,p,f: self.patrol_run(r,p,f,count), minimum_circuits=count//4)
+                self.assertEqual(result['verifiedCircuits'], count//4)
+                self.assertEqual(len(result['partialPatrolLegs']), count%4)
+                self.assertEqual([s['toStation'] for s in result['patrolCircuits'][0]['legs']],
+                                 ['sidewalk-junction','west-lamp','sidewalk-junction','stair-front'])
+        with tempfile.TemporaryDirectory() as root, self.assertRaisesRegex(ValueError, 'Only 1 verified patrol circuits'):
+            self.fixture(Path(root), lambda r,p,f: self.patrol_run(r,p,f,7), minimum_circuits=2)
+
+    def test_tampered_patrol_station_order_provenance_and_input_do_not_qualify(self):
+        for name in ('skipB','swapBVisits','skipCircuitMarker','wrongCircuitFrame','falseStationCoordinates','noHold',
+                     'wrongReleaseEpoch','noForward','noMidLegSource','wrongHeading','sourceSwitch','gpuRunSwitch','fakeClock','falseAdmission'):
+            def changed(run, part, frames):
+                self.patrol_run(run, part, frames)
+                events = part['hybridNavigationEvents']
+                if name == 'skipB':
+                    events.pop(1)
+                elif name == 'swapBVisits':
+                    events[3]['fromStation'] = 'stair-front'
+                elif name == 'skipCircuitMarker':
+                    events.pop(5)
+                elif name == 'wrongCircuitFrame':
+                    events[5]['frameId'] -= 1
+                elif name == 'falseStationCoordinates':
+                    for s in events[2]['samples']:
+                        s['x'] += 15
+                        frames[s['frameId']-1]['navigationPose']['x'] += 15
+                elif name == 'noHold':
+                    part['controlTransitions'].pop(1)
+                elif name == 'wrongReleaseEpoch':
+                    events[2]['releaseEpoch'] += 1
+                elif name == 'noForward':
+                    part['receipts'][1]['appliedSteps'].clear()
+                elif name == 'noMidLegSource':
+                    frames[part['decisions'][1]['frameId']]['navigationPose']['state'] = 'unavailable'
+                elif name == 'wrongHeading':
+                    frames[part['decisions'][1]['frameId']-1]['navigationPose']['yawDegrees'] += 90
+                elif name == 'sourceSwitch':
+                    frames[3]['sourceFrame']['captureEpoch'] = 'other'
+                elif name == 'gpuRunSwitch':
+                    part['residentRunId'] = 'other'
+                elif name == 'fakeClock':
+                    events[2]['legElapsedMs'] += 50000
+                else:
+                    events[0]['samples'][0]['x'] += 15
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as root, self.assertRaises(ValueError):
+                self.fixture(Path(root), changed, minimum_circuits=2)
 
     def test_complete_joined_evidence_passes_without_claiming_physical_delivery(self):
         with tempfile.TemporaryDirectory() as root:

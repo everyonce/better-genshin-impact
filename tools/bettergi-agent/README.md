@@ -6,6 +6,21 @@ This prototype uses real downloaded checkpoints. It does not claim trained Gensh
 
 ## Start the local stream
 
+### Run the Mondstadt street patrol on SIREN
+
+Start at the stair-front station with the existing BetterGI RDP child in the game world and the host minimized. Run this command from the repository root.
+
+```powershell
+& 'C:/Programs/Python/Python311/python.exe' -B tools/bettergi-agent/run_rdp_patrol.py `
+    --circuits 24 --seconds 540 `
+    --steering-shadow=artifacts/agent/steering/gen-01.json `
+    --landmark-shadow=artifacts/agent/landmarks/gen-04.json
+```
+
+Each circuit visits the sidewalk junction, the west lamp, the junction again and the foot of the stairs. The launcher locates the authenticated child and starts one resident CUDA policy there. BetterGI steers from its native pose and accepts compatible Open P2P actions. The two optional observers score steering decisions and station images. The launcher checks the first GPU every two seconds, stops at 78 °C or on missing telemetry, and releases input when the target or deadline is reached. Each launch creates a separate evidence directory. See the [patrol measurements](../../Docs/research/BetterGI-Patrol-Learning-2026-10-29.md) and [training instructions](STEERING-HEAD.md).
+
+### Start an individual stream
+
 1. Use the approved **Start Genshin in RDP** launcher to start or reuse the minimized RDP host and child game runtime. The [RDP automation guide](../rdp-automation/README.md) covers the stable shortcuts, saved Windows sign-in, commands inside the child session and child-only hot replacement.
 2. Launch `stream_client.py --resident` inside that actual RDP Windows session, using the installed GPU Python. From the main desktop, use the guide's `rdp_control.py exec` command to dispatch it into RDP. Resident mode authenticates the child and starts its stream; it never falls back to console input. Both the server and client must enable input before a model action is submitted.
 

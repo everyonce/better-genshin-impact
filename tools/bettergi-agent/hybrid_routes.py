@@ -20,7 +20,7 @@ _POINTS = {
     STAIR_POST_ROUTE: ((-844.93, 2255.29), (-844.30, 2245.50)),
 }
 
-# Reuse the surveyed street endpoints. Entry is always at the stair front.
+# The fixed patrol starts at the stairs. Destination requests can start at any verified station here.
 PATROL_STATIONS = {'stair-front': _POINTS[STAIR_POST_ROUTE][0],
                    'sidewalk-junction': _POINTS[LAMPPOST_ROUTE][1], 'west-lamp': _POINTS[LAMPPOST_ROUTE][0]}
 PATROL_SEGMENTS = (('stair-front', 'sidewalk-junction'), ('sidewalk-junction', 'west-lamp'),
@@ -30,6 +30,34 @@ PATROL_SEGMENTS = (('stair-front', 'sidewalk-junction'), ('sidewalk-junction', '
 def patrol_leg(completed_legs):
     """Return the directed segment that follows this many verified arrivals."""
     return PATROL_SEGMENTS[completed_legs % len(PATROL_SEGMENTS)]
+
+
+def station_path(origin, destination):
+    """Return the next station(s) from a named origin without inventing an unsurveyed edge."""
+    if not isinstance(origin, str) or origin not in PATROL_STATIONS:
+        raise ValueError('Itinerary origin must be a surveyed station')
+    if not isinstance(destination, str) or destination not in PATROL_STATIONS or destination == origin:
+        raise ValueError('Each destination must require movement to a surveyed station')
+    if (origin, destination) in PATROL_SEGMENTS:
+        return (destination,)
+    # The two ends of this three-station street meet at one surveyed junction.
+    for start, via in PATROL_SEGMENTS:
+        if start == origin and (via, destination) in PATROL_SEGMENTS:
+            return via, destination
+    raise ValueError('No surveyed path between requested stations')
+
+
+def itinerary_legs(start, destinations):
+    """Preview the shortest surveyed path for each ordered request, with a one-based owner."""
+    if not isinstance(destinations, (tuple, list)) or not 1 <= len(destinations) <= 4:
+        raise ValueError('Expected one to four predeclared itinerary destinations')
+    legs = []
+    origin = start
+    for ordinal, destination in enumerate(destinations, 1):
+        for station in station_path(origin, destination):
+            legs.append((origin, station, ordinal))
+            origin = station
+    return tuple(legs)
 
 
 def route_points(route_id):

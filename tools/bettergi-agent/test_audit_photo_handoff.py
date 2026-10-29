@@ -6,7 +6,8 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from audit_photo_handoff import attribute_actions, bridge_clock, check_plan, check_release, lifecycle, terminal_release, validate_stop
+from audit_photo_handoff import (attribute_actions, bridge_clock, check_plan, check_release, directed_broker,
+                                directed_controls, lifecycle, terminal_release, validate_stop)
 
 
 class WarmAuditTests(unittest.TestCase):
@@ -119,6 +120,162 @@ class WarmAuditTests(unittest.TestCase):
         held['warmRelease']['policyHistoryReset']=False
         with self.assertRaises(ValueError):
             check_release(completed,end,parts)
+
+    def test_directed_job_cannot_substitute_session_process_plan_or_stop_target(self):
+        jid='a'*8+'-'+'b'*4+'-'+'c'*4+'-'+'d'*4+'-'+'e'*12
+        with tempfile.TemporaryDirectory() as d:
+            folder=Path(d)
+            jobs=folder/'jobs'
+            jobs.mkdir()
+            supervisor=dict(rootPid=100,childPid=200,wallTimeLimitSeconds=110)
+            run=dict(runId='run',endReason='userStop',windowsSessionId=3,
+                     segments=[dict(processId=200,instanceNonce='b'*32)])
+            argv=['--rdp-session-id','3','--hybrid-legs','2','--seconds','110',
+                  '--patrol-series-binding=100:'+'a'*32+':200:'+'b'*32+':90000000',
+                  '--warm-photo-plan='+str(folder/'photo-requests.json'),
+                  '--landmark-shadow='+str(folder/'head.json'),'--photo-qualification='+str(folder/'qual.json')]
+            result=dict(jobId=jid,remoteDesktop=True,success=True,timedOut=False,returnCode=0,windowsSessionId=3,
+                        runnerProcessId=300,startedAtUtc='2026-10-29T16:12:00Z',endedAtUtc='2026-10-29T16:12:40Z')
+            for mutation in ('none','mainDesktop','newProcess','wrongPlan','extraEdges','wrongStop','resultSubstitution'):
+                with self.subTest(mutation=mutation):
+                    args=list(argv)
+                    job=dict(jobId=jid,windowsSessionId=3,argv=args)
+                    b=dict(result)
+                    control=dict(runId='run',command='stop')
+                    if mutation=='mainDesktop':
+                        job['windowsSessionId']=1
+                    elif mutation=='newProcess':
+                        args[6]=args[6].replace('b'*32,'c'*32)
+                    elif mutation=='wrongPlan':
+                        args[7]+='.old'
+                    elif mutation=='extraEdges':
+                        args[3]='4'
+                    elif mutation=='wrongStop':
+                        control['runId']='other'
+                    elif mutation=='resultSubstitution':
+                        b['runnerProcessId']=50
+                    for path,doc in ((folder/'broker.json',b),(jobs/f'{jid}.result.json',result),
+                                     (jobs/f'{jid}.job.json',job),(folder/'patrol.json.control.json',control)):
+                        path.write_text(json.dumps(doc))
+                    def check():
+                        return directed_broker(folder,run,supervisor,[None,None],folder/'head.json',folder/'qual.json')
+                    if mutation=='none':
+                        self.assertEqual(check()[0]['runnerPid'],300)
+                    else:
+                        with self.assertRaises(ValueError):
+                            check()
+
+    def test_directed_budget_replay_binds_actual_mouse_keys_gpu_and_all_qpc_anchors(self):
+        a,b='stair-front','sidewalk-junction'
+        step=dict(keys=['W'],mouseDx=0,mouseDy=0,durationMs=100)
+        for mutation in ('none','wrongStep','unobservedClock','wrongOwner','earlyInput','nonGpuInput','overBudget'):
+            with self.subTest(mutation=mutation):
+                frames={i:self.frame(i*100) for i in (1,2,3)}
+                for i,f in frames.items():
+                    f.update(navigationPose=dict(frameId=i,state='valid',layerId='City_102',positionConfidence=1,
+                                                 yawConfidence=.8,yawDegrees=32),
+                             motionEvidence=dict(status='normal',spaceKeyMatched=False),inputAvailable=True,
+                             frameWorldReadiness=dict(ready=True,sourceFrameId=i,sourceFrame=f['sourceFrame']))
+                nav=dict(navigationMode='itinerary',completedLegs=0,segmentIndex=0,destinationOrdinal=1,
+                         requestedDestination=b,fromStation=a,toStation=b,target=b,step=step,owner='open-p2p',
+                         reason='modelRouteCompatible',pose=frames[2]['navigationPose'])
+                row=dict(frameId=2,hybridNavigation=nav,acceptance=dict(type='accepted',requestId='x'),
+                         rawPolicySteps=[step.copy()],steps=[step],startBeforeMs=350)
+                run=dict(mode='resident-rdp',observationProfile='p2p-native-hamming-192-v1',recordedBytes=123,
+                         recordingBudgetExhausted=False,segments=[dict(processId=200,exitCode=0)])
+                part=dict(recording=dict(recordedBytes=123),decisionHz=10,actionHoldMs=100,maxObservationAgeMs=150,
+                          firstInputDeadlinePolicy=dict(serverEnforcementRequested=True),effectiveInputKeys=list('WASD'))
+                actual=dict(index=0,**step)
+                start=dict(type='hybridStartVerified',frameId=1,samples=[dict(frameId=1)])
+                if mutation=='wrongStep':
+                    actual['mouseDx']=20
+                elif mutation=='unobservedClock':
+                    frames[3]['sourceFrame']['timestamp100ns']+=9000
+                elif mutation=='wrongOwner':
+                    nav['destinationOrdinal']=2
+                elif mutation=='earlyInput':
+                    start['frameId']=3
+                elif mutation=='nonGpuInput':
+                    row['rawPolicySteps'][0]['keys']=[]
+                elif mutation=='overBudget':
+                    part['maxObservationAgeMs']=500
+                def checked():
+                    return directed_controls(run,dict(wallTimeLimitSeconds=110,childPid=200),[part],[start],
+                            [row],[],dict(x=dict(appliedSteps=[actual])),frames,[(a,b,1,b)],self.clock)
+                if mutation=='none':
+                    self.assertEqual(checked()['sourceSpanSeconds'],.2)
+                else:
+                    with self.assertRaises(ValueError):
+                        checked()
+
+    def test_partial_second_destination_must_follow_first_goals_released_endpoint(self):
+        a,b,c='stair-front','sidewalk-junction','west-lamp'
+        specs=[dict(id=str(i)*32,name='go-'+s,destination=s,targets=[s]) for i,s in enumerate((b,c),1)]
+        clock=dict(sessionId='session',ownerEpoch='owner')
+        with tempfile.TemporaryDirectory() as d:
+            embed=Path(d)/'goal'
+            embed.write_bytes(b'ground')
+            digest=hashlib.sha256(embed.read_bytes()).hexdigest()
+            def marker(kind,index,fid,legs,**detail):
+                spec=specs[index]
+                return dict(type=kind,warmRequestId=spec['id'],ordinal=index+1,name=spec['name'],targets=spec['targets'],
+                        destination=spec['destination'],planSha256='plan',runId='run',sourceEpoch='epoch',
+                        goalEmbeddingSha256=digest,frameId=fid,completedLegs=legs,**clock,**detail)
+            release=dict(type='released',arrivalFrameId=8,readinessEpoch=2,captureEpoch='epoch',serverNowMs=500,
+                         readinessReason='client_release',readinessReady=False,policyHistoryReset=True)
+            held=dict(state='held',reason='hybridEndpoint',frameId=8,warmRelease=release,warmRequestId=specs[0]['id'])
+            part=dict(policyMetadata=dict(goal=dict(file=str(embed))),controlTransitions=[held])
+            native=dict(type='hybridStartVerified',frameId=3,sourceEpoch='epoch',
+                        samples=[dict(frameId=3)],warmRequestId=specs[0]['id'])
+            end=dict(type='hybridEndpointVerified',samples=[dict(frameId=11)],sourceEpoch='epoch',completedLegs=1,
+                     arrivalFrameId=8,releaseAtMs=500,releaseEpoch=2,warmRequestId=specs[0]['id'])
+            milestone=dict(type='hybridDestinationVerified',frameId=11,station=b,requestedDestination=b,
+                           warmRequestId=specs[0]['id'])
+            detail=dict(release=release,pendingActionIds=[],lastAcceptedRequestId='old-final')
+            valid=[native,marker('warmPhotoRequestStarted',0,3,0),end,milestone,
+                   marker('warmPhotoRequestCompleted',0,11,1,**detail),
+                   marker('warmPhotoHandoff',0,11,1,nextRequestId=specs[1]['id'],**detail),
+                   marker('warmPhotoRequestStarted',1,11,1,previousRequestId=specs[0]['id'])]
+            for mutation in ('none','unreleased','wrongGoal','earlySwitch','surplusEnd','phantomFinish','epochChange',
+                             'retry','confirmed','badRetryFrame','forgedConfirm'):
+                with self.subTest(mutation=mutation):
+                    rows=copy.deepcopy(valid)
+                    if mutation=='unreleased':
+                        rows[4]['pendingActionIds']=['active']
+                    elif mutation=='wrongGoal':
+                        rows[3]['requestedDestination']=c
+                    elif mutation=='earlySwitch':
+                        rows[5]['frameId']=10
+                    elif mutation=='surplusEnd':
+                        rows.append(end)
+                    elif mutation=='phantomFinish':
+                        rows.append(marker('warmPhotoRequestCompleted',1,19,2,**detail))
+                    elif mutation=='epochChange':
+                        rows[6]['sourceEpoch']='another capture'
+                    elif mutation in ('retry','confirmed','badRetryFrame','forgedConfirm'):
+                        confirm=mutation in ('confirmed','forgedConfirm')
+                        rows[2]['photoSurveyVisit']=dict(outcome='confirmationPending' if confirm else 'classificationMiss')
+                        rows.insert(4,dict(type='hybridDestinationPhotoRetry',initialEndpointFrameId=11,frameId=14,
+                                           samples=[dict(frameId=12),dict(frameId=13),dict(frameId=14)],
+                                           warmRequestId=specs[0]['id']))
+                        for m in rows[5:7]:
+                            m.update(initialEndpointFrameId=11,retryOrdinal=1)
+                            if confirm:
+                                m['firstConfirmedFrameId']=11
+                        for m in rows[5:]:
+                            m['frameId']=14
+                        if mutation=='badRetryFrame':
+                            rows[5]['frameId']=11
+                        elif mutation=='forgedConfirm':
+                            rows[5]['firstConfirmedFrameId']=12
+                    def check():
+                        return lifecycle(rows,[part],specs,'run','plan',clock,True,[(a,b,1,b),(b,c,2,c)],
+                                         mutation in ('confirmed','forgedConfirm'))
+                    if mutation in ('none','retry','confirmed'):
+                        self.assertEqual(check()[0],[11 if mutation=='none' else 14])
+                    else:
+                        with self.assertRaises(ValueError):
+                            check()
 
     def test_third_request_cannot_start_before_its_own_release_or_take_the_preceding_image(self):
         specs=self.specs+[dict(id='3'*32,name='junction',targets=['sidewalk-junction'],circuits=1)]

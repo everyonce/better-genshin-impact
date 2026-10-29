@@ -134,3 +134,43 @@ class WarmRequestsTests(unittest.TestCase):
         for suffix in ([],[binding,'--seconds=601'],[binding,'--max-observation-age-ms=151']):
             with self.subTest(suffix=suffix), redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
                 parse_arguments(cli+suffix)
+
+    def test_destination_needs_fresh_matching_photo_release_and_the_exact_number_of_edges(self):
+        """Visit the stairs from the lamp, then reverse to the junction without waiting for a circuit."""
+        requests = [dict(id='1'*32, name='stairs', destination='stair-front', targets=['stair-front']),
+                    dict(id='2'*32, name='back', destination='sidewalk-junction', targets=['sidewalk-junction'])]
+        self.file.write_text(json.dumps(dict(version=2, mode='destinations', start='west-lamp', requests=requests)))
+        self.factory.side_effect = [Mock(), Mock()]
+        def create(legs):
+            return WarmPhotoRequests(self.file, self.root/'directed', 'c'*64, self.file,
+                                     dict(sessionId='lease', ownerEpoch='owner'), 'run', legs)
+        with self.assertRaisesRegex(ValueError, 'leg limit'):
+            create(8)
+        warm = create(3)
+        self.assertEqual(self.factory.call_args.kwargs['start_station'], 'west-lamp')
+        with self.assertRaisesRegex(RuntimeError, 'pinned itinerary start'):
+            warm.after_native(dict(self.start, station='sidewalk-junction'))
+        warm.after_native(dict(self.start, station='west-lamp'))
+        self.assertEqual(warm.after_native(self.circuit), [])
+        for ordinal, (station, legs) in enumerate((('stair-front', 2), ('sidewalk-junction', 3)), 1):
+            fid = 100 * ordinal
+            endpoint = dict(self.endpoint, station=station, samples=[dict(frameId=fid)], arrivalFrameId=fid-6)
+            native = dict(type='hybridDestinationVerified', completedLegs=legs, frameId=fid, sourceEpoch='capture',
+                          destinationOrdinal=ordinal, requestedDestination=station, station=station)
+            warm.accepted('action', fid-20)
+            warm.receipt(dict(requestId='action', frameId=fid-20, appliedSteps=[{}]))
+            warm.released(fid-6, self.release)
+            warm.survey.snapshot.return_value = {'complete': True}
+            warm.survey.collected = {station: fid-1}
+            with self.assertRaisesRegex(RuntimeError, 'fresh photo'):
+                warm.after_native(native, endpoint)
+            warm.survey.collected[station] = fid
+            with self.assertRaisesRegex(RuntimeError, 'requested endpoint'):
+                warm.after_native(dict(native, completedLegs=legs+1), endpoint)
+            rows = warm.after_native(native, endpoint)
+            self.assertIsNone(self.factory.call_args.kwargs['start_station'])
+            self.assertEqual((rows[0]['destination'], rows[0]['completedLegs']), (station, legs))
+            self.assertNotIn('circuits', rows[0])
+            self.assertEqual(warm.finished, ordinal == 2)
+            with self.assertRaisesRegex(RuntimeError, 'frame boundary'):
+                warm.require_action_frame(fid)

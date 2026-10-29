@@ -12,26 +12,45 @@ import uuid
 
 import run_rdp_patrol as patrol
 from run_patrol_series import SeriesGuard
+from hybrid_routes import PATROL_STATIONS, itinerary_legs
 
 
 def options(argv=None):
     """Accept a bounded sequence of named goals and reuse the single-patrol bounds and local assets."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--request', action='append', required=True, nargs='+', metavar='VALUE',
-                        help='Use two to four times. Each request supplies NAME CIRCUITS STATION [STATION...]')
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument('--request', action='append', nargs='+', metavar='VALUE',
+                      help='Repeat two to four times with NAME CIRCUITS STATION [STATION...]')
+    mode.add_argument('--destination', action='append', nargs=2, metavar=('NAME', 'STATION'),
+                      help='Walk the shortest surveyed path and photograph STATION. Repeat two to four times.')
+    parser.add_argument('--start-station', choices=PATROL_STATIONS,
+                        help='Required native start location for destination requests (default stair-front)')
+    parser.add_argument('--confirm-first-arrival', action='store_true',
+                        help='Require two separate qualified views at the first requested destination')
     parser.add_argument('--stop-drill', action='store_true',
                         help='For a two-request plan, exercise the external STOP file after a dispatch in request two')
     args = patrol.options(argv, parser, warm=True)
     try:
         requests = []
-        for name, circuits, *targets in args.request:
-            requests.append(dict(id=uuid.uuid4().hex, name=name, targets=targets, circuits=int(circuits)))
-        args.plan = dict(version=1, requests=requests)
+        if args.destination:
+            for name, station in args.destination:
+                requests.append(dict(id=uuid.uuid4().hex, name=name, destination=station, targets=[station]))
+            args.plan = dict(version=2, mode='destinations', start=args.start_station or 'stair-front', requests=requests)
+            if args.confirm_first_arrival:
+                args.plan['confirmFirstArrival'] = True
+        else:
+            if args.start_station or args.confirm_first_arrival:
+                raise ValueError('--start-station and --confirm-first-arrival are only valid with --destination')
+            for name, circuits, *targets in args.request:
+                requests.append(dict(id=uuid.uuid4().hex, name=name, targets=targets, circuits=int(circuits)))
+            args.plan = dict(version=1, requests=requests)
         from warm_photo_requests import validate_plan
         validate_plan(args.plan)
         if args.stop_drill and len(requests) != 2:
             raise ValueError('The request-two stop drill requires exactly two requests')
-        args.circuits = sum(r['circuits'] for r in requests)
+        args.circuits = 0 if args.destination else sum(r['circuits'] for r in requests)
+        if args.destination:
+            args.destination_legs = len(itinerary_legs(args.plan['start'], [r['destination'] for r in requests]))
     except (TypeError, ValueError) as exc:
         parser.error(str(exc))
     return args

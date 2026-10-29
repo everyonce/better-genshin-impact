@@ -44,6 +44,6 @@ In a separate two-request test, the west-lamp objective completed one circuit. T
 
 The bridge returned its final software release **36.02 to 37.43 ms after the addressed write**. Its final ledger reported an empty held-key array, no active action and a successful return of the release call. This interval begins at control-file publication. An operator who creates a STOP file separately must also allow for the supervisor to observe it. The audit marked the stop verified and the interrupted request incomplete. Evidence is under `stop/warm-20261029T160332Z-17ff39777f3a`. Final discovery found the original minimized host and the original game-ready RDP child, with no active stream or task.
 
-## Next live experiment
+## Destination-directed follow-up
 
-Use the same surveyed street and make the requested station determine the next movement. From the stairs, request a west-lamp photo via the junction, then request a return to the stairs via the junction. Compare the actual ordered legs with that declared itinerary and preserve an independent original photo for each arrival. Continue to require a fresh release boundary, one warm lease, no action after its owner retires, a sub-second handoff and the existing source-age, thermal, recording and stop checks. A future itinerary needs its own movement audit before it can replace the fixed circuit.
+The next experiment used the same warm handoff to choose the next leg from the requested destination. It compared the fixed circuit and the new controller on the same three photos, then tested a fresh lease starting at the previous destination, a stationary second view and returns to an earlier station. See the [destination routing measurements and retained refusals](BetterGI-Destination-Requests-2026-10-29.md).

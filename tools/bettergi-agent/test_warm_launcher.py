@@ -81,6 +81,41 @@ class WarmLauncherTests(unittest.TestCase):
             with self.subTest(requests=requests), redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
                 warm.options(requests + photo_flags)
 
+    def test_destinations_reach_only_the_requested_stations_and_can_revisit(self):
+        """The actual resident receives the six-edge route including a reversal at the junction."""
+        flags = ['--destination', 'junction', 'sidewalk-junction', '--destination', 'stairs', 'stair-front',
+                 '--destination', 'lamp', 'west-lamp', '--destination', 'home', 'stair-front']
+        args = warm.options(flags + ['--confirm-first-arrival'] + self.flags[-4:])
+        self.assertEqual((args.plan['start'], args.destination_legs, args.circuits), ('stair-front', 6, 0))
+        self.assertIs(args.plan['confirmFirstArrival'], True)
+        with patch.object(patrol, 'run', side_effect=self.publish):
+            self.assertEqual(warm.run(args,self.folder)['status'], 'completed')
+        self.assertEqual(self.audit.call_args.kwargs['requests'], args.plan)
+        command = patrol.patrol_argv(args, 3, self.folder)
+        self.assertEqual(command[command.index('--hybrid-legs')+1], '6')
+        self.assertLessEqual(len(command)+1, 65)
+
+    def test_destination_stop_after_first_applied_receipt_of_the_second_request(self):
+        """Exercise the same external operator-stop protocol with a nondefault pinned start."""
+        args = warm.options(['--start-station', 'west-lamp', '--destination', 'first', 'sidewalk-junction',
+                             '--destination', 'second', 'stair-front', '--stop-drill'] + self.flags[-4:])
+        self.assertEqual((args.plan['start'], args.destination_legs), ('west-lamp', 2))
+        self.audit.return_value = {'passed':False, 'stopVerified':True}
+        with patch.object(patrol, 'run', side_effect=self.publish):
+            self.assertEqual(warm.run(args, self.folder)['status'], 'stopVerified')
+        self.assertTrue(self.audit.call_args.kwargs['allow_incomplete'])
+        self.assertEqual(json.loads((self.folder/'operator-stop.json').read_bytes())['requestId'],
+                         args.plan['requests'][1]['id'])
+
+    def test_mixed_modes_stationary_steps_and_conflicting_start_are_rejected(self):
+        """Reject a zero-edge request or ambiguous task before handing anything to RDP."""
+        fields = ['--destination', 'lamp', 'west-lamp', '--destination', 'stairs', 'stair-front']
+        for flags in (fields + ['--request', 'patrol', '1', 'stair-front'],
+                      fields + ['--start-station', 'west-lamp'], fields + ['--destination','home','stair-front'],
+                      self.flags[:-4] + ['--start-station', 'west-lamp'], self.flags[:-4] + ['--confirm-first-arrival']):
+            with self.subTest(flags=flags), redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                warm.options(flags + self.flags[-4:])
+
     def test_multiple_requests_verify_every_planned_boundary_in_one_lease(self):
         flags = self.flags + ['--request', 'junction', '1', 'sidewalk-junction',
                               '--request', 'return', '1', 'stair-front', 'west-lamp']

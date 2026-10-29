@@ -1232,7 +1232,7 @@ def observe_station(head, event, frame, pixels):
     """Join a visual hypothesis to the verified start or final stable arrival frame."""
     if event['type'] == 'hybridStartVerified':
         source_id = event['frameId']
-    elif event['type'] == 'hybridEndpointVerified':
+    elif event['type'] in ('hybridEndpointVerified', 'hybridDestinationPhotoRetry'):
         source_id = event['samples'][-1]['frameId']
     else:
         return
@@ -1397,12 +1397,23 @@ def run_episode(args, policy=None, control=None):
     hybrid = None
     terminal_climb_error = None
     try:
+        warm = None
+        itinerary = {}
+        if getattr(args, 'warm_photo_plan', None):
+            from warm_photo_requests import WarmPhotoRequests
+            warm = WarmPhotoRequests(args.warm_photo_plan, args.photo_directory, policy.landmark_shadow.checkpoint_id,
+                                     args.goal_embedding, bridge.hello, control.run_id, args.hybrid_legs)
+            if warm.identity['goalEmbeddingSha256'] != policy.warm_goal_sha:
+                raise RuntimeError('Warm goal embedding changed since model load')
+            if warm.destinations:
+                itinerary = dict(itinerary_start=warm.itinerary_start, itinerary_destinations=warm.destinations,
+                                 stationary_photo_retries=True)
         if getattr(args, 'navigation_guidance', False):
             from hybrid_navigation import HybridNavigation
             # Validate the advertised fixed geometry before enabling native recognition.
             route_id = getattr(args, 'hybrid_route', None) or COURTYARD_ROUTE
             candidate = HybridNavigation(bridge.hello.get('navigationGuidance') or {}, route_id,
-                                         remember_bypass=getattr(args, 'remember_hybrid_bypass', False))
+                                         remember_bypass=getattr(args, 'remember_hybrid_bypass', False), **itinerary)
             configured = bridge.request('enableNavigationGuidance')[0]
             if configured.get('type') != 'navigationGuidance' or configured.get('enabled') is not True:
                 raise RuntimeError('The bridge did not acknowledge native navigation guidance')
@@ -1427,13 +1438,6 @@ def run_episode(args, policy=None, control=None):
         report['configuredInputKeys'] = configured_keys
         report['effectiveInputKeys'] = sorted(effective_keys)
         photo_survey = None
-        warm = None
-        if getattr(args, 'warm_photo_plan', None):
-            from warm_photo_requests import WarmPhotoRequests
-            warm = WarmPhotoRequests(args.warm_photo_plan, args.photo_directory, policy.landmark_shadow.checkpoint_id,
-                                     args.goal_embedding, bridge.hello, control.run_id, args.hybrid_legs)
-            if warm.identity['goalEmbeddingSha256'] != policy.warm_goal_sha:
-                raise RuntimeError('Warm goal embedding changed since model load')
         if getattr(args, 'photo_station', None):
             from patrol_photo_survey import PatrolPhotoSurvey
             photo_survey = PatrolPhotoSurvey(Path(args.photo_directory), args.photo_station,
@@ -1670,7 +1674,6 @@ def run_episode(args, policy=None, control=None):
         """Keep sparse native verification and selected-controller attribution in each evidence segment."""
         if hybrid is None:
             return
-        report['hybridNavigation'] = hybrid.snapshot()
         endpoint = None
         for event in hybrid.drain_events():
             if warm:
@@ -1679,7 +1682,10 @@ def run_episode(args, policy=None, control=None):
                 observe_station(policy.landmark_shadow, event, station_frame, station_pixels)
                 survey = warm.survey if warm else photo_survey
                 if survey and 'visualStation' in event:
-                    visit = survey.observe(event, station_frame, station_pixels)
+                    retain_miss = bool(warm and warm.destinations and event.get('station') == warm.current['destination']
+                                       and event['type'] in ('hybridEndpointVerified', 'hybridDestinationPhotoRetry'))
+                    visit = survey.observe(event, station_frame, station_pixels, retain_miss=retain_miss,
+                                           confirm_only=retain_miss and warm.needs_first_view)
                     if visit is not None:
                         event['photoSurveyVisit'] = visit
                     report['stationPhotoSurvey'] = survey.snapshot()
@@ -1689,9 +1695,16 @@ def run_episode(args, policy=None, control=None):
             if warm:
                 if event['type'] == 'hybridEndpointVerified':
                     endpoint = event
-                for transition in warm.after_native(event, endpoint):
+                transitions = warm.after_native(event, endpoint, received_ns=(station_frame or {}).get('clientReceivedNs'))
+                if warm.destinations and event['type'] in ('hybridDestinationVerified', 'hybridDestinationPhotoRetry'):
+                    if warm.retry_endpoint is not None:
+                        hybrid.retry_destination_photo()
+                    else:
+                        hybrid.finish_destination_photo()
+                for transition in transitions:
                     report['hybridNavigationEvents'].append(transition)
                     recorder.event(transition)
+        report['hybridNavigation'] = hybrid.snapshot()
         if control:
             control.publish(hybridNavigation=report['hybridNavigation'])
 
@@ -1819,6 +1832,9 @@ def run_episode(args, policy=None, control=None):
             if command == 'stop':
                 report['endReason'] = 'userStop'
                 break
+            awaiting_photo = bool(warm and warm.retry_endpoint is not None)
+            if awaiting_photo:
+                warm.check_photo_deadline()
             if command == 'pause':
                 hold('goalChangeFailed' if control and control.goal_state()['goalError'] else
                      'controlError' if control_error else 'userPause')
@@ -1841,7 +1857,7 @@ def run_episode(args, policy=None, control=None):
                 refresh_started = time.perf_counter_ns()
                 poll_frame()
                 refresh_ms = (time.perf_counter_ns()-refresh_started)/1e6
-            if climb:
+            if climb and not awaiting_photo:
                 with receive_lock:
                     received_at, current_status = server_snapshot
                     item = latest.newer_than(None)
@@ -1899,13 +1915,17 @@ def run_episode(args, policy=None, control=None):
                 if hybrid_wait == 'releaseRequired':
                     hybrid.released(hold('hybridEndpoint', force_release=True))
                 elif hybrid_wait not in (None, 'endpointVerified', 'verifyingEndpoint', 'waitingAfterRelease',
-                                         'waitingAfterClimbResume', 'confirmingBypassReentry'):
+                                         'waitingAfterClimbResume', 'confirmingBypassReentry',
+                                         'waitingForDestinationPhoto', 'destinationPhotoRetry'):
                     # Stable-start sampling and duplicate source frames are waits,
                     # not interruptions of the navigation evidence being gathered.
                     hold('hybrid:' + hybrid_wait, preserve_navigation=hybrid_wait in (
                         'confirmingStart', 'duplicatePose', 'sourceNotIncreasing'))
                 publish_hybrid(frame, pixels)
-                if args.hybrid_legs is not None and hybrid.legs >= args.hybrid_legs:
+                if (args.hybrid_legs is not None and hybrid.legs >= args.hybrid_legs
+                        and not (warm and warm.retry_endpoint is not None)):
+                    if warm and not warm.finished:
+                        raise RuntimeError('Native route ended with an unfinished warm request')
                     report['endReason'] = 'hybridLegLimit'
                     break
                 if hybrid_wait is not None:
@@ -2093,6 +2113,8 @@ def run_episode(args, policy=None, control=None):
             if recorder:
                 recorder.event({'type': 'proposal', 'frameId': frame['frameId'],
                                 **({'warmRequestId': result['warmRequestId']} if warm else {}),
+                                **({key: result[key] for key in ('episodeStep', 'validHistoryFrames', 'cudaGraphActive')}
+                                   if warm and warm.destinations else {}),
                                 'proposalJournalVersion': 2,
                                 # Null explicitly means this policy has no acceptance feedback.
                                 'historyCommitted': result.get('historyCommitted'),

@@ -5,14 +5,17 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from PIL import Image
 
+from audit_photo_handoff import photo_proofs
 from hybrid_routes import PATROL_STATIONS, STREET_PATROL_ROUTE
 from landmark_recognizer import CLASSES, FEATURE, FORMAT, LandmarkRecognizer, signature
 from patrol_photo_survey import PatrolPhotoSurvey, require_qualified_observer, verify_photos
 from qualify_landmarks import qualify
 from test_qualify_landmarks import NEW, OLD, paired
+from warm_photo_requests import WarmPhotoRequests
 
 
 class PhotoSurveyTests(unittest.TestCase):
@@ -81,6 +84,105 @@ class PhotoSurveyTests(unittest.TestCase):
         m['journal'][2]['pngSha256']=hashlib.sha256(photo.read_bytes()).hexdigest()
         with self.assertRaisesRegex(ValueError,'pixels or frozen prediction'):
             verify_photos(folder,m,targets,sources,poses,self.head)
+
+    def test_starting_station_is_bound_to_the_plan_and_exact_source(self):
+        """The same qualified west-lamp arrival is valid only under a matching start declaration."""
+        station = 'west-lamp'
+        event, frame, rgb, _, _ = self.visit(30, station, station)
+        event.update(type='hybridStartVerified', frameId=30)
+        for label, kwargs, expected in (('declared', dict(start_station=station), 'unrequested'),
+                                        ('fixed', {}, 'sourceMismatch'),
+                                        ('other', dict(start_station='sidewalk-junction'), 'sourceMismatch'),
+                                        ('handoff', dict(start_station=None), 'sourceMismatch')):
+            with self.subTest(label=label):
+                task = PatrolPhotoSurvey(self.root/label, ['stair-front'], self.head.checkpoint_id, **kwargs)
+                self.assertEqual(task.observe(event, frame, rgb)['outcome'], expected)
+        task = PatrolPhotoSurvey(self.root/'stale', ['stair-front'], self.head.checkpoint_id, start_station=station)
+        wrong = dict(frame, frameWorldReadiness=dict(frame['frameWorldReadiness'], sourceFrameId=27))
+        self.assertEqual(task.observe(event, wrong, rgb)['outcome'], 'sourceMismatch')
+
+    def test_stationary_attempts_preserve_original_pixels_release_and_limits(self):
+        """The real collector and warm lifecycle can advance only on the required number of native RGB matches."""
+        stairs, junction = 'stair-front', 'sidewalk-junction'
+        visits = ((False, [stairs,junction], ['classificationMiss','collected']),
+                  (True, [junction,junction], ['confirmationPending','collected']),
+                  (True, [stairs,junction,junction], ['classificationMiss','confirmationPending','collected']),
+                  (False, [stairs]*4, ['classificationMiss']*4))
+        for case, (confirm, predictions, outcomes) in enumerate(visits):
+            requests = [dict(id='a'*32, name='east', destination=junction, targets=[junction]),
+                        dict(id='b'*32, name='home', destination=stairs, targets=[stairs])]
+            plan = self.root/f'plan-{case}.json'
+            plan.write_text(json.dumps(dict(version=2, mode='destinations', start=stairs,
+                                            confirmFirstArrival=confirm, requests=requests)))
+            root = self.root/f'lease-{case}'
+            owner = WarmPhotoRequests(plan, root, self.head.checkpoint_id, self.root/'head.json',
+                                      dict(sessionId='lease', ownerEpoch='owner'), 'run', 2)
+            owner.after_native(dict(type='hybridStartVerified', frameId=1, sourceEpoch='wgc', station=stairs))
+            owner.accepted('moved', 3)
+            owner.receipt(dict(requestId='moved', frameId=3, appliedSteps=[{}]))
+            owner.released(8, dict(type='released', serverNowMs=900, worldReadiness=dict(epoch=9,
+                           reason='client_release',ready=False,sourceFrame=dict(captureEpoch='wgc'))))
+            for attempt, (predicted, expected) in enumerate(zip(predictions, outcomes)):
+                fid = 12 + 3*attempt
+                event, frame, pixels, _, _ = self.visit(fid, junction, predicted)
+                event.update(completedLegs=1, destinationOrdinal=1, requestedDestination=junction,
+                             frameId=fid, arrivalFrameId=8, releaseAtMs=900, releaseEpoch=9)
+                if attempt:
+                    event.update(type='hybridDestinationPhotoRetry', initialEndpointFrameId=12, retryOrdinal=attempt)
+                visit = owner.survey.observe(event, frame, pixels, retain_miss=True, confirm_only=owner.needs_first_view)
+                event['photoSurveyVisit'] = visit
+                self.assertEqual(visit['outcome'], expected)
+                if expected != 'collected':
+                    filename = root/requests[0]['id']/visit['retryEvidenceFile']
+                    self.assertEqual(hashlib.sha256(filename.read_bytes()).hexdigest(), visit['retryEvidencePngSha256'])
+                    with Image.open(filename) as image:
+                        self.assertEqual(image.tobytes(), pixels)
+                marker = event if attempt else dict(event, type='hybridDestinationVerified')
+                if attempt == 3:
+                    with self.assertRaisesRegex(RuntimeError,'three stationary retries'):
+                        owner.after_native(marker)
+                    self.assertEqual(owner.index, 0)
+                else:
+                    rows = owner.after_native(marker, event if not attempt else None)
+                    if expected == 'collected':
+                        self.assertEqual((rows[0]['frameId'], rows[0]['initialEndpointFrameId'],
+                                          rows[0]['release']['arrivalFrameId']), (fid,12,8))
+                        if confirm:
+                            self.assertEqual(rows[0]['firstConfirmedFrameId'], fid-3)
+                        self.assertEqual(owner.index, 1)
+                    else:
+                        self.assertEqual(rows, [])
+                        with self.assertRaisesRegex(RuntimeError,'frame boundary'):
+                            owner.require_action_frame(fid+1)
+                        with patch('warm_photo_requests.time.perf_counter_ns', return_value=owner.retry_deadline_ns + 1):
+                            with self.assertRaisesRegex(RuntimeError,'1500 ms'):
+                                owner.check_photo_deadline()
+
+    def test_destination_photo_requires_own_exact_completion_and_fresh_revisit(self):
+        b,c='sidewalk-junction','west-lamp'
+        specs=[dict(id=str(n)*32,targets=[s],destination=s) for n,s in enumerate((b,c,b),1)]
+        events,sources=[],[]
+        for i,(fid,station) in enumerate(((10,b),(20,c),(30,b))):
+            spec=specs[i]
+            task=PatrolPhotoSurvey(self.root/spec['id'],spec['targets'],self.head.checkpoint_id)
+            e,f,rgb,s,_=self.visit(fid,station,station)
+            e.update(warmRequestId=spec['id'],photoSurveyVisit=task.observe(e,f,rgb))
+            events.append(e)
+            sources.append(dict(s,decoded=station))
+        report=dict(landmarkShadow=dict(sources=sources))
+        done=[dict(frameId=n) for n in (10,20,30)]
+        def check(plan,completed):
+            return photo_proofs(self.root,report,events,plan,[10,20][:len(plan)-1],self.head,completed)
+        self.assertEqual([p['frameId'] for p in check(specs[:2],done[:2])],[10,20])
+        with self.assertRaisesRegex(ValueError,'reused an earlier photo'):
+            check(specs,done)
+        with self.assertRaisesRegex(ValueError,'Photo source differs'):
+            check(specs[:2],[done[0],dict(frameId=10)])
+        with self.assertRaisesRegex(ValueError,'Unfinished request already claims'):
+            check(specs[:2],done[:1])
+        events[1]['warmRequestId']=specs[0]['id']
+        with self.assertRaisesRegex(ValueError,'journal crossed'):
+            check(specs[:2],done[:2])
 
     def test_missing_or_wrong_source_checkpoint_and_live_digest_cannot_yield_a_photo(self):
         for i,issue in enumerate(('frame','hash','wrongHead','wrongGate','wrongPose','wrongBytes','noVisual')):

@@ -8,6 +8,7 @@ import re
 import statistics
 
 from audit_hybrid_run import require
+from audit_destination_retries import RETRY
 from hybrid_routes import STREET_PATROL_ROUTE
 from landmark_recognizer import CLASSES, LandmarkRecognizer, decode
 from observation_timing import observation_timestamp
@@ -58,7 +59,7 @@ def audit_landmarks(run, parts, events, frames, recordings, epoch, checkpoint, f
         require(train['runId'] != run['runId'] and train['lease'] != [hello['sessionId'],hello['ownerEpoch']]
                 and (train['captureEpoch'] != epoch or max(ticks) < train['sourceInterval100ns'][0]
                      or min(ticks) > train['sourceInterval100ns'][1]), 'Landmark evaluation overlaps its training evidence')
-    kinds = ('hybridStartVerified','hybridEndpointVerified')
+    kinds = ('hybridStartVerified','hybridEndpointVerified',RETRY)
     journal = []
     for entry in run['segments']:
         with (Path(recordings)/f"{entry['number']:05d}"/'events.jsonl').open(encoding='utf-8') as stream:

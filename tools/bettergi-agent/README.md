@@ -35,6 +35,25 @@ For separate named photo requests on one model load, use the warm launcher on SI
 
 Declare two to four requests ahead of time. Use different names and distinct sets of target stations, up to 32 circuits in total. At a verified return to the stairs, the previous request must have all its photos, an acknowledged release and terminal receipts for every accepted action. The next request takes fresh observations and starts a fresh policy history on the loaded walking model. Each request has a dedicated photo directory. Create the printed `STOP` file to cancel. To exercise the stop path, add `--stop-drill` to a separate two-request launch. The supervisor waits for an applied input from request two, creates the STOP file, and audits the addressed cancellation. The [warm handoff report](../../Docs/research/BetterGI-Warm-Requests-2026-10-29.md) gives the timing and evidence requirements.
 
+### Walk to requested destinations
+
+On SIREN, a destination request selects the next surveyed leg. This example starts at the stairs, walks to the junction, turns directly back to the stairs, then reaches the west lamp via the junction. BetterGI verifies the character's pose and releases input at each intermediate station. Only a fresh, independently verified photo at the requested destination finishes that request.
+
+```powershell
+& 'C:/Programs/Python/Python311/python.exe' -B tools/bettergi-agent/run_warm_photo_requests.py `
+    --destination junction-check sidewalk-junction `
+    --destination stairs-check stair-front `
+    --destination lamp-check west-lamp `
+    --seconds 110 --evidence-root artifacts/live/destination-requests `
+    --steering-shadow=artifacts/agent/steering/gen-01.json `
+    --landmark-shadow=artifacts/agent/landmarks/gen-04.json `
+    --photo-qualification=artifacts/agent/landmarks/qualify-g4-fresh-10.json
+```
+
+Declare two to four named requests. To admit a new run at a previous destination, pass `--start-station west-lamp`, `sidewalk-junction`, or `stair-front` (the default). The controller requires three fresh, stable native pose samples at that station before moving. Each request must involve at least one surveyed leg. A later request may return to a station and must collect its own photo. The same `STOP` file and two-request `--stop-drill` apply.
+
+When the image classifier disagrees at a requested destination, the controller holds the existing input release and checks up to three new sets of stable frames within 1.5 seconds. An unresolved photo ends the run. To exercise this hold deliberately, add `--confirm-first-arrival` to require two matching views at the first destination. The photo journal records whether a second view was requested or the classifier actually missed.
+
 ### Separate resident batches
 
 On SIREN the series launcher can repeat a task on the same minimized RDP connection. This example requests one source photo at each named station in each batch. The collector saves the original RGB image when the native station, verified frame and qualified image prediction agree. At the end of the batch a separate verifier decodes each saved PNG, checks its raw pixels against the live hash and classifies it again. A failed objective ends the series.

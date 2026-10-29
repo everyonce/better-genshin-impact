@@ -10,7 +10,7 @@ import math
 from observation_timing import observation_timestamp
 from hybrid_bypass import HybridBypass
 from hybrid_routes import (COURTYARD_ROUTE, PATROL_SEGMENTS, PATROL_STATIONS, STREET_PATROL_ROUTE,
-                           camera_correction, patrol_leg, route_heading, route_points)
+                           camera_correction, itinerary_legs, patrol_leg, route_heading, route_points, station_path)
 
 
 PROFILE = COURTYARD_ROUTE
@@ -25,7 +25,8 @@ def yaw_error(a, b):
 class HybridNavigation:
     """Serial planner; the existing bridge remains the sole input/freshness owner."""
 
-    def __init__(self, capability, route_id=COURTYARD_ROUTE, remember_bypass=False):
+    def __init__(self, capability, route_id=COURTYARD_ROUTE, remember_bypass=False, *,
+                 itinerary_destinations=None, itinerary_start='stair-front', stationary_photo_retries=False):
         expected = dict(version=1, profileId=PROFILE, sameFrame=True, readOnly=True)
         if any(capability.get(k) != v for k, v in expected.items()):
             raise ValueError('The bridge does not advertise same-frame hybrid navigation')
@@ -62,16 +63,35 @@ class HybridNavigation:
         self.failure = None
         self.segment = {}
         self.arrival_frame = self.arrival_epoch = self.release_epoch = None
+        self.destinations = ()
+        self.completed_destinations = 0
+        self.stationary_photo_retries = stationary_photo_retries
+        self.photo_hold = None
+        self.photo_resume_after = None
+        if stationary_photo_retries and itinerary_destinations is None:
+            raise ValueError('Stationary destination photos require a directed itinerary')
+        if itinerary_destinations is not None:
+            if route_id != STREET_PATROL_ROUTE or remember_bypass:
+                raise ValueError('An itinerary requires the surveyed street route')
+            # Validate all requests before admitting any input. Compute each live hop from its proven origin below.
+            itinerary_legs(itinerary_start, itinerary_destinations)
+            self.destinations = tuple(itinerary_destinations)
         if route_id == STREET_PATROL_ROUTE:
-            self._set_patrol_leg()
+            self._set_patrol_leg(itinerary_start)
 
-    def _set_patrol_leg(self):
+    def _set_patrol_leg(self, origin):
         """Update all corridor and steering geometry together, after the preceding station verifies."""
-        origin, destination = patrol_leg(self.legs)
+        if self.destinations:
+            requested = self.destinations[self.completed_destinations]
+            destination = station_path(origin, requested)[0]
+            metadata = dict(navigationMode='itinerary', segmentIndex=self.legs,
+                            destinationOrdinal=self.completed_destinations + 1, requestedDestination=requested)
+        else:
+            origin, destination = patrol_leg(self.legs)
+            metadata = dict(segmentIndex=self.legs % len(PATROL_SEGMENTS), circuit=self.legs // len(PATROL_SEGMENTS) + 1)
         self.start, self.end = PATROL_STATIONS[origin], PATROL_STATIONS[destination]
         self.target_name, self.target = destination, self.end
-        self.segment = dict(fromStation=origin, toStation=destination, segmentIndex=self.legs % len(PATROL_SEGMENTS),
-                            circuit=self.legs // len(PATROL_SEGMENTS) + 1)
+        self.segment = dict(fromStation=origin, toStation=destination, **metadata)
 
     def snapshot(self):
         """Return scalar progress without exposing mutable internal collections."""
@@ -80,7 +100,9 @@ class HybridNavigation:
                     completedLegs=self.legs, selections=dict(self.selections),
                     recoveryAttempts=self.total_recoveries, failure=self.failure,
                     lastPose=copy.deepcopy(self.last_pose))
-        if self.segment:
+        if self.destinations:
+            result.update(completedDestinations=self.completed_destinations, **self.segment)
+        elif self.segment:
             result.update(completedCircuits=self.legs // len(PATROL_SEGMENTS), **self.segment)
         return result
 
@@ -88,6 +110,54 @@ class HybridNavigation:
         """Transfer sparse verified endpoint/recovery events to the evidence writer."""
         events, self.events = self.events, []
         return events
+
+    def retry_destination_photo(self):
+        """After a classified miss, admit one more read-only attempt within the original release."""
+        if self.phase != 'destinationPhotoDecision' or self.photo_hold is None:
+            self._fail('destination_photo_result_unbound')
+        if self.photo_hold['retryOrdinal'] >= 3:
+            self._fail('destination_photo_attempts_exhausted')
+        self.photo_hold['retryOrdinal'] += 1
+        self.phase = 'awaitingDestinationPhoto'
+
+    def finish_destination_photo(self):
+        """Let the warm owner advance only after the original or retried photo qualifies."""
+        if self.phase != 'destinationPhotoDecision' or self.photo_hold is None:
+            self._fail('destination_photo_result_unbound')
+        self.photo_hold = None
+        self.photo_resume_after = self.last_frame_id
+        if self.completed_destinations == len(self.destinations):
+            self.phase = 'complete'
+        else:
+            self._set_patrol_leg(self.target_name)
+            self.phase = 'walking'
+
+    def _observe_destination_photo(self, frame, pose, at, distance):
+        """Stay within the released endpoint across every fresh sample, including earlier attempts."""
+        hold, source = self.photo_hold, frame['sourceFrame']
+        gate = frame.get('frameWorldReadiness') or {}
+        stamp = source.get('timestamp100ns')
+        if (self.phase != 'awaitingDestinationPhoto' or type(stamp) is not int or stamp <= hold['lastStamp']
+                or type(gate.get('epoch')) is not int or gate['epoch'] != self.release_epoch
+                or gate.get('ready') is not True or gate.get('sourceFrameId') != pose['frameId']
+                or gate.get('sourceFrame') != source):
+            self._fail('destination_photo_source_or_release_changed')
+        hold['lastStamp'] = stamp
+        samples = hold['samples']
+        if distance > 2 or any(math.hypot(pose['x'] - old['x'], pose['y'] - old['y']) > 1.5
+                               or yaw_error(pose['yawDegrees'], old['yawDegrees']) > 3 for old in samples):
+            self._fail('destination_photo_pose_moved')
+        if at - samples[-1]['atMs'] < 80:
+            return 'waitingForDestinationPhoto'
+        samples.append(dict(frameId=pose['frameId'], atMs=at, x=pose['x'], y=pose['y'], yawDegrees=pose['yawDegrees']))
+        if len(samples) % 3:
+            return 'waitingForDestinationPhoto'
+        self.events.append(dict(type='hybridDestinationPhotoRetry', routeId=self.route_id, sourceEpoch=self.source_epoch,
+            station=self.target_name, completedLegs=self.legs, releaseEpoch=self.release_epoch, releaseAtMs=self.release_at,
+            arrivalFrameId=self.arrival_frame, initialEndpointFrameId=samples[2]['frameId'], retryOrdinal=hold['retryOrdinal'],
+            atMs=at, frameId=pose['frameId'], samples=copy.deepcopy(samples[-3:]), **self.segment))
+        self.phase = 'destinationPhotoDecision'
+        return 'destinationPhotoRetry'
 
     def recovery_side(self, target, attempt):
         """Use the open pavement on surveyed street routes in both directions."""
@@ -107,6 +177,8 @@ class HybridNavigation:
 
     def interrupt(self, reason):
         """Require fresh confirmation after interruption without inventing completed legs."""
+        if self.photo_hold is not None:
+            self._fail('destination_photo_interrupted')
         self.samples.clear()
         self.stall_samples.clear()
         if self.bypass and not (reason == 'hybridStalePose' and self.bypass.suspend_stale(self)):
@@ -282,6 +354,13 @@ class HybridNavigation:
         """Validate the exact source pose and advance read-only endpoint verification."""
         if self.failure:
             self._fail(self.failure)
+        if self.phase == 'complete':
+            return 'itineraryComplete'
+        if self.photo_hold is not None:
+            if observation_timestamp(frame) - self.photo_hold['samples'][2]['atMs'] > 1500:
+                self._fail('destination_photo_deadline')
+            if not self.latest_pose_usable(frame):
+                self._fail('destination_photo_pose_unavailable')
         pose = frame.get('navigationPose') or {}
         if pose.get('state') != 'valid' or pose.get('frameId') != frame.get('frameId'):
             return 'poseUnavailable'
@@ -291,6 +370,8 @@ class HybridNavigation:
             self._fail('invalid_pose_numbers')
         if (pose.get('layerId') != 'City_102' or not .99 <= pose['positionConfidence'] <= 1
                 or not .2 <= pose['yawConfidence'] <= 1 or not 0 <= pose['yawDegrees'] < 360):
+            if self.photo_hold is not None:
+                self._fail('destination_photo_pose_unqualified')
             return 'poseUnqualified'
         motion = frame.get('motionEvidence') or {}
         if motion.get('status') != 'normal' or motion.get('spaceKeyMatched') is not False:
@@ -311,9 +392,11 @@ class HybridNavigation:
             if (frame.get('frameWorldReadiness') or {}).get('epoch') != exit_proof['resumeWorldEpoch']:
                 self._fail('climb_resume_world_epoch_changed')
         if self.last_frame_id is not None and pose['frameId'] <= self.last_frame_id:
-            return 'duplicatePose'
+            return 'waitingForDestinationPhoto' if self.photo_hold is not None else 'duplicatePose'
         self.last_frame_id = pose['frameId']
         if self.last_at is not None and at <= self.last_at:
+            if self.photo_hold is not None:
+                self._fail('destination_photo_source_not_increasing')
             if self.bypass:
                 self.bypass.invalidate(self, 'sourceNotIncreasing')
             return 'sourceNotIncreasing'
@@ -368,6 +451,8 @@ class HybridNavigation:
             self.pending_climb_exit = None
             return None
         distance = math.hypot(x - self.target[0], y - self.target[1])
+        if self.photo_hold is not None:
+            return self._observe_destination_photo(frame, pose, at, distance)
         if self.phase == 'verifying':
             if at < self.release_at + 80:
                 return 'waitingAfterRelease'
@@ -388,18 +473,33 @@ class HybridNavigation:
                 if self.bypass.release_epoch is not None:
                     self.events[-1]['releaseEpoch'] = self.bypass.release_epoch
                 self.bypass.endpoint(self)
+            finished = False
             if self.segment:
                 self.events[-1].update(routeId=self.route_id, station=self.target_name, arrivalFrameId=self.arrival_frame,
                                        releaseEpoch=self.release_epoch, **self.segment)
-                if self.legs % len(PATROL_SEGMENTS) == 0:
+                if self.destinations:
+                    if self.target_name == self.segment['requestedDestination']:
+                        self.completed_destinations += 1
+                        self.events.append(dict(type='hybridDestinationVerified', routeId=self.route_id, sourceEpoch=epoch,
+                            atMs=at, frameId=pose['frameId'], station=self.target_name, completedLegs=self.legs, **self.segment))
+                        if self.stationary_photo_retries:
+                            stamp = source.get('timestamp100ns')
+                            if type(stamp) is not int:
+                                self._fail('destination_photo_source_missing')
+                            self.photo_hold = dict(retryOrdinal=0, lastStamp=stamp, samples=copy.deepcopy(self.samples))
+                    finished = self.completed_destinations == len(self.destinations)
+                elif self.legs % len(PATROL_SEGMENTS) == 0:
                     self.events.append(dict(type='hybridCircuitVerified', routeId=self.route_id, sourceEpoch=epoch,
                         atMs=at, frameId=pose['frameId'], station=self.target_name, completedLegs=self.legs,
                         completedCircuits=self.legs // len(PATROL_SEGMENTS)))
-                self._set_patrol_leg()
+                if not finished and self.photo_hold is None:
+                    self._set_patrol_leg(self.target_name)
             else:
                 self.target_name = 'start' if self.target_name == 'end' else 'end'
                 self.target = self.start if self.target_name == 'start' else self.end
-            self.phase, self.leg_started = 'walking', at
+            self.phase, self.leg_started = ('complete' if finished else 'walking'), at
+            if self.photo_hold is not None:
+                self.phase = 'destinationPhotoDecision'
             self.samples.clear()
             self.stall_samples.clear()
             self.recovery_attempts = 0
@@ -415,6 +515,11 @@ class HybridNavigation:
 
     def choose(self, frame, proposal):
         """Accept route-compatible model walking; otherwise use measured native correction."""
+        if self.destinations and self.phase not in ('walking', 'recovering'):
+            raise RuntimeError('Itinerary input requires a verified active leg')
+        if self.photo_resume_after is not None and (frame['frameId'] <= self.photo_resume_after
+                                                     or frame['frameId'] != self.last_pose['frameId']):
+            raise RuntimeError('Input after a station photo requires a newer navigable frame')
         if self.bypass and self.bypass.suspension:
             raise RuntimeError('A suspended bypass cannot select an input before re-entry confirmation')
         pose, at = self.last_pose, self.last_at

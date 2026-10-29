@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 import time
 
-from hybrid_routes import PATROL_STATIONS, STREET_PATROL_ROUTE, patrol_leg, route_points
+from hybrid_routes import PATROL_SEGMENTS, PATROL_STATIONS, STREET_PATROL_ROUTE, patrol_leg, route_points
 from steering_head import CLASSES, FEATURES, FORMAT, SteeringHead, features, finite
 
 
@@ -49,18 +49,28 @@ def applied_label(decision, frame, terminal):
     return None
 
 
-def steering_point(route, selection):
-    """Recover only the waypoint or fixed directed leg identified on this decision."""
+def steering_point(route, selection, edges=None):
+    """Recover the shadow target from evidence. Directed hops require the independently declared plan."""
+    target = selection.get('target')
+    legs = selection.get('completedLegs')
+    origin = selection.get('fromStation')
+    if edges is not None or selection.get('navigationMode') == 'itinerary':
+        if (edges is None or route != STREET_PATROL_ROUTE or selection.get('navigationMode') != 'itinerary'
+                or type(legs) is not int or not 0 <= legs < len(edges)
+                or type(selection.get('segmentIndex')) is not int or selection['segmentIndex'] != legs
+                or type(selection.get('destinationOrdinal')) is not int or selection.get('toStation') != target
+                or (origin, target, selection['destinationOrdinal'], selection.get('requestedDestination')) != edges[legs]
+                or (origin, target) not in PATROL_SEGMENTS or selection.get('steeringPoint') is not None
+                or selection.get('bypassPointIndex') is not None):
+            return None
+        return PATROL_STATIONS[target]
     p = selection.get('steeringPoint')
     if p:
         return p['x'], p['y']
     if selection.get('bypassPointIndex') is not None:
         return None
-    target = selection.get('target')
     if route == STREET_PATROL_ROUTE:
-        legs = selection.get('completedLegs')
-        if (type(legs) is int and legs >= 0 and selection.get('toStation') == target
-                and (selection.get('fromStation'), target) == patrol_leg(legs)):
+        if type(legs) is int and legs >= 0 and selection.get('toStation') == target and (origin, target) == patrol_leg(legs):
             return PATROL_STATIONS[target]
     elif target in ('start', 'end'):
         return route_points(route)[int(target == 'end')]

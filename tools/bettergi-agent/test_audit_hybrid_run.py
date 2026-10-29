@@ -46,9 +46,9 @@ class HybridAuditTests(unittest.TestCase):
                      minimum_obstacle_passages=minimum_obstacle_passages, **minimums)
 
     @staticmethod
-    def patrol_run(run, part, frames, legs=8):
+    def patrol_run(run, part, frames, legs=8, itinerary=None):
         """Make independent source frames, applied events and release barriers for two circuits."""
-        route = ('stair-front','sidewalk-junction','west-lamp','sidewalk-junction','stair-front')
+        route = itinerary[0] if itinerary else ('stair-front','sidewalk-junction','west-lamp','sidewalk-junction','stair-front')
         epoch = 1
         frames.clear()
         def sample(at, point, heading=0):
@@ -60,6 +60,10 @@ class HybridAuditTests(unittest.TestCase):
                                frameWorldReadiness=dict(ready=True, epoch=epoch)))
             return s
         def leg_info(i):
+            if itinerary:
+                ordinal, goal = itinerary[1][i]
+                return dict(fromStation=route[i],toStation=route[i+1],segmentIndex=i,destinationOrdinal=ordinal,
+                            requestedDestination=goal,navigationMode='itinerary')
             return dict(fromStation=route[i%4], toStation=route[i%4+1], segmentIndex=i%4, circuit=i//4+1)
         admission = [sample(at, PATROL_STATIONS[route[0]]) for at in (100,200,300)]
         events = [dict(type='hybridStartVerified', target=route[1], station=route[0], routeId=STREET_PATROL_ROUTE,
@@ -89,7 +93,11 @@ class HybridAuditTests(unittest.TestCase):
                                sourceFrameId=stable[-1]['frameId'], arrivalFrameId=arrival['frameId'], releaseAtMs=release,
                                samples=stable, legElapsedMs=stable[-1]['atMs']-began, completedLegs=i+1))
             began = stable[-1]['atMs']
-            if (i+1)%4 == 0:
+            if itinerary and leg['requestedDestination'] == leg['toStation']:
+                events.append(dict(type='hybridDestinationVerified',routeId=STREET_PATROL_ROUTE, sourceEpoch='epoch',
+                                   frameId=stable[-1]['frameId'], atMs=began, station=leg['toStation'],
+                                   completedLegs=i+1,**leg))
+            elif not itinerary and (i+1)%4 == 0:
                 events.append(dict(type='hybridCircuitVerified', routeId=STREET_PATROL_ROUTE, sourceEpoch='epoch',
                                    frameId=stable[-1]['frameId'], atMs=began, station=route[0],
                                    completedLegs=i+1, completedCircuits=(i+1)//4))
@@ -98,6 +106,57 @@ class HybridAuditTests(unittest.TestCase):
                     serverDroppedReceipts=0, hybridNavigationEvents=events, receipts=receipts,
                     decisions=decisions, controlTransitions=transitions)
         run.update(runId='gpu-run', acceptedInputActions=legs)
+        if itinerary:
+            part['hybridNavigation'].pop('completedCircuits')
+            part['hybridNavigation'].update(navigationMode='itinerary',phase='complete',
+                    completedDestinations=sum(e['type'] == 'hybridDestinationVerified' for e in events))
+            run['endReason'] = 'hybridLegLimit'
+
+    def test_directed_navigation_forks_and_rejects_filler_or_stationary_transit(self):
+        a,b,c = 'stair-front','sidewalk-junction','west-lamp'
+        # Begin at B, turn toward A, and later take B's other exit toward C.
+        plan = dict(version=2,mode='destinations',start=b,requests=[dict(destination=s,targets=[s]) for s in (a,c,b)])
+        itinerary = ([b,a,b,c,b],[(1,a),(2,c),(2,c),(3,b)])
+        for change in ('none','prefix','replaceWithCircuit','switchLabel','wrongStart','missMarker','surplusEdge',
+                       'falseTransit','backdateArrival','wrongOwner','reuseBoundary','stopAfterComplete','partialClaim'):
+            def setup(run,part,frames):
+                self.patrol_run(run,part,frames,2 if change in ('prefix','partialClaim') else 4,itinerary)
+                events=part['hybridNavigationEvents']
+                ends=[e for e in events if e['type']=='hybridEndpointVerified']
+                destination=next(e for e in events if e['type']=='hybridDestinationVerified')
+                if change=='replaceWithCircuit':
+                    self.patrol_run(run,part,frames,4)
+                elif change=='switchLabel':
+                    ends[1]['requestedDestination']=b
+                elif change=='wrongStart':
+                    events[0]['station']=c
+                elif change=='missMarker':
+                    events.remove(destination)
+                elif change=='surplusEdge':
+                    events.append(ends[-1])
+                elif change=='falseTransit':
+                    row=part['decisions'][0]
+                    first=frames[row['frameId']-1]['navigationPose']
+                    frames[row['frameId']]['navigationPose'].update(x=first['x'],y=first['y'])
+                elif change=='backdateArrival':
+                    ends[0]['releaseAtMs']=ends[0]['samples'][0]['atMs']
+                elif change=='wrongOwner':
+                    part['decisions'][1]['hybridNavigation']['destinationOrdinal']=1
+                elif change=='reuseBoundary':
+                    destination['frameId']-=1
+                elif change in ('prefix','stopAfterComplete'):
+                    run['endReason']='userStop'
+                    part['hybridNavigation']['phase']='walking'
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as root:
+                if change in ('none','prefix'):
+                    result=self.fixture(Path(root),setup,destination_plan=plan)
+                    expected=itinerary[0][:3 if change=='prefix' else 5]
+                    self.assertEqual([(leg['fromStation'],leg['toStation']) for leg in result['directedLegs']],
+                                     list(zip(expected,expected[1:])))
+                    self.assertEqual(result['verifiedCircuits'],0)
+                else:
+                    with self.assertRaises(ValueError):
+                        self.fixture(Path(root),setup,destination_plan=plan)
 
     def test_count_only_complete_four_leg_patrols(self):
         for count in (4,6,8):

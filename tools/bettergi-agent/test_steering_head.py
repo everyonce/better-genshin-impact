@@ -46,6 +46,20 @@ class SteeringTests(unittest.TestCase):
         self.assertIsNone(steering_point(STREET_PATROL_ROUTE, dict(h, completedLegs=2)))
         self.assertIsNone(steering_point(STREET_PATROL_ROUTE, dict(h, bypassPointIndex=0)))
 
+    def test_itinerary_shadow_follows_only_the_externally_bound_hop(self):
+        a, b, c = 'stair-front', 'sidewalk-junction', 'west-lamp'
+        edges = [(a,b,1,b), (b,a,2,a), (a,b,3,c), (b,c,3,c)]
+        for leg, (origin, target, ordinal, requested) in enumerate(edges):
+            h = dict(navigationMode='itinerary', completedLegs=leg, segmentIndex=leg, fromStation=origin,
+                     toStation=target, target=target, destinationOrdinal=ordinal, requestedDestination=requested)
+            self.assertEqual(steering_point(STREET_PATROL_ROUTE, h, edges), PATROL_STATIONS[target])
+            self.assertIsNone(steering_point(STREET_PATROL_ROUTE, h))
+            for changes in (dict(navigationMode=None), dict(segmentIndex=leg+1), dict(completedLegs=True),
+                            dict(destinationOrdinal=True), dict(requestedDestination=origin), dict(fromStation=target),
+                            dict(toStation=origin), dict(steeringPoint=dict(x=1, y=2)), dict(bypassPointIndex=0)):
+                with self.subTest(leg=leg, changes=changes):
+                    self.assertIsNone(steering_point(STREET_PATROL_ROUTE, dict(h, **changes), edges))
+
     def test_source_and_input_match_the_current_observation(self):
         f, raw = observation(), [dict(keys=[], mouseDx=0, mouseDy=0)]
         goal = (0., -1.)

@@ -57,9 +57,11 @@ def outcome(station, predicted, targets, collected):
 
 class PatrolPhotoSurvey:
     """Store images from verified arrivals. The collector receives frames and has no input or navigation API."""
-    def __init__(self, output, targets, checkpoint_id):
-        """Create a fresh evidence directory without overwriting an earlier survey."""
+    def __init__(self, output, targets, checkpoint_id, *, start_station='stair-front'):
+        """Bind the independently declared entry station and create a fresh evidence directory."""
         self.targets = validated_targets(targets)
+        require(start_station is None or start_station in PATROL_STATIONS, 'Unknown photo survey start station')
+        self.start_station = start_station
         require(isinstance(checkpoint_id,str) and len(checkpoint_id)==64 and
                 all(c in '0123456789abcdef' for c in checkpoint_id), 'Expected frozen landmark checkpoint SHA-256')
         self.output, self.checkpoint_id = Path(output), checkpoint_id
@@ -82,9 +84,9 @@ class PatrolPhotoSurvey:
                     checkpointId=self.checkpoint_id, **progress, journal=self.journal)
         atomic_json(self.output/'manifest.json',data)
 
-    def observe(self, event, frame, rgb):
+    def observe(self, event, frame, rgb, *, retain_miss=False, confirm_only=False):
         """Consider the original RGB only for this native-verified start or final stable arrival."""
-        if event.get('type') not in ('hybridStartVerified','hybridEndpointVerified') or len(self.collected)==len(self.targets):
+        if event.get('type') not in ('hybridStartVerified','hybridEndpointVerified','hybridDestinationPhotoRetry') or len(self.collected)==len(self.targets):
             return None
         sample = (event.get('samples') or [{}])[-1]
         visual = event.get('visualStation') or {}
@@ -97,7 +99,7 @@ class PatrolPhotoSurvey:
                  event.get('routeId') == STREET_PATROL_ROUTE and identity[0] and identity[0] == event.get('sourceEpoch')
                  and type(identity[1]) is int and visual.get('checkpointId') == self.checkpoint_id
                  and frame.get('frameId') == fid == visual.get('frameId') == pose.get('frameId')
-                 and (event['type'] != 'hybridStartVerified' or event.get('frameId') == fid)
+                 and (event['type'] == 'hybridEndpointVerified' or event.get('frameId') == fid)
                  and frame.get('width') == frame.get('height') == 192 and frame.get('pixelFormat') == 'rgb24'
                  and pose.get('state') == 'valid' and pose.get('layerId') == 'City_102'
                  and all(k in pose and k in sample and sample[k]==pose[k] for k in ('x','y','yawDegrees'))
@@ -109,8 +111,9 @@ class PatrolPhotoSurvey:
         if exact:
             gate = frame['frameWorldReadiness']
             distance = prediction.get('squaredDistance')
-            exact = (len(event['samples'])==3 and (event['type']=='hybridStartVerified' and station=='stair-front'
-                     or event['type']=='hybridEndpointVerified' and event.get('endpoint')==station)
+            exact = (len(event['samples'])==3 and (event['type']=='hybridStartVerified' and station==self.start_station
+                     or event['type']=='hybridEndpointVerified' and event.get('endpoint')==station
+                     or event['type']=='hybridDestinationPhotoRetry' and event.get('requestedDestination')==station)
                      and gate.get('sourceFrameId')==fid and gate.get('sourceFrame')==source
                      and frame.get('inputAvailable') is True and (frame.get('motionEvidence') or {}).get('status')=='normal'
                      and frame['motionEvidence'].get('spaceKeyMatched') is False
@@ -127,6 +130,16 @@ class PatrolPhotoSurvey:
             row['outcome'] = outcome(station, prediction['station'], self.targets, self.collected)
             if row['outcome'] == 'collected' and raw_hash in self.used_rgb:
                 row['outcome'] = 'duplicateImage'
+            if confirm_only and row['outcome'] == 'collected':
+                row['outcome'] = 'confirmationPending'
+            if (retain_miss and row['outcome'] == 'classificationMiss') or row['outcome'] == 'confirmationPending':
+                # Preserve the exact first view or refusal separately from the final requested photo.
+                relative = f'retry-evidence/{station}-frame-{fid}.png'
+                photo = self.output/relative
+                photo.parent.mkdir(exist_ok=True)
+                with photo.open('xb') as out:
+                    Image.frombytes('RGB',(192,192),bytes(rgb)).save(out,'PNG',compress_level=1)
+                row.update(retryEvidenceFile=relative, retryEvidencePngSha256=digest(photo.read_bytes()))
             if row['outcome'] == 'collected':
                 filename = f'{station}-frame-{fid}.png'
                 photo = self.output/filename
@@ -171,10 +184,11 @@ def verify_photo_survey(output, run_path, recordings, *, repository, landmark_ch
     return verify_photos(output,manifest,targets,sources,poses,head)
 
 
-def verify_photos(output, manifest, targets, sources, poses, head):
+def verify_photos(output, manifest, targets, sources, poses, head, confirm_first=False):
     """Replay the survey journal against the authenticated station sequence through completion."""
     rows, collected, files, hashes = manifest['journal'], [], set(), set()
     used = 0
+    first_confirmation = None
     for i,s in enumerate(sources):
         if len(collected)==len(targets):
             break
@@ -186,6 +200,9 @@ def verify_photos(output, manifest, targets, sources, poses, head):
                 ('sourceEpoch','sourceEpoch'),('sourceTimestamp100ns','sourceTimestamp100ns'),('liveRgbSha256','liveRgbSha256')))
                 and row['atMs']==p['atMs'], 'Photo journal differs from native/visual observation')
         expected=outcome(s['native'],s['live'],targets,collected)
+        if confirm_first and expected == 'collected' and first_confirmation is None:
+            first_confirmation = s['frameId']
+            expected = 'confirmationPending'
         require(row['outcome']==expected, 'Unverified omission, duplicate or photo claim')
         if expected!='collected':
             require('file' not in row and 'pngSha256' not in row, 'Unverified station has a photo')

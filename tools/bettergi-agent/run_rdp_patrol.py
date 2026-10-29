@@ -88,7 +88,7 @@ def patrol_argv(args, session, folder):
                '--history=41', '--cuda-graph', '--p2p-fast-start', '--p2p-prewarm',
                '--goal-embedding', str(args.goal_embedding.resolve()), '--goal-intent=ground-navigation',
                '--hybrid-navigation', '--navigation-climb-recovery', '--hybrid-route', STREET_PATROL_ROUTE,
-               '--hybrid-legs', str(args.circuits*4), '--fps=20', '--decision-hz=10',
+               '--hybrid-legs', str(getattr(args, 'destination_legs', args.circuits*4)), '--fps=20', '--decision-hz=10',
                '--max-observation-age-ms=150', '--action-hold-ms=100', '--enable-input', '--resident',
                '--rdp-session-id', str(session), '--observation-profile=p2p-native-hamming-192-v1',
                '--seconds', str(args.seconds), '--segment-seconds', str(min(30, args.seconds)),
@@ -295,7 +295,9 @@ def run(args, folder, *, series=None):
             checkpoints['shadow_checkpoint'] = args.steering_shadow.resolve()
         if args.landmark_shadow:
             checkpoints.update(landmark_checkpoint=args.landmark_shadow.resolve(), ffmpeg=str(args.ffmpeg.resolve()))
-        evidence = audit(output, folder/'patrol-recording', repository=ROOT, minimum_legs=4*args.circuits,
+        if getattr(args, 'destination_legs', None):
+            checkpoints['destination_plan'] = args.plan
+        evidence = audit(output, folder/'patrol-recording', repository=ROOT, minimum_legs=getattr(args, 'destination_legs', 4*args.circuits),
                          minimum_circuits=args.circuits, **checkpoints)
         atomic_json(folder/'audit.json', evidence)
         if args.photo_station:

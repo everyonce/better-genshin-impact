@@ -1,5 +1,6 @@
 """Discover and operate explicitly enabled BetterGI RDP automation instances."""
 import argparse
+from contextlib import ExitStack
 import hashlib
 import importlib.util
 import json
@@ -1866,27 +1867,69 @@ def resolve_child_root(child, *, strict_discovery=False):
     return root
 
 
-def hot_replace(child, target, timeout, *, idle_only=False, pinned_root=None, pinned_package=None, start_game=True):
+def _target_config_opener(path, flags):
+    """Open an existing Windows config for read sharing only, denying writes and deletions through restart admission."""
+    import _winapi
+    import msvcrt
+    handle = _winapi.CreateFile(path, 0x80000000, 1, 0, 3, 0x00200080, 0)  # GENERIC_READ, FILE_SHARE_READ, OPEN_REPARSE_POINT.
+    try:
+        return msvcrt.open_osfhandle(handle, os.O_RDONLY | os.O_BINARY)
+    except BaseException:
+        _winapi.CloseHandle(handle)
+        raise
+
+
+def protected_game_identity(process, session, pid, started=None):
+    """Project an exact live native Genshin process to public identity fields, omitting its install path."""
+    identity = process.identity
+    name = Path(identity['executable']).name
+    if (name.casefold() not in ('genshinimpact.exe','yuanshen.exe') or type(pid) is not int or pid <= 0
+            or identity['windowsSessionId'] != session or identity['processId'] != pid
+            or type(identity['startedFileTime']) is not int or identity['startedFileTime'] <= 0
+            or started is not None and identity['startedFileTime'] != started):
+        raise ControlError('The exact original RDP game process identity was not verified.')
+    process.require_alive()
+    return dict(processId=pid,windowsSessionId=session,startedFileTime=identity['startedFileTime'],executable=name)
+
+
+def hot_replace(child, target, timeout, *, idle_only=False, pinned_root=None, pinned_package=None, start_game=True,
+                require_existing_target_config=False, target_config_sha256=None):
     """Retain acknowledgement/readiness evidence on either successful or failed handoff."""
     evidence = {'phase': 'replacement_preflight', 'restartRequestAttempted': False,
                 'restartAcknowledged': False, 'readinessPolls': 0,
                 'previousProcessId': child.get('processId'), 'previousNonce': child.get('instanceNonce'),
                 'targetDirectory': str(target)}
     try:
-        result = _hot_replace(child, target, timeout, idle_only=idle_only, pinned_root=pinned_root,
-                              pinned_package=pinned_package, start_game=start_game, evidence=evidence)
+        with ExitStack() as held:
+            if require_existing_target_config and not idle_only:
+                raise ControlError('A pinned target configuration requires idle replacement.')
+            result = _hot_replace(child, target, timeout, idle_only=idle_only, pinned_root=pinned_root,
+                                  pinned_package=pinned_package, start_game=start_game, evidence=evidence,
+                                  target_guard=held if require_existing_target_config else None, target_config_sha256=target_config_sha256)
         return {**result, 'replacementEvidence': evidence}
     except (ControlError, OSError, ValueError, KeyError) as error:
         raise ReplacementError(str(error) or type(error).__name__, evidence) from error
 
 
-def _hot_replace(child, target, timeout, *, idle_only, pinned_root, pinned_package, start_game, evidence):
+def _hot_replace(child, target, timeout, *, idle_only, pinned_root, pinned_package, start_game, evidence,
+                 target_guard=None, target_config_sha256=None):
     """Drain tasks, restart only this child, then verify replacement identity and assembly."""
     require_role(child, 'ChildSession')
     if type(start_game) is not bool or not start_game and not idle_only:
         raise ControlError('Endpoint-only replacement requires the capability-gated idle-only path.')
     idle_deadline = time.monotonic() + timeout if idle_only else None
     manifest = prepare_replacement(child['appDirectory'], target, require_opt_in=False)
+    if target_guard is not None:
+        # Hold only the new target's original bytes through the authenticated restart acknowledgement.
+        config = Path(manifest['targetDirectory']) / 'User/config.json'
+        _no_links(config)
+        handle = target_guard.enter_context(open(config,'rb',opener=_target_config_opener))
+        snapshot = os.fstat(handle.fileno())
+        if not stat.S_ISREG(snapshot.st_mode) or not 0 < snapshot.st_size <= 16*1024*1024 or not os.path.samestat(snapshot,config.stat()):
+            raise ControlError('The pre-staged target configuration is unavailable or changed.')
+        evidence['existingTargetConfigSha256'] = hashlib.file_digest(handle,'sha256').hexdigest()
+        if target_config_sha256 is not None and evidence['existingTargetConfigSha256'] != target_config_sha256:
+            raise ControlError('The pre-staged target configuration hash changed.')
     root = resolve_child_root(child, strict_discovery=True) if idle_only else resolve_child_root(child)
     if idle_only:
         # Shortcut upgrades must not interrupt a task that won the startup race.
@@ -1921,6 +1964,8 @@ def _hot_replace(child, target, timeout, *, idle_only, pinned_root, pinned_packa
             expectation.update(version=2, startupMode='gameRuntime' if start_game else 'controlEndpoint')
     evidence.update(phase='restart_request', restartRequestAttempted=True)
     mutate('restartApp', idle, **({'idleRestart': expectation} if idle_only else {}))
+    if target_guard is not None:
+        target_guard.close()  # The replacement can now persist its own settings during normal startup.
     evidence.update(phase='replacement_readiness', restartAcknowledged=True)
     deadline = idle_deadline if idle_only else time.monotonic() + timeout
     replacement_identity = None
@@ -2013,6 +2058,12 @@ def main():
             item.add_argument('--exe-sha256', required=True)
             item.add_argument('--dll-sha256', required=True)
             item.add_argument('--start-game', action='store_true')
+            item.add_argument('--source-process-id', type=int, help='Require this original running child; disable cold start and staging')
+            item.add_argument('--source-nonce', help='Verified instance nonce of the required original child')
+            item.add_argument('--require-existing-target-config', action='store_true', help='Require pre-staged target settings with both original child pins')
+            item.add_argument('--target-config-sha256', help='Pin the exact preflight target settings through restart admission')
+            item.add_argument('--game-process-id',type=int,help='Hold the original RDP game lifetime across pinned child replacement')
+            item.add_argument('--game-started-file-time',type=int,help='Expected native creation FILETIME for the protected game')
         if command == 'start-agent':
             item.add_argument('--enable-input', action='store_true', help='explicitly permit controller input in the RDP child')
             item.add_argument('--experimental-queued-step-applications', action='store_true',
@@ -2090,9 +2141,27 @@ def main():
                 result = start_child(status, args.timeout, args.preserve_window)
             elif args.command == 'ensure-child':
                 from child_reconciliation import ensure_child
-                result = ensure_child(sys.modules[__name__], status, args.target_directory,
-                                      args.exe_sha256, args.dll_sha256, args.instance_nonce,
-                                      args.timeout, args.preserve_window, args.start_game)
+                with ExitStack() as retained:
+                    process = None
+                    if args.game_process_id is not None or args.game_started_file_time is not None:
+                        if not (args.game_process_id and args.game_process_id > 0 and args.game_started_file_time and args.game_started_file_time > 0
+                                and args.source_process_id and args.source_nonce and args.require_existing_target_config and args.start_game
+                                and status.get('instanceNonce') == args.instance_nonce and args.target_config_sha256):
+                            raise ControlError('Protecting the game requires both lifetime fields and a pinned idle game replacement.')
+                        from root_upgrade import OwnedProcess
+                        process = OwnedProcess(args.game_process_id)
+                        retained.callback(process.close)
+                        game = protected_game_identity(process,status['childSessionId'],args.game_process_id,args.game_started_file_time)
+                    result = ensure_child(sys.modules[__name__], status, args.target_directory,
+                                          args.exe_sha256, args.dll_sha256, args.instance_nonce,
+                                          args.timeout, args.preserve_window, args.start_game,
+                                          source_process_id=args.source_process_id, source_nonce=args.source_nonce,
+                                          require_existing_target_config=args.require_existing_target_config,
+                                          target_config_sha256=args.target_config_sha256)
+                    if process is not None:
+                        if game != protected_game_identity(process,result['child']['windowsSessionId'],args.game_process_id,args.game_started_file_time):
+                            raise ControlError('The protected RDP game changed during replacement.')
+                        result['protectedGame'] = game
             elif args.command == 'resume-upgrade':
                 from root_upgrade import resume_root
                 result = resume_root(sys.modules[__name__], status, args.instance_nonce)

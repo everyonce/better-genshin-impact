@@ -19,6 +19,16 @@ def child(**changes):
 
 
 class ResidentTests(unittest.TestCase):
+    def test_timed_pinned_observation_uses_sealed_part_frames_and_has_no_input(self):
+        args=SimpleNamespace(model='observe',enable_input=False,navigation_guidance=True)
+        summary=dict(segments=[dict(framesReceived=58)],evidenceComplete=True,acceptedInputActions=0)
+        self.assertTrue(runtime.completed_passive_observation(args,summary,'durationElapsed'))
+        for change in (dict(segments=[]),dict(evidenceComplete=False),dict(acceptedInputActions=1)):
+            self.assertFalse(runtime.completed_passive_observation(args,dict(summary,**change),'durationElapsed'))
+        self.assertFalse(runtime.completed_passive_observation(args,summary,'error'))
+        args.enable_input=True
+        self.assertFalse(runtime.completed_passive_observation(args,summary,'durationElapsed'))
+
     def test_verified_hybrid_leg_limit_does_not_start_another_lease(self):
         self.assert_final_lease('hybridLegLimit')
 

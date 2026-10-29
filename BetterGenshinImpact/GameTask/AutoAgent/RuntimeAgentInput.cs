@@ -7,11 +7,13 @@ using System.Linq;
 using Vanara.PInvoke;
 using Newtonsoft.Json.Linq;
 using BetterGenshinImpact.Core.Input.Backends.Win32;
+using BetterGenshinImpact.Core.Config;
+using BetterGenshinImpact.Core.Simulator.Extensions;
 
 namespace BetterGenshinImpact.GameTask.AutoAgent;
 
 /// <summary>Maps canonical model inputs into the single InputHub owner for a bound runtime.</summary>
-internal sealed class RuntimeAgentInput(GameRuntime runtime) : IAgentInput, IAgentApplicationInput
+internal sealed class RuntimeAgentInput(GameRuntime runtime) : IAgentInput, IAgentApplicationInput, IMapInspectionInput
 {
     /// <summary>Only transitions are sent; consecutive intervals can retain a held key.</summary>
     private readonly HashSet<User32.VK> _held = [];
@@ -76,6 +78,30 @@ internal sealed class RuntimeAgentInput(GameRuntime runtime) : IAgentInput, IAge
 
     /// <summary>Optional observation is synchronous and never changes a backend call's result.</summary>
     internal AgentInputCallObserver Telemetry { get; } = new();
+
+    /// <summary>Require the original live game HWND and input backend for the two fixed UI keys.</summary>
+    internal bool MapTargetOwned => ReferenceEquals(InputHub.Backend, _applicationBackend) && runtime.Window.IsAlive &&
+        User32.GetWindowThreadProcessId(runtime.Window.Handle, out var pid) != 0 && pid == runtime.Window.ProcessId;
+    /// <inheritdoc />
+    public int GameProcessId => runtime.Window.ProcessId;
+    /// <inheritdoc />
+    public long GameWindowHandle => runtime.Window.Handle.ToInt64();
+
+    /// <summary>This tested map binding uses the in-memory configured game action and a foreground, capturing WGC target.</summary>
+    public bool MapTargetReady => IsAvailable && MapTargetOwned && runtime.Window.IsForeground && !runtime.IsDesktopCapture &&
+        runtime.Capture.IsCapturing && GIActions.OpenMap.ToActionKey().ToVK() == User32.VK.VK_M;
+
+    /// <summary>Address only the original HWND. A lost foreground never redirects this key-up into another application.</summary>
+    public void MapKey(bool open, bool down)
+    {
+        var vk = open ? User32.VK.VK_M : User32.VK.VK_ESCAPE;
+        if (!MapTargetOwned || down && !MapTargetReady) throw new InvalidOperationException("map_input_target_lost");
+        Telemetry.Invoke(down ? "keyDown" : "keyUp", KeyName(vk), 0, 0, () =>
+        {
+            if (down) { _applicationBackend.Background.Keyboard.KeyDown(vk); _held.Add(vk); }
+            else { _applicationBackend.Background.Keyboard.KeyUp(vk); _held.Remove(vk); }
+        });
+    }
 
     /// <summary>Read only while the controller lock serializes this runtime's input calls.</summary>
     internal AgentTrackedInputState ReadTrackedState() => new(

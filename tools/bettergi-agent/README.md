@@ -123,6 +123,36 @@ $runFolder = Read-Host 'Paste the exact evidence folder printed by the manual la
 
 A graceful finish completes the accepted batch and seals its final station photo before closing. To cancel during movement, create the launcher’s printed `STOP` file with `New-Item -ItemType File -Path (Join-Path $runFolder 'STOP')`. This requests an immediate addressed input release. An empty manual slot at a photographed boundary has a one-second deadline. On expiry the resident keeps input released and reports queue starvation. Publish the next batch or finish while the predecessor is still walking.
 
+### Inspect the junction world map on SIREN
+
+The map runner uses the existing minimized BetterGI RDP child, one resident GPU model and the qualified G4 observer. Its fixed itinerary starts at the sidewalk junction, visits the west lamp and returns to the junction. The original warm-owner or verified replacement receipt must match the current authenticated RDP pair. For R59 use the `map-owner-lineage.json` produced by the [source-pinned child replacement](../rdp-automation/README.md#replace-only-the-verified-map-test-child-on-siren). The launcher joins the native game PID and window binding to the protected game from that handoff.
+
+**Inspect from the world HUD.** Start only when the character is at the junction in the playable world. BetterGI verifies the junction pose and G4 photo, opens the configured world map, recognizes the map and close control on fresh frames, and closes it once. It requires a fresh world HUD, settled junction pose and matching photo before handing walking back to the controller. Normal walking proposals are fenced during the UI operation. The standard thermal, stale-frame, owner and operator STOP gates remain active throughout the run.
+
+```powershell
+$py = 'C:/Programs/Python/Python311/python.exe'
+$runner = 'tools/bettergi-agent/run_warm_photo_requests.py'
+$mapRoot = 'artifacts/live/2026-10-29-map-inspection'
+$mapOwner = (Resolve-Path (Read-Host 'Verified map-owner-lineage.json for the current child')).Path
+$route = @('--map-owner-from', $mapOwner, '--start-station', 'sidewalk-junction',
+    '--destination', 'photograph-lamp', 'west-lamp', '--destination', 'return-junction', 'sidewalk-junction',
+    '--seconds', '120', '--steering-shadow', 'artifacts/agent/steering/gen-01.json',
+    '--landmark-shadow', 'artifacts/agent/landmarks/gen-04.json',
+    '--photo-qualification', 'artifacts/agent/landmarks/qualify-g4-fresh-10.json')
+& $py -B -X utf8 $runner @route --inspect-junction-map --evidence-root "$mapRoot/inspection"
+```
+
+**Recover an already-open map.** The R58 inspection reached its map but refused a stale frame before closing. Its original evidence directory is `live/warm-20261029T180711Z-9e347a5c89dc` below `$mapRoot`. A separate input-disabled observation in `r58-after-attempt` recorded the map still open. For this case, use the R59 recovery capability and the sealed R58 to R59 lineage. The recovery runner checks both original records, recognizes the still-open map again on fresh native frames, and allows one close. It requires the same world and junction checks before walking. Selecting recovery starts a separate lease with a fresh model and a new evidence folder.
+
+```powershell
+# Use the shared variables and R59 route arguments above. Run recovery as its own trial.
+& $py -B -X utf8 $runner @route --recover-junction-map `
+    --map-failure "$mapRoot/live/warm-20261029T180711Z-9e347a5c89dc" `
+    --map-passive "$mapRoot/r58-after-attempt" --evidence-root "$mapRoot/recovery"
+```
+
+The launcher prints a run-specific `STOP` file. On a completed run, `map-audit.json` records either a complete inspection or recovery of the earlier map, with native image, input, release and west-lamp evidence. Use `warm-launcher.json` and the terminal audit together to determine the outcome. An interruption remains a separate failed or stopped run.
+
 ### Separate resident batches
 
 On SIREN the series launcher can repeat a task on the same minimized RDP connection. This example requests one source photo at each named station in each batch. The collector saves the original RGB image when the native station, verified frame and qualified image prediction agree. At the end of the batch a separate verifier decodes each saved PNG, checks its raw pixels against the live hash and classifies it again. A failed objective ends the series.

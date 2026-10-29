@@ -148,6 +148,103 @@ class ChildReconciliationTests(unittest.TestCase):
         self.assertEqual(result['child']['rootProcessId'], 20)
         self.assertEqual(self.restart_expectations[0]['startupMode'], 'gameRuntime')
 
+    def pinned_upgrade(self, **overrides):
+        """Exercise the original-child-only path without allowing startup or profile staging."""
+        options = dict(source_process_id=self.previous['processId'],source_nonce=self.previous['instanceNonce'],
+                       require_existing_target_config=True,start_game=True)
+        options.update(overrides)
+        with patch.object(control,'start_child',side_effect=AssertionError('no bootstrap')), \
+                patch.object(control,'stage_configuration',side_effect=AssertionError('no staging')):
+            return self.ensure(**options)
+
+    def test_pinned_idle_upgrade_reuses_original_and_records_only_new_config_hash(self):
+        self.child = self.previous.copy()
+        config = self.target/'User/config.json'
+        digest = hashlib.sha256(config.read_bytes()).hexdigest()
+        original = self.mutate
+        def check_lease(command,status,**fields):
+            if command == 'restartApp' and sys.platform == 'win32':
+                with self.assertRaises(PermissionError):
+                    config.unlink()
+                with self.assertRaises(PermissionError):
+                    config.write_bytes(b'changed while restarting')
+            original(command,status,**fields)
+        with patch.object(control,'mutate',side_effect=check_lease):
+            result = self.pinned_upgrade(target_config_sha256=digest)
+        self.assertEqual(self.commands,['restartApp'])
+        self.assertFalse(result['childStartDispatched'])
+        self.assertTrue(result['gameReady'])
+        self.assertEqual(result['replacementEvidence']['existingTargetConfigSha256'],digest)
+        config.unlink()  # Once the restart is acknowledged the application owns its new settings.
+
+    def test_pinned_upgrade_rejects_changed_preflight_config_bytes(self):
+        self.child = self.previous.copy()
+        with self.assertRaisesRegex(control.ControlError,'configuration hash changed'):
+            self.pinned_upgrade(target_config_sha256='a'*64)
+        self.assertEqual(self.commands,[])
+        self.assertFalse((self.previous_path/'User/ExternalControl').exists())
+
+    def test_cli_retains_exact_native_game_handle_until_new_runtime_is_ready(self):
+        import root_upgrade
+        self.child = self.previous.copy()
+        digest = hashlib.sha256((self.target/'User/config.json').read_bytes()).hexdigest()
+        argv = ['rdp_control.py','ensure-child','--process-id','20','--windows-session-id','2',
+                '--instance-nonce','root-epoch','--source-process-id','50','--source-nonce','old-child',
+                '--require-existing-target-config','--target-config-sha256',digest,'--target-directory',str(self.target),
+                '--exe-sha256',self.package['exeSha256'],'--dll-sha256',self.package['dllSha256'],'--start-game',
+                '--game-process-id','77','--game-started-file-time','98765']
+        for birth in (1,98765):
+            self.child = self.previous.copy()
+            self.commands.clear()
+            out = io.StringIO()
+            with patch.object(sys,'argv',argv),patch.object(control,'exchange',return_value=self.host), \
+                    patch.object(root_upgrade,'OwnedProcess') as original, contextlib.redirect_stdout(out),contextlib.redirect_stderr(io.StringIO()):
+                held = original.return_value
+                held.identity = dict(processId=77,windowsSessionId=3,startedFileTime=birth,executable='C:/game/GenshinImpact.exe')
+                code = control.main()
+                original.assert_called_once_with(77)
+                held.close.assert_called_once_with()
+            if birth == 1:
+                self.assertNotEqual(code,0)
+                self.assertEqual(self.commands,[])
+            else:
+                self.assertEqual(code,0)
+                self.assertEqual(self.commands,['restartApp'])
+                self.assertEqual(held.require_alive.call_count,2)
+                self.assertEqual(json.loads(out.getvalue())['protectedGame'],dict(processId=77,windowsSessionId=3,
+                    startedFileTime=98765,executable='GenshinImpact.exe'))
+
+    def test_pinned_upgrade_refuses_absence_changed_owner_busy_and_missing_settings(self):
+        for child,options in ((None,{}),(dict(self.previous,processId=76),{}),
+                              (dict(self.previous,instanceNonce='swapped'),{}),(dict(self.previous,taskRunning=True),{}),
+                              (self.previous.copy(),{'source_nonce':None}),(self.previous.copy(),{'require_existing_target_config':False})):
+            self.child = child
+            with self.subTest(child=child,options=options), self.assertRaises(control.ControlError):
+                self.pinned_upgrade(**options)
+        self.child = self.previous.copy()
+        (self.target/'User/config.json').unlink()
+        with self.assertRaisesRegex(control.ControlError,'must already exist'):
+            self.pinned_upgrade()
+        self.assertEqual(self.commands,[])
+        self.assertFalse((self.previous_path/'User/ExternalControl').exists())
+
+    def test_pinned_upgrade_rechecks_source_and_target_before_first_write(self):
+        original = control.prepare_replacement
+        for change in ('source','target'):
+            self.child = self.previous.copy()
+            def swap(*args,**kwargs):
+                manifest = original(*args,**kwargs)
+                if change == 'source':
+                    self.child['instanceNonce'] = 'other occupant'
+                else:
+                    (self.target/'User/config.json').unlink()
+                return manifest
+            with self.subTest(change=change), patch.object(control,'prepare_replacement',side_effect=swap), \
+                    self.assertRaises(control.ControlError):
+                self.pinned_upgrade()
+            self.assertEqual(self.commands,[])
+            self.assertFalse((self.previous_path/'User/ExternalControl').exists())
+
     def test_host_replacement_is_endpoint_only_even_when_no_runtime_was_started(self):
         self.child = {**self.previous, 'automationState': 'stopped', 'runtimeRunning': False}
         self.on_restart = {**self.ready, 'automationState': 'idle', 'runtimeRunning': False}

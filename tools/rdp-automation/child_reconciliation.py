@@ -161,10 +161,12 @@ def replacement_candidate(control, previous, root, discovery, pinned_root, packa
     return child, None
 
 
-def _target_settings(control, source, target):
+def _target_settings(control, source, target, *, require_existing=False):
     """Retain existing target settings; stage only when the selected copy has none."""
     config = Path(target) / 'User/config.json'
     if not config.exists():
+        if require_existing:
+            raise control.ControlError('The pinned target configuration must already exist; source settings cannot be staged.')
         control.stage_configuration(str(source), str(target))
     control._no_links(config)
     if not config.is_file() or not 0 < config.stat().st_size <= 16 * 1024 * 1024:
@@ -180,7 +182,8 @@ def _no_selected_downgrade(control, source, target):
 
 
 def ensure_child(control, root, target, exe_hash, dll_hash, expected_nonce, timeout,
-                 preserve_window=False, start_game=False):
+                 preserve_window=False, start_game=False, *, source_process_id=None, source_nonce=None,
+                 require_existing_target_config=False, target_config_sha256=None):
     """Ensure one selected child without replacing the primary or cancelling active work."""
     deadline = time.monotonic() + timeout
 
@@ -192,6 +195,12 @@ def ensure_child(control, root, target, exe_hash, dll_hash, expected_nonce, time
         return seconds
 
     control.require_role(root, 'Primary')
+    pinned = source_process_id is not None or source_nonce is not None or require_existing_target_config or target_config_sha256 is not None
+    if pinned and not (type(source_process_id) is int and source_process_id > 0 and isinstance(source_nonce,str)
+                       and source_nonce and require_existing_target_config is True):
+        raise control.ControlError('Pinned replacement requires the source PID, nonce and existing target configuration together.')
+    if target_config_sha256 is not None and (not isinstance(target_config_sha256,str) or not re.fullmatch('[a-f0-9]{64}',target_config_sha256)):
+        raise control.ControlError('Expected a lowercase SHA256 of the pre-staged target configuration.')
     if not expected_nonce or root.get('instanceNonce') != expected_nonce:
         raise control.ControlError('The primary nonce no longer matches the approved wrapper.')
     if any(not isinstance(value, str) or re.fullmatch('[0-9a-fA-F]{64}', value) is None
@@ -224,11 +233,25 @@ def ensure_child(control, root, target, exe_hash, dll_hash, expected_nonce, time
             # an unupgradeable old child. Refuse before that launch, preserving RDP.
             require_idle_restart(control, current_root, start_game=start_game)
 
-    startup = control.start_child(root, remaining(), preserve_window, _candidate=candidate,
-                                  _read_root=lambda _: _read_root(control, root),
-                                  startup_mode='gameRuntime' if start_game else 'controlEndpoint',
-                                  _before_dispatch=before_dispatch)
-    child = startup['child']
+    if pinned:
+        # A missing/changed source is terminal. Never dispatch a bootstrap, minimize a window or stage the old profile.
+        current_root = _read_root(control, root)
+        child = candidate(current_root,control.discover())
+        if (child is None or (child['processId'],child['instanceNonce']) != (source_process_id,source_nonce)
+                or child.get('rootProcessId') != current_root['processId']
+                or current_root.get('childConnectedState') != 1
+                or not preserve_window and current_root.get('childWindowMinimized') is not True
+                or _path(control, child['appDirectory']) == _path(control, target)):
+            raise control.ControlError('Expected the pinned original child in its connected RDP window for replacement.')
+        _idle(control,child)
+        _target_settings(control,child['appDirectory'],target,require_existing=True)
+        startup = dict(childStartDispatched=False,windowPolicy='preserve_existing' if preserve_window else 'minimized')
+    else:
+        startup = control.start_child(root, remaining(), preserve_window, _candidate=candidate,
+                                      _read_root=lambda _: _read_root(control, root),
+                                      startup_mode='gameRuntime' if start_game else 'controlEndpoint',
+                                      _before_dispatch=before_dispatch)
+        child = startup['child']
     replaced = False
     replacement_evidence = None
     previous_pid = None
@@ -243,9 +266,10 @@ def ensure_child(control, root, target, exe_hash, dll_hash, expected_nonce, time
         _idle(control, child)
         resolved = control.resolve_child_root(child, strict_discovery=True)
         _connected_root(control, resolved, child, root)
-        _target_settings(control, child['appDirectory'], target)
+        _target_settings(control, child['appDirectory'], target, **({'require_existing':True} if pinned else {}))
+        guard = {'require_existing_target_config': True, 'target_config_sha256':target_config_sha256} if pinned else {}
         result = control.hot_replace(child, str(target), remaining(), idle_only=True,
-                                     pinned_root=root, pinned_package=package, start_game=start_game)
+                                     pinned_root=root, pinned_package=package, start_game=start_game, **guard)
         previous_pid = child['processId']
         child, replaced = result['child'], True
         replacement_evidence = result['replacementEvidence']

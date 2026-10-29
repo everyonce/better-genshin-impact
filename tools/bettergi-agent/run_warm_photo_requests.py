@@ -27,6 +27,13 @@ def options(argv=None):
                         help='Required native start location for destination requests (default stair-front)')
     parser.add_argument('--confirm-first-arrival', action='store_true',
                         help='Require two separate qualified views at the first requested destination')
+    map_mode = parser.add_mutually_exclusive_group()
+    map_mode.add_argument('--inspect-junction-map', action='store_true',
+                        help='Inspect the map at the junction on the same lease before walking to the west lamp')
+    map_mode.add_argument('--recover-junction-map', action='store_true', help='Close the positively recognized map of a proven interrupted inspection')
+    parser.add_argument('--map-owner-from', type=Path, help='Sealed owner or verified idle child-replacement lineage')
+    parser.add_argument('--map-failure',type=Path,help='Original interrupted inspection folder, required for recovery')
+    parser.add_argument('--map-passive',type=Path,help='Independent original passive map capture folder, required for recovery')
     parser.add_argument('--stop-drill', action='store_true',
                         help='For a two-request plan, exercise the external STOP file after a dispatch in request two')
     args = patrol.options(argv, parser, warm=True)
@@ -46,6 +53,13 @@ def options(argv=None):
             args.plan = dict(version=1, requests=requests)
         from warm_photo_requests import validate_plan
         validate_plan(args.plan)
+        map_visit = args.inspect_junction_map or args.recover_junction_map
+        if args.recover_junction_map != bool(args.map_failure and args.map_passive) or bool(args.map_failure)!=bool(args.map_passive):
+            raise ValueError('Recovery requires both the original failure and the subsequent passive map observation')
+        if map_visit != bool(args.map_owner_from) or (map_visit and (
+                not args.destination or args.plan['start'] != 'sidewalk-junction' or args.stop_drill
+                or [r['destination'] for r in requests] != ['west-lamp','sidewalk-junction'])):
+            raise ValueError('Map inspection requires a pinned owner and exactly junction to lamp to junction')
         if args.stop_drill and len(requests) != 2:
             raise ValueError('The request-two stop drill requires exactly two requests')
         args.circuits = 0 if args.destination else sum(r['circuits'] for r in requests)
@@ -157,6 +171,23 @@ def run(args, folder, *, guard_type=WarmGuard):
         json.dump(args.plan, output, indent=2)
     args.warm_photo_plan = plan_path.resolve()
     guard = guard_type(folder, args)
+    if getattr(args, 'inspect_junction_map', False) or getattr(args,'recover_junction_map',False):
+        from map_owner import load_map_owner
+        guard.required_identity = load_map_owner(args.map_owner_from)
+        with (folder/'map-required-owner.json').open('x',encoding='utf-8') as out:
+            json.dump(guard.required_identity,out,indent=2)
+        receipt=json.loads(args.map_owner_from.read_bytes())
+        if receipt.get('protectedGame'):
+            with (folder/'map-required-game.json').open('x',encoding='utf-8') as out:
+                json.dump(receipt['protectedGame'],out,indent=2)
+        if args.recover_junction_map:
+            from audit_map_recovery import verify_failed_map_origin
+            predecessor=Path(receipt['prior'])
+            if predecessor.name!='map-owner-lineage.json':
+                raise ValueError('Map recovery requires a replacement descended from the proven interrupted child')
+            origin=verify_failed_map_origin(args.map_failure.resolve(),args.map_passive.resolve(),predecessor,patrol.ROOT)
+            with (folder/'map-recovery-origin.json').open('xb') as out:
+                out.write(json.dumps(origin,sort_keys=True,separators=(',',':'),allow_nan=False).encode('utf-8'))
     requests = args.plan['requests']
     planned = [dict(oldRequestId=old['id'], newRequestId=new['id']) for old, new in zip(requests, requests[1:])]
     summary = dict(status='running', computer=socket.gethostname(), stopFile=str(guard.stop_file),
@@ -231,6 +262,23 @@ def main():
     folder = args.evidence_root.resolve()/f'warm-{stamp}-{uuid.uuid4().hex[:12]}'
     folder.mkdir(parents=True, exist_ok=False)
     summary = run(args, folder)
+    if (args.inspect_junction_map or args.recover_junction_map) and summary['status']=='completed':
+        from audit_map_inspection import audit_map
+        auditor=audit_map
+        key='mapInspectionVerified'
+        if args.recover_junction_map:
+            from audit_map_recovery import audit_recovery_visit
+            auditor,key=audit_recovery_visit,'mapRecoveryVerified'
+        try:
+            proof = auditor(folder,args.map_owner_from,args.landmark_shadow,args.photo_qualification,patrol.ROOT)
+            if proof.get('passed') is not True:
+                raise ValueError('Map-to-lamp audit did not pass')
+            patrol.atomic_json(folder/'map-audit.json',proof)
+            summary[key]=True
+        except Exception as exc:
+            summary.update(status='stopped',reason='Map audit failed: '+str(exc))
+            summary[key]=False
+        patrol.atomic_json(folder/'warm-launcher.json',summary)
     print(summary.get('reason', summary['status']))
     return int(summary['status'] not in ('completed', 'stopVerified'))
 

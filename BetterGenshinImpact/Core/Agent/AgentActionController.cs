@@ -184,6 +184,22 @@ public sealed partial class AgentActionController(IAgentInput input, bool inputE
         lock (_gate) return ExecutionSnapshotUnderLock();
     }
 
+    /// <summary>Serialize the fixed native map task with scheduler ticks and enforce a completely released controller.</summary>
+    internal void WithIdleMapInput(Action operation)
+    {
+        lock (_gate)
+        {
+            var context = ExecutionSnapshotUnderLock();
+            if (_stopped || !inputEnabled || !input.IsAvailable || _active is not null || _queued is not null ||
+                !context.TelemetryComplete || context.TrackedState.HeldKeys.Length != 0)
+                throw new InvalidOperationException("map_controller_not_idle");
+            var prior = _inputOrigin;
+            _inputOrigin = "mapInspection";
+            try { operation(); }
+            finally { _inputOrigin = prior; }
+        }
+    }
+
     /// <summary>Sample only the existing session clock; telemetry clock failure cannot alter input.</summary>
     private double? SampleTelemetryClock()
     {

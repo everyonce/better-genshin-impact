@@ -119,6 +119,10 @@ def patrol_argv(args, session, folder):
         command.extend(['--warm-photo-plan=' + str(args.warm_photo_plan),
                         '--photo-directory=' + str(folder/'station-photos'),
                         '--photo-qualification=' + str(args.photo_qualification.resolve())])
+        if getattr(args, 'inspect_junction_map', False):
+            command.append('--inspect-junction-map')
+        if getattr(args, 'recover_junction_map', False):
+            command.append('--recover-junction-map')
         if getattr(args, 'batches', None):
             command.append('--warm-batch-count=' + str(args.batches))
             if getattr(args,'open_queue',False):

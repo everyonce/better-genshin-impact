@@ -1102,6 +1102,8 @@ def parse_arguments(argv=None):
     parser.add_argument('--photo-directory', help='Fresh directory for original station photos and their source IDs')
     parser.add_argument('--photo-qualification', help='Sealed observer qualification for the selected checkpoint')
     parser.add_argument('--warm-photo-plan', help='Two to four independently verified photo requests on the same native patrol lease')
+    parser.add_argument('--inspect-junction-map', action='store_true', help='Require the fixed junction map operation before navigation')
+    parser.add_argument('--recover-junction-map', action='store_true', help='Require a proven interrupted-map recovery before navigation')
     parser.add_argument('--warm-batch-count', type=int, help='Total addressed destination batches on this bounded lease (2 to 12)')
     parser.add_argument('--warm-open-queue', action='store_true', help='Treat the batch count as a ceiling; require an explicit released-boundary finish')
     parser.add_argument('--camera-calibration', metavar='CHECKPOINT',
@@ -1177,8 +1179,9 @@ def parse_arguments(argv=None):
             args.p2p_execution_feedback = True
     if args.patrol_series_binding is not None:
         from resident_runtime import parse_series_binding
-        if not (args.resident and args.hybrid_navigation and args.hybrid_route == STREET_PATROL_ROUTE):
-            parser.error('A series binding requires a resident street patrol')
+        passive_pose = args.model == 'observe' and args.navigation_guidance and not args.enable_input
+        if not (args.resident and (passive_pose or args.hybrid_navigation and args.hybrid_route == STREET_PATROL_ROUTE)):
+            parser.error('A series binding requires a resident street patrol or an input-disabled pose observation')
         try:
             args.patrol_series_binding = parse_series_binding(args.patrol_series_binding)
         except ValueError as error:
@@ -1222,6 +1225,9 @@ def parse_arguments(argv=None):
         parser.error('Warm photos require the receipt-backed resident P2P policy, walking embedding and recorded leg budget')
     if args.warm_photo_plan and (not args.patrol_series_binding or args.seconds > 600 or args.max_observation_age_ms > 150):
         parser.error('Warm photos require pinned patrol owners, a 600 second maximum and a 150 ms source-age ceiling')
+    if (args.inspect_junction_map or args.recover_junction_map) and (not args.warm_photo_plan or not args.enable_input
+            or args.warm_batch_count or (args.inspect_junction_map and args.recover_junction_map)):
+        parser.error('Map inspection requires a bounded input-enabled warm destination plan')
     if args.warm_open_queue and args.warm_batch_count is None:
         parser.error('An open queue requires bounded warm destination batches')
     if args.warm_batch_count is not None and (not args.warm_photo_plan or not 2 <= args.warm_batch_count <= 12
@@ -1501,6 +1507,11 @@ def run_episode(args, policy=None, control=None):
                 hybrid = candidate
                 report['hybridNavigation'] = hybrid.snapshot()
                 report['hybridNavigationEvents'] = []
+        if getattr(args, 'inspect_junction_map', False) or getattr(args,'recover_junction_map',False):
+            from map_inspection_client import inspect_before_navigation
+            if not warm or warm.itinerary_start != 'sidewalk-junction' or warm.destinations != ('west-lamp','sidewalk-junction'):
+                raise ValueError('Map inspection requires the prescribed junction, west lamp and return route')
+            report['mapInspection'] = inspect_before_navigation(bridge,args,policy,control,profile_contract)
         if idle_recovery.threshold is not None and (bridge.hello.get('supportsRelease') is not True
                 or not getattr(policy, 'execution_feedback', False) or not callable(getattr(policy, 'reset', None))):
             raise RuntimeError('Navigation idle recovery requires acknowledged release and a resettable feedback policy')

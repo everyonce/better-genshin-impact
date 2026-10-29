@@ -83,6 +83,8 @@ public sealed class AgentStreamSession
     private bool _queuedEnableAttempted;
     /// <summary>Explicit same-owner opt-in to read-only native pose metadata; ordinary streams keep their existing capture cost.</summary>
     private bool _navigationGuidanceEnabled;
+    /// <summary>Explicit one-shot UI authority; ordinary actions always use the original world guard.</summary>
+    private AgentMapInspection? _mapInspection;
 
     /// <summary>Authenticated opt-in configuration uses the existing exact session QPC origin, never paired approximate samples.</summary>
     internal JObject StepApplicationConfiguration(RuntimeAgentInput input, string producerBuildSha256, int version = 1)
@@ -132,6 +134,7 @@ public sealed class AgentStreamSession
             ?? throw new InvalidOperationException("The agent pipe requires a Windows user identity."));
         var input = new RuntimeAgentInput(_runtime);
         var controller = new AgentActionController(input, enableInput, () => NowMs, _runtime.DesktopDcSourcePolicy, input.ReadTrackedState);
+        _mapInspection = new AgentMapInspection(_sessionId, _ownerEpoch, _clockOrigin, controller, input);
         // Install the nonthrowing observer before any owned loop can dispatch input.
         input.Telemetry.Sink = controller.RecordInputCall;
         if (AgentStepApplicationWire.Available) _applicationController = controller;
@@ -149,6 +152,7 @@ public sealed class AgentStreamSession
         {
             // Input release precedes waiting for any native capture or pipe operation to unwind.
             stop.Cancel();
+            _mapInspection.Cancel();
             controller.Stop(NowMs, "session_ended");
             await pipe.DisposeAsync();
             try { await Task.WhenAll(captureTask, inputTask, transportTask); }
@@ -213,6 +217,8 @@ public sealed class AgentStreamSession
             // Inspect these same native pixels after the safety gate; never take another capture for motion hints.
             var motion = AgentMotionRecognizer.Recognize(source, readiness.Ready);
             var navigationPose = navigation?.Recognize(source, observation, readiness, motion);
+            if (_mapInspection?.Pending == true)
+                _mapInspection.Observe(source, observation, readiness, motion, navigationPose, ct);
             _snapshots.Observe(source, observation, readiness);
             var resizeStarted = Stopwatch.GetTimestamp();
             var bytes = EncodeObservation(source, out var width, out var height, out var payloadBytes);
@@ -340,7 +346,11 @@ public sealed class AgentStreamSession
     private async Task InputLoopAsync(AgentActionController controller, CancellationToken ct)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(10));
-        while (await timer.WaitForNextTickAsync(ct)) controller.Tick(NowMs);
+        while (await timer.WaitForNextTickAsync(ct))
+        {
+            controller.Tick(NowMs);
+            _mapInspection?.Watch();
+        }
     }
 
     /// <summary>Serve one same-user controller; disconnect ends this task rather than transferring the lease.</summary>
@@ -369,6 +379,37 @@ public sealed class AgentStreamSession
             }
             switch (request.Command)
             {
+                case "inspectJunctionMap":
+                case "recoverJunctionMap":
+                case "mapInspectionStatus":
+                case "mapInspectionImage":
+                    object mapReply;
+                    byte[]? mapPng = null;
+                    try
+                    {
+                        if (request.Command is "inspectJunctionMap" or "recoverJunctionMap")
+                        {
+                            _mapInspection!.Start(request.RequestId, enableInput && !_experimentalQueuedStepApplications &&
+                                Volatile.Read(ref _navigationGuidanceEnabled) && Stopwatch.IsHighResolution,
+                                request.Command == "recoverJunctionMap", request.PriorEvidenceSha256);
+                            mapReply = new { type = "mapInspectionStarted", request.RequestId };
+                        }
+                        else if (request.Command == "mapInspectionStatus")
+                            mapReply = new { type = "mapInspection", inspection = _mapInspection!.Status(request.RequestId) };
+                        else
+                        {
+                            mapPng = _mapInspection!.Image(request.RequestId, request.FrameId);
+                            mapReply = new { type = "mapInspectionImage", request.RequestId, request.FrameId,
+                                payloadBytes = mapPng.Length, sha256 = Convert.ToHexString(
+                                    System.Security.Cryptography.SHA256.HashData(mapPng)).ToLowerInvariant() };
+                        }
+                    }
+                    catch (InvalidOperationException error)
+                    {
+                        mapReply = new { type = "rejected", reason = error.Message };
+                    }
+                    await WriteAsync(pipe, mapReply, mapPng is null ? (ReadOnlyMemory<byte>?)null : mapPng, ct);
+                    break;
                 case "enableNavigationGuidance":
                     // This command only enables evidence. Input still requires both original explicit opt-ins.
                     Volatile.Write(ref _navigationGuidanceEnabled, true);
@@ -429,6 +470,11 @@ public sealed class AgentStreamSession
                     finally { frame?.Release(); }
                     break;
                 case "action":
+                    if (_mapInspection?.RejectWalkingProposal() == true)
+                    {
+                        await WriteAsync(pipe, new { type = "rejected", request.RequestId, reason = "map_inspection_fenced" }, null, ct);
+                        break;
+                    }
                     if (_experimentalQueuedStepApplications && _applicationController is null)
                     {
                         await WriteAsync(pipe, new { type = "rejected", reason = "step_applications_not_enabled" }, null, ct);
@@ -470,6 +516,7 @@ public sealed class AgentStreamSession
                         diagnostics = _snapshots.Snapshot() }, null, ct);
                     break;
                 case "release":
+                    _mapInspection?.Cancel();
                     // The acknowledgement is also the client's fresh-source barrier, so sample it after release finishes.
                     var releasedReadiness = controller.ReleaseAndGetSnapshot(NowMs, out var releaseAcknowledgedAt, out var releaseExecutionContext);
                     await WriteAsync(pipe, new { type = "released", serverNowMs = releaseAcknowledgedAt,
@@ -477,6 +524,7 @@ public sealed class AgentStreamSession
                         receipts = controller.DrainReceipts(), droppedReceipts = controller.DroppedReceipts }, null, ct);
                     break;
                 case "stop":
+                    _mapInspection?.Cancel();
                     controller.Stop(NowMs, "client_stop");
                     await WriteAsync(pipe, new { type = "stopped", executionContext = controller.GetExecutionContextSnapshot(),
                         receipts = controller.DrainReceipts() }, null, ct);
@@ -503,6 +551,9 @@ public sealed class AgentStreamSession
     {
         type = "hello", version = 1, sessionId = _sessionId, ownerEpoch = _ownerEpoch,
         goalVersion = 1, inputEnabled = enableInput, supportsRelease = true,
+        mapInspection = new { version = 1, recoveryVersion = 1, station = "sidewalk-junction", wgcOnly = true, maximumSourceAgeMs = 150,
+            gameProcessId = _runtime?.Window.ProcessId ?? 0, gameWindowHandle = _runtime?.Window.Handle.ToInt64() ?? 0,
+            deadlineMs = 12000, minimumResponseMs = 80, maxImages = 3, inputChannel = "original-game-hwnd" },
         readbackMode = GameCaptureSettings.GetReadbackModeName(_runtime?.Capture), readbackVersion = 1,
         supportsStartBeforeMs = true, maxActionStartAgeMs = AgentActionController.MaxActionStartAgeMs,
         clockFrequency = 1000, allowedKeys = AgentActionController.AllowedKeys,

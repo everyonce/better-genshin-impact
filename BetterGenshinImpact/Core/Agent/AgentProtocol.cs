@@ -19,6 +19,8 @@ public sealed record AgentRequest
     public int GoalVersion { get; init; } = 1;
     /// <summary>Unique action identifier. Replays are rejected.</summary>
     public string RequestId { get; init; } = string.Empty;
+    /// <summary>Recovery-only SHA-256 of the external original-visit failure and passive full-map proof.</summary>
+    public string? PriorEvidenceSha256 { get; init; }
     /// <summary>Frame that the model actually consumed.</summary>
     public long FrameId { get; init; }
     /// <summary>Unmodified server monotonic capture timestamp from that frame.</summary>

@@ -363,7 +363,8 @@ public class LimitedFile(string rootPath)
                 if (tree is "reports" or "receipts")
                 {
                     var bytes = System.Text.Encoding.UTF8.GetByteCount(content);
-                    CaptureStorageBudget.Check(Path.Combine(rootPath, tree), bytes, maxBytes: 64L * 1024 * 1024);
+                    CaptureStorageBudget.Check(Path.Combine(rootPath, tree), bytes, maxBytes: 64L * 1024 * 1024,
+                        existingFilePath: path, append: append);
                 }
             }
 

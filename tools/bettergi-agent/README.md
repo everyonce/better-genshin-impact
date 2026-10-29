@@ -21,6 +21,22 @@ Each circuit visits the sidewalk junction, the west lamp, the junction again and
 
 ### Repeat a qualified photo task
 
+For separate named photo requests on one model load, use the warm launcher on SIREN. Each request specifies its name, circuit count and target stations. This command captures a lamp photo first, then obtains fresh photos of the stairs and junction.
+
+```powershell
+& 'C:/Programs/Python/Python311/python.exe' -B tools/bettergi-agent/run_warm_photo_requests.py `
+    --request lamp-survey 2 west-lamp `
+    --request stairs-survey 2 stair-front sidewalk-junction `
+    --seconds 165 --evidence-root artifacts/live/warm-photo `
+    --steering-shadow=artifacts/agent/steering/gen-01.json `
+    --landmark-shadow=artifacts/agent/landmarks/gen-04.json `
+    --photo-qualification=artifacts/agent/landmarks/qualify-g4-fresh-10.json
+```
+
+Declare two to four requests ahead of time. Use different names and distinct sets of target stations, up to 32 circuits in total. At a verified return to the stairs, the previous request must have all its photos, an acknowledged release and terminal receipts for every accepted action. The next request takes fresh observations and starts a fresh policy history on the loaded walking model. Each request has a dedicated photo directory. Create the printed `STOP` file to cancel. To exercise the stop path, add `--stop-drill` to a separate two-request launch. The supervisor waits for an applied input from request two, creates the STOP file, and audits the addressed cancellation. The [warm handoff report](../../Docs/research/BetterGI-Warm-Requests-2026-10-29.md) gives the timing and evidence requirements.
+
+### Separate resident batches
+
 On SIREN the series launcher can repeat a task on the same minimized RDP connection. This example requests one source photo at each named station in each batch. The collector saves the original RGB image when the native station, verified frame and qualified image prediction agree. At the end of the batch a separate verifier decodes each saved PNG, checks its raw pixels against the live hash and classifies it again. A failed objective ends the series.
 
 ```powershell

@@ -23,10 +23,11 @@ STOP_C = 78
 POLL_SECONDS = 2
 
 
-def options(argv=None, parser=None):
+def options(argv=None, parser=None, *, warm=False):
     """All model assets and executables must already be installed on this host."""
     p = parser if parser is not None else argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--circuits', type=int, default=1, help='Number of A-B-C-B-A circuits (1 to 32)')
+    if not warm:
+        p.add_argument('--circuits', type=int, default=1, help='Number of A-B-C-B-A circuits (1 to 32)')
     p.add_argument('--seconds', type=int, default=180, help='Wall time limit including model loading (15 to 600)')
     p.add_argument('--evidence-root', type=Path, default=ROOT/'artifacts/live/patrol')
     p.add_argument('--gpu-python', type=Path, default=AGENT/'envs/gamescaling/Scripts/python.exe')
@@ -39,15 +40,18 @@ def options(argv=None, parser=None):
                    Path(os.environ.get('SystemRoot', 'C:/Windows'))/'System32/nvidia-smi.exe'))
     p.add_argument('--steering-shadow', type=Path, help='Observe and audit predictions from this steering checkpoint')
     p.add_argument('--landmark-shadow', type=Path, help='Observe station predictions and audit recorded frames against them')
-    p.add_argument('--photo-station', choices=PATROL_STATIONS, action='append', default=[],
-                   help='Collect a verified photo at this station during the patrol')
+    if warm:
+        p.set_defaults(photo_station=[])
+    else:
+        p.add_argument('--photo-station', choices=PATROL_STATIONS, action='append', default=[],
+                       help='Collect a verified photo at this station during the patrol')
     p.add_argument('--photo-qualification', type=Path, help='Sealed qualification for the photo observer')
     p.add_argument('--camera-calibration', type=Path, help='Use and independently audit this local camera checkpoint')
     args = p.parse_args(argv)
-    if (args.photo_station or args.photo_qualification) and not (
-            args.photo_station and args.photo_qualification and args.landmark_shadow):
+    if (warm or args.photo_station or args.photo_qualification) and not (
+            (warm or args.photo_station) and args.photo_qualification and args.landmark_shadow):
         p.error('Photo stations require both --landmark-shadow and --photo-qualification')
-    if not (1 <= args.circuits <= 32 and 15 <= args.seconds <= 600):
+    if not (15 <= args.seconds <= 600 and (warm or 1 <= args.circuits <= 32)):
         p.error('Set --circuits between 1 and 32 and --seconds between 15 and 600.')
     return args
 
@@ -99,6 +103,10 @@ def patrol_argv(args, session, folder):
                         '--photo-qualification', str(args.photo_qualification.resolve())])
         for station in args.photo_station:
             command.extend(['--photo-station', station])
+    if getattr(args, 'warm_photo_plan', None):
+        command.extend(['--warm-photo-plan=' + str(args.warm_photo_plan),
+                        '--photo-directory=' + str(folder/'station-photos'),
+                        '--photo-qualification=' + str(args.photo_qualification.resolve())])
     if args.camera_calibration:
         command.append('--camera-calibration=' + str(args.camera_calibration.resolve()))
     return command
@@ -166,12 +174,36 @@ def pin_resident(folder, run_id=None):
     return run_id
 
 
-def stop_resident(folder, run_id):
+def native_qpc_sample():
+    """Read Windows QPC ticks and frequency; timing is optional for delivering a stop."""
+    if os.name != 'nt':
+        return None
+    import ctypes
+    try:
+        kernel = ctypes.WinDLL('kernel32')
+        frequency, ticks = ctypes.c_int64(), ctypes.c_int64()
+        if (kernel.QueryPerformanceFrequency(ctypes.byref(frequency)) and frequency.value > 0
+                and kernel.QueryPerformanceCounter(ctypes.byref(ticks))):
+            return frequency.value, ticks.value
+    except (AttributeError, OSError):
+        pass
+    return None
+
+
+def stop_resident(folder, run_id, *, timing=None):
     """Address only this run's private control file and preserve its existing fields."""
     path = folder/'patrol.json.control.json'
     doc = addressed_control(path, run_id)
     if doc['command'] != 'stop':
+        before = native_qpc_sample() if timing is not None else None
         atomic_json(path, {**doc, 'command': 'stop'})
+        if before is not None:
+            after = native_qpc_sample()
+            if after is not None and after[0] == before[0] and after[1] >= before[1]:
+                timing['addressedStopQpc'] = dict(clock='windows-query-performance-counter',
+                    frequencyHz=before[0], beforeTicks=before[1], afterTicks=after[1])
+        return True
+    return False
 
 
 def supervise(future, folder, executable, deadline, state, series=None):
@@ -197,8 +229,12 @@ def supervise(future, folder, executable, deadline, state, series=None):
                 if state['runId'] or 'controlError' not in state:
                     state['runId'] = pin_resident(folder, state['runId'])
                 if state['runId'] and state['stopReason'] and not state['stopRequested']:
-                    stop_resident(folder, state['runId'])
+                    # Only the externally observed second-request drill measures the actual atomic control write.
+                    drill = state['stopReason'] == 'seriesOperatorStop' and getattr(series, 'stop_observation', None)
+                    timing = state if drill else None
+                    state['stopCommandPublished'] = stop_resident(folder, state['runId'], timing=timing)
                     state['stopRequested'] = True
+                    state['stopRequestedAtMonotonicNs'] = time.monotonic_ns()
             except (OSError, ValueError, KeyError) as exc:
                 state.update(stopReason=state['stopReason'] or 'invalidResidentControl', controlError=str(exc))
             wait((future,), timeout=POLL_SECONDS)

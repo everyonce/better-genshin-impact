@@ -1,0 +1,182 @@
+"""Run two to four named photo requests on one pinned SIREN RDP lease and verify every handoff."""
+import argparse
+from datetime import datetime, timezone
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import socket
+import time
+import uuid
+
+import run_rdp_patrol as patrol
+from run_patrol_series import SeriesGuard
+
+
+def options(argv=None):
+    """Accept a bounded sequence of named goals and reuse the single-patrol bounds and local assets."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--request', action='append', required=True, nargs='+', metavar='VALUE',
+                        help='Use two to four times. Each request supplies NAME CIRCUITS STATION [STATION...]')
+    parser.add_argument('--stop-drill', action='store_true',
+                        help='For a two-request plan, exercise the external STOP file after a dispatch in request two')
+    args = patrol.options(argv, parser, warm=True)
+    try:
+        requests = []
+        for name, circuits, *targets in args.request:
+            requests.append(dict(id=uuid.uuid4().hex, name=name, targets=targets, circuits=int(circuits)))
+        args.plan = dict(version=1, requests=requests)
+        from warm_photo_requests import validate_plan
+        validate_plan(args.plan)
+        if args.stop_drill and len(requests) != 2:
+            raise ValueError('The request-two stop drill requires exactly two requests')
+        args.circuits = sum(r['circuits'] for r in requests)
+    except (TypeError, ValueError) as exc:
+        parser.error(str(exc))
+    return args
+
+
+class WarmGuard(SeriesGuard):
+    """Apply existing ownership/deadline/STOP controls and optionally exercise that same STOP path."""
+    def __init__(self, folder, args):
+        super().__init__(folder/'STOP', args.seconds)
+        self.folder = folder
+        self.drill = args.stop_drill
+        self.second_id = args.plan['requests'][1]['id']
+        self.stop_observation = None
+
+    def stop_reason(self):
+        """Only create the drill marker after observing an applied action in this resident's second request."""
+        reason = super().stop_reason()
+        if reason or not self.drill:
+            return reason
+        try:
+            try:
+                raw = (self.folder/'station-photos'/'warm-status.json').read_bytes()
+            except (FileNotFoundError, PermissionError):
+                return None
+            status = json.loads(raw)
+            if (status.get('version') != 1 or status.get('activeOrdinal') != 2
+                    or status.get('activeRequestId') != self.second_id
+                    or not status.get('activeFirstAppliedRequestId')):
+                return None
+            run_id = patrol.pin_resident(self.folder)
+            native_id = status['activeFirstAppliedRequestId']
+            frame_id = status.get('activeFirstAppliedFrameId')
+            if (not run_id or run_id != status.get('runId') or not isinstance(native_id, str)
+                    or not re.fullmatch('[0-9a-f]{32}', native_id) or type(frame_id) is not int or frame_id < 1):
+                raise ValueError('Applied request is not bound to the addressed resident')
+            if patrol.addressed_control(self.folder/'patrol.json.control.json', run_id)['command'] != 'run':
+                return None
+            proof = dict(version=1, mode='external-stop-drill', runId=run_id, requestId=self.second_id,
+                         nativeRequestId=native_id, frameId=frame_id, observedAtMonotonicNs=time.monotonic_ns())
+            # Exclusive creation distinguishes the exercise from an actual operator already cancelling this run.
+            with self.stop_file.open('x', encoding='utf-8') as marker:
+                json.dump(proof, marker)
+            proof['stopFileCreatedAtMonotonicNs'] = time.monotonic_ns()
+            self.stop_observation = proof
+        except FileExistsError:
+            pass
+        except (OSError, KeyError, ValueError, TypeError):
+            self.reason = 'invalidWarmStopEvidence'
+        return super().stop_reason()
+
+
+def audit_result(args, folder, guard):
+    """Check the exact addressed lease, all original request evidence and the requested completion mode."""
+    from audit_photo_handoff import audit_photo_handoff
+    state = json.loads((folder/'launcher.json').read_bytes())
+    broker = json.loads((folder/'broker.json').read_bytes())
+    resident = json.loads((folder/'patrol.json').read_bytes())
+    if (not state['runId'] or state['runId'] != resident['runId'] or not broker.get('success')
+            or broker.get('returnCode') != 0 or broker.get('timedOut')):
+        raise RuntimeError('Warm request broker or resident identity did not finish cleanly')
+    proof = guard.stop_observation
+    if args.stop_drill:
+        if (not proof or state.get('stopReason') != 'seriesOperatorStop' or guard.reason != 'seriesOperatorStop'
+                or state.get('stopRequested') is not True or state.get('stopCommandPublished') is not True
+                or proof['runId'] != state['runId']
+                or state.get('stopRequestedAtMonotonicNs', 0) < proof['stopFileCreatedAtMonotonicNs']
+                or resident.get('endReason') != 'userStop'
+                or patrol.addressed_control(folder/'patrol.json.control.json', state['runId'])['command'] != 'stop'):
+            raise RuntimeError('Expected a verified operator stop of the second request')
+        witness = dict(proof, addressedStopAtMonotonicNs=state['stopRequestedAtMonotonicNs'])
+        if 'addressedStopQpc' in state:
+            witness['addressedStopQpc'] = state['addressedStopQpc']
+        patrol.atomic_json(folder/'operator-stop.json', witness)
+        authenticated = None
+    else:
+        if (state.get('verified') is not True or state.get('stopReason') or state.get('stopRequested')
+                or guard.stop_reason()
+                or patrol.addressed_control(folder/'patrol.json.control.json', state['runId'])['command'] != 'run'):
+            raise RuntimeError('Warm request ownership or prior route audit failed')
+        authenticated = json.loads((folder/'audit.json').read_bytes())
+    audit = audit_photo_handoff(folder/'patrol.json', folder/'patrol-recording', repository=patrol.ROOT,
+        photo_root=folder/'station-photos', requests=args.plan, landmark_checkpoint=args.landmark_shadow,
+        qualification=args.photo_qualification, authenticated_report=authenticated, allow_incomplete=args.stop_drill)
+    patrol.atomic_json(folder/'handoff-audit.json', audit)
+    if args.stop_drill:
+        if audit.get('stopVerified') is not True or audit.get('passed') is not False:
+            raise RuntimeError('Independent audit did not verify the stop drill')
+    elif audit.get('passed') is not True:
+        raise RuntimeError('Independent audit did not verify the warm handoff')
+    return audit
+
+
+def run(args, folder):
+    """Submit exactly one pinned resident job and persist the supervisor result even on refusal."""
+    plan_path = folder/'photo-requests.json'
+    with plan_path.open('x', encoding='utf-8') as output:
+        json.dump(args.plan, output, indent=2)
+    args.warm_photo_plan = plan_path.resolve()
+    guard = WarmGuard(folder, args)
+    requests = args.plan['requests']
+    planned = [dict(oldRequestId=old['id'], newRequestId=new['id']) for old, new in zip(requests, requests[1:])]
+    summary = dict(status='running', computer=socket.gethostname(), stopFile=str(guard.stop_file),
+                   stopDrill=args.stop_drill, planSha256=hashlib.sha256(plan_path.read_bytes()).hexdigest(),
+                   plannedHandoffs=planned, verifiedHandoffs=[])
+    print(f'Warm request evidence: {folder}\nTo cancel, create: {guard.stop_file}', flush=True)
+    patrol.atomic_json(folder/'warm-launcher.json', summary)
+    try:
+        if os.name != 'nt' or summary['computer'].split('.')[0].upper() != 'SIREN':
+            raise RuntimeError('Warm requests require the SIREN Windows host')
+        if guard.stop_reason():
+            raise RuntimeError(guard.reason)
+        try:
+            patrol.run(args, folder, series=guard)
+        except RuntimeError:
+            if not args.stop_drill or not guard.stop_observation or guard.reason != 'seriesOperatorStop':
+                raise
+        if hashlib.sha256(plan_path.read_bytes()).hexdigest() != summary['planSha256']:
+            raise RuntimeError('The request plan changed during the lease')
+        audit = audit_result(args, folder, guard)
+        handoffs = audit['handoffs']
+        audited = [dict(oldRequestId=row['oldRequestId'], newRequestId=row['newRequestId']) for row in handoffs]
+        if audited != planned:
+            raise RuntimeError('Audited handoffs differ from the prescribed request sequence')
+        summary['verifiedHandoffs'] = [dict(pair, dispatchGapMs=row['dispatchGapMs'])
+                                       for pair, row in zip(audited, handoffs)]
+        summary['status'] = 'stopVerified' if args.stop_drill else 'completed'
+    except (Exception, KeyboardInterrupt) as exc:
+        summary.update(status='stopped', reason=str(exc) or 'interrupted')
+    finally:
+        guard.finished.set()
+        summary['identity'] = guard.identity
+        patrol.atomic_json(folder/'warm-launcher.json', summary)
+    return summary
+
+
+def main():
+    """Use a fresh exclusive folder for every completed, stopped or refused trial."""
+    args = options()
+    stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+    folder = args.evidence_root.resolve()/f'warm-{stamp}-{uuid.uuid4().hex[:12]}'
+    folder.mkdir(parents=True, exist_ok=False)
+    summary = run(args, folder)
+    print(summary.get('reason', summary['status']))
+    return int(summary['status'] not in ('completed', 'stopVerified'))
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

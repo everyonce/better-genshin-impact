@@ -92,6 +92,30 @@ class PatrolLauncherTests(unittest.TestCase):
             patrol.pin_resident(self.folder)
         read.assert_called_once()
 
+    def test_native_qpc_brackets_only_an_actual_addressed_write(self):
+        self.publish(self.run_id)
+        evidence = {}
+        path = self.folder/'patrol.json.control.json'
+        observed_commands = []
+        def sample():
+            observed_commands.append(patrol.addressed_control(path,self.run_id)['command'])
+            return (10_000_000, 300 + len(observed_commands))
+        with patch.object(patrol,'native_qpc_sample',side_effect=sample):
+            self.assertTrue(patrol.stop_resident(self.folder,self.run_id,timing=evidence))
+            self.assertFalse(patrol.stop_resident(self.folder,self.run_id,timing={}))
+        self.assertEqual(observed_commands,['run','stop'])
+        self.assertEqual(evidence['addressedStopQpc'],dict(clock='windows-query-performance-counter',
+            frequencyHz=10_000_000,beforeTicks=301,afterTicks=302))
+
+    def test_unavailable_or_inconsistent_clock_never_prevents_stop(self):
+        for samples in ([None], [(10, 20), None], [(10, 20), (11, 21)], [(10, 20), (10, 19)]):
+            self.publish(self.run_id)
+            evidence = {}
+            with self.subTest(samples=samples), patch.object(patrol,'native_qpc_sample',side_effect=samples):
+                self.assertTrue(patrol.stop_resident(self.folder,self.run_id,timing=evidence))
+                self.assertEqual(evidence,{})
+                self.assertEqual(patrol.addressed_control(self.folder/'patrol.json.control.json',self.run_id)['command'],'stop')
+
     def test_retry_sharing_on_control_preserves_uuid_and_fails_immediately_on_invalid_content(self):
         doc = {'version': 1, 'runId': self.run_id, 'command': 'pause'}
         with patch.object(patrol, 'read_control_document', side_effect=[

@@ -46,7 +46,7 @@ The segmented recorder now admits up to 32 verified RGB192 frames while the enco
 
 The two repaired batches applied 1,063 actions in total. Their measured last-to-first dispatch interval was 24.84 seconds across the batch boundary, including 18.47 seconds of model loading. The lease-adjusted Windows clock and the independent capture clock gave the same result.
 
-The next experiment for uninterrupted operation is to carry the CUDA model across two independently graded photo requests in one bounded resident lease. Each request needs a separate target list, source-frame journal and completion check. Switch at a verified station release. Require one model load, at most one second between the previous and next request's dispatches, zero actions attributed to the retired request after the switch and the same 150 ms source-age ceiling. Exercise the operator stop during a separate second-request trial. Keep the zero-loss and thermal requirements for both requests. For a different neighborhood, first survey its positions and collect a separate held-out lease before using its photos as task evidence.
+The follow-up experiment carried the loaded model across independently graded photo requests in one bounded lease. It measured each handoff against the earlier one-second limit and audited request ownership, source age and the separate photo journals. See the [warm request results](BetterGI-Warm-Requests-2026-10-29.md). For a different neighborhood, first survey its positions and collect a separate held-out lease before using its photos as task evidence.
 
 ## Reproduce on SIREN
 

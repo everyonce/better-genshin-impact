@@ -839,6 +839,7 @@ class ClimbRecoveryStream:
         self.control, self.report, self.recorder = control, report, recorder
         self.collect, self.reset, self.clear, self.released = collect, reset, clear, released
         self.drop_resumed = drop_resumed
+        self.warm = None
         self.token = None
         self.first_error = None
         self.cleanup_attempted = False
@@ -864,6 +865,8 @@ class ClimbRecoveryStream:
         row = dict(event, type=event.get('type', 'navigationClimbRecovery'),
                    clientTimeNs=time.perf_counter_ns(), sessionId=self.hello_value['sessionId'],
                    ownerEpoch=self.hello_value['ownerEpoch'], modelHistoryCommitted=False)
+        if self.warm:
+            row['warmRequestId'] = self.warm.current['id']
         self.report['navigationClimbRecoveryEvents'].append(row)
         if self.recorder:
             self.recorder.event(row)
@@ -949,6 +952,8 @@ class ClimbRecoveryStream:
                 arguments = event['arguments']
                 def submit_recovery():
                     """Only evidence retention and owned bridge I/O; never re-enter control methods."""
+                    if self.warm:
+                        self.warm.require_action_frame(arguments['frameId'])
                     self.report['unacknowledgedRecoveryAction'] = copy.deepcopy(arguments)
                     return self.bridge.request('action', **arguments)
                 # The monitor cannot change the token between this final check and the write.
@@ -966,6 +971,10 @@ class ClimbRecoveryStream:
                            frameId=arguments['frameId'], requestId=arguments['requestId'],
                            arguments=copy.deepcopy(arguments), acceptance=copy.deepcopy(reply),
                            controlToken=self.token, modelHistoryCommitted=False)
+                if self.warm:
+                    row['warmRequestId'] = self.warm.current['id']
+                    if reply.get('type') == 'accepted':
+                        self.warm.accepted(arguments['requestId'], arguments['frameId'])
                 self.report['navigationClimbActions'].append(row)
                 self.record(row)
                 # Record admission before consuming any terminal returned in the same reply.
@@ -1089,6 +1098,7 @@ def parse_arguments(argv=None):
                         help='Collect one source photo when the native station and its visual prediction agree')
     parser.add_argument('--photo-directory', help='Fresh directory for original station photos and their source IDs')
     parser.add_argument('--photo-qualification', help='Sealed observer qualification for the selected checkpoint')
+    parser.add_argument('--warm-photo-plan', help='Two to four independently verified photo requests on the same native patrol lease')
     parser.add_argument('--camera-calibration', metavar='CHECKPOINT',
                         help='Trial a holdout-qualified camera response on the street patrol')
     parser.add_argument('--remember-hybrid-bypass', action='store_true',
@@ -1194,10 +1204,15 @@ def parse_arguments(argv=None):
     if args.landmark_shadow and (not args.hybrid_navigation or args.hybrid_route != STREET_PATROL_ROUTE
                                  or args.observation_profile != P2P_NATIVE):
         parser.error('landmark-shadow requires the street patrol and native RGB192 input')
-    if args.photo_station or args.photo_directory or args.photo_qualification:
-        if not (args.photo_station and args.photo_directory and args.photo_qualification
+    if args.photo_station or args.photo_directory or args.photo_qualification or args.warm_photo_plan:
+        if not ((bool(args.photo_station) != bool(args.warm_photo_plan)) and args.photo_directory and args.photo_qualification
                 and args.landmark_shadow and args.resident and args.enable_input):
             parser.error('A photo survey requires named stations, fresh output, the qualified landmark observer and a live resident')
+    if args.warm_photo_plan and (args.model != 'open-p2p' or not args.goal_embedding or not args.hybrid_legs
+                                 or not args.p2p_execution_feedback or not args.record_dir):
+        parser.error('Warm photos require the receipt-backed resident P2P policy, walking embedding and recorded leg budget')
+    if args.warm_photo_plan and (not args.patrol_series_binding or args.seconds > 600 or args.max_observation_age_ms > 150):
+        parser.error('Warm photos require pinned patrol owners, a 600 second maximum and a 150 ms source-age ceiling')
     if args.camera_calibration and (args.hybrid_route != STREET_PATROL_ROUTE or not args.enable_input
                                     or not args.resident or args.max_observation_age_ms != 150):
         parser.error('camera-calibration requires the resident live street patrol and its 150 ms input deadline')
@@ -1236,6 +1251,7 @@ def load_policy(args):
     validate_execution_context_options(args)
     prewarm = validate_startup_options(args)
     p2p_temperature = validate_p2p_temperature_options(args)
+    warm_goal_sha = hashlib.sha256(Path(args.goal_embedding).read_bytes()).hexdigest() if getattr(args, 'warm_photo_plan', None) else None
     policy = None
     if args.model != 'observe':
         from model_adapters import make_adapter
@@ -1264,6 +1280,12 @@ def load_policy(args):
         if getattr(args, 'landmark_shadow', None):
             from landmark_recognizer import LandmarkRecognizer
             policy.landmark_shadow = LandmarkRecognizer.load(args.landmark_shadow)
+            if warm_goal_sha:
+                if (not policy.execution_feedback or not callable(getattr(policy, 'reset', None))
+                        or Path(policy.metadata['goal']['file']).resolve() != Path(args.goal_embedding).resolve()
+                        or hashlib.sha256(Path(args.goal_embedding).read_bytes()).hexdigest() != warm_goal_sha):
+                    raise RuntimeError('Loaded warm policy must retain the same receipt-backed goal embedding')
+                policy.warm_goal_sha = warm_goal_sha
             if getattr(args, 'photo_qualification', None):
                 from patrol_photo_survey import require_qualified_observer
                 require_qualified_observer(args.photo_qualification, policy.landmark_shadow.checkpoint_id)
@@ -1405,6 +1427,13 @@ def run_episode(args, policy=None, control=None):
         report['configuredInputKeys'] = configured_keys
         report['effectiveInputKeys'] = sorted(effective_keys)
         photo_survey = None
+        warm = None
+        if getattr(args, 'warm_photo_plan', None):
+            from warm_photo_requests import WarmPhotoRequests
+            warm = WarmPhotoRequests(args.warm_photo_plan, args.photo_directory, policy.landmark_shadow.checkpoint_id,
+                                     args.goal_embedding, bridge.hello, control.run_id, args.hybrid_legs)
+            if warm.identity['goalEmbeddingSha256'] != policy.warm_goal_sha:
+                raise RuntimeError('Warm goal embedding changed since model load')
         if getattr(args, 'photo_station', None):
             from patrol_photo_survey import PatrolPhotoSurvey
             photo_survey = PatrolPhotoSurvey(Path(args.photo_directory), args.photo_station,
@@ -1414,6 +1443,7 @@ def run_episode(args, policy=None, control=None):
                 collect=lambda value: collect_receipts(value), reset=lambda: reset_for_climb(),
                 clear=lambda: latest.clear(), released=lambda value: climb_released(value),
                 drop_resumed=hybrid.latch_climb_exit if hybrid else None)
+            climb.warm = warm
         archive = None
         if getattr(args, 'lease_output', None):
             from stream_segments import StreamSegments
@@ -1614,6 +1644,10 @@ def run_episode(args, policy=None, control=None):
                 progress.reset()
             transition = {'type': 'controlTransition', 'state': 'held', 'reason': reason,
                           'clientTimeNs': time.perf_counter_ns(), 'frameId': previous}
+            if warm:
+                transition['warmRequestId'] = warm.current['id']
+                if reason == 'hybridEndpoint':
+                    transition['warmRelease'] = warm.released(previous, released)
             if stale_replay and released:
                 # Keep the exact release barrier and terminal identities so a
                 # later route audit can verify the gap during re-localization.
@@ -1637,17 +1671,27 @@ def run_episode(args, policy=None, control=None):
         if hybrid is None:
             return
         report['hybridNavigation'] = hybrid.snapshot()
+        endpoint = None
         for event in hybrid.drain_events():
+            if warm:
+                event['warmRequestId'] = warm.current['id']
             if getattr(args, 'landmark_shadow', None):
                 observe_station(policy.landmark_shadow, event, station_frame, station_pixels)
-                if photo_survey and 'visualStation' in event:
-                    visit = photo_survey.observe(event, station_frame, station_pixels)
+                survey = warm.survey if warm else photo_survey
+                if survey and 'visualStation' in event:
+                    visit = survey.observe(event, station_frame, station_pixels)
                     if visit is not None:
                         event['photoSurveyVisit'] = visit
-                    report['stationPhotoSurvey'] = photo_survey.snapshot()
+                    report['stationPhotoSurvey'] = survey.snapshot()
             report['hybridNavigationEvents'].append(event)
             if recorder:
                 recorder.event(event)
+            if warm:
+                if event['type'] == 'hybridEndpointVerified':
+                    endpoint = event
+                for transition in warm.after_native(event, endpoint):
+                    report['hybridNavigationEvents'].append(transition)
+                    recorder.event(transition)
         if control:
             control.publish(hybridNavigation=report['hybridNavigation'])
 
@@ -1733,7 +1777,12 @@ def run_episode(args, policy=None, control=None):
             # The monitor already invalidated its epoch, so no old-goal result can be reused.
             if control:
                 from resident_runtime import apply_pending_goal
-                change = apply_pending_goal(control, policy, lambda: hold('goalChange', force_release=True))
+                def release_for_goal_change():
+                    """Keep the warm plan bound to its original instruction through completion or operator stop."""
+                    hold('goalChange', force_release=True)
+                    if warm:
+                        raise RuntimeError('External goal change interrupted the warm photo plan')
+                change = apply_pending_goal(control, policy, release_for_goal_change)
                 if change:
                     report['goalChanges'].append(change)
                     if recorder:
@@ -1757,6 +1806,8 @@ def run_episode(args, policy=None, control=None):
             # Inspect before receipt() retires the bounded accepted-noop identity ledger.
             noop_history_reset = idle_recovery.matched_noop_expiries(unapplied_history_receipts(pending_receipts))
             for receipt in pending_receipts:
+                if warm:
+                    warm.receipt(receipt)
                 recovery_event(idle_recovery.receipt(receipt))
                 if camera_trial:
                     camera_trial.receipt(receipt)
@@ -1923,6 +1974,8 @@ def run_episode(args, policy=None, control=None):
                           controlEpoch=control_token[0], policyGoalVersion=control_token[1],
                           appliedGoalRequestId=control_token[2], goalIntent=goal_state.get('goalIntent', 'unspecified'))
             result['frameTiming'] = timing
+            if warm:
+                result['warmRequestId'] = warm.current['id']
             if args.action_hold_ms is not None and result.get('parseValid') and len(result.get('steps', [])) == 1:
                 result['rawPolicySteps'] = [dict(step) for step in result['steps']]
                 result['steps'] = [dict(result['steps'][0], durationMs=args.action_hold_ms)]
@@ -1981,11 +2034,22 @@ def run_episode(args, policy=None, control=None):
                 report['unacknowledgedAction'] = {'requestId': request_id, 'frame': dict(frame),
                     'steps': result['steps'], 'observedAtMs': frame['capturedAtMs'],
                     'expiresAtMs': observed_at+700, **start_deadline}
-                result['acceptance'], response_payload = bridge.request('action', requestId=request_id,
-                    frameId=frame['frameId'], observedAtMs=frame['capturedAtMs'],
-                    expiresAtMs=observed_at+700, modelId=action_model_id,
-                    steps=result['steps'], **start_deadline)
-                committed = action_response_accepted(result['acceptance'], request_id, response_payload)
+                def submit_action():
+                    """Finish this policy transaction under the current resident authority."""
+                    if warm:
+                        warm.require_action_frame(frame['frameId'])
+                    return bridge.request('action', requestId=request_id, frameId=frame['frameId'],
+                        observedAtMs=frame['capturedAtMs'], expiresAtMs=observed_at+700, modelId=action_model_id,
+                        steps=result['steps'], **start_deadline)
+                submitted, response = control.guarded_submit(control_token, submit_action) if warm else (True, submit_action())
+                if submitted:
+                    result['acceptance'], response_payload = response
+                    committed = action_response_accepted(result['acceptance'], request_id, response_payload)
+                    if warm and committed:
+                        warm.accepted(request_id, frame['frameId'])
+                else:
+                    result['acceptance'] = dict(type='notSubmitted', reason='residentControlEpochChanged')
+                    committed = False
                 if committed and camera_trial:
                     camera_trial.accepted(request_id, observed_at, result['steps'][0])
                 report.pop('unacknowledgedAction', None)
@@ -2028,6 +2092,7 @@ def run_episode(args, policy=None, control=None):
             report['decisions'].append(result)
             if recorder:
                 recorder.event({'type': 'proposal', 'frameId': frame['frameId'],
+                                **({'warmRequestId': result['warmRequestId']} if warm else {}),
                                 'proposalJournalVersion': 2,
                                 # Null explicitly means this policy has no acceptance feedback.
                                 'historyCommitted': result.get('historyCommitted'),

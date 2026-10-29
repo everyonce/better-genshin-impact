@@ -6,6 +6,7 @@ from pathlib import Path
 import struct
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -215,6 +216,66 @@ class StartupTests(unittest.TestCase):
                 with self.assertRaisesRegex(control.ControlError, 'disabled: rejected'):
                     control.start_game(idle, 1)
         mutation.assert_called_once()
+
+
+class CommandAdmissionTests(unittest.TestCase):
+    """Drive the real file-claim protocol with fake clocks; never start a runner."""
+
+    def setUp(self):
+        self.directory = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.pythonw = self.directory/'pythonw.exe'
+        self.pythonw.touch()
+        self.root = dict(instanceType='Primary', automationEnabled=True, instanceNonce='test',
+                         childConnectedState=1, childSessionId=3)
+        self.clock = self.enterContext(patch.object(control, 'time'))
+        self.utc = time.time()
+        self.clock.time.return_value = self.utc
+        self.clock.monotonic.return_value = 0.
+        self.launch = self.enterContext(patch.object(control, 'mutate'))
+
+    def poll(self, ticks):
+        """Sleep advances the two clocks independently and may publish a worker file."""
+        ticks = iter(ticks)
+        def advance(_):
+            elapsed, age, state = next(ticks)
+            self.clock.monotonic.return_value = elapsed
+            self.clock.time.return_value = self.utc + age
+            path, = self.directory.glob('*.job.json')
+            job_id = path.name.removesuffix('.job.json')
+            if state == 'claim':
+                path.with_name(job_id + '.claimed').write_text('321')
+            if state == 'result':
+                path.with_name(job_id + '.result.json').write_text(json.dumps(
+                    dict(version=1, jobId=job_id, success=True, windowsSessionId=3)))
+        self.clock.sleep.side_effect = advance
+        return control.run_command(self.root, [str(self.pythonw)], str(self.directory),
+                                   str(self.pythonw), 120, str(self.directory), 1024)
+
+    def test_expired_unclaimed_uuid_is_closed_once_after_both_clocks_pass_the_limit(self):
+        # Wall-clock jump alone, elapsed clock alone, and exactly 60 s all
+        # remain admissible. Only the fourth poll can take the terminal marker.
+        self.launch.side_effect = control.ControlError('dispatch response lost')
+        with self.assertRaisesRegex(control.ControlError, 'expired before.*dispatch response lost'):
+            self.poll([(1, 75, None), (61, 45, None), (62, 60, None), (63, 61, None)])
+        self.launch.assert_called_once()
+        self.assertEqual(self.clock.sleep.call_count, 4)
+        claim, = self.directory.glob('*.claimed')
+        self.assertEqual(claim.read_text(), 'expired-before-runner-claim')
+        from child_runner import run_job
+        with self.assertRaises(FileExistsError):
+            run_job(next(self.directory.glob('*.job.json')))
+
+    def test_result_from_already_claimed_worker_takes_precedence_after_expiry(self):
+        result = self.poll([(60, 60, 'claim'), (61, 61, None), (80, 80, 'result')])
+        self.assertTrue(result['success'])
+        self.assertEqual(next(self.directory.glob('*.claimed')).read_text(), '321')
+        self.launch.assert_called_once()
+
+    def test_claim_with_no_result_keeps_unknown_outcome_and_no_replay(self):
+        with self.assertRaisesRegex(control.ControlError, 'outcome is unknown.*do not replay'):
+            self.poll([(61, 61, 'claim'), (151, 151, None)])
+        self.assertEqual(next(self.directory.glob('*.claimed')).read_text(), '321')
+        self.launch.assert_called_once()
 
 
 class ReplacementTests(unittest.TestCase):

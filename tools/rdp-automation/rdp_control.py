@@ -15,7 +15,7 @@ import tempfile
 import time
 import uuid
 
-from child_runner import atomic_json, local_absolute, MAX_JOB_BYTES, validate_job
+from child_runner import atomic_json, local_absolute, MAX_JOB_AGE_MS, MAX_JOB_BYTES, validate_job
 
 # Reuse the established overlapped I/O and Windows PID/session/SID verification.
 # The old quest-only command allowlist remains unchanged and independently usable.
@@ -1514,6 +1514,7 @@ def run_command(root, argv, work_dir, python_exe, timeout, job_dir, output_limit
     job = {'version': 1, 'jobId': job_id, 'createdAtUnixMs': int(time.time() * 1000),
            'windowsSessionId': session, 'argv': argv, 'workingDirectory': str(local_absolute(work_dir)),
            'timeoutSeconds': timeout, 'maxOutputBytes': output_limit}
+    admission_deadline = time.monotonic() + MAX_JOB_AGE_MS / 1000
     validate_job(job, job_id)
     python_exe = background_python(python_exe)
     job_dir = local_absolute(job_dir)
@@ -1534,6 +1535,8 @@ def run_command(root, argv, work_dir, python_exe, timeout, job_dir, output_limit
         # inspected; a second launch request is never sent automatically.
         launch_error = str(error)
     result_path = path.with_name(job_id + '.result.json')
+    claim_path = path.with_name(job_id + '.claimed')
+    runner_claimed = False
     deadline = time.monotonic() + timeout + 30
     while time.monotonic() < deadline:
         if result_path.exists():
@@ -1545,6 +1548,20 @@ def run_command(root, argv, work_dir, python_exe, timeout, job_dir, output_limit
             if 'windowsSessionId' in result and result['windowsSessionId'] != session:
                 raise ControlError('The command result identifies a different Windows session.')
             return {'jobFile': str(path), 'resultFile': str(result_path), **result}
+        if (not runner_claimed and time.monotonic() > admission_deadline
+                and int(time.time() * 1000) - job['createdAtUnixMs'] > MAX_JOB_AGE_MS):
+            # The runner must win this same exclusive claim before validating age
+            # or starting work. Closing admission is atomic even against a late
+            # runner or a subsequent wall-clock rollback.
+            try:
+                with claim_path.open('x', encoding='utf-8') as claim:
+                    claim.write('expired-before-runner-claim')
+            except FileExistsError:
+                runner_claimed = True
+            else:
+                suffix = f' Dispatch reported: {launch_error}' if launch_error else ''
+                raise ControlError('Command expired before the RDP runner claimed it. '
+                                   f'No command was started. Inspect {path}.{suffix}')
         time.sleep(0.2)
     suffix = f' Dispatch reported: {launch_error}' if launch_error else ''
     raise ControlError(f'Command result timed out; outcome is unknown. Inspect {path}; do not replay it.{suffix}')

@@ -13,6 +13,7 @@ import uuid
 
 MAX_JOB_BYTES = 65536
 MAX_OUTPUT_BYTES = 1024 * 1024
+MAX_JOB_AGE_MS = 60000
 
 
 def atomic_json(path, value):
@@ -48,7 +49,7 @@ def validate_job(job, job_id, now_ms=None):
         raise ValueError('Job identity does not match the file name.')
     created = job['createdAtUnixMs']
     now_ms = int(time.time() * 1000) if now_ms is None else now_ms
-    if type(created) is not int or not -30000 <= now_ms - created <= 60000:
+    if type(created) is not int or not -30000 <= now_ms - created <= MAX_JOB_AGE_MS:
         raise ValueError('The command job is expired or has a future timestamp.')
     if type(job['windowsSessionId']) is not int or job['windowsSessionId'] <= 0:
         raise ValueError('A positive, explicitly pinned RDP session is required.')

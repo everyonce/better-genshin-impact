@@ -25,3 +25,9 @@ For an interrupted opening, the separate recovery command requires the audited R
 The .NET 10 Debug solution build and self-contained Windows x64 Release publish passed. The package is `artifacts/release-r59/BetterGI-English-win-x64`, with DLL SHA-256 `6165c8b7e3bc25a3490c8a1042740f05587fa1762616870bd5109cd4530c25cf`. The native suite passed 100 tests, the Python agent suite passed 474, and the RDP control suite passed 95. Release retention kept R1, R55, R56, R58 and R59.
 
 The first R59 deployment preflight stopped before replacement. Windows denied `SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION` on Genshin PID 26240 in RDP session 3. The capture settings were staged and the idle discovery saved under `lineage59`. The R56 host and R58 child remained connected. At that preflight the last verified screen was the open map, and a completed map-to-lamp run was still unverified.
+
+## Measured cost of retaining evidence
+
+An offline SIREN replay used the same R58 OpenCvSharp binary and the original junction pixels. It reproduced the saved PNG byte for byte. Encoding took 154.7 ms at the median and 156.4 ms at p95. All 12 warm encodes exceeded the 150 ms source-age limit. Allocating and copying the same 6.22 MB of pixels took 1.04 ms at the median and 1.96 ms at p95. On the original map image the corresponding medians were 114.4 ms and 1.00 ms.
+
+The independent Python verifier classified both saved images correctly. Warm median times were 17.8 ms for the junction and 17.6 ms for the map. The R59 change moves PNG encoding after release. Its live recognition and input latency still require measurement. The raw samples are in `offline-map-microbench-20261029T182302Z.json` under the experiment directory, SHA-256 `6cece3324e84b937573a9b360dfd522c1024ccd0382507bcb6fc71437866703f`.

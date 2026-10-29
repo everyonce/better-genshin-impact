@@ -1,6 +1,7 @@
 """Run up to three audited street patrols on SIREN's existing minimized BetterGI RDP connection."""
 import argparse
 from datetime import datetime, timezone
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -18,6 +19,7 @@ def options(argv=None):
     parser.add_argument('--batches', type=int, choices=(1, 2, 3), required=True)
     parser.add_argument('--series-seconds', type=int, default=1800, help='Whole-series input budget, 15 to 1800 seconds')
     parser.add_argument('--stop-file', type=Path, help='Create this file to stop the series (default: STOP in its folder)')
+    parser.add_argument('--owner-from', type=Path, help='Require the same authenticated RDP pair as this previous launcher or series manifest')
     args = patrol.options(argv, parser)
     if not 15 <= args.series_seconds <= 1800:
         parser.error('Set --series-seconds between 15 and 1800.')
@@ -30,6 +32,7 @@ class SeriesGuard:
         self.stop_file = stop_file
         self.deadline_ns = time.monotonic_ns() + seconds * 1_000_000_000
         self.identity = None
+        self.required_identity = None
         self.reason = None
         self.finished = threading.Event()
         self.last_proof = None
@@ -39,7 +42,8 @@ class SeriesGuard:
         def identity(status):
             return {key: status[key] for key in ('windowsSessionId', 'processId', 'instanceNonce')}
         pair = {'root': identity(root), 'child': identity(child)}
-        if self.identity is not None and self.identity != pair:
+        expected = self.identity if self.identity is not None else self.required_identity
+        if expected is not None and expected != pair:
             self.reason = 'seriesIdentityChanged'
             raise RuntimeError(self.reason)
         if self.identity is None:
@@ -100,6 +104,14 @@ def run_series(args, folder):
     try:
         if os.name != 'nt' or summary['computer'].split('.')[0].upper() != 'SIREN':
             raise RuntimeError('Patrol series are restricted to the SIREN Windows host')
+        if args.owner_from:
+            # Compare the historical process/session/nonces inside admission, before any input lease can be acquired.
+            source = args.owner_from.read_bytes()
+            previous = json.loads(source)
+            if previous.get('status') not in ('completed', 'stopVerified') or not isinstance(previous.get('identity'), dict):
+                raise ValueError('Expected a sealed launcher manifest with the original RDP identity')
+            guard.required_identity = previous['identity']
+            summary['requiredOwnerManifestSha256'] = hashlib.sha256(source).hexdigest()
         for number in range(1, args.batches+1):
             if guard.stop_reason():
                 raise RuntimeError(guard.reason)

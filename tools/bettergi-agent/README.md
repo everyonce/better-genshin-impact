@@ -19,6 +19,14 @@ Start at the stair-front station with the existing BetterGI RDP child in the gam
 
 Each circuit visits the sidewalk junction, the west lamp, the junction again and the foot of the stairs. The launcher locates the authenticated child and starts one resident CUDA policy there. BetterGI steers from its native pose and accepts compatible Open P2P actions. The two optional observers score steering decisions and station images. The launcher checks the first GPU every two seconds, stops at 78 °C or on missing telemetry, and releases input when the target or deadline is reached. Each launch creates a separate evidence directory. See the [patrol measurements](../../Docs/research/BetterGI-Patrol-Learning-2026-10-29.md) and [training instructions](STEERING-HEAD.md).
 
+### Compare a station observer on the original game images
+
+For a bounded fixed patrol on SIREN, add `--retain-station-rgb` and a frozen `--landmark-shadow`. The recorder retains the exact native RGB from every settled start and endpoint, including wrong predictions. After a complete run, `station-rgb-audit.json` verifies the original bytes, native station, timestamps, RDP identity and prediction. With `run_patrol_series.py`, add `--owner-from` with a previous `warm-launcher.json` or `series.json` to require the same authenticated RDP pair. The original-image collector requires a fixed patrol without photo objectives.
+
+`audit_landmark_episode.py` compares two frozen observers on the same lossless originals and separately on independently decoded video. `audit_landmark_panel.py` checks older whole leases. Experimental G6 and G7 are confined to observation. See the [stair recognition experiments](../../Docs/research/BetterGI-Stair-Recognition-2026-10-29.md) for their source evidence and limits.
+
+For a sealed directed-photo lease, `report_stationary_photo_recovery.py --run <patrol.json> --checkpoint <checkpoint.json> --qualification <qualification.json>` checks whether a natural missed photo was recovered with no intervening input and a verified handoff within one second. It also reports planned confirmations and exhausted retries.
+
 ### Repeat a qualified photo task
 
 For separate named photo requests on one model load, use the warm launcher on SIREN. Each request specifies its name, circuit count and target stations. This command captures a lamp photo first, then obtains fresh photos of the stairs and junction.

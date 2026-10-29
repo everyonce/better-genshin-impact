@@ -564,7 +564,7 @@ def audit_photo_handoff(run_path, recordings, *, repository, photo_root, request
     require(not allow_incomplete or batch_plans is not None or len(specs) == 2, 'Stop drill requires exactly two declared requests')
     require((interrupted and allow_incomplete) or run.get('endReason') == 'hybridLegLimit', 'Unexpected resident end reason')
     head = LandmarkRecognizer.load(landmark_checkpoint)
-    require_qualified_observer(qualification,head.checkpoint_id)
+    require_qualified_observer(qualification,head)
     supervisor = read(run_path.parent/'launcher.json')
     admission = read(run_path.parent/'warm-launcher.json')
     batches = None

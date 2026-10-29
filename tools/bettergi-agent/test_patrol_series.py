@@ -86,6 +86,16 @@ class SeriesTests(unittest.TestCase):
                 if cause in ('temperatureLimit', 'telemetryLost'):
                     self.assertEqual(result['reason'], cause)
 
+    def test_previous_pair_must_match_on_first_admission(self):
+        guard = series.SeriesGuard(self.folder/'STOP', 60)
+        self.addCleanup(guard.finished.set)
+        guard.required_identity = {role: {key: row[key] for key in ('processId', 'windowsSessionId', 'instanceNonce')}
+                                   for role, row in (('root', self.root), ('child', self.child))}
+        with self.assertRaisesRegex(RuntimeError, 'seriesIdentityChanged'):
+            guard.admit(self.api, self.root, dict(self.child, instanceNonce='c'*32))
+        self.assertIsNone(guard.identity)
+        self.assertIsNone(guard.last_proof)
+
     def test_same_pid_but_different_nonce_and_lost_status_stop_the_series(self):
         guard = series.SeriesGuard(self.folder/'STOP', 1800)
         self.addCleanup(guard.finished.set)

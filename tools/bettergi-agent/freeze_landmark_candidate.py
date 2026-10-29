@@ -154,7 +154,7 @@ def main():
         p.add_argument('--'+flag,type=Path,required=True)
     args = p.parse_args()
     head = LandmarkRecognizer.load(args.incumbent)
-    require_qualified_observer(args.qualification,head.checkpoint_id)
+    require_qualified_observer(args.qualification,head)
     data = dict(head.data,prototypes=list(head.data['prototypes']),trainingRuns=list(head.data['trainingRuns']))
     sources = []
     for path,diag in ((args.audited_run,False),(args.diagnostic_run,True)):

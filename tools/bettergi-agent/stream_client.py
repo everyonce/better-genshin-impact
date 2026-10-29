@@ -1095,6 +1095,8 @@ def parse_arguments(argv=None):
                         help='Record a trained steering prediction after each hybrid decision has settled')
     parser.add_argument('--landmark-shadow', metavar='CHECKPOINT',
                         help='Identify verified patrol stations from unannotated RGB192 frames')
+    parser.add_argument('--retain-station-rgb',action='store_true',
+                        help='Retain original RGB at every fixed-patrol station in the bounded shadow journal')
     parser.add_argument('--photo-station', action='append', choices=PATROL_STATIONS, default=[],
                         help='Collect one source photo when the native station and its visual prediction agree')
     parser.add_argument('--photo-directory', help='Fresh directory for original station photos and their source IDs')
@@ -1206,6 +1208,10 @@ def parse_arguments(argv=None):
     if args.landmark_shadow and (not args.hybrid_navigation or args.hybrid_route != STREET_PATROL_ROUTE
                                  or args.observation_profile != P2P_NATIVE):
         parser.error('landmark-shadow requires the street patrol and native RGB192 input')
+    if args.retain_station_rgb and (not args.landmark_shadow or not args.resident or not args.record_dir
+            or args.warm_photo_plan or args.photo_station or not args.hybrid_legs or args.hybrid_legs%4
+            or not 4 <= args.hybrid_legs <= 128):
+        parser.error('retain-station-rgb requires a bounded, recorded fixed-circuit landmark shadow without photo tasks')
     if args.photo_station or args.photo_directory or args.photo_qualification or args.warm_photo_plan:
         if not ((bool(args.photo_station) != bool(args.warm_photo_plan)) and args.photo_directory and args.photo_qualification
                 and args.landmark_shadow and args.resident and args.enable_input):
@@ -1259,6 +1265,14 @@ def load_policy(args):
     warm_goal_sha = hashlib.sha256(Path(args.goal_embedding).read_bytes()).hexdigest() if getattr(args, 'warm_photo_plan', None) else None
     policy = None
     if args.model != 'observe':
+        # Bind a photographic task to the exact observer bytes before allocating the GPU policy.
+        landmark = None
+        if getattr(args, 'landmark_shadow', None):
+            from weighted_landmark_recognizer import load_landmark_shadow
+            landmark = load_landmark_shadow(args.landmark_shadow)
+            if getattr(args, 'photo_qualification', None):
+                from patrol_photo_survey import require_qualified_observer
+                require_qualified_observer(args.photo_qualification, landmark)
         from model_adapters import make_adapter
         temperature_options = {}
         if p2p_temperature != 1.0:
@@ -1282,18 +1296,14 @@ def load_policy(args):
         if getattr(args, 'steering_shadow', None):
             from steering_head import SteeringHead
             policy.steering_shadow = SteeringHead.load(args.steering_shadow)
-        if getattr(args, 'landmark_shadow', None):
-            from landmark_recognizer import LandmarkRecognizer
-            policy.landmark_shadow = LandmarkRecognizer.load(args.landmark_shadow)
+        if landmark is not None:
+            policy.landmark_shadow = landmark
             if warm_goal_sha:
                 if (not policy.execution_feedback or not callable(getattr(policy, 'reset', None))
                         or Path(policy.metadata['goal']['file']).resolve() != Path(args.goal_embedding).resolve()
                         or hashlib.sha256(Path(args.goal_embedding).read_bytes()).hexdigest() != warm_goal_sha):
                     raise RuntimeError('Loaded warm policy must retain the same receipt-backed goal embedding')
                 policy.warm_goal_sha = warm_goal_sha
-            if getattr(args, 'photo_qualification', None):
-                from patrol_photo_survey import require_qualified_observer
-                require_qualified_observer(args.photo_qualification, policy.landmark_shadow.checkpoint_id)
         if getattr(args, 'camera_calibration', None):
             from camera_response import CameraCalibration
             policy.camera_calibration = CameraCalibration.load(args.camera_calibration)
@@ -1701,6 +1711,10 @@ def run_episode(args, policy=None, control=None):
             report['hybridNavigationEvents'].append(event)
             if recorder:
                 recorder.event(event)
+                if getattr(args,'retain_station_rgb',False) and event['type'] in ('hybridStartVerified','hybridEndpointVerified'):
+                    from landmark_shadow_sources import retain
+                    retain(recorder,event,station_frame,station_pixels,control.run_id,bridge.hello,
+                           args.expected_process_id,args.expected_session_id)
             if warm:
                 if event['type'] == 'hybridEndpointVerified':
                     endpoint = event

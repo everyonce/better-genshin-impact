@@ -11,7 +11,7 @@ from PIL import Image
 
 from audit_photo_handoff import photo_proofs
 from hybrid_routes import PATROL_STATIONS, STREET_PATROL_ROUTE
-from landmark_recognizer import CLASSES, FEATURE, FORMAT, LandmarkRecognizer, signature
+from landmark_recognizer import CLASSES, FEATURE, FORMAT, G4_SHA256, LandmarkRecognizer, signature
 from patrol_photo_survey import PatrolPhotoSurvey, require_qualified_observer, verify_photos
 from qualify_landmarks import qualify
 from test_qualify_landmarks import NEW, OLD, paired
@@ -211,13 +211,39 @@ class PhotoSurveyTests(unittest.TestCase):
             qualification.write_text(json.dumps(dict(result,evaluation=evaluation.name,
                                      evaluationSha256=hashlib.sha256(evaluation.read_bytes()).hexdigest())))
         save(qualify(data,OLD,NEW))
-        self.assertEqual(require_qualified_observer(qualification,NEW)['recommendation'],'use-challenger-as-observer')
+        accepted, foreign = copy.copy(self.head), copy.copy(self.head)
+        accepted.checkpoint_id, foreign.checkpoint_id = NEW, OLD
+        self.assertEqual(require_qualified_observer(qualification,accepted)['recommendation'],'use-challenger-as-observer')
         with self.assertRaisesRegex(ValueError,'checkpoint digest'):
-            require_qualified_observer(qualification,OLD)
+            require_qualified_observer(qualification,foreign)
         evaluation.write_text(evaluation.read_text()+' ')
         with self.assertRaisesRegex(ValueError,'qualification or checkpoint digest'):
-            require_qualified_observer(qualification,NEW)
+            require_qualified_observer(qualification,accepted)
         data=paired()
         save(dict(qualify(data,OLD,NEW),recommendation='use-challenger-as-observer'))
         with self.assertRaisesRegex(ValueError,'recomputed promotion'):
-            require_qualified_observer(qualification,NEW)
+            require_qualified_observer(qualification,accepted)
+
+    def test_old_resident_can_only_admit_the_canonical_g4_and_rechecks_its_entire_qualification(self):
+        """Exercise the historical function call used by an already-loaded resident during hot replacement."""
+        landmarks = Path(__file__).resolve().parents[2]/'artifacts/agent/landmarks'
+        checkpoint, qualification = landmarks/'gen-04.json', landmarks/'qualify-g4-fresh-10.json'
+        if not (checkpoint.exists() and qualification.exists()):
+            self.skipTest('requires deployed G4 and its original qualification')
+        head = LandmarkRecognizer.load(checkpoint)
+        self.assertEqual(head.checkpoint_id,G4_SHA256)
+        actual = require_qualified_observer(qualification,head.checkpoint_id)
+        self.assertEqual(actual,require_qualified_observer(qualification,head))
+        self.assertEqual(actual['recommendation'],'use-challenger-as-observer')
+        # A copied, embellished recommendation still fails after the genuine paired evaluation is recomputed.
+        saved = json.loads(qualification.read_bytes())
+        saved['additionalCorrect'] += 1
+        altered = self.root/'altered.json'
+        altered.write_text(json.dumps(saved))
+        with self.assertRaisesRegex(ValueError,'recomputed promotion'):
+            require_qualified_observer(altered,head.checkpoint_id)
+        for experimental in ('4c347fc40796ccd33248982e5979273d10e6dd2afed45e8f2d5be7b8f1f7e446',
+                             '99531706a59ce3e53156f0ad1a4532292e375d1ed783ba49bc82653ebce1e3c6',
+                             G4_SHA256.upper(),G4_SHA256[:-1]+'0'):
+            with self.subTest(digest=experimental),self.assertRaisesRegex(ValueError,'exact deployed G4'):
+                require_qualified_observer(qualification,experimental)

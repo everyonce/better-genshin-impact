@@ -23,15 +23,28 @@ def digest(raw):
     return hashlib.sha256(raw).hexdigest()
 
 
-def require_qualified_observer(qualification_path, checkpoint_id):
-    """Recompute the promotion result from its hash-bound paired evaluation before enabling capture."""
+def require_photo_metric(head):
+    """Only the deployed v1 metric family is eligible to authorize a requested photo."""
+    from landmark_recognizer import FORMAT
+    require(head.data.get('format') == FORMAT, 'Experimental landmark metrics are shadow-only for photographic goals')
+
+
+def require_qualified_observer(qualification_path, head):
+    """Verify the loaded family, or the exact G4 digest from an older resident, and recompute its qualification."""
+    from landmark_recognizer import G4_SHA256
     from qualify_landmarks import qualify
+    digest_only = type(head) is str
+    checkpoint_id = head if digest_only else head.checkpoint_id
+    if digest_only:
+        require(checkpoint_id == G4_SHA256, 'Digest-only photo admission requires the exact deployed G4 checkpoint')
     path = Path(qualification_path)
     saved = json.loads(path.read_bytes())
+    require(saved['challengerSha256'] == checkpoint_id, 'Photo observer qualification or checkpoint digest differs')
+    if not digest_only:
+        require_photo_metric(head)
     evaluated = path.parent/Path(saved['evaluation'])
     raw = evaluated.read_bytes()
-    require(digest(raw) == saved['evaluationSha256'] and saved['challengerSha256'] == checkpoint_id,
-            'Photo observer qualification or checkpoint digest differs')
+    require(digest(raw) == saved['evaluationSha256'], 'Photo observer qualification or checkpoint digest differs')
     result = qualify(json.loads(raw),saved['incumbentSha256'],checkpoint_id)
     require(result == {k:v for k,v in saved.items() if k not in ('evaluation','evaluationSha256')}
             and result['route'] == STREET_PATROL_ROUTE and result['recommendation'] == 'use-challenger-as-observer',
@@ -186,6 +199,7 @@ def verify_photo_survey(output, run_path, recordings, *, repository, landmark_ch
 
 def verify_photos(output, manifest, targets, sources, poses, head, confirm_first=False):
     """Replay the survey journal against the authenticated station sequence through completion."""
+    require_photo_metric(head)
     rows, collected, files, hashes = manifest['journal'], [], set(), set()
     used = 0
     first_confirmation = None

@@ -18,6 +18,17 @@ CLASSES = ('sidewalk-junction', 'stair-front', 'west-lamp')
 ROLES = ('entry-or-previous-return', 'junction-from-stairs', 'west-lamp-from-junction',
          'junction-from-west-lamp', 'stair-front-from-junction')
 FEATURE = 'rgb192 crop(x48:144,y40:120);8x8-cell mean;subtract 0.65*crop channel mean;divide by 255'
+CENTERED_FORMAT = 'bettergi-checkpoint-landmarks-v2'
+CENTERED_METRIC = 'g4-rgb-cell-residual-minus-full-spatial-channel-mean-squared-sum-v1'
+CENTERED_METHOD = 'nearest G4 prototype, per-channel spatially centered residual, class-order ties'
+G4_SHA256 = '753d4a81b7a41a6d7eccfe0cb6e15b7ca122dcb63ab4bfe3527f379b546f2d94'
+G4_TEMPLATES_SHA256 = 'cd69e93d6fbfc21cba442fc987665a2bbe0f4c5c09da9b6e1d036676194bb01f'
+G4_TRAINING_SHA256 = '4b9ad58599f8ae714a44b044c55dcbd875b138e9909d24588327d4145fa4ffeb'
+
+
+def document_digest(value):
+    """Pin the ordered original training rows independently of checkpoint JSON formatting."""
+    return hashlib.sha256(json.dumps(value,sort_keys=True,separators=(',',':'),allow_nan=False).encode('ascii')).hexdigest()
 
 
 def signature(rgb):
@@ -33,7 +44,20 @@ class LandmarkRecognizer:
     """Nearest training checkpoint under a fixed image-only feature metric."""
     def __init__(self, data):
         """Sort templates into explicit class order for deterministic distance ties."""
-        require(data.get('format') == FORMAT and data.get('feature') == FEATURE and data.get('classes') == list(CLASSES)
+        self.centered = data.get('format') == CENTERED_FORMAT
+        if self.centered:
+            require(set(data) == {'format','feature','classes','deployment','method','sourceCheckpointSha256',
+                                  'distanceMetric','trainingRuns','prototypes','implementationSha256'}
+                    and data['distanceMetric'] == CENTERED_METRIC and data['method'] == CENTERED_METHOD
+                    and data['sourceCheckpointSha256'] == G4_SHA256
+                    and data['implementationSha256'] == '8a550ba69176b654b5152424a6941ced4a46efa425bd667fbb4ce93ace74356e'
+                    and document_digest(data['prototypes']) == G4_TEMPLATES_SHA256
+                    and document_digest(data['trainingRuns']) == G4_TRAINING_SHA256,
+                    'Unrecognized centered metric or changed G4 training inputs')
+        else:
+            require(data.get('format') == FORMAT and 'distanceMetric' not in data and 'sourceCheckpointSha256' not in data
+                    and data.get('method') != CENTERED_METHOD, 'Unrecognized legacy landmark checkpoint')
+        require(data.get('feature') == FEATURE and data.get('classes') == list(CLASSES)
                 and data.get('deployment') == 'checkpoint-shadow-only', 'Unrecognized landmark classifier')
         rows = sorted(data['prototypes'], key=lambda r: CLASSES.index(r['station']))
         self.templates = np.asarray([r['signature'] for r in rows], dtype=np.float32)
@@ -53,7 +77,12 @@ class LandmarkRecognizer:
     def predict(self, rgb):
         """Accept pixels alone. Output a station hypothesis at an already-verified checkpoint."""
         error = self.templates-signature(rgb)
-        distances = np.einsum('ij,ij->i',error,error)
+        if self.centered:
+            grid = error.reshape(-1,10,12,3)
+            residual = grid-grid.mean(axis=(1,2),keepdims=True)
+            distances = (residual**2).sum(axis=(1,2,3))
+        else:
+            distances = np.einsum('ij,ij->i',error,error)
         i = int(np.argmin(distances))
         return dict(station=self.labels[i], squaredDistance=float(distances[i]))
 

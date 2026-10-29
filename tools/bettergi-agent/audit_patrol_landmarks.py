@@ -10,9 +10,10 @@ import statistics
 from audit_hybrid_run import require
 from audit_destination_retries import RETRY
 from hybrid_routes import STREET_PATROL_ROUTE
-from landmark_recognizer import CLASSES, LandmarkRecognizer, decode
+from landmark_recognizer import CLASSES, decode
 from observation_timing import observation_timestamp
 from patrol_landmarks import indexed_frames
+from weighted_landmark_recognizer import load_landmark_shadow
 
 
 def live_views(events, frames, journal, checkpoint_id, epoch):
@@ -51,7 +52,7 @@ def live_views(events, frames, journal, checkpoint_id, epoch):
 
 def audit_landmarks(run, parts, events, frames, recordings, epoch, checkpoint, ffmpeg, ffprobe):
     """Check holdout independence and compare the logged live class with offline H.264 reclassification."""
-    head = LandmarkRecognizer.load(checkpoint)
+    head = load_landmark_shadow(checkpoint)
     require(head.data.get('trainingRuns'), 'Landmark checkpoint omits its training runs')
     hello = parts[0]['hello']
     ticks = [f['sourceFrame']['timestamp100ns'] for f in frames.values()]

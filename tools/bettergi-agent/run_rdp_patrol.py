@@ -40,6 +40,9 @@ def options(argv=None, parser=None, *, warm=False):
                    Path(os.environ.get('SystemRoot', 'C:/Windows'))/'System32/nvidia-smi.exe'))
     p.add_argument('--steering-shadow', type=Path, help='Observe and audit predictions from this steering checkpoint')
     p.add_argument('--landmark-shadow', type=Path, help='Observe station predictions and audit recorded frames against them')
+    if not warm:
+        p.add_argument('--retain-station-rgb',action='store_true',
+                       help='Record one lossless RGB source for every settled station in the fixed patrol')
     if warm:
         p.set_defaults(photo_station=[])
     else:
@@ -48,6 +51,8 @@ def options(argv=None, parser=None, *, warm=False):
     p.add_argument('--photo-qualification', type=Path, help='Sealed qualification for the photo observer')
     p.add_argument('--camera-calibration', type=Path, help='Use and independently audit this local camera checkpoint')
     args = p.parse_args(argv)
+    if getattr(args,'retain_station_rgb',False) and (not args.landmark_shadow or args.photo_station):
+        p.error('--retain-station-rgb requires --landmark-shadow without photo objectives')
     if (warm or args.photo_station or args.photo_qualification) and not (
             (warm or args.photo_station) and args.photo_qualification and args.landmark_shadow):
         p.error('Photo stations require both --landmark-shadow and --photo-qualification')
@@ -98,6 +103,8 @@ def patrol_argv(args, session, folder):
         command.append('--steering-shadow=' + str(args.steering_shadow.resolve()))
     if args.landmark_shadow:
         command.append('--landmark-shadow=' + str(args.landmark_shadow.resolve()))
+    if getattr(args,'retain_station_rgb',False):
+        command.append('--retain-station-rgb')
     if args.photo_station:
         command.extend(['--photo-directory', str(folder/'station-photos'),
                         '--photo-qualification', str(args.photo_qualification.resolve())])
@@ -310,6 +317,10 @@ def run(args, folder, *, series=None):
         evidence = audit(output, folder/'patrol-recording', repository=ROOT, minimum_legs=minimum_legs,
                          minimum_circuits=args.circuits, **checkpoints)
         atomic_json(folder/'audit.json', evidence)
+        if getattr(args,'retain_station_rgb',False):
+            from landmark_shadow_sources import verify_archive
+            originals = verify_archive(output,folder/'patrol-recording',args.landmark_shadow,evidence,ROOT)
+            atomic_json(folder/'station-rgb-audit.json', originals)
         if args.photo_station:
             from patrol_photo_survey import verify_photo_survey
             survey = verify_photo_survey(folder/'station-photos', output, folder/'patrol-recording',

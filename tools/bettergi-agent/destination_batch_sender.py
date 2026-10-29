@@ -7,6 +7,7 @@ import time
 import uuid
 
 from hybrid_routes import itinerary_legs
+from destination_queue_policy import choose
 import run_rdp_patrol as patrol
 from warm_photo_requests import validate_plan
 
@@ -70,11 +71,14 @@ def qualification_goals(start, batch, witness_frame):
 def admitted_plans(folder):
     """Read operator commitments in sequence, separately from the files received by the resident."""
     plans = [read_json(folder/'photo-requests.json')]
-    for ordinal in range(2,13):
+    for ordinal in range(2,14):
         path = folder/'batches'/f'{ordinal:05d}.intent.json'
         if not path.exists():
             break
-        plans.append(read_json(path)['plan'])
+        intent = read_json(path)
+        if intent.get('kind')=='finish':
+            break
+        plans.append(intent['plan'])
     return plans
 
 
@@ -105,15 +109,19 @@ def witness_for(folder, status, plans):
                 frameId=status['activeFirstAppliedFrameId'])
 
 
-def submit(folder, expected_batch, destinations=None, admit=None):
+def submit(folder, expected_batch, destinations=None, admit=None, *, finish=False):
     """Commit and deliver a single dynamically selected successor under an exclusive per-batch issuer claim."""
     summary = read_json(folder/'warm-launcher.json')
+    opened = summary.get('openQueue') is True
     if (summary.get('status') != 'running' or summary.get('computer','').split('.')[0].upper() != 'SIREN'
             or (folder/'STOP').exists()
-            or not 2 <= expected_batch <= summary['batchCount'] <= 12
+            or not 2 <= expected_batch <= summary['batchCount']+int(opened) or summary['batchCount']>12
+            or finish and (not opened or destinations is not None)
             or summary.get('stopInBatch') and expected_batch > summary['stopInBatch']):
         raise ValueError('Destination queue is closed or outside its published bounds')
     prefix = folder/'batches'/f'{expected_batch:05d}'
+    if prefix.with_suffix('.intent.json').exists():
+        raise ValueError('Destination slot already claimed')
     plans = admitted_plans(folder)
     if len(plans) != expected_batch-1:
         raise ValueError('Destination batch is already claimed or its predecessor is missing')
@@ -135,19 +143,48 @@ def submit(folder, expected_batch, destinations=None, admit=None):
     if admit is not None:
         admit(folder, status)
     start = plans[-1]['requests'][-1]['destination']
-    if destinations is None:
-        destinations = qualification_goals(start, expected_batch, witness['frameId'])
-    plan = create_plan(start, destinations)
-    names = [r['name'] for p in (*plans,plan) for r in p['requests']]
-    legs = sum(len(itinerary_legs(p['start'],[r['destination'] for r in p['requests']])) for p in (*plans,plan))
-    if len(set(names)) != len(names) or legs + 2*(summary['batchCount']-expected_batch) > summary['maxLegs']:
-        raise ValueError('Duplicate goal name or destination batch exceeds the authorized leg cap')
+    basis = None
+    if opened:
+        policy_raw = (folder/'queue-policy.json').read_bytes()
+        policy = json.loads(policy_raw)
+        if (hashlib.sha256(policy_raw).hexdigest()!=summary['queuePolicySha256'] or policy['maxLegs']!=summary['maxLegs']
+                or policy['mode']!=summary['planner']['mode'] or policy['targetGameplaySeconds']!=summary['planner']['targetGameplaySeconds']
+                or policy['maxBatches']!=summary['batchCount'] or policy['initialPlanSha256']!=hashlib.sha256((folder/'photo-requests.json').read_bytes()).hexdigest()):
+            raise ValueError('Open queue policy changed')
+        # Read operator commitments only after the addressed resident has admitted this exact predecessor.
+        for ordinal,prior in enumerate(plans[1:],2):
+            stem = folder/'batches'/f'{ordinal:05d}'
+            prior_raw = stem.with_suffix('.json').read_bytes()
+            intent = read_json(stem.with_suffix('.intent.json'))
+            if hashlib.sha256(prior_raw).hexdigest()!=intent['batchSha256'] or json.loads(prior_raw).get('plan')!=prior:
+                raise ValueError('Open queue admitted plan differs from its original published intent')
+        basis = choose(policy,plans,status,witness,expected_batch,destinations,finish)
+        finish = not basis['selectedStations']
+        if destinations is None and not finish:
+            destinations = [(f'open-{expected_batch:02d}-{i:02d}-{s}',s) for i,s in enumerate(basis['selectedStations'],1)]
+    if finish:
+        content = dict(kind='finish')
+    else:
+        if destinations is None:
+            destinations = qualification_goals(start, expected_batch, witness['frameId'])
+        plan = create_plan(start, destinations)
+        names = [r['name'] for p in (*plans,plan) for r in p['requests']]
+        legs = sum(len(itinerary_legs(p['start'],[r['destination'] for r in p['requests']])) for p in (*plans,plan))
+        reserve = 0 if opened else 2*(summary['batchCount']-expected_batch)
+        if len(set(names)) != len(names) or legs+reserve > summary['maxLegs']:
+            raise ValueError('Duplicate goal name or destination batch exceeds the authorized leg cap')
+        content = dict(plan=plan)
     identity = {k:status[k] for k in ('runId','sessionId','ownerEpoch')}
     binding = dict(**identity,batchOrdinal=expected_batch,previousSha256=status['batchSha256'],witness=witness)
-    payload = encode(dict(version=1, mode='destination-batch', **binding, plan=plan))
+    payload = encode(dict(version=1, mode='destination-batch', **binding, **content))
     evidence = dict(version=1, **binding, batchSha256=hashlib.sha256(payload).hexdigest(), observedAtMonotonicNs=observed)
+    if basis is not None:
+        decision = encode(dict(type='destinationQueueDecision',**evidence,policySha256=summary['queuePolicySha256'],**basis))
+        evidence['policyDecisionSha256'] = hashlib.sha256(decision).hexdigest()
     # The intent is the single-writer claim. A losing or interrupted sender can never overwrite a batch.
-    exclusive_bytes(prefix.with_suffix('.intent.json'), encode(dict(**evidence,type='destinationBatchIntent',plan=plan)))
+    exclusive_bytes(prefix.with_suffix('.intent.json'), encode(dict(**evidence,type='destinationBatchIntent',**content)))
+    if basis is not None:
+        exclusive_bytes(prefix.with_suffix('.decision.json'),decision)
     if (folder/'STOP').exists() or patrol.addressed_control(folder/'patrol.json.control.json',status['runId'])['command'] != 'run':
         raise ValueError('Stopped before destination batch publication')
     bracket = exclusive_bytes(prefix.with_suffix('.json'), payload, patrol.native_qpc_sample)

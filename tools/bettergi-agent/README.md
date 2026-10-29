@@ -87,6 +87,42 @@ $runFolder = Read-Host 'Paste the evidence folder printed by the running launche
 
 The resident admits the new list only at the released, photographed endpoint of the previous list. Each request gets fresh policy history and its own photo directory. A missing successor expires after one second at that boundary with input released. The printed `STOP` file cancels the entire lease. The built-in qualification sender can issue four goals per batch during gameplay. Use `launch` without `--manual` or `--destination` and allow seven legs per batch. For a separate cancellation trial, `--stop-in-batch 2` stops after an applied input in the second batch.
 
+### Run an open destination queue
+
+Run these PowerShell commands from the repository root on SIREN with BetterGI RDP connected and minimized. For each new lease, supply a sealed `warm-launcher.json` or `series.json` from a completed or stop-verified run on the same live RDP pair. The launcher copies that manifest and checks both Windows sessions, process IDs and instance nonces before issuing input. After a process restart, obtain a fresh sealed owner manifest. Choose the station where the character is currently standing. BetterGI verifies it before moving.
+
+```powershell
+$queueOwner = (Resolve-Path (Read-Host 'Path to the sealed manifest for the current RDP pair')).Path
+$queueStart = Read-Host 'Current station (stair-front, sidewalk-junction or west-lamp)'
+$queueArgs = @(
+    '--open-queue', '--owner-from', $queueOwner, '--start-station', $queueStart,
+    '--batches', '12', '--leg-limit', '96', '--seconds', '400',
+    '--evidence-root', 'artifacts/live/open-destination-queues',
+    '--steering-shadow', 'artifacts/agent/steering/gen-01.json',
+    '--landmark-shadow', 'artifacts/agent/landmarks/gen-04.json',
+    '--photo-qualification', 'artifacts/agent/landmarks/qualify-g4-fresh-10.json'
+)
+& 'C:/Programs/Python/Python311/python.exe' -B tools/bettergi-agent/run_destination_batches.py launch @queueArgs --target-gameplay-seconds 210
+```
+
+The automatic sender chooses one batch after observing an applied action in its predecessor. It uses the requested and already photographed destinations to balance visits and approach directions across the three stations. The 210-second target starts at the first native input dispatch and is checked at a later positively witnessed dispatch. Once that span reaches the target, the sender requests a finish at the current batch's final photographed, released endpoint. Model loading is outside that span. The 12-batch and 96-leg caps can close the queue earlier (`capacity-closed`). The 400-second wall limit, recording budget and thermal watchdog still apply. The launcher records the verified closure reason in `warm-launcher.json`.
+
+For manual control, run the setup above with the current owner and station, then use this launch line in place of the automatic one. The launcher prints the new evidence folder.
+
+```powershell
+& 'C:/Programs/Python/Python311/python.exe' -B tools/bettergi-agent/run_destination_batches.py launch @queueArgs --manual
+```
+
+In a second PowerShell at the repository root, run the following while the initial batch is walking. Slot 2 is the decision after batch 1. After any later walking batch, pass its ordinal plus one. Both `submit` and `finish` claim this same slot exclusively. The sender can wait for its predecessor's applied action.
+
+```powershell
+$runFolder = Read-Host 'Paste the exact evidence folder printed by the manual launch'
+& 'C:/Programs/Python/Python311/python.exe' -B tools/bettergi-agent/run_destination_batches.py finish `
+    --folder $runFolder --batch 2 --wait-seconds 60
+```
+
+A graceful finish completes the accepted batch and seals its final station photo before closing. To cancel during movement, create the launcher’s printed `STOP` file with `New-Item -ItemType File -Path (Join-Path $runFolder 'STOP')`. This requests an immediate addressed input release. An empty manual slot at a photographed boundary has a one-second deadline. On expiry the resident keeps input released and reports queue starvation. Publish the next batch or finish while the predecessor is still walking.
+
 ### Separate resident batches
 
 On SIREN the series launcher can repeat a task on the same minimized RDP connection. This example requests one source photo at each named station in each batch. The collector saves the original RGB image when the native station, verified frame and qualified image prediction agree. At the end of the batch a separate verifier decodes each saved PNG, checks its raw pixels against the live hash and classifies it again. A failed objective ends the series.

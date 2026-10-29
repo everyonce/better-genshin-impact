@@ -73,10 +73,21 @@ def validate_plan(plan):
     return requests
 
 
+class WarmQueueStarved(RuntimeError):
+    """A verified open-queue boundary expired without an admissible next decision."""
+
+
+class WarmQueueInterrupted(RuntimeError):
+    """A run-bound operator command preempted an already released queue boundary."""
+    def __init__(self, reason, source):
+        super().__init__(reason)
+        self.reason, self.source = reason, source
+
+
 class WarmPhotoRequests:
     """Serial policy-thread state for the current request, its outstanding actions and native release barrier."""
 
-    def __init__(self, plan, directory, checkpoint_id, embedding, hello, run_id, legs, *, batch_count=None):
+    def __init__(self, plan, directory, checkpoint_id, embedding, hello, run_id, legs, *, batch_count=None, open_queue=False, control_path=None):
         """Bind the plan, embedding and request journals to this one resident/bridge identity."""
         definition, self.plan_sha = read_plan(plan)
         self.requests = definition['requests']
@@ -92,17 +103,31 @@ class WarmPhotoRequests:
         self.batch_count, self.max_legs = batch_count, legs
         self.batch_boundary = None
         self.batch_witnesses = {}
+        self.batch_clocks = {}
         self.batch_scope = {}
         self.batch_dispatch_before_ms = None
+        self.open_queue = open_queue
+        self.first_dispatch = None
+        if open_queue:
+            from landmark_recognizer import G4_SHA256
+            self.control_path = Path(control_path) if control_path is not None else Path(plan).resolve().parent/'patrol.json.control.json'
+            telemetry = hello.get('inputTelemetry') or {}
+            self.frequency = telemetry.get('stopwatchFrequency')
+            self.origin = telemetry.get('sessionOriginAtStopwatchTicks')
+            if (batch_count is None or checkpoint_id != G4_SHA256
+                    or any(type(v) is not int or v <= 0 for v in (self.frequency,self.origin))):
+                raise ValueError('An open destination queue requires bounded batches, deployed G4 and the native QPC clock')
         if batch_count is not None:
+            reserved = 0 if open_queue or type(batch_count) is not int else 2*(batch_count-1)
             if (not self.destinations or type(batch_count) is not int or not 2 <= batch_count <= 12
-                    or type(legs) is not int or not sum(self.request_legs) + 2*(batch_count-1) <= legs <= 96):
+                    or type(legs) is not int or not sum(self.request_legs) + reserved <= legs <= 96):
                 raise ValueError('Successive destination batches require feasible batch and total edge limits')
             if (set(definition) - {'version','mode','start','requests','confirmFirstArrival'}
                     or any(set(r) != {'id','name','destination','targets'} for r in self.requests)):
                 raise ValueError('Initial batch must use the reviewed destination request schema')
             self.batch_directory = Path(plan).resolve().parent/'batches'
-            if any((self.batch_directory/f'{n:05}.json').exists() for n in range(2,batch_count+1)):
+            suffixes = ('.json','.intent.json','.publication.json','.decision.json') if open_queue else ('.json',)
+            if any((self.batch_directory/f'{n:05}{suffix}').exists() for n in range(2,batch_count+1+int(open_queue)) for suffix in suffixes):
                 raise ValueError('Successor batches cannot be published before gameplay')
             self.batch_scope = dict(batchOrdinal=1,batchSha256=self.plan_sha,batchPlanSha256=batch_plan_digest(definition))
         elif sum(self.request_legs) != legs:
@@ -136,9 +161,11 @@ class WarmPhotoRequests:
             start = self.itinerary_start if self.index == 0 else None
         self.survey = PatrolPhotoSurvey(self.directory/self.current['id'], self.current['targets'], self.checkpoint_id,
                                         start_station=start)
-        self.pending = set()
+        self.pending = {}
         self.first_accepted = self.first_applied = self.last_accepted = None
         self.last_applied_at_ms = None
+        self.last_terminal_ms = None
+        self.gameplay_clock = None
         self._status()
 
     @property
@@ -151,6 +178,7 @@ class WarmPhotoRequests:
         accepted, applied = self.first_accepted or (None, None), self.first_applied or (None, None)
         atomic_json(self.directory/'warm-status.json', dict(version=1, runId=self.identity['runId'],
                     sessionId=self.identity['sessionId'], ownerEpoch=self.identity['ownerEpoch'], **self.batch_scope,
+                    **({'gameplayClock':self.gameplay_clock} if self.open_queue and self.gameplay_clock else {}),
                     activeRequestId=self.current['id'], activeOrdinal=self.index+1, complete=self.finished,
                     activeFirstAcceptedRequestId=accepted[0], activeFirstAcceptedFrameId=accepted[1],
                     activeFirstAppliedRequestId=applied[0], activeFirstAppliedFrameId=applied[1]))
@@ -166,7 +194,7 @@ class WarmPhotoRequests:
     def accepted(self, request_id, frame_id):
         """Track each admitted ordinary or recovery action until its real terminal is observed."""
         self.require_action_frame(frame_id)
-        self.pending.add(request_id)
+        self.pending[request_id] = frame_id
         self.last_accepted = request_id
         if self.first_accepted is None:
             self.first_accepted = (request_id, frame_id)
@@ -182,17 +210,37 @@ class WarmPhotoRequests:
         """Retire pending IDs on the policy thread, after the serial action transaction."""
         key = receipt['requestId']
         if key in self.pending:
-            self.pending.remove(key)
+            if self.open_queue:
+                accepted,ended = receipt.get('acceptedAtMs'),receipt.get('endedAtMs')
+                if (self.pending[key] != receipt.get('frameId') or receipt.get('status') not in ('completed','cancelled','replaced','expired')
+                        or not isinstance(receipt.get('appliedSteps'),list)
+                        or any(type(t) not in (int,float) or not math.isfinite(t) for t in (accepted,ended))
+                        or not 0 <= accepted <= ended):
+                    raise ValueError('Open queue requires the accepted frame and genuine terminal receipt')
+                self.last_terminal_ms = max(self.last_terminal_ms or ended,ended)
+            del self.pending[key]
             if self.batch_count and receipt.get('appliedSteps'):
                 times = [s['startedAtMs'] for s in receipt['appliedSteps']]
                 if any(type(t) not in (int,float) or not math.isfinite(t) for t in times):
                     raise ValueError('Invalid batch native dispatch time')
+                if self.open_queue and (times != sorted(times) or not accepted <= times[0] <= times[-1] <= ended):
+                    raise ValueError('Open queue dispatch is outside its terminal receipt')
                 self.last_applied_at_ms = max(times) if self.last_applied_at_ms is None else max(self.last_applied_at_ms, *times)
                 self.batch_dispatch_before_ms = None
             if self.first_applied is None and receipt.get('appliedSteps'):
                 self.first_applied = (key, receipt['frameId'])
                 if self.batch_count:
                     self.batch_witnesses[self.current['id']] = self.first_applied
+                if self.open_queue:
+                    if min(times) <= 0:
+                        raise ValueError('Open queue requires an actual positive dispatch timestamp')
+                    ticks = self.origin + round(min(times)*self.frequency/1000)
+                    if self.first_dispatch is None:
+                        self.first_dispatch = dict(firstAppliedTicks=ticks,firstNativeRequestId=key,firstFrameId=receipt['frameId'])
+                    if ticks < self.first_dispatch['firstAppliedTicks']:
+                        raise ValueError('Open queue dispatch clock regressed')
+                    self.gameplay_clock = dict(self.first_dispatch,frequencyHz=self.frequency,witnessAppliedTicks=ticks)
+                    self.batch_clocks[self.current['id']] = self.gameplay_clock
                 self._status()
 
     def released(self, frame_id, reply):
@@ -257,6 +305,8 @@ class WarmPhotoRequests:
                 or release['readinessEpoch'] != endpoint['releaseEpoch'] or release['serverNowMs'] != endpoint['releaseAtMs']
                 or release['arrivalFrameId'] != endpoint['arrivalFrameId']):
             raise RuntimeError('Warm request cannot finish without verified release, terminal receipts and complete photos')
+        if self.open_queue and (self.last_terminal_ms is None or self.last_terminal_ms > release['serverNowMs']):
+            raise RuntimeError('Open queue requires all terminal actions to end before endpoint release')
         if self.destinations and self.survey.collected.get(destination) != native['frameId']:
             visit = (native if retry else endpoint).get('photoSurveyVisit') or {}
             confirmation = self.needs_first_view and visit.get('outcome') == 'confirmationPending'
@@ -284,7 +334,7 @@ class WarmPhotoRequests:
             self.retry_endpoint = self.retry_deadline_ns = None
             self.retry_count = 0
         rows = [self._event('warmPhotoRequestCompleted', native, legs, **proof)]
-        if self.index + 1 == len(self.requests) and self.batch_count and self.batch_scope['batchOrdinal'] < self.batch_count:
+        if self.index + 1 == len(self.requests) and self.batch_count and (self.open_queue or self.batch_scope['batchOrdinal'] < self.batch_count):
             self.batch_boundary = (native, proof, (received_ns or time.perf_counter_ns()) + 1_000_000_000)
         elif self.index + 1 == len(self.requests):
             self.finished = True
@@ -299,12 +349,38 @@ class WarmPhotoRequests:
             rows.append(self._event('warmPhotoRequestStarted', native, legs, previousRequestId=previous))
         return rows
 
+    def check_batch_interruption(self):
+        """Honor the original addressed command or operator STOP marker before interpreting a boundary failure."""
+        if not self.open_queue or self.batch_boundary is None:
+            return
+        from resident_runtime import read_control_document
+        doc,error = read_control_document(self.control_path,self.identity['runId'])
+        if error:
+            raise ValueError('Open queue released boundary lost its addressed control: '+error)
+        if doc['command']=='stop':
+            raise WarmQueueInterrupted('userStop','addressedControl')
+        if (self.batch_directory.parent/'STOP').exists():
+            raise WarmQueueInterrupted('userStop','runLocalStopFile')
+        if doc['command']=='pause':
+            raise WarmQueueInterrupted('userPause','addressedControl')
+
     def check_batch_deadline(self):
         """A missing successor or capture cannot extend the released boundary wait."""
+        self.check_batch_interruption()
         if self.batch_boundary and time.perf_counter_ns() > self.batch_boundary[2]:
+            if self.open_queue:
+                raise WarmQueueStarved('No qualified open-queue decision within the 1000 ms released boundary')
             raise RuntimeError('No qualified destination batch within the 1000 ms released boundary')
 
-    def consume_batch(self, admission_frame):
+    def starved_event(self):
+        """Identify the original released request and terminal receipt barrier when the external slot times out."""
+        from run_rdp_patrol import native_qpc_sample
+        native,proof,_ = self.batch_boundary
+        freq,ticks = native_qpc_sample()
+        return self._event('warmQueueStarved',native,native['completedLegs'],decisionOrdinal=self.batch_scope['batchOrdinal']+1,
+                           failedQpc=dict(clock='windows-query-performance-counter',frequencyHz=freq,ticks=ticks),**proof)
+
+    def consume_batch(self, admission_frame, *, still_current=None):
         """Read only the next append-only envelope at a verified boundary, authenticating its applied-action witness."""
         if not self.batch_boundary:
             raise RuntimeError('Successor needs a verified, released request boundary')
@@ -315,16 +391,21 @@ class WarmPhotoRequests:
         number = self.batch_scope['batchOrdinal'] + 1
         prefix = self.batch_directory/f'{number:05}'
         try:
-            published = json.loads(batch_bytes(prefix.with_suffix('.publication.json')))
+            publication_raw = batch_bytes(prefix.with_suffix('.publication.json'))
         except FileNotFoundError:
             return None
+        published = json.loads(publication_raw)
         raw = batch_bytes(prefix.with_suffix('.json'))
         envelope = json.loads(raw)
-        intent = json.loads(batch_bytes(prefix.with_suffix('.intent.json')))
+        intent_raw = batch_bytes(prefix.with_suffix('.intent.json'))
+        intent = json.loads(intent_raw)
         fixed = dict(version=1, mode='destination-batch', batchOrdinal=number,
                      previousSha256=self.batch_scope['batchSha256'],
                      **{key:self.identity[key] for key in ('runId','sessionId','ownerEpoch')})
-        if (not isinstance(envelope, dict) or set(envelope) != set(fixed) | {'witness','plan'}
+        finishing = self.open_queue and isinstance(envelope,dict) and envelope.get('kind') == 'finish'
+        decision_key = 'kind' if finishing else 'plan'
+        if (not isinstance(envelope, dict) or set(envelope) != set(fixed) | {'witness',decision_key}
+                or number > self.batch_count + int(finishing)
                 or any(type(envelope[k]) is not type(value) or envelope[k] != value for k,value in fixed.items())):
             raise ValueError('Misaddressed destination batch envelope')
         witness = envelope['witness']
@@ -333,29 +414,43 @@ class WarmPhotoRequests:
                 or type(witness['frameId']) is not int or not isinstance(witness['requestId'],str)
                 or self.batch_witnesses.get(witness['requestId']) != (witness['nativeRequestId'],witness['frameId'])):
             raise ValueError('Successor is missing its predecessor gameplay witness')
-        plan = envelope['plan']
-        requests = validate_plan(plan)
-        if (set(plan) != {'version','mode','start','requests'} or plan['version'] != 2
-                or any(set(r) != {'id','name','destination','targets'} for r in requests)
-                or plan['start'] != self.current['destination']
-                or any({r[key] for r in requests} & {r[key] for r in self.requests} for key in ('id','name'))):
-            raise ValueError('Successor must start at the released station with fresh request identities and names')
-        counts = request_leg_counts(plan)
-        if sum(self.request_legs) + sum(counts) + 2*(self.batch_count-number) > self.max_legs:
-            raise ValueError('Successor exceeds the resident edge budget')
         from run_rdp_patrol import native_qpc_sample
+        raw_sha = hashlib.sha256(raw).hexdigest()
+        if not finishing:
+            plan = envelope['plan']
+            requests = validate_plan(plan)
+            if (set(plan) != {'version','mode','start','requests'} or plan['version'] != 2
+                    or any(set(r) != {'id','name','destination','targets'} for r in requests)
+                    or plan['start'] != self.current['destination']
+                    or any({r[key] for r in requests} & {r[key] for r in self.requests} for key in ('id','name'))):
+                raise ValueError('Successor must start at the released station with fresh request identities and names')
+            counts = request_leg_counts(plan)
+            reserved = 0 if self.open_queue else 2*(self.batch_count-number)
+            if sum(self.request_legs) + sum(counts) + reserved > self.max_legs:
+                raise ValueError('Successor exceeds the resident edge budget')
+            scope = dict(batchOrdinal=number, batchSha256=raw_sha, batchPlanSha256=batch_plan_digest(plan))
+        # The producer seals the exact selected plan before publishing the envelope and writes its receipt last.
+        address = {k:v for k,v in fixed.items() if k != 'mode'}
+        address.update(witness=witness, batchSha256=raw_sha)
+        decision_proof = {}
+        if self.open_queue:
+            decision_raw = batch_bytes(prefix.with_suffix('.decision.json'))
+            decision = json.loads(decision_raw)
+            clock = self.batch_clocks[witness['requestId']]
+            selected = [] if finishing else [r['destination'] for r in requests]
+            if (decision.get('type') != 'destinationQueueDecision' or any(decision.get(k) != v for k,v in address.items())
+                    or decision.get('gameplayClock') != clock or decision.get('selectedStations') != selected):
+                raise ValueError('Open queue policy evidence differs from its addressed gameplay witness or selection')
+            decision_proof['policyDecisionSha256'] = hashlib.sha256(decision_raw).hexdigest()
+            address.update(decision_proof)
+        observed = intent.get('observedAtMonotonicNs')
+        bracket = published.get('publicationQpc') or {}
         qpc = native_qpc_sample()
         self.check_batch_deadline()
         if qpc is None:
             raise RuntimeError('A native monotonic timestamp is required for successor admission')
-        scope = dict(batchOrdinal=number, batchSha256=hashlib.sha256(raw).hexdigest(), batchPlanSha256=batch_plan_digest(plan))
-        # The producer seals the exact selected plan before publishing the envelope and writes its receipt last.
-        address = {k:v for k,v in fixed.items() if k != 'mode'}
-        address.update(witness=witness, batchSha256=scope['batchSha256'])
-        observed = intent.get('observedAtMonotonicNs')
-        bracket = published.get('publicationQpc') or {}
         if (type(observed) is not int or observed <= 0
-                or intent != dict(address,type='destinationBatchIntent',plan=plan,observedAtMonotonicNs=observed)
+                or intent != dict(address,type='destinationBatchIntent',observedAtMonotonicNs=observed,**{decision_key:envelope[decision_key]})
                 or any(published.get(k) != v for k,v in address.items())
                 or published.get('type') != 'destinationBatchPublished' or published.get('observedAtMonotonicNs') != observed
                 or type(published.get('publishedAtMonotonicNs')) is not int or published['publishedAtMonotonicNs'] < observed
@@ -363,15 +458,35 @@ class WarmPhotoRequests:
                 or not all(type(bracket.get(k)) is int for k in ('beforeTicks','afterTicks'))
                 or not 0 < bracket['beforeTicks'] <= bracket['afterTicks'] <= qpc[1]):
             raise ValueError('Destination batch differs from the sealed external selection or publication')
+        if self.open_queue:
+            if qpc[0] != self.frequency or self.pending or self.release != proof['release']:
+                raise ValueError('Open queue changed its clock, released endpoint or terminal receipt barrier')
+            if bracket['beforeTicks'] < clock['witnessAppliedTicks']:
+                raise ValueError('Open queue decision was published before its claimed gameplay witness')
+            source_ticks = self.origin + round(native['atMs']*self.frequency/1000)
+            if not source_ticks <= qpc[1] <= source_ticks+self.frequency:
+                raise WarmQueueStarved('Open-queue decision missed the native 1000 ms released boundary')
+            if still_current is not None and not still_current():
+                return None
+            self.check_batch_interruption()
+        consumed = dict(clock='windows-query-performance-counter',frequencyHz=qpc[0],ticks=qpc[1])
+        if finishing:
+            row = self._event('warmQueueFinished',native,native['completedLegs'],decisionOrdinal=number,
+                              decisionSha256=raw_sha,decisionBytes=len(raw),publicationWitness=witness,
+                              intentSha256=hashlib.sha256(intent_raw).hexdigest(),publicationSha256=hashlib.sha256(publication_raw).hexdigest(),
+                              admissionFrameId=admission_frame,consumedQpc=consumed,**decision_proof,**proof)
+            self.finished,self.batch_boundary = True,None
+            self._status()
+            return None,[row]
         previous, following, legs = self.current['id'], requests[0]['id'], native['completedLegs']
         self.requests.extend(requests)
         self.request_legs.extend(counts)
         rows = [self._event('warmBatchAccepted', native, legs, nextRequestId=following, nextBatchOrdinal=number,
                             nextBatchSha256=scope['batchSha256'], nextBatchPlanSha256=scope['batchPlanSha256'],
                             nextBatchBytes=len(raw), publicationWitness=witness, admissionFrameId=admission_frame,
-                            consumedQpc=dict(clock='windows-query-performance-counter', frequencyHz=qpc[0], ticks=qpc[1]), **proof),
+                            consumedQpc=consumed, **decision_proof, **proof),
                 self._event('warmPhotoHandoff', native, legs, nextRequestId=following, **proof)]
-        self.batch_scope, self.batch_witnesses, self.batch_boundary = scope, {}, None
+        self.batch_scope, self.batch_witnesses, self.batch_clocks, self.batch_boundary = scope, {}, {}, None
         self.batch_dispatch_before_ms = self.last_applied_at_ms + 1000
         self.index += 1
         self.active_after, self.release = admission_frame, None

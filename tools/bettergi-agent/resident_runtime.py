@@ -503,7 +503,8 @@ def run_resident(args, load_policy, run_episode):
             if args.max_input_actions is not None and summary['acceptedInputActions'] >= args.max_input_actions:
                 summary['endReason'] = 'maxInputActions'
                 break
-            if segment.get('endReason') in ('userStop', 'hybridLegLimit'):
+            if segment.get('endReason') in ('userStop', 'hybridLegLimit') or (
+                    getattr(args,'warm_open_queue',False) and segment.get('endReason') in ('destinationQueueFinished','userPause')):
                 summary['endReason'] = segment['endReason']
                 break
             if binding:

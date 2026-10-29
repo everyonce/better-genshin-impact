@@ -1,7 +1,10 @@
 """Exercise the monitored patrol launcher without invoking the GPU, game, or broker."""
 import json
+from concurrent.futures import Future
 from pathlib import Path
+from queue import SimpleQueue
 import tempfile
+from threading import Event
 import unittest
 from unittest.mock import Mock, patch
 
@@ -181,6 +184,44 @@ class PatrolLauncherTests(unittest.TestCase):
                 patrol.run(args, self.folder)
             self.api.run_command.assert_not_called()
             self.assertEqual(json.loads((self.folder/'launcher.json').read_text())['stopReason'], reason)
+
+    def test_operator_marker_reaches_resident_while_gpu_query_is_pending(self):
+        self.publish(self.run_id)
+        started, released = Event(), Event()
+        broker = Future()
+        state = dict(stopReason=None, runId=self.run_id, stopRequested=False)
+        series = Mock(stop_observation=None)
+        series.stop_reason.side_effect = lambda: 'seriesOperatorStop' if started.is_set() else None
+
+        def sample(*_):
+            started.set()
+            return {'temperatureC':60} if released.wait(2) else {'error':'GPU query outlasted the stop'}
+
+        original_stop = patrol.stop_resident
+        def finish(folder, run_id, *, timing=None):
+            written = original_stop(folder, run_id, timing=timing)
+            released.set()
+            broker.set_result(None)
+            return written
+
+        with patch.object(patrol, 'log_sample', side_effect=sample), patch.object(patrol, 'stop_resident', side_effect=finish), \
+                patch.object(patrol, 'native_qpc_sample', side_effect=[(10_000_000, 60), (10_000_000, 72)]):
+            patrol.supervise(broker, self.folder, None, float('inf'), state, series)
+        self.assertEqual(state['stopReason'], 'seriesOperatorStop')
+        self.assertEqual((state['addressedStopQpc']['beforeTicks'], state['addressedStopQpc']['afterTicks']), (60, 72))
+        self.assertNotIn('telemetryError', state)
+        self.assertEqual(patrol.addressed_control(self.folder/'patrol.json.control.json', self.run_id)['command'], 'stop')
+
+    def test_stalled_gpu_monitor_stops_the_original_resident(self):
+        self.publish(self.run_id)
+        state = dict(stopReason=None, runId=self.run_id, stopRequested=False)
+        broker = Mock()
+        broker.done.side_effect = [False, True]
+        with patch.object(patrol.time, 'monotonic', side_effect=[1,1+patrol.MAX_GPU_SAMPLE_AGE_SECONDS]), \
+                patch.object(patrol, 'wait'):
+            patrol.supervise_control(broker,Future(),SimpleQueue(),self.folder,float('inf'),state,None)
+        self.assertEqual((state['stopReason'],state['stopRequested']), ('telemetryLost',True))
+        self.assertEqual(patrol.addressed_control(self.folder/'patrol.json.control.json',self.run_id)['command'], 'stop')
 
     def test_hot_startup_during_load_and_missing_telemetry_latch_until_resident_id_exists(self):
         for trigger, expected in [({'temperatureC': 78}, 'temperatureLimit'), ({'error': 'timeout'}, 'telemetryLost'),

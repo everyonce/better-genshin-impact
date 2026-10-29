@@ -13,7 +13,7 @@ from audit_destination_retries import RELEASE_REJECTED, RELEASE_RETRY, RETRY, ve
 from audit_hybrid_run import audit, batch_edges, check_patrol_leg, destination_edges, require
 from audit_warm_batches import read_batches, verify_batch_events
 from hybrid_routes import STREET_PATROL_ROUTE
-from landmark_recognizer import LandmarkRecognizer
+from landmark_recognizer import G4_SHA256, LandmarkRecognizer
 from observation_timing import observation_timestamp
 from patrol_photo_survey import require_qualified_observer, validated_targets, verify_photos
 
@@ -97,7 +97,7 @@ def authority_parts(run, recordings, repository, directed=False, batch_queue=Fal
                     release_trace.append((kind,row[key]))
         native_events = part.get('hybridNavigationEvents', [])
         types = {row['type'] for row in native_events}
-        require([r for r in journal if r.get('type') in types or r.get('type','').startswith(('warmPhoto','warmBatch','hybrid'))] == native_events,
+        require([r for r in journal if r.get('type') in types or r.get('type','').startswith(('warmPhoto','warmBatch','warmQueue','hybrid'))] == native_events,
                 'Warm or native event differs from original event journal')
         require([r for r in journal if r.get('type') == 'controlTransition'] == part.get('controlTransitions', []),
                 'Control transitions differ from the original journal')
@@ -160,7 +160,8 @@ def endpoint_release(endpoint, parts, owner):
     return proof
 
 
-def lifecycle(events, parts, specs, run_id, plan_hash, clock, interrupted, edges=None, confirm_first=False):
+def lifecycle(events, parts, specs, run_id, plan_hash, clock, interrupted, edges=None, confirm_first=False,
+              failed_photo=False):
     """Bind every lifecycle marker to the plan, native endpoint and single policy-goal identity."""
     rows = [e for e in events if e['type'].startswith('warmPhoto')]
     started, completed, handoff = 'warmPhotoRequestStarted', 'warmPhotoRequestCompleted', 'warmPhotoHandoff'
@@ -197,7 +198,7 @@ def lifecycle(events, parts, specs, run_id, plan_hash, clock, interrupted, edges
     for i,spec in enumerate(specs):
         legs += sum(edge[2] == i+1 for edge in edges) if edges is not None else 4*spec['circuits']
         if interrupted and i == len(specs)-1:
-            require(len(ends) < legs, 'Stop drill already completed its final route')
+            require((len(ends)==legs) if failed_photo else len(ends)<legs,'Unexpected last physical request completion')
             break
         require(len(ends) >= legs, 'Request did not meet its own native route target')
         end = ends[legs-1]
@@ -368,14 +369,15 @@ def photo_proofs(root, report, events, specs, boundaries, head, completed=None, 
     return photos
 
 
-def directed_controls(run, supervisor, parts, events, decisions, recovery, receipts, frames, edges, clock):
+def directed_controls(run, supervisor, parts, events, decisions, recovery, receipts, frames, edges, clock, *, failed=False):
     """Authenticate the budgets, source clock, every proposed leg, every terminal step and every endpoint hold."""
     seconds = supervisor.get('wallTimeLimitSeconds')
     require(type(seconds) is int and 15 <= seconds <= 600 and run.get('mode') == 'resident-rdp'
             and run.get('observationProfile') == 'p2p-native-hamming-192-v1'
             and run.get('recordingBudgetExhausted') is False and 0 < run['recordedBytes'] <= 160 * 2**20
             and run['recordedBytes'] == sum(p['recording']['recordedBytes'] for p in parts)
-            and all(e.get('processId') == supervisor['childPid'] and e.get('exitCode') == 0 for e in run['segments']),
+            and all(e.get('processId') == supervisor['childPid'] and e.get('exitCode') == int(failed and i==len(parts)-1)
+                    for i,e in enumerate(run['segments'])),
             'Destination route exceeded its bounded RDP or recording profile')
     require(all(p.get('decisionHz') == 10 and p.get('actionHoldMs') == 100 and p.get('maxObservationAgeMs') == 150
                 and (p.get('firstInputDeadlinePolicy') or {}).get('serverEnforcementRequested') is True
@@ -447,7 +449,8 @@ def directed_controls(run, supervisor, parts, events, decisions, recovery, recei
                 legLimitMs=35000, dispatchLimitMs=150, holdMs=100, sourceSpanSeconds=elapsed/1000)
 
 
-def directed_broker(folder, run, supervisor, edges, landmark_checkpoint, qualification, batch_count=None, max_legs=None):
+def directed_broker(folder, run, supervisor, edges, landmark_checkpoint, qualification, batch_count=None, max_legs=None,
+                    open_queue=False, failed=False):
     """Bind the recorded RDP worker, addressed resident, time budget and both BetterGI peers to the original job."""
     broker = read(folder/'broker.json')
     jid = broker['jobId']
@@ -455,8 +458,9 @@ def directed_broker(folder, run, supervisor, edges, landmark_checkpoint, qualifi
     result = read(folder/'jobs'/f'{jid}.result.json')
     job = read(folder/'jobs'/f'{jid}.job.json')
     require(result == {k:v for k,v in broker.items() if k not in ('jobFile','resultFile')}
-            and job['jobId'] == jid and result.get('remoteDesktop') is True and result.get('success') is True
-            and result.get('timedOut') is False and result.get('returnCode') == 0
+            and job['jobId'] == jid and result.get('remoteDesktop') is True and result.get('success') is (not failed)
+            and result.get('timedOut') is False and type(result.get('returnCode')) is int
+            and (result['returnCode']!=0 if failed else result['returnCode']==0)
             and result['windowsSessionId'] == job['windowsSessionId'] == run['windowsSessionId'],
             'Original broker job did not complete in the addressed RDP session')
     argv = job['argv']
@@ -470,6 +474,8 @@ def directed_broker(folder, run, supervisor, edges, landmark_checkpoint, qualifi
     batch_argv = [v for v in argv if v.split('=',1)[0] == '--warm-batch-count']
     require((not batch_argv if batch_count is None else value('--warm-batch-count') == str(batch_count)),
             'RDP broker batch budget differs from authorization')
+    require(sum(v=='--warm-open-queue' for v in argv)==int(open_queue)
+            and not any(v.startswith('--warm-open-queue=') for v in argv),'RDP open-queue authority differs')
     require(len(binding) == 5 and binding[0] == str(supervisor['rootPid']) and binding[2] == str(supervisor['childPid'])
             and all(re.fullmatch('[0-9a-f]{32}',binding[i]) for i in (1,3))
             and all(str(s['processId']) == binding[2] and s.get('instanceNonce') == binding[3] for s in run['segments'])
@@ -562,11 +568,14 @@ def audit_photo_handoff(run_path, recordings, *, repository, photo_root, request
     edges = destination_edges(plan) if plan['version'] == 2 else None
     interrupted = run.get('endReason') == 'userStop'
     require(not allow_incomplete or batch_plans is not None or len(specs) == 2, 'Stop drill requires exactly two declared requests')
-    require((interrupted and allow_incomplete) or run.get('endReason') == 'hybridLegLimit', 'Unexpected resident end reason')
+    admission = read(run_path.parent/'warm-launcher.json')
+    opened=admission.get('openQueue') is True
+    require((interrupted and allow_incomplete) or run.get('endReason') ==
+            ('destinationQueueFinished' if opened else 'hybridLegLimit'), 'Unexpected resident end reason')
     head = LandmarkRecognizer.load(landmark_checkpoint)
+    require(not opened or head.checkpoint_id==G4_SHA256,'Unexpected photographic authority for the open queue')
     require_qualified_observer(qualification,head)
     supervisor = read(run_path.parent/'launcher.json')
-    admission = read(run_path.parent/'warm-launcher.json')
     batches = None
     require(batch_plans is not None or not admission.get('batchCount'), 'Multi-batch broker requires external batch intents')
     if batch_plans is not None:
@@ -591,7 +600,7 @@ def audit_photo_handoff(run_path, recordings, *, repository, photo_root, request
              and supervisor.get('stopReason') is None), 'Handoff lacks its SIREN RDP supervisor and addressed lease')
     circuits = 0 if edges is not None else (specs[0]['circuits'] if interrupted else sum(r['circuits'] for r in specs))
     broker, shadow = directed_broker(run_path.parent,run,supervisor,edges,landmark_checkpoint,qualification,
-                    admission['batchCount'] if batches else None,admission['maxLegs'] if batches else None) if edges is not None else (None,None)
+                    admission['batchCount'] if batches else None,admission['maxLegs'] if batches else None,opened) if edges is not None else (None,None)
     report = audit(run_path,recordings,repository=repository,landmark_checkpoint=landmark_checkpoint,
                    minimum_circuits=circuits,destination_plan=plan if edges is not None else None,
                    destination_batches=batch_plans,shadow_checkpoint=shadow)
@@ -612,7 +621,7 @@ def audit_photo_handoff(run_path, recordings, *, repository, photo_root, request
     parts, events, decisions, recovery, receipts, frames = authority_parts(run,recordings,repository,edges is not None,bool(batches))
     clock = bridge_clock(parts)
     confirm_first = edges is not None and plan.get('confirmFirstArrival') is True
-    request_events = [e for e in events if e['type'] != 'warmBatchAccepted'] if batches else events
+    request_events = [e for e in events if e['type'] not in ('warmBatchAccepted','warmQueueFinished')] if batches else events
     boundaries, completed = lifecycle(request_events,parts,specs,run['runId'],plan_sha,clock,interrupted,edges,confirm_first)
     rows, switches = attribute_actions(decisions,recovery,receipts,frames,specs,boundaries,completed,clock)
     if edges is not None:
@@ -639,6 +648,10 @@ def audit_photo_handoff(run_path, recordings, *, repository, photo_root, request
                         'A successor batch was staged after the addressed operator stop')
         extra.update(batchContinuations=continuations,batchCount=admission['batchCount'],maxLegs=admission['maxLegs'],
                      publishedBatches=len(batches),admittedBatches=1+sum(b['status']=='accepted' for b in continuations))
+        if opened:
+            from audit_open_queue import verify_open_queue
+            extra['openQueue']=verify_open_queue(run_path.parent,admission,batches,parts,events,rows,frames,clock,
+                                                 terminal_release(parts,rows),interrupted)
     if edges is not None:
         budgets = directed_controls(run,supervisor,parts,events,decisions,recovery,receipts,frames,edges,clock)
         samples = [datetime.fromisoformat(t['atUtc']) for t in thermal]
@@ -668,7 +681,12 @@ def audit_photo_handoff(run_path, recordings, *, repository, photo_root, request
                 done_at = observation_timestamp(frames[completed[i]['frameId']])
                 summaries[-1]['navigationAndPhotoSeconds'] = (done_at-request_start)/1000
                 request_start = done_at
-    return dict(version=plan['version'],passed=not interrupted,status='operator-stopped-prefix' if interrupted else 'qualified',
+    result_status='operator-stopped-prefix' if interrupted else 'qualified'
+    if opened and not interrupted:
+        reason=extra['openQueue']['outcome']
+        result_status={'gameplayTargetReached':'runtime-target-achieved','operatorFinish':'operator-finished',
+                       'batchLimitReached':'capacity-closed','legLimitReached':'capacity-closed'}[reason]
+    return dict(version=plan['version'],passed=result_status not in ('operator-stopped-prefix','capacity-closed'),status=result_status,
                 stopVerified=interrupted,stop=stop,modelLoads=1,controllerLeases=1,runId=run['runId'],
                 verifiedLegs=report['verifiedLegs'],verifiedCircuits=report['verifiedCircuits'],
                 requests=summaries,clock=clock,handoffs=switches,**({'handoff':switches[0]} if len(switches)==1 else {}),
@@ -685,12 +703,12 @@ if __name__ == '__main__':
     parser.add_argument('--repository', type=Path, default=Path(__file__).resolve().parents[2])
     parser.add_argument('--allow-incomplete', action='store_true')
     parser.add_argument('--batch-intent',type=Path,action='append',
-                        help='Separately committed successor .intent.json in order (repeat once per publication)')
+                        help='Walking successor .intent.json files in order. The audit reads the terminal finish separately.')
     args = vars(parser.parse_args())
     args['run_path'] = args.pop('run')
     intents = args.pop('batch_intent')
-    if intents:
-        args['batch_plans'] = [read(args['requests']),*(read(p)['plan'] for p in intents)]
+    if intents or read(args['run_path'].parent/'warm-launcher.json').get('openQueue') is True:
+        args['batch_plans'] = [read(args['requests']),*(read(p)['plan'] for p in (intents or []))]
     destination = args.pop('output')
     result = audit_photo_handoff(**args)
     with destination.open('x',encoding='utf-8') as stream:

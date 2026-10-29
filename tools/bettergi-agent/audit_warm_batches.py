@@ -22,11 +22,12 @@ def bounded_bytes(path,limit):
     return raw
 
 
-def read_batches(folder, plans, initial_bytes, admission, run, stopped):
+def read_batches(folder, plans, initial_bytes, admission, run, stopped, failed=False, has_finish=False):
     """Match each external committed intent to its unique, untouched envelope and publication acknowledgement."""
     count, cap = admission.get('batchCount'), admission.get('maxLegs')
-    require(type(count) is int and 2 <= count <= 12 and type(cap) is int and 2*count <= cap <= 96
-            and 1 < len(plans) <= count and (stopped or len(plans) == count)
+    opened=admission.get('openQueue') is True
+    require(type(count) is int and 2 <= count <= 12 and type(cap) is int and (2 if opened else 2*count) <= cap <= 96
+            and (1 if opened or failed else 2) <= len(plans) <= count and (opened or stopped or failed or len(plans) == count)
             and len(batch_edges(plans)) <= cap, 'Invalid queue batch count or total leg budget')
     stop_batch = admission.get('stopInBatch')
     require((type(stop_batch) is int and 2 <= stop_batch == len(plans)
@@ -40,7 +41,7 @@ def read_batches(folder, plans, initial_bytes, admission, run, stopped):
     batch = dict(batchOrdinal=1,batchSha256=hashlib.sha256(initial_bytes).hexdigest(),
                  batchPlanSha256=canonical_digest(plans[0]),firstRequestOrdinal=1,plan=plans[0])
     batches = [batch]
-    for n in range(1,len(plans)+1):
+    for n in range(1,len(plans)+1) if not opened else []:
         require(len(batch_edges(plans[:n])) + 2*(count-n) <= cap, 'Insufficient remaining budget for announced batches')
     for n,plan in enumerate(plans[1:],2):
         key = f'{n:05d}'
@@ -50,9 +51,10 @@ def read_batches(folder, plans, initial_bytes, admission, run, stopped):
         envelope = json.loads(raw)
         intent, published = (json.loads(bounded_bytes(queue/name,65536)) for name in packets[1:])
         common = ('version','runId','sessionId','ownerEpoch','batchOrdinal','previousSha256','witness')
+        policy_fields={'policyDecisionSha256'} if opened else set()
         require(set(envelope) == {*common,'mode','plan'} and envelope.get('mode') == 'destination-batch'
-                and set(intent) == {*common,'type','plan','batchSha256','observedAtMonotonicNs'}
-                and set(published) == {*common,'type','batchSha256','observedAtMonotonicNs','publishedAtMonotonicNs','publicationQpc'}
+                and set(intent) == {*common,'type','plan','batchSha256','observedAtMonotonicNs',*policy_fields}
+                and set(published) == {*common,'type','batchSha256','observedAtMonotonicNs','publishedAtMonotonicNs','publicationQpc',*policy_fields}
                 and intent['type'] == 'destinationBatchIntent' and published['type'] == 'destinationBatchPublished'
                 and all(envelope[k] == intent[k] == published[k] for k in common)
                 and type(envelope['version']) is int and envelope['version'] == 1 and envelope['runId'] == run['runId']
@@ -67,6 +69,10 @@ def read_batches(folder, plans, initial_bytes, admission, run, stopped):
         require(raw == json.dumps(expected,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode('utf-8'),
                 'Consumed envelope bytes differ from the independently committed sender intent')
         digest = hashlib.sha256(raw).hexdigest()
+        if opened:
+            require(intent['policyDecisionSha256']==published['policyDecisionSha256']==
+                    hashlib.sha256(bounded_bytes(queue/(key+'.decision.json'),65536)).hexdigest(),
+                    'Walking decision differs from independently committed policy bytes')
         observed = intent['observedAtMonotonicNs']
         require(digest == intent['batchSha256'] == published['batchSha256'] and type(observed) is int and observed > 0
                 and published['observedAtMonotonicNs'] == observed and type(published['publishedAtMonotonicNs']) is int
@@ -75,16 +81,20 @@ def read_batches(folder, plans, initial_bytes, admission, run, stopped):
                      firstRequestOrdinal=batch['firstRequestOrdinal']+len(batch['plan']['requests']),plan=plan,
                      bytes=len(raw),envelope=envelope,publication=published)
         batches.append(batch)
+    if opened:
+        files.update(f'{n:05d}.decision.json' for n in range(2,len(plans)+1))
+        if not stopped and (not failed or has_finish):
+            files.update(f'{len(plans)+1:05d}'+s for s in ('.json','.intent.json','.publication.json','.decision.json'))
     require({p.name for p in queue.iterdir()} == files, 'Unaccounted or missing file in the batch inbox')
     return batches
 
 
-def verify_batch_events(events, batches, groups, frames, clock, specs, stopped, decisions):
+def verify_batch_events(events, batches, groups, frames, clock, specs, stopped, decisions, failed=False):
     """Prove staged successors used a real preceding software dispatch and were consumed only at the released handoff."""
     active_specs = {r['id'] for r in specs}
     by_id = {r['id']:(batch,n) for batch in batches for n,r in enumerate(batch['plan']['requests'],batch['firstRequestOrdinal'])}
     by_group = {r['id']:g for r,g in zip(specs,groups)}
-    require((len(specs) < len(by_id)) if stopped else len(specs) == len(by_id),
+    require(len(specs)<=len(by_id) if failed else (len(specs)<len(by_id)) if stopped else len(specs)==len(by_id),
             'Queue stop/completion differs from its declared request prefix')
     markers = [e for e in events if e.get('type','').startswith('warmBatch')]
     accepted = [b for b in batches[1:] if b['plan']['requests'][0]['id'] in active_specs]
@@ -153,27 +163,33 @@ def verify_batch_events(events, batches, groups, frames, clock, specs, stopped, 
                     or ticks(d['acceptance']['acceptedAtMs']) >= qpc['ticks'])
                     for d in decisions if d.get('warmRequestId') == new),
                 'Successor proposed or admitted an action before the original batch admission')
-        at = ticks(observation_timestamp(frames[admitted_at]))
-        require(0 <= (qpc['ticks']-at)*1000/clock['frequency'] <= 150 and
-                (qpc['ticks']-ticks(observation_timestamp(frames[fid])))*1000/clock['frequency'] <= 1000,
-                'Successor release wait or admission freshness budget exceeded')
-        pose = frames[fid]['navigationPose']
-        station = previous['plan']['requests'][-1]['destination']
-        for i,f in frames.items():
-            if not fid <= i <= admitted_at:
-                continue
-            p,g,m,src=(f[k] for k in ('navigationPose','frameWorldReadiness','motionEvidence','sourceFrame'))
-            require(f.get('inputAvailable') is True and g.get('ready') is True and g.get('sourceFrameId') == i
-                    and g.get('sourceFrame') == src and src.get('captureEpoch') == done['sourceEpoch']
-                    and g.get('epoch') == done['release']['readinessEpoch'] and p.get('frameId') == i
-                    and p.get('state') == 'valid' and p.get('layerId') == 'City_102' and .99 <= p['positionConfidence'] <= 1
-                    and .2 <= p['yawConfidence'] <= 1 and m.get('status') == 'normal' and m.get('spaceKeyMatched') is False
-                    and math.dist((p['x'],p['y']),PATROL_STATIONS[station]) <= 2
-                    and math.dist((p['x'],p['y']),(pose['x'],pose['y'])) <= 1.5
-                    and abs((p['yawDegrees']-pose['yawDegrees']+180)%360-180) <= 3,
-                    'Admission left the released destination or changed its source or readiness epoch')
+        verify_settled_wait(done,fid,admitted_at,previous['plan']['requests'][-1]['destination'],qpc,frames,clock)
         proofs.append(dict(proof,status='accepted',oldRequestId=old,newRequestId=new,boundaryFrameId=fid,
                       admissionFrameId=admitted_at,consumedQpc=qpc,
                       releasedBoundaryToReadMs=(qpc['ticks']-ticks(observation_timestamp(frames[fid])))*1000/clock['frequency'],
                       stagedBeforeRelease=bracket['afterTicks'] <= ticks(done['release']['serverNowMs'])))
     return proofs
+
+
+def verify_settled_wait(done, fid, admitted_at, station, qpc, frames, clock):
+    """Validate every source between the actual released endpoint and the external decision admission."""
+    def ticks(ms):
+        return clock["originTicks"]+round(ms*clock["frequency"]/1000)
+    at = ticks(observation_timestamp(frames[admitted_at]))
+    require(0 <= (qpc['ticks']-at)*1000/clock['frequency'] <= 150 and
+            (qpc['ticks']-ticks(observation_timestamp(frames[fid])))*1000/clock['frequency'] <= 1000,
+            'Successor release wait or admission freshness budget exceeded')
+    pose = frames[fid]['navigationPose']
+    for i,f in frames.items():
+        if not fid <= i <= admitted_at:
+            continue
+        p,g,m,src=(f[k] for k in ('navigationPose','frameWorldReadiness','motionEvidence','sourceFrame'))
+        require(f.get('inputAvailable') is True and g.get('ready') is True and g.get('sourceFrameId') == i
+                and g.get('sourceFrame') == src and src.get('captureEpoch') == done['sourceEpoch']
+                and g.get('epoch') == done['release']['readinessEpoch'] and p.get('frameId') == i
+                and p.get('state') == 'valid' and p.get('layerId') == 'City_102' and .99 <= p['positionConfidence'] <= 1
+                and .2 <= p['yawConfidence'] <= 1 and m.get('status') == 'normal' and m.get('spaceKeyMatched') is False
+                and math.dist((p['x'],p['y']),PATROL_STATIONS[station]) <= 2
+                and math.dist((p['x'],p['y']),(pose['x'],pose['y'])) <= 1.5
+                and abs((p['yawDegrees']-pose['yawDegrees']+180)%360-180) <= 3,
+                'Admission left the released destination or changed its source or readiness epoch')

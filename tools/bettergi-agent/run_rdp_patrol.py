@@ -5,11 +5,13 @@ from datetime import datetime, timezone
 import json
 import math
 import os
+from queue import Empty, SimpleQueue
 from pathlib import Path
 import re
 import shutil
 import subprocess
 import sys
+from threading import Event
 import time
 import uuid
 
@@ -21,6 +23,9 @@ ROOT = Path(__file__).resolve().parents[2]
 AGENT = ROOT / 'artifacts' / 'agent'
 STOP_C = 78
 POLL_SECONDS = 2
+CONTROL_POLL_SECONDS = .05
+GPU_QUERY_TIMEOUT_SECONDS = 3
+MAX_GPU_SAMPLE_AGE_SECONDS = POLL_SECONDS + GPU_QUERY_TIMEOUT_SECONDS + 1
 
 
 def options(argv=None, parser=None, *, warm=False):
@@ -116,6 +121,8 @@ def patrol_argv(args, session, folder):
                         '--photo-qualification=' + str(args.photo_qualification.resolve())])
         if getattr(args, 'batches', None):
             command.append('--warm-batch-count=' + str(args.batches))
+            if getattr(args,'open_queue',False):
+                command.append('--warm-open-queue')
     if args.camera_calibration:
         command.append('--camera-calibration=' + str(args.camera_calibration.resolve()))
     return command
@@ -124,7 +131,7 @@ def patrol_argv(args, session, folder):
 def sample_gpu(executable):
     """Sample the local first NVIDIA GPU without opening a console or invoking a shell."""
     result = subprocess.run([str(executable), '--id=0', '--query-gpu=temperature.gpu,utilization.gpu,memory.used,power.draw',
-                             '--format=csv,noheader,nounits'], capture_output=True, text=True, timeout=3, check=True,
+                             '--format=csv,noheader,nounits'], capture_output=True, text=True, timeout=GPU_QUERY_TIMEOUT_SECONDS, check=True,
                             creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     temp, utilization, memory, power = map(float, result.stdout.strip().split(','))
     if not (0 < temp <= 130 and 0 <= utilization <= 100 and memory >= 0 and power >= 0
@@ -215,40 +222,75 @@ def stop_resident(folder, run_id, *, timing=None):
     return False
 
 
-def supervise(future, folder, executable, deadline, state, series=None):
-    """Latch the first stop condition, including when it occurs before the resident publishes an ID."""
+def monitor_temperature(folder, executable, finished, completed_samples):
+    """Keep the existing GPU cadence while allowing a stop to be delivered during a slow NVIDIA query."""
+    while not finished.is_set():
+        try:
+            sample = log_sample(folder, executable)
+        except OSError as exc:
+            return 'telemetryLost', str(exc)
+        if 'error' in sample:
+            return 'telemetryLost', sample['error']
+        if sample['temperatureC'] >= STOP_C:
+            return 'temperatureLimit', None
+        completed_samples.put(time.monotonic())
+        finished.wait(POLL_SECONDS)
+    return None, None
+
+
+def supervise_control(future, thermal, completed_samples, folder, deadline, state, series):
+    """Quickly deliver latched stops to the original resident, even while its GPU sample is pending."""
+    next_control_check = 0
+    last_sample = time.monotonic()
     while not future.done():
         try:
+            now = time.monotonic()
             try:
-                sample = log_sample(folder, executable)
-            except OSError as exc:
-                sample = {'error': str(exc)}
-                state['telemetryError'] = str(exc)
-            if 'error' in sample:
+                while True:
+                    last_sample = completed_samples.get_nowait()
+            except Empty:
+                pass
+            if thermal.done():
+                state['stopReason'] = state['stopReason'] or thermal.result()[0]
+            if now - last_sample >= MAX_GPU_SAMPLE_AGE_SECONDS:
                 state['stopReason'] = state['stopReason'] or 'telemetryLost'
-            elif sample['temperatureC'] >= STOP_C:
-                state['stopReason'] = state['stopReason'] or 'temperatureLimit'
-            if time.monotonic() >= deadline:
+            if now >= deadline:
                 state['stopReason'] = state['stopReason'] or 'wallTimeLimit'
             if series is not None and not state['stopReason']:
                 state['stopReason'] = series.stop_reason()
             try:
                 # After a failed initial identity check, a later occupant of these
                 # paths must never inherit the first job's stop authority.
-                if state['runId'] or 'controlError' not in state:
+                if (not state['runId'] or state['stopReason'] or now >= next_control_check) and (
+                        state['runId'] or 'controlError' not in state):
                     state['runId'] = pin_resident(folder, state['runId'])
+                    next_control_check = now + POLL_SECONDS
                 if state['runId'] and state['stopReason'] and not state['stopRequested']:
-                    # Only the externally observed second-request drill measures the actual atomic control write.
-                    drill = state['stopReason'] == 'seriesOperatorStop' and getattr(series, 'stop_observation', None)
-                    timing = state if drill else None
-                    state['stopCommandPublished'] = stop_resident(folder, state['runId'], timing=timing)
+                    # Capture the actual write even when the marker producer has not finished its observation record.
+                    state['stopCommandPublished'] = stop_resident(folder, state['runId'], timing=state)
                     state['stopRequested'] = True
                     state['stopRequestedAtMonotonicNs'] = time.monotonic_ns()
             except (OSError, ValueError, KeyError) as exc:
                 state.update(stopReason=state['stopReason'] or 'invalidResidentControl', controlError=str(exc))
-            wait((future,), timeout=POLL_SECONDS)
+            wait((future,), timeout=CONTROL_POLL_SECONDS)
         except KeyboardInterrupt:
             state['stopReason'] = state['stopReason'] or 'interrupted'
+
+
+def supervise(future, folder, executable, deadline, state, series=None):
+    """Join the last thermal sample before a completed job can earn route credit."""
+    finished = Event()
+    completed_samples = SimpleQueue()
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        thermal = pool.submit(monitor_temperature, folder, executable, finished, completed_samples)
+        try:
+            supervise_control(future, thermal, completed_samples, folder, deadline, state, series)
+        finally:
+            finished.set()
+        reason, error = thermal.result()
+        state['stopReason'] = state['stopReason'] or reason
+        if error:
+            state['telemetryError'] = error
 
 
 def run(args, folder, *, series=None):
@@ -294,7 +336,8 @@ def run(args, folder, *, series=None):
             raise RuntimeError('Patrol stopped or broker failed. Inspect launcher.json and broker.json.')
         output = folder/'patrol.json'
         report = json.loads(output.read_text(encoding='utf-8-sig'))
-        if not state['runId'] or report.get('runId') != state['runId'] or report.get('endReason') != 'hybridLegLimit':
+        expected_end = 'destinationQueueFinished' if getattr(args,'open_queue',False) else 'hybridLegLimit'
+        if not state['runId'] or report.get('runId') != state['runId'] or report.get('endReason') != expected_end:
             raise RuntimeError('The addressed resident did not finish the requested legs.')
         from audit_hybrid_run import audit
         checkpoints = {}
@@ -310,7 +353,7 @@ def run(args, folder, *, series=None):
         if getattr(args, 'warm_photo_plan', None) and getattr(args, 'batches', None):
             from destination_batch_sender import admitted_plans
             plans = admitted_plans(folder)
-            if len(plans) != args.batches:
+            if (not 1<=len(plans)<=args.batches or not getattr(args,'open_queue',False) and len(plans)!=args.batches):
                 raise RuntimeError('The resident ended before every external batch was published')
             checkpoints['destination_batches'] = plans
             minimum_legs = sum(len(itinerary_legs(p['start'],[r['destination'] for r in p['requests']])) for p in plans)

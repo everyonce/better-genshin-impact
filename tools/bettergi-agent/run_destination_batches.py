@@ -24,17 +24,27 @@ def launch_options(argv):
     parser.add_argument('--leg-limit', type=int, required=True)
     parser.add_argument('--start-station', choices=PATROL_STATIONS, required=True)
     parser.add_argument('--manual', action='store_true', help='Wait for the standalone submit command for every successor')
+    parser.add_argument('--open-queue',action='store_true',help='Require an explicit finish in the next shared queue slot')
+    parser.add_argument('--target-gameplay-seconds',type=int,help='Finish after this span of positively witnessed native dispatches')
+    parser.add_argument('--owner-from',type=Path,help='Sealed prior launcher/series manifest with the original RDP owner')
     parser.add_argument('--destination', nargs=2, action='append', metavar=('NAME','STATION'), help='Initial batch goals')
     parser.add_argument('--stop-in-batch', type=int, help='Stop after the first applied action of this later batch')
     args = patrol.options(argv, parser, warm=True)
-    if (not 2 <= args.batches <= 12 or not 2*args.batches <= args.leg_limit <= 96
+    if (not 2 <= args.batches <= 12 or not (2 if args.open_queue else 2*args.batches) <= args.leg_limit <= 96
             or args.stop_in_batch is not None and not 2 <= args.stop_in_batch <= args.batches):
         parser.error('Use 2–12 batches, a leg cap between twice the batch count and 96, and an optional later stop batch.')
+    if args.open_queue:
+        if not args.owner_from or (args.target_gameplay_seconds is None) != args.manual or (
+                args.target_gameplay_seconds is not None and not 1<=args.target_gameplay_seconds<args.seconds):
+            parser.error('Open queues require --owner-from and either --manual or a gameplay target below the wall-time cap.')
+    elif args.target_gameplay_seconds is not None or args.owner_from is not None:
+        parser.error('--target-gameplay-seconds and --owner-from require --open-queue.')
     try:
         destinations = args.destination or qualification_goals(args.start_station,1,0)
         args.plan = create_plan(args.start_station,destinations)
         legs = len(itinerary_legs(args.start_station,[r['destination'] for r in args.plan['requests']]))
-        if legs + (2 if args.manual else 7)*(args.batches-1) > args.leg_limit:
+        reserve = 0 if args.open_queue else (2 if args.manual else 7)*(args.batches-1)
+        if legs+reserve > args.leg_limit:
             raise ValueError('The leg limit cannot accommodate the declared batch count')
     except ValueError as exc:
         parser.error(str(exc))
@@ -118,7 +128,7 @@ class BatchGuard(SeriesGuard):
                     proof['stopFileCreatedAtMonotonicNs'] = time.monotonic_ns()
                     self.stop_observation = proof
                     return
-                if not self.args.manual and b < self.args.batches:
+                if not self.args.manual and (b < self.args.batches or getattr(self.args,'open_queue',False)):
                     if submit(self.folder,b+1) is None:
                         continue
                 last_batch = b
@@ -134,8 +144,8 @@ class BatchGuard(SeriesGuard):
 def main(argv=None):
     """The two commands run in separate processes and never require foregrounding BetterGI."""
     argv = list(sys.argv[1:] if argv is None else argv)
-    if not argv or argv[0] not in ('launch','submit'):
-        print('Usage: run_destination_batches.py {launch|submit} --help',file=sys.stderr)
+    if not argv or argv[0] not in ('launch','submit','finish'):
+        print('Usage: run_destination_batches.py {launch|submit|finish} --help',file=sys.stderr)
         return 2
     operation = argv.pop(0)
     if operation == 'launch':
@@ -144,16 +154,19 @@ def main(argv=None):
         folder = args.evidence_root.resolve()/f'batches-{stamp}-{uuid.uuid4().hex[:12]}'
         (folder/'batches').mkdir(parents=True,exist_ok=False)
         summary = warm.run(args,folder,guard_type=BatchGuard)
-        print(summary.get('reason',summary['status']),flush=True)
+        print(summary.get('reason',summary.get('auditStatus',summary['status'])),flush=True)
         return int(summary['status'] not in ('completed','stopVerified'))
-    parser = argparse.ArgumentParser(description='Submit 2–4 named destinations to a running, manually supplied lease.')
+    finish = operation=='finish'
+    parser = argparse.ArgumentParser(description='Submit named destinations or finish an addressed manually supplied lease.')
     parser.add_argument('--folder',type=Path,required=True)
     parser.add_argument('--batch',type=int,default=2,help='Explicit successor ordinal. Defaults to the first successor, 2.')
-    parser.add_argument('--destination',action='append',nargs=2,required=True,metavar=('NAME','STATION'))
+    if not finish:
+        parser.add_argument('--destination',action='append',nargs=2,required=True,metavar=('NAME','STATION'))
     parser.add_argument('--wait-seconds',type=int,default=60)
     args = parser.parse_args(argv)
-    if not 0 <= args.wait_seconds <= 600 or not 2 <= args.batch <= 12 or not 2 <= len(args.destination) <= 4:
-        parser.error('Submit 2–4 destinations, batch 2–12, and a wait of at most 600 seconds.')
+    if (not 0 <= args.wait_seconds <= 600 or not 2 <= args.batch <= (13 if finish else 12)
+            or not finish and not 2 <= len(args.destination) <= 4):
+        parser.error('Use 2–4 destinations or an explicit finish, and a wait of at most 600 seconds.')
     folder = args.folder.resolve()
     try:
         if os.name != 'nt' or socket.gethostname().split('.')[0].upper() != 'SIREN':
@@ -162,9 +175,9 @@ def main(argv=None):
             raise ValueError('This lease uses its own benchmark sender')
         deadline = time.monotonic()+args.wait_seconds
         while True:
-            result = submit(folder,args.batch,args.destination,verify_manual_lease)
+            result = submit(folder,args.batch,getattr(args,'destination',None),verify_manual_lease,finish=finish)
             if result is not None:
-                print(f'Published destination batch {args.batch}',flush=True)
+                print(f'Published {operation} in destination slot {args.batch}',flush=True)
                 return 0
             if time.monotonic() >= deadline:
                 raise ValueError('No prior applied gameplay witness before the deadline')

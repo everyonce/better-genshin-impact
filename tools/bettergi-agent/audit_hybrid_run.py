@@ -110,7 +110,7 @@ def audit_shadow(decisions, frames, receipts, entries, recordings, route, checkp
                 eligibleNativeLabels=labelled, nativeLabelMatches=correct)
 
 
-def audit_patrol(start, endpoints, events, frames, parts, run, accepted, receipts, epoch, edges=None):
+def audit_patrol(start, endpoints, events, frames, parts, run, accepted, receipts, epoch, edges=None, failure_prefix=False):
     """Require an actual arrival, release, traversal and software forward input for each directed leg."""
     require(run.get('runId') and all(p.get('residentRunId') == run['runId'] and p.get('model') == 'open-p2p'
             and p.get('policyMetadata', {}).get('graphCaptureValidated') is True
@@ -274,8 +274,9 @@ def audit_patrol(start, endpoints, events, frames, parts, run, accepted, receipt
     if edges is not None:
         require(final.get('navigationMode') == 'itinerary' and final.get('completedCircuits',0) == 0
                 and final.get('completedDestinations') == sum(e['type'] == 'hybridDestinationVerified' for e in expected)
-                and ((final.get('phase') == 'complete') if run.get('endReason') == 'hybridLegLimit'
-                     else final.get('phase') in ('walking','recovering','releaseRequired','verifying','awaitingClimbPose')),
+                and ((final.get('phase') == 'complete') if run.get('endReason') in ('hybridLegLimit','destinationQueueFinished')
+                     else final.get('phase') in (('awaitingDestinationBatch','destinationPhotoDecision','failed')
+                             if failure_prefix else ('walking','recovering','releaseRequired','verifying','awaitingClimbPose'))),
                 'Final directed request count, mode or phase differs')
     require(expected == milestones and (edges is not None or final.get('completedCircuits') == len(circuits)),
             'Patrol milestone sequence or final circuit count differs')
@@ -759,7 +760,8 @@ def audit_bypasses(events, attempts, frames, accepted, receipts, route_id, epoch
 def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_passages=0,
           minimum_climb_passages=0, minimum_bypass_replays=0, minimum_bypass_rebinds=0, minimum_circuits=0,
           camera_checkpoint=None, minimum_calibrated_actions=0, shadow_checkpoint=None,
-          landmark_checkpoint=None, ffmpeg='ffmpeg', ffprobe='ffprobe', destination_plan=None, destination_batches=None):
+          landmark_checkpoint=None, ffmpeg='ffmpeg', ffprobe='ffprobe', destination_plan=None, destination_batches=None,
+          failure_prefix=False):
     """Join endpoint samples to retained same-frame poses and actions to terminal receipts."""
     require(minimum_legs >= 1 and min(minimum_obstacle_passages, minimum_climb_passages,
                                       minimum_bypass_replays, minimum_bypass_rebinds, minimum_circuits,
@@ -773,7 +775,10 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
         require(destination_plan is not None and destination_batches and destination_batches[0] == destination_plan,
                 'Initial plan does not match the first authorized batch')
         edges = batch_edges(destination_batches)
-    require(run.get('status') == 'completed' and run.get('evidenceComplete') is True,
+    if failure_prefix:
+        require(edges and run.get('status')=='failed' and run.get('endReason')=='error' and run.get('failedLeases')==1
+                and run.get('evidenceComplete') is False,'Expected an explicitly failed directed lease')
+    require(failure_prefix or run.get('status') == 'completed' and run.get('evidenceComplete') is True,
             'Resident run did not finish with complete evidence')
     require(run.get('modelLoads') == 1 and run.get('inputRequested') is True,
             'Expected one resident GPU model and an input-enabled trial')
@@ -798,7 +803,9 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
     lease = tuple(parts[0]['hello'][k] for k in ('sessionId', 'ownerEpoch'))
     require(all(tuple(p['hello'][k] for k in ('sessionId', 'ownerEpoch')) == lease for p in parts),
             'More than one controller lease was used')
-    require(all(p.get('status') == 'completed' for p in parts), 'A segment failed')
+    require(all(p.get('status')=='completed' for p in (parts[:-1] if failure_prefix else parts))
+            and (not failure_prefix or parts[-1].get('status')=='failed' and parts[-1].get('error')==run['error']),
+            'Unexpected segment status')
     events = [e for p in parts for e in p.get('hybridNavigationEvents', [])]
     if any(e['type'].startswith('hybridBypass') for e in events):
         require(all(p['hybridNavigation'].get('rememberBypass') is True for p in parts),
@@ -813,8 +820,12 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
     start, end = route_points(route_id)
     patrol = route_id == STREET_PATROL_ROUTE
     if edges is not None:
-        require(patrol and ((run.get('endReason') == 'hybridLegLimit' and len(endpoints) == len(edges))
-                or (run.get('endReason') == 'userStop' and len(endpoints) < len(edges))),
+        closed=run.get('endReason')=='destinationQueueFinished'
+        require(not closed or destination_batches and sum(e['type']=='warmQueueFinished' for e in events)==1,
+                'Closed destination queue lacks its original finish decision')
+        require(patrol and ((run.get('endReason') in ('hybridLegLimit','destinationQueueFinished') and len(endpoints) == len(edges))
+                or (run.get('endReason') == 'userStop' and len(endpoints) < len(edges))
+                or failure_prefix and len(endpoints)<=len(edges)),
                 'Destination run has missing or surplus edges, or an unexpected stop')
         start = PATROL_STATIONS[edges[0][0]]
     goals = PATROL_STATIONS if patrol else dict(start=start, end=end)
@@ -908,7 +919,7 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
             dispatch_ages.append(age)
     require(parts[-1]['hybridNavigation']['completedLegs'] == len(endpoints), 'Final leg total differs')
     circuits, partial = audit_patrol(starts[0], endpoints, events, frames, parts, run, accepted, receipts,
-                                     source_epoch, edges) if patrol else ([], [])
+                                     source_epoch, edges, failure_prefix) if patrol else ([], [])
     require(edges is not None or not any(e['type'] in (RETRY,RELEASE_REJECTED,RELEASE_RETRY) for e in events),
             'Release and photo retries require a directed route')
     retries = verify_retry_poses(events,frames,parts,receipts,destination_plan.get('confirmFirstArrival',False)) if edges is not None else {}
@@ -950,7 +961,7 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
     require(len(replays) >= minimum_bypass_replays, f'Only {len(replays)} verified bypass replays')
     rebinds = sum(len(r['rebinds']) for r in replays)
     require(rebinds >= minimum_bypass_rebinds, f'Only {rebinds} verified bypass rebinds')
-    return dict(version=1, passed=True, scope='directed-destination-endpoint-and-software-input-joins' if edges is not None
+    return dict(version=1, passed=not failure_prefix, scope='directed-destination-endpoint-and-software-input-joins' if edges is not None
                 else 'fixed-route-endpoint-and-software-input-joins', routeId=route_id,
                 verifiedLegs=len(endpoints), controllerLeases=1, modelLoads=1,
                 verifiedCircuits=len(circuits), patrolCircuits=circuits, partialPatrolLegs=[] if edges is not None else partial,

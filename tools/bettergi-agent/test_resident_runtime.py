@@ -20,16 +20,22 @@ def child(**changes):
 
 class ResidentTests(unittest.TestCase):
     def test_verified_hybrid_leg_limit_does_not_start_another_lease(self):
+        self.assert_final_lease('hybridLegLimit')
+
+    def test_explicit_queue_finish_does_not_start_another_lease(self):
+        self.assert_final_lease('destinationQueueFinished')
+
+    def assert_final_lease(self,reason):
         with tempfile.TemporaryDirectory() as root:
             args = SimpleNamespace(output=str(Path(root)/'resident.json'), model='observe', rdp_session_id=3,
                 control_file=None, seconds=3, reconnect_timeout=2, enable_input=True,
-                segment_seconds=1, record_dir=None, max_input_actions=None)
+                segment_seconds=1, record_dir=None, max_input_actions=None,warm_open_queue=reason=='destinationQueueFinished')
             starts = []
             lifecycle = SimpleNamespace(discover=lambda: {'instances': [child()]},
                 start_agent=lambda entry, *unused, **kwargs: starts.append(entry) or entry)
 
             def episode(segment, policy, control):
-                runtime.atomic_json(segment.output, dict(endReason='hybridLegLimit',
+                runtime.atomic_json(segment.output, dict(endReason=reason,
                     framesReceived=30, acceptedInputActions=10))
                 return 0
 
@@ -37,7 +43,7 @@ class ResidentTests(unittest.TestCase):
                 self.assertEqual(runtime.run_resident(args, lambda _: None, episode), 0)
             summary = json.loads(Path(args.output).read_text())
             self.assertEqual(len(starts), 1)
-            self.assertEqual(summary['endReason'], 'hybridLegLimit')
+            self.assertEqual(summary['endReason'], reason)
             self.assertEqual(summary['status'], 'completed')
 
     def test_healthy_file_rolls_do_not_rediscover_restart_or_reset_policy(self):

@@ -148,6 +148,13 @@ class HybridNavigation:
             self._set_patrol_leg(self.target_name)
             self.phase = 'walking'
 
+    def finish_destination_queue(self):
+        """Close an explicitly finished queue at its existing released endpoint without advancing another leg."""
+        if self.phase != 'awaitingDestinationBatch' or not self.photo_hold or self.completed_destinations != len(self.destinations):
+            self._fail('destination_batch_boundary_unbound')
+        self.photo_hold = None
+        self.phase = 'complete'
+
     def append_destination_batch(self, destinations):
         """Continue from the same released station after the resident authenticates new requests."""
         if self.phase != 'awaitingDestinationBatch' or not self.photo_hold:

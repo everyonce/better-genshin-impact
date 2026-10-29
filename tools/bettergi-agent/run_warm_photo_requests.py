@@ -142,6 +142,9 @@ def audit_result(args, folder, guard):
     if args.stop_drill:
         if audit.get('stopVerified') is not True or audit.get('passed') is not False:
             raise RuntimeError('Independent audit did not verify the stop drill')
+    elif getattr(args,'open_queue',False) and audit.get('status')=='capacity-closed':
+        if audit.get('passed') is not False or audit['openQueue']['outcome'] not in ('batchLimitReached','legLimitReached'):
+            raise RuntimeError('Open queue cap closure differs from the independent audit')
     elif audit.get('passed') is not True:
         raise RuntimeError('Independent audit did not verify the warm handoff')
     return audit
@@ -162,6 +165,23 @@ def run(args, folder, *, guard_type=WarmGuard):
     if getattr(args, 'batches', None):
         summary.update(batchCount=args.batches, maxLegs=args.destination_legs, manualSubmission=args.manual,
                        stopInBatch=args.stop_in_batch, stopRule='first-request-first-applied' if args.stop_drill else None)
+    if getattr(args,'open_queue',False):
+        from destination_batch_sender import encode,exclusive_bytes
+        from destination_queue_policy import BALANCED
+        owner_raw = args.owner_from.read_bytes()
+        owner = json.loads(owner_raw)
+        if owner.get('status') not in ('completed','stopVerified') or set(owner.get('identity') or {})!={'root','child'}:
+            raise ValueError('Open queue requires a sealed historical RDP owner')
+        guard.required_identity = owner['identity']
+        owner_sha = hashlib.sha256(owner_raw).hexdigest()
+        planner = dict(version=1,mode='manual' if args.manual else BALANCED,
+                       targetGameplaySeconds=args.target_gameplay_seconds,goalsPerBatch=4)
+        policy = dict(**planner,maxBatches=args.batches,maxLegs=args.destination_legs,initialPlanSha256=summary['planSha256'],
+                      requiredOwnerManifestSha256=owner_sha)
+        raw = encode(policy)
+        exclusive_bytes(folder/'required-owner.json',owner_raw)
+        exclusive_bytes(folder/'queue-policy.json',raw)
+        summary.update(openQueue=True,planner=planner,requiredOwnerManifestSha256=owner_sha,queuePolicySha256=hashlib.sha256(raw).hexdigest())
     print(f'Warm request evidence: {folder}\nTo cancel, create: {guard.stop_file}', flush=True)
     patrol.atomic_json(folder/'warm-launcher.json', summary)
     try:
@@ -191,6 +211,10 @@ def run(args, folder, *, guard_type=WarmGuard):
         summary['verifiedHandoffs'] = [dict(pair, dispatchGapMs=row['dispatchGapMs'])
                                        for pair, row in zip(audited, handoffs)]
         summary['status'] = 'stopVerified' if args.stop_drill else 'completed'
+        if getattr(args,'open_queue',False):
+            summary.update(auditStatus=audit['status'],openQueueResult=audit['openQueue'])
+            if audit['status']=='capacity-closed':
+                summary['status']='capacityClosed'
     except (Exception, KeyboardInterrupt) as exc:
         summary.update(status='stopped', reason=str(exc) or 'interrupted')
     finally:

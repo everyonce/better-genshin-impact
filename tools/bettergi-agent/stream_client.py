@@ -1103,6 +1103,7 @@ def parse_arguments(argv=None):
     parser.add_argument('--photo-qualification', help='Sealed observer qualification for the selected checkpoint')
     parser.add_argument('--warm-photo-plan', help='Two to four independently verified photo requests on the same native patrol lease')
     parser.add_argument('--warm-batch-count', type=int, help='Total addressed destination batches on this bounded lease (2 to 12)')
+    parser.add_argument('--warm-open-queue', action='store_true', help='Treat the batch count as a ceiling; require an explicit released-boundary finish')
     parser.add_argument('--camera-calibration', metavar='CHECKPOINT',
                         help='Trial a holdout-qualified camera response on the street patrol')
     parser.add_argument('--remember-hybrid-bypass', action='store_true',
@@ -1221,8 +1222,10 @@ def parse_arguments(argv=None):
         parser.error('Warm photos require the receipt-backed resident P2P policy, walking embedding and recorded leg budget')
     if args.warm_photo_plan and (not args.patrol_series_binding or args.seconds > 600 or args.max_observation_age_ms > 150):
         parser.error('Warm photos require pinned patrol owners, a 600 second maximum and a 150 ms source-age ceiling')
+    if args.warm_open_queue and args.warm_batch_count is None:
+        parser.error('An open queue requires bounded warm destination batches')
     if args.warm_batch_count is not None and (not args.warm_photo_plan or not 2 <= args.warm_batch_count <= 12
-                                             or not 2*args.warm_batch_count <= args.hybrid_legs <= 96):
+                                             or not (2 if args.warm_open_queue else 2*args.warm_batch_count) <= args.hybrid_legs <= 96):
         parser.error('Warm batch count requires a bounded warm destination lease and at most 96 total legs')
     if args.camera_calibration and (args.hybrid_route != STREET_PATROL_ROUTE or not args.enable_input
                                     or not args.resident or args.max_observation_age_ms != 150):
@@ -1255,6 +1258,61 @@ def observe_station(head, event, frame, pixels):
     event['visualStation'] = dict(checkpointId=head.checkpoint_id, frameId=source_id,
                                   prediction=prediction, elapsedUs=elapsed_us,
                                   rgbSha256=hashlib.sha256(pixels).hexdigest())
+
+
+def open_queue_interruption(control, token):
+    """Any interruption invalidates the issued queue, including a pause resumed before the next frame."""
+    current = control.prediction_token()
+    if current[3] == 'stop':
+        return 'userStop'
+    if current[3] == 'pause':
+        return 'userPause'
+    return 'openQueueAuthorityChanged' if current != token else None
+
+
+def consume_queue_decision(warm, frame, control, token, maximum_age_ms):
+    """Serialize open-queue admission against the original control generation, then recheck its disk command and RGB age."""
+    if not warm.open_queue:
+        return warm.consume_batch(frame['frameId'])
+    from resident_runtime import read_control_document
+    def still_current():
+        document,error = read_control_document(control.path,control.run_id)
+        return (not error and document.get('command') == 'run' and document.get('goalRequestId') == token[2]
+                and fresh_frame(frame,time.perf_counter_ns(),maximum_age_ms))
+    try:
+        permitted,decision = control.guarded_submit(token,lambda:warm.consume_batch(frame['frameId'],still_current=still_current))
+    except (ValueError,KeyError,TypeError,OSError):
+        # A stop can reach disk while the bounded packet is being read or rejected.
+        warm.check_batch_interruption()
+        raise
+    return decision if permitted else None
+
+
+def record_open_queue_boundary_error(warm, error, native_failure, report, recorder):
+    """Classify a released-boundary interruption without claiming a native stop acknowledgement."""
+    if not warm or not warm.open_queue or warm.batch_boundary is None:
+        return False
+    from warm_photo_requests import WarmQueueInterrupted, WarmQueueStarved
+    interruption = error if isinstance(error,WarmQueueInterrupted) else None
+    if not interruption and (isinstance(error,WarmQueueStarved) or native_failure == 'destination_batch_deadline'):
+        try:
+            warm.check_batch_interruption()
+        except WarmQueueInterrupted as command:
+            interruption = command
+        except ValueError as lost_control:
+            report['openQueueControlError'] = str(lost_control)
+            return False
+        if not interruption:
+            starved = warm.starved_event()
+            report['hybridNavigationEvents'].append(starved)
+            recorder.event(starved)
+    if not interruption:
+        return False
+    proof = dict(runId=warm.identity['runId'],frameId=warm.batch_boundary[0]['frameId'],
+                 source=interruption.source,reason=interruption.reason)
+    report.update(endReason=interruption.reason,openQueueInterruption=proof)
+    recorder.event(dict(type='openQueueOperatorInterruption',**proof))
+    return True
 
 
 def load_policy(args):
@@ -1413,12 +1471,16 @@ def run_episode(args, policy=None, control=None):
     terminal_climb_error = None
     try:
         warm = None
+        queue_control_token = None
         itinerary = {}
         if getattr(args, 'warm_photo_plan', None):
             from warm_photo_requests import WarmPhotoRequests
             warm = WarmPhotoRequests(args.warm_photo_plan, args.photo_directory, policy.landmark_shadow.checkpoint_id,
                                      args.goal_embedding, bridge.hello, control.run_id, args.hybrid_legs,
-                                     batch_count=getattr(args, 'warm_batch_count', None))
+                                     batch_count=getattr(args, 'warm_batch_count', None),open_queue=getattr(args,'warm_open_queue',False),
+                                     control_path=control.path if getattr(args,'warm_open_queue',False) else None)
+            if warm.open_queue:
+                queue_control_token = control.prediction_token()
             if warm.identity['goalEmbeddingSha256'] != policy.warm_goal_sha:
                 raise RuntimeError('Warm goal embedding changed since model load')
             if warm.destinations:
@@ -1733,10 +1795,13 @@ def run_episode(args, policy=None, control=None):
 
     def admit_successor(frame):
         """Poll only after native validation of the released station. The next frame starts any new action."""
-        batch = warm.consume_batch(frame['frameId'])
+        batch = consume_queue_decision(warm,frame,control,queue_control_token,args.max_observation_age_ms)
         if batch:
             destinations, transitions = batch
-            hybrid.append_destination_batch(destinations)
+            if destinations is None:
+                hybrid.finish_destination_queue()
+            else:
+                hybrid.append_destination_batch(destinations)
             for row in transitions:
                 report['hybridNavigationEvents'].append(row)
                 recorder.event(row)
@@ -1867,6 +1932,11 @@ def run_episode(args, policy=None, control=None):
             if command == 'stop':
                 report['endReason'] = 'userStop'
                 break
+            if warm and warm.open_queue:
+                interrupted = open_queue_interruption(control,queue_control_token)
+                if interrupted:
+                    report['endReason'] = interrupted
+                    break
             awaiting_photo = bool(warm and warm.retry_endpoint is not None)
             if awaiting_photo:
                 warm.check_photo_deadline()
@@ -1983,10 +2053,10 @@ def run_episode(args, policy=None, control=None):
                     admit_successor(frame)
                 if (warm and warm.batch_count and warm.finished
                         or args.hybrid_legs is not None and hybrid.legs >= args.hybrid_legs
-                        and not (warm and warm.retry_endpoint is not None)):
+                        and not (warm and (warm.retry_endpoint is not None or warm.open_queue and warm.batch_boundary is not None))):
                     if warm and not warm.finished:
                         raise RuntimeError('Native route ended with an unfinished warm request')
-                    report['endReason'] = 'hybridLegLimit'
+                    report['endReason'] = 'destinationQueueFinished' if warm and warm.open_queue else 'hybridLegLimit'
                     break
                 if hybrid_wait is not None:
                     cadence.advance(time.perf_counter())
@@ -2249,11 +2319,12 @@ def run_episode(args, policy=None, control=None):
                     control.publish(navigationIdleRecovery=report['navigationIdleRecovery'])
             cadence.advance(time.perf_counter())
     except Exception as exc:
-        episode_failure = exc
-        report['error'] = str(exc)
-        if climb and climb.helper.blocks_model:
-            raise climb.terminate('episode_failed_during_recovery', exc) from exc
-        raise
+        if not record_open_queue_boundary_error(warm,exc,getattr(hybrid,'failure',None),report,recorder):
+            episode_failure = exc
+            report['error'] = str(exc)
+            if climb and climb.helper.blocks_model:
+                raise climb.terminate('episode_failed_during_recovery', exc) from exc
+            raise
     finally:
         stopped.set()
         producer.join(timeout=3)
@@ -2299,7 +2370,7 @@ def run_episode(args, policy=None, control=None):
         if hybrid:
             publish_hybrid()
             reached = warm.finished if warm and warm.batch_count else (args.hybrid_legs is None or hybrid.legs >= args.hybrid_legs)
-            if not reached and report['endReason'] != 'userStop':
+            if not reached and report['endReason'] not in ('userStop','userPause'):
                 report.setdefault('error', 'Requested hybrid route legs were not completed')
         if execution_mode != 'off':
             # Include terminal reports that arrived after the last model decision.

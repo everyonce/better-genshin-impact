@@ -458,7 +458,7 @@ class RecordingFrameQueue(queue.Queue):
 class AsyncVideoRecorder:
     """Bound image, observation and event queues; only the worker performs recording IO."""
     def __init__(self, directory, ffmpeg, fps, max_bytes, frame_capacity=8, event_capacity=256, preview=False,
-                 metadata_capacity=256, shared_budget=None):
+                 metadata_capacity=256, shared_budget=None, retain_policy_rgb=False):
         if not math.isfinite(fps) or fps <= 0 or max_bytes <= 0 or min(frame_capacity, event_capacity, metadata_capacity) < 1:
             raise ValueError('Recording rate, budget, and queue capacities must be positive')
         self.directory = Path(directory)
@@ -467,6 +467,9 @@ class AsyncVideoRecorder:
         self.metadata_queue = queue.Queue(maxsize=metadata_capacity)
         self.ffmpeg, self.fps, self.max_bytes = ffmpeg, fps, max_bytes
         self.shared_budget = shared_budget
+        self.retain_policy_rgb = retain_policy_rgb
+        self.policy_rgb_bytes = 0
+        self.policy_rgb_frames = 0
         self.recorded_bytes = 0
         self.dropped = 0
         self.dropped_events = 0
@@ -517,7 +520,7 @@ class AsyncVideoRecorder:
             # Headers retain source clocks/readiness even when image admission fails.
             # They contain no pixels or receipts, and never claim a video index.
             frame_metadata = dict(metadata)
-            for key in ('receipts', 'videoFrameIndex', 'videoPtsSeconds', 'videoQueueAccepted'):
+            for key in ('receipts', 'videoFrameIndex', 'videoPtsSeconds', 'videoQueueAccepted', 'policyRgb'):
                 frame_metadata.pop(key, None)
             video_accepted = True
             try:
@@ -547,6 +550,8 @@ class AsyncVideoRecorder:
                     'recordedObservations': self.recorded_observations,
                     'droppedObservations': self.dropped_observations,
                     'recordedBytes': self.recorded_bytes,
+                    'policyRgbEnabled': self.retain_policy_rgb, 'policyRgbBytes': self.policy_rgb_bytes,
+                    'policyRgbFrames': self.policy_rgb_frames,
                     'error': self.error, 'closed': self.closed,
                     'previewFrameId': self.preview_frame_id, 'previewError': self.preview_error,
                     'complete': complete, 'lossless': complete and not any((
@@ -635,7 +640,7 @@ class AsyncVideoRecorder:
                     if self.error:
                         break
                     size = video.stat().st_size if video.exists() else 0
-                    self.recorded_bytes = size + frames.tell() + observations.tell() + events.tell()
+                    self.recorded_bytes = size + frames.tell() + observations.tell() + events.tell() + self.policy_rgb_bytes
                     total = self.shared_budget.update(str(self.directory), self.recorded_bytes) if self.shared_budget else self.recorded_bytes
                     if total >= self.max_bytes:
                         raise RuntimeError('Recording byte budget reached; inference continues without recording')
@@ -657,6 +662,17 @@ class AsyncVideoRecorder:
                         raise ValueError('Recording requires complete, even-sized RGB24 frames')
                     if shape is not None and shape != (width, height):
                         raise ValueError('Recording dimensions changed; start a new episode')
+                    if self.retain_policy_rgb:
+                        # Reserve raw bytes before any write. A retiring segment shares this same finite budget.
+                        from policy_rgb_archive import write_policy_rgb
+                        projected = self.recorded_bytes + len(pixels)
+                        total = self.shared_budget.update(str(self.directory), projected) if self.shared_budget else projected
+                        if total >= self.max_bytes:
+                            raise RuntimeError('Recording byte budget reached before exact policy RGB retention')
+                        metadata['policyRgb'] = write_policy_rgb(self.directory, index, metadata, pixels)
+                        self.policy_rgb_bytes += len(pixels)
+                        self.policy_rgb_frames += 1
+                        self.recorded_bytes = projected
                     if process is None:
                         shape = (width, height)
                         command = [self.ffmpeg, '-hide_banner', '-loglevel', 'error', '-f', 'rawvideo',
@@ -1073,6 +1089,8 @@ def parse_arguments(argv=None):
     parser.add_argument('--max-input-actions', type=int,
                         help='Stop after this many server-accepted proposals; requires --enable-input')
     parser.add_argument('--record-dir')
+    parser.add_argument('--retain-policy-rgb', action='store_true',
+                        help='Retain exact RGB192 files on the recording worker, inside the existing byte budget')
     parser.add_argument('--preview', action='store_true',
                         help='Save latest.jpg once per second on the recording worker; requires record-dir')
     parser.add_argument('--ffmpeg', default='ffmpeg')
@@ -1258,6 +1276,8 @@ def parse_arguments(argv=None):
         args.navigation_guidance = True
         if args.input_keys is None:
             args.input_keys = 'W,A,S,D'
+    if args.retain_policy_rgb and (not args.record_dir or args.observation_profile != P2P_NATIVE or args.record_max_mib > 160):
+        parser.error('Exact policy RGB requires a recording directory, native Hamming192, and at most 160 MiB')
     return args
 
 
@@ -1568,7 +1588,7 @@ def run_episode(args, policy=None, control=None):
             recorder = archive
         else:
             recorder = AsyncVideoRecorder(args.record_dir, args.ffmpeg, args.fps, args.record_max_mib*2**20,
-                                          preview=args.preview) if args.record_dir else None
+                                          preview=args.preview, retain_policy_rgb=getattr(args,'retain_policy_rgb',False)) if args.record_dir else None
         if climb:
             climb.recorder = recorder
     except Exception:

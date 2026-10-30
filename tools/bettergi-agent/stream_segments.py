@@ -89,9 +89,11 @@ class StreamSegments:
     def _new_recorder(self):
         if self.record_parent is None or self.budget.used >= self.budget.maximum:
             return None
+        options = dict(preview=self.args.preview, shared_budget=self.budget, frame_capacity=self.frame_capacity)
+        if getattr(self.args, 'retain_policy_rgb', False):
+            options['retain_policy_rgb'] = True
         return self.factory(str(self.record_parent / f'{self.number:05d}'), self.args.ffmpeg,
-                            self.args.fps, self.budget.maximum, preview=self.args.preview,
-                            shared_budget=self.budget, frame_capacity=self.frame_capacity)
+                            self.args.fps, self.budget.maximum, **options)
 
     def _context(self, previous):
         """Carry original evidence, explicitly as context rather than new decisions/video."""

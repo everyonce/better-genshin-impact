@@ -6,6 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 import subprocess
+from policy_rgb_archive import verify_policy_rgb
 
 ROOT = Path(__file__).resolve().parents[2]
 LOSS_FIELDS = ('droppedFrames','droppedEvents','abandonedFrames','droppedObservations')
@@ -152,6 +153,7 @@ def build_manifest(folder, output, *, split='diagnostic', repo=ROOT):
     referenced={folder/'patrol.json',folder/'warm-launcher.json',folder/'launcher.json',folder/'broker.json',
                 folder/'photo-requests.json',folder/'patrol.json.control.json'}
     proposals,receipts,observations,images={}, {}, {}, {}
+    policy_rgb_digests = {}
     losses=Counter(dict.fromkeys(LOSS_FIELDS,0))
     actors=Counter()
     leases=set()
@@ -209,9 +211,19 @@ def build_manifest(folder, output, *, split='diagnostic', repo=ROOT):
             image=dict(frameId=fid,path=str((directory/'frames.mp4').relative_to(repo)),videoFrameIndex=frame['videoFrameIndex'],
                        metadataPath=str((directory/'frames.jsonl').relative_to(repo)),metadataLine=line,
                        sourceFrame=frame.get('sourceFrame'),width=frame['width'],height=frame['height'])
+            if bool(frame.get('policyRgb')) != recording.get('policyRgbEnabled', False):
+                raise ValueError('Exact policy RGB coverage differs from its recording seal')
+            if frame.get('policyRgb'):
+                raw_path = verify_policy_rgb(directory, frame['policyRgb'])
+                referenced.add(raw_path)
+                policy_rgb_digests[raw_path] = frame['policyRgb']['sha256']
+                image['policyRgb'] = dict(frame['policyRgb'], path=str(raw_path.relative_to(repo)))
             if fid not in images: images[fid]=image
             elif images[fid]['sourceFrame']!=image['sourceFrame']: raise ValueError('Conflicting encoded source identity')
         if encoded!=recording['encodedFrames']: raise ValueError('Encoded frame coverage differs from its seal')
+        if recording.get('policyRgbEnabled') and (recording.get('policyRgbFrames') != encoded
+                or recording.get('policyRgbBytes') != encoded*192*192*3):
+            raise ValueError('Exact policy RGB count differs from encoded source coverage')
         video_proof=verify_video(directory/'frames.mp4',video_index)
         segment_rows.append(dict(number=entry['number'],complete=recording['complete'],lossless=recording['lossless'],
                                  encodedFrames=encoded,recordedBytes=recording['recordedBytes'],videoDecode=video_proof))
@@ -251,7 +263,7 @@ def build_manifest(folder, output, *, split='diagnostic', repo=ROOT):
     for path in sorted(referenced):
         if not path.resolve().is_relative_to(folder): raise ValueError('Evidence file escapes its original episode')
         sha=digest_file(path)
-        expected=(map_experience or {}).get('sourceSha256',{}).get(str(path.relative_to(folder)))
+        expected=policy_rgb_digests.get(path) or (map_experience or {}).get('sourceSha256',{}).get(str(path.relative_to(folder)))
         if expected is not None and sha!=expected:raise ValueError('Qualified map evidence changed before export')
         originals.append(dict(path=str(path.relative_to(repo)),bytes=path.stat().st_size,sha256=sha))
     manifest=dict(format='bettergi-automated-experience-v1',createdAtUtc=datetime.now(timezone.utc).isoformat(),
@@ -261,7 +273,9 @@ def build_manifest(folder, output, *, split='diagnostic', repo=ROOT):
             for key,path in zip(('checkpoint','qualification'),observer)},
         humanExpertDemonstrations=False,demonstrationType='automated-controller-experience',
         inputEvidence='native-software-dispatch; game outcomes require separate observation',
-        imageDomain='original retained H.264 recordings; lossy pixels, not exact policy RGB',
+        imageDomain=('original retained H.264 plus explicitly hashed exact RGB192 references' if policy_rgb_digests
+                     else 'original retained H.264 recordings; lossy pixels, not exact policy RGB'),
+        exactPolicyRgbFrames=len(policy_rgb_digests),
         learnedPolicyCompetence='Only actions attributed to learned-policy; no claim of independent navigation',
         leases=[list(pair) for pair in sorted(leases)],captureIntervals100ns={k:[min(v),max(v)] for k,v in captures.items()},
         segments=segment_rows,losses=dict(losses),unknownInputOutcomes=unknown,localRefusals=refusals,

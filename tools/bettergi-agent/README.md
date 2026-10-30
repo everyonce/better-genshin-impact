@@ -230,6 +230,10 @@ The [streaming guide](STREAMING.md) documents input opt-in, text goals, pause/re
 
 An observation session sends a bounded queue of RGB frames to FFmpeg independently of capture and inference. The resulting H.264 video is lossy, with synthetic fixed-rate playback timestamps. `frames.jsonl` maps actual encoded indices to source metadata; `observations.jsonl` separately retains received headers even when the video queue drops an image. Use native source clocks and execution receipts for analysis, and reject affected training windows after metadata, receipt or video loss. Model-generated trajectories are not expert demonstrations, and these recordings do not establish physical-input or game-render timing.
 
+For bounded data collection, `--retain-policy-rgb` preserves the exact immutable RGB192 payload beside each encoded frame, on the recording worker. It requires the native Hamming192 profile and a recording cap of at most 160 MiB. Raw files share that existing budget, including retiring segments; retention stops before admitting a raw file that would exceed it. `frames.jsonl` carries each file's shape, size and SHA-256. The experience exporter independently checks those bytes, source/action alignment and complete raw coverage against the recording seal, while retaining the H.264 references separately. This option does not expand input authority or make automated trajectories human demonstrations. It is available on the standard patrol/warm-photo launchers, but not the larger endurance profile.
+
+`combat_observer.py` is a read-only preparation tool. Its compact red-bar and health-color heuristics return candidates and temporal consistency only. They explicitly do not identify an enemy, grant input authority, estimate a health percentage, or verify a kill. The current negative-route check is not positive combat qualification.
+
 `prepare_replay_session.py` prepares offline P2P comparisons from one **complete,
 closed bridge lease** split across resident recording segments. It verifies the
 session/owner, contiguous report chain, original carry-over frames, pending

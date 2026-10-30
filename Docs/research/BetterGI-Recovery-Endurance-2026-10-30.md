@@ -128,3 +128,36 @@ After the failure was diagnosed and the original idle owner was verified, `trial
 | Final release | 13,789.341 ms on the original native lease clock |
 
 The `artifacts/agent/experience/2026-10-30/map-visit-training` export is reserved as **train**, separate from both existing holdouts. `qualified-map-review.json` verifies all 30 retained original-file hashes, both independent audits, ordinary and UI action-file hashes, and the original UI source PNGs. The directed reader recovered 77 native steering weak labels (40 forward, 19 right, 18 left) without fitting. At 20:54 UTC the same host and child were idle, minimized and game-ready; the GPU was 56°C. Both holdout reservations still rejected fitting. This qualifies a bounded map transition and its training provenance, not an independently trained general-purpose policy.
+
+## Varied starts and rejected steering candidates
+
+`varied-starts/series-20261030T210501Z-c98f5e7fe592` collected two independently leased, preassigned episodes. Junction-to-lamp training completed seven legs/four photos in 25.01 seconds with 214 actions and 155 native steering labels. Lamp-to-junction holdout completed five legs/four photos in 20.30 seconds with 177 actions and 149 labels. Both had zero recording losses; maximum handoffs were 705.75/700.55 ms and GPU peaks 63/61°C. The exports retain their distinct train/holdout reservations. Frozen scalar generations 1 and 2 each agreed with 143/149 new holdout labels; the native five-degree teacher rule agreed with all its own labels.
+
+`steering-candidate-01` used one fixed, one-thread CPU fit: 822 native weak labels from six permitted training runs, 24 coefficients, 0.260 seconds. Its candidate SHA-256 is `7dd9a0581136605527980b5bef0c57713af35dabc1dbf563339eaea60bfb2aee`. It reached 145/149 on the new holdout, 432/444 on recovery-resume, and 4,260/4,347 on the endurance holdout, with at most 28.6 µs p95. It nevertheless failed the predeclared zero-paired-regression/native-rule gate. The original heads, failures and holdout reservations remain unchanged; the candidate was not deployed.
+
+`visual-steering-01` froze the existing 1,008-dimensional center-scene CNN and fitted a nearest-cosine prototype bank within each exact planned waypoint. It excluded current pose, heading, bearing error, raw P2P actions and future frames. The bank used 232 training images; the untouched 149-image validation episode scored 110/149 (73.83%) at 3.27 ms p95, excluding capture/decode/transport. CUDA graph/eager features matched exactly on all 381 images and the GPU peaked at 61°C. The 95% accuracy gate failed, so no fresh final test or input authority was granted. The bank SHA-256 is `0c21f0371002307cba4758d3228241a555edec28bc6eb66721976fd3475b8c69`.
+
+## Exact-pixel recording and paired fidelity diagnostic
+
+Ten original goal PNGs could be joined to precisely the same encoded source frames. Their average pixel error was 4.17/255 and minimum frozen-CNN feature cosine 0.9582; all ten scene labels were unchanged. Those station images did not establish the cause of steering errors. The original steering frames had only lossy video, so the Python recorder gained optional bounded raw RGB192 retention; no native application was rebuilt or replaced.
+
+The standard-budget diagnostic episode `exact-pixel-collection/series-20261030T220204Z-40d00a1d6f90/exact-pixel-diagnostic-01`, run `06d0a1f2431747c4925fc45e29ac2e23`, then passed independent route and handoff audits on the original R56/R59 owner:
+
+| Evidence | Result |
+| --- | --- |
+| Route | Four legs, four photos, 19.6875 seconds |
+| Applied inputs | 175: 132 native controller, 43 learned policy |
+| Exact pixels | 405 RGB192 files, with SHA-256 and original encoded indices |
+| Recording | 49,992,792 bytes of 167,772,160; all loss counters zero |
+| Handoff / thermal | 797.1383 ms maximum; 61°C peak; original 78°C stop unchanged |
+| Terminal release | 20,720.8149 ms on the native lease clock |
+
+`exact-pixel-comparison/result.json` rechecked all 429 referenced original files and paired 129 native steering sources with both their raw RGB and decoded H.264 pixels. With the same frozen rejected prototype, raw pixels scored 87/129 (67.44%) and encoded pixels 84/129 (65.12%). Eleven predictions changed: seven raw-pixel wins and four losses. Average pixel error was 4.66/255; minimum feature cosine was 0.8742. Restoring only the input pixels did not repair the model's accuracy. This single correlated episode does not isolate the effects of compression during fitting. It is explicitly **diagnostic**, excluded from fitting, and confers no promotion or control authority.
+
+The focused recorder tests passed. The first broad run encountered sandbox-denied Windows hard links in existing evidence-publication tests; the unchanged suite then passed all 569 tests on the host in 29.51 seconds. Failed logs remain preserved. The raw files are written off the capture path and share the existing total recording budget, including retiring segments; truncation, changed hashes, redirected paths and incomplete coverage are rejected.
+
+## Combat prerequisites
+
+The user selected combat at 21:55 UTC. The native bridge accepts bounded mouse-button proposals, but the surveyed navigation graph stays inside the city and the map transaction grants only its fixed M/Escape visit. No supported route to an observed enemy has been qualified. The fresh input-disabled native image in `resource-prerequisites/01-frame-000000000016.png` showed the planter wall, no collectible prompt and no enemy. The requested next prerequisite is an isolated low-level enemy on flat ground. No combat inputs have been sent, and further preparation is offline while that position is pending.
+
+`combat-isolated-enemy-v1.json` was encoded with the installed local EmbeddingGemma model, one CPU thread, exact token parity and zero upstream embedding error. `combat_observer.py` is deliberately read-only: red horizontal shapes are candidates, health colors are coarse visual evidence, and temporal confirmation never grants input or proves a kill. Five synthetic refusal/clock tests passed. `combat-negative-observer.json` found zero enemy candidates on all 405 original city frames, with green health-color evidence throughout and 0.456 ms p95 processing. Positive recognition and live combat outcomes remain unqualified.

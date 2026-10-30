@@ -57,7 +57,11 @@ def options(argv=None, parser=None, *, warm=False):
                        help='Collect a verified photo at this station during the patrol')
     p.add_argument('--photo-qualification', type=Path, help='Sealed qualification for the photo observer')
     p.add_argument('--camera-calibration', type=Path, help='Use and independently audit this local camera checkpoint')
+    p.add_argument('--retain-policy-rgb', action='store_true',
+                   help='Retain exact policy pixels inside the standard 160 MiB recording budget')
     args = p.parse_args(argv)
+    if args.retain_policy_rgb and getattr(args, 'endurance', False):
+        p.error('Exact policy capture requires the standard bounded collection profile')
     if getattr(args,'retain_station_rgb',False) and (not args.landmark_shadow or args.photo_station):
         p.error('--retain-station-rgb requires --landmark-shadow without photo objectives')
     if (warm or args.photo_station or args.photo_qualification) and not (
@@ -116,6 +120,8 @@ def patrol_argv(args, session, folder):
         command.append('--landmark-shadow=' + str(args.landmark_shadow.resolve()))
     if getattr(args,'retain_station_rgb',False):
         command.append('--retain-station-rgb')
+    if getattr(args, 'retain_policy_rgb', False):
+        command.append('--retain-policy-rgb')
     if args.photo_station:
         command.extend(['--photo-directory', str(folder/'station-photos'),
                         '--photo-qualification', str(args.photo_qualification.resolve())])

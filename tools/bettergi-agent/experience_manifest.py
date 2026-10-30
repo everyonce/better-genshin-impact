@@ -146,6 +146,8 @@ def build_manifest(folder, output, *, split='diagnostic', repo=ROOT):
         raise ValueError('Episode already has a different reserved split')
     observer=photo_inputs(folder,repo)
     proof=qualify(folder,repo,observer=observer)
+    from map_experience import collect_map_experience
+    map_experience=collect_map_experience(folder,repo,observer)
     run=json.loads((folder/'patrol.json').read_bytes())
     referenced={folder/'patrol.json',folder/'warm-launcher.json',folder/'launcher.json',folder/'broker.json',
                 folder/'photo-requests.json',folder/'patrol.json.control.json'}
@@ -157,12 +159,18 @@ def build_manifest(folder, output, *, split='diagnostic', repo=ROOT):
     refusals=[]
     unknown=[]
     segment_rows=[]
+    map_reports=0
     for entry in run['segments']:
         number=f"{entry['number']:05d}"
         report=folder/'patrol-segments'/(number+'.json')
         if Path(entry['report']).resolve()!=report:
             raise ValueError('Episode segment redirects to another run')
         part=json.loads(report.read_bytes())
+        if part.get('mapInspection') is not None:
+            if not map_experience or part['mapInspection']!=dict(requestId=map_experience['audit']['requestId'],
+                    returnedFrame=map_experience['audit']['returned']['frameId']):
+                raise ValueError('Stream report has an unaccounted or different native map operation')
+            map_reports+=1
         directory=folder/'patrol-recording'/number
         record_path=directory/'recording.json'
         recording=json.loads(record_path.read_bytes())
@@ -220,11 +228,18 @@ def build_manifest(folder, output, *, split='diagnostic', repo=ROOT):
         action_rows.append(row)
         if row['hasAppliedInput']: actors[row['actor']]+=1
     missing=[row['requestId'] for row in action_rows if row['hasAppliedInput'] and not row['hasOriginalEncodedImage']]
+    if map_experience and not map_reports:
+        raise ValueError('Qualified map operation is missing from the original stream report')
     qualified=proof.get('passed') is True and run.get('status')=='completed'
     eligible=(qualified and not unknown and not missing and not any(losses.values()) and len(leases)==1
               and 'unknown-controller' not in actors and all(s['complete'] and s['lossless'] for s in segment_rows))
     for row in action_rows:
         row['eligibleForImageActionTraining']=bool(eligible and row['hasAppliedInput'])
+    ui_rows=map_experience['actions'] if map_experience else []
+    for row in ui_rows:
+        row['eligibleForImageActionTraining']=bool(eligible)
+    if map_experience:
+        referenced.update(folder/path for path in map_experience['sourceFiles'])
     # Hash only the exact source files referenced above and bounded, named queue/photo sidecars.
     for directory,pattern in ((folder/'batches','*.json'),(folder/'station-photos','**/*.json'),(folder/'station-photos','**/*.png')):
         referenced.update(directory.glob(pattern))
@@ -235,7 +250,10 @@ def build_manifest(folder, output, *, split='diagnostic', repo=ROOT):
     originals=[]
     for path in sorted(referenced):
         if not path.resolve().is_relative_to(folder): raise ValueError('Evidence file escapes its original episode')
-        originals.append(dict(path=str(path.relative_to(repo)),bytes=path.stat().st_size,sha256=digest_file(path)))
+        sha=digest_file(path)
+        expected=(map_experience or {}).get('sourceSha256',{}).get(str(path.relative_to(folder)))
+        if expected is not None and sha!=expected:raise ValueError('Qualified map evidence changed before export')
+        originals.append(dict(path=str(path.relative_to(repo)),bytes=path.stat().st_size,sha256=sha))
     manifest=dict(format='bettergi-automated-experience-v1',createdAtUtc=datetime.now(timezone.utc).isoformat(),
         split=split,runId=run['runId'],originalRun=str((folder/'patrol.json').relative_to(repo)),
         originalStatus=run['status'],originalEndReason=run['endReason'],originalError=run.get('error'),
@@ -251,6 +269,7 @@ def build_manifest(folder, output, *, split='diagnostic', repo=ROOT):
         appliedActions=sum(bool(row['appliedSteps']) for row in receipts.values()),
         appliedActionsWithPairedSource=sum(row['hasAppliedInput'] for row in action_rows),
         appliedByActor=dict(actors),appliedActionsMissingImages=missing,eligibleForImageActionTraining=bool(eligible),
+        nativeUiTransition=map_experience,uiPulseCount=len(ui_rows),
         originalFiles=originals,trainingQualification='whole-run audit plus complete receipts and original encoded source coverage')
     if output.exists():raise FileExistsError(output)
     manifest['splitReservation']=reserve_split(folder,run['runId'],split)
@@ -259,6 +278,11 @@ def build_manifest(folder, output, *, split='diagnostic', repo=ROOT):
     with actions_path.open('x',encoding='utf-8') as target:
         for row in action_rows: target.write(json.dumps(row,separators=(',',':'),allow_nan=False)+'\n')
     manifest['actionsFile']=dict(path='actions.jsonl',rows=len(action_rows),sha256=digest_file(actions_path))
+    if ui_rows:
+        ui_path=output/'ui-actions.jsonl'
+        with ui_path.open('x',encoding='utf-8') as target:
+            for row in ui_rows:target.write(json.dumps(row,separators=(',',':'),allow_nan=False)+'\n')
+        manifest['uiActionsFile']=dict(path=ui_path.name,rows=len(ui_rows),sha256=digest_file(ui_path))
     with (output/'manifest.json').open('x',encoding='utf-8') as target:
         json.dump(manifest,target,indent=2,allow_nan=False)
     return manifest

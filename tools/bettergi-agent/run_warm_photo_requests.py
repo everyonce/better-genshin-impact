@@ -187,6 +187,10 @@ def run(args, folder, *, guard_type=WarmGuard):
             receipt=json.loads(args.map_owner_from.read_bytes())
         with (folder/'map-required-owner.json').open('x',encoding='utf-8') as out:
             json.dump(guard.required_identity,out,indent=2)
+        # Retain the original lineage source so later experience export can independently replay the UI operation.
+        with (folder/'map-owner-source.json').open('x',encoding='utf-8') as out:
+            json.dump(dict(path=str(args.map_owner_from.resolve()),
+                sha256=hashlib.sha256(args.map_owner_from.read_bytes()).hexdigest()),out,indent=2)
         if receipt.get('protectedGame'):
             with (folder/'map-required-game.json').open('x',encoding='utf-8') as out:
                 json.dump(receipt['protectedGame'],out,indent=2)

@@ -11,6 +11,7 @@ def qualified_edges(folder,*,repo=ROOT):
     from destination_batch_sender import admitted_plans
     from destination_queue_limits import queue_limits
     from experience_manifest import digest_file,photo_inputs,qualify
+    from map_experience import collect_map_experience
     folder,repo=Path(folder).resolve(),Path(repo).resolve()
     if not folder.is_relative_to(repo/'artifacts/live'):
         raise ValueError('Directed training needs a retained live episode')
@@ -25,7 +26,12 @@ def qualified_edges(folder,*,repo=ROOT):
     paths.update((folder/'jobs').glob('*.job.json'))
     for name in ('queue-policy.json','required-owner.json','scene-photo-claim.json'):
         if (folder/name).is_file():paths.add(folder/name)
+    map_experience=collect_map_experience(folder,repo,observer)
+    if map_experience:
+        paths.update(folder/path for path in map_experience['sourceFiles'])
     before={path:digest_file(path) for path in paths}
+    if map_experience and any(before[folder/path]!=sha for path,sha in map_experience['sourceSha256'].items()):
+        raise ValueError('Qualified map evidence changed before directed training')
     proof=qualify(folder,repo,observer=observer)
     if (proof.get('passed') is not True or proof.get('verifiedLegs')!=len(edges)
             or proof!=json.loads((folder/'handoff-audit.json').read_bytes())):
@@ -34,4 +40,5 @@ def qualified_edges(folder,*,repo=ROOT):
         raise ValueError('Directed training evidence changed during qualification')
     return edges,dict(scope='Positive native steering receipts on the externally declared itinerary',
         humanExpertDemonstration=False,verifiedLegs=len(edges),
+        nativeUiTransitionQualified=map_experience is not None,
         files=[dict(path=str(path.relative_to(repo)),sha256=before[path]) for path in sorted(paths)])

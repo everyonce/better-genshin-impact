@@ -1,6 +1,7 @@
 """Exercise map and automatic-queue admission and result sealing without starting a live lease."""
 from contextlib import redirect_stderr
 import io
+import hashlib
 import json
 from pathlib import Path
 import tempfile
@@ -49,6 +50,7 @@ class MapQueueTests(unittest.TestCase):
 
     def launch(self, args, *, receipt=None, expected=None, side_effect=None):
         actual = self.receipt if receipt is None else receipt
+        self.lineage.write_text(json.dumps(actual),encoding='utf-8')
         with patch.object(map_owner,'evidence',return_value=(actual,'f'*64)), \
                 patch.object(map_owner,'replacement',return_value=actual if expected is None else expected), \
                 patch.object(warm.socket,'gethostname',return_value='SIREN'), \
@@ -78,6 +80,8 @@ class MapQueueTests(unittest.TestCase):
         handoffs=[dict(oldRequestId=a['id'],newRequestId=b['id'],dispatchGapMs=400) for a,b in zip(requests,requests[1:])]
         def job(args,folder,*,series):
             self.assertEqual(series.required_identity,self.pair)
+            self.assertEqual(json.loads((folder/'map-owner-source.json').read_bytes()),dict(
+                path=str(self.lineage.resolve()),sha256=hashlib.sha256(self.lineage.read_bytes()).hexdigest()))
             self.assertEqual(json.loads((folder/'map-required-game.json').read_bytes()),self.game)
             self.assertEqual((folder/'required-owner.json').read_bytes(),self.owner.read_bytes())
             command=patrol.patrol_argv(args,3,folder)

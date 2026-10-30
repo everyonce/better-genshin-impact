@@ -86,6 +86,23 @@ class MapClientTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             options([w if w!='west-lamp' else 'stair-front' for w in argv])
 
+    def test_acquisition_delay_cannot_stand_in_for_eighty_ms_of_capture_separation(self):
+        """Reproduce the distinct 62.5 ms sources that arrived 82.8 ms apart in the rejected live visit."""
+        rgb=bytes(192*192*3)
+        rows=[frame(i,t) for i,t in enumerate((100,182.8,290,390),1)]
+        for row,captured in zip(rows,(120,182.5,290,390)):
+            acquired=row['sourceFrame']['acquiredAtMs']
+            row['sourceFrame'].update(capturedAtMs=captured,timestamp100ns=round(captured*10000),
+                freshnessAtMs=min(captured,acquired),
+                freshnessClockKind='reported_compositor_qpc' if captured<=acquired else 'first_acquisition_qpc')
+            row['frameWorldReadiness']['sourceFrame']=dict(row['sourceFrame'])
+        bridge=Mock()
+        bridge.request.side_effect=[(row,rgb) for row in rows]
+        with tempfile.TemporaryDirectory() as tmp:
+            result=collect_junction(bridge,Path(tmp),'before',self.head,
+                {'profile':rows[0]['observationProfile'],'serverAdvertised':True},0,None,17,lambda:None,float('inf'))
+        self.assertEqual([row['frameId'] for row in result['samples']],[1,3,4])
+
     def test_recovery_timer_waits_for_distinct_current_native_navigation_frames(self):
         rgb = bytes(192*192*3)
         rows = [frame(i,t) for i,t in [(1,100),(2,180),(2,180),(3,240)]]

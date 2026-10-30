@@ -106,3 +106,25 @@ The successful CNN endurance episode is exported to `artifacts/agent/experience/
 The steering reader now independently qualifies the whole directed episode and supplies its externally declared itinerary to label extraction. It previously omitted that itinerary and silently skipped every directed steering target. The corrected reader recovered 4,347 weak native labels from this holdout (2,046 forward, 1,374 right, 927 left) as a loader validation only. The original plans, observer qualification and byte hashes accompany the labels. The remaining native actions do not meet the narrower steering-label admission rule and are not relabeled.
 
 `experience-split.json` now binds a whole-run split to the original resident-manifest hash. Conflicting exports are refused, and the steering fitter rejects holdout and diagnostic inputs before optimization. The earlier recovery-resume holdout and the CNN endurance holdout both have explicit reservations; neither was fitted. `split-guard-regressions.log` records all 556 selected tests passing. The two source files checked by the frozen CNN loader also use explicit LF Git attributes, preserving their qualification bytes across checkouts.
+
+## Separate map-transition training episode
+
+The next bounded objective was a fresh G4 world-map inspection followed by the west-lamp and junction photos, with a 120-second wall cap and the same original minimized R59 RDP owner. The ordinary M/Escape map pulses live in a separate native journal rather than the stream action-receipt list. `map_experience.py` now independently replays the map audit and emits `ui-actions.jsonl` with the real native operation ID, pulse ordinal, software execution evidence and exact original 1920×1080 PNG. Ordinary actions retain their receipt-to-video pairing. The launcher preserves the original lineage path and SHA-256 in `map-owner-source.json`; the exporter rejects missing, changed, recovery or unqualified map evidence. UI pulses are separate native-controller experience, not human demonstrations or P2P actions.
+
+The initial trial, `map-training/live/warm-20261030T204404Z-17ea753e9743`, run `5c1c4fdb9fb34e5396d92232cf45b378`, completed two walking legs and two photos with 76 applied actions. Its map audit failed: the first two G4 sources were **distinct**, but their capture timestamps advanced only 62.5 ms while their freshness timestamps advanced 82.7854 ms. The existing audit requires at least 80 ms of source separation. This was a collection-clock mismatch, not literal frame reuse. `capture-spacing-diagnosis.json` preserves the original intervals, completed walking evidence, terminal release and 63°C peak. That whole episode is explicitly reserved as diagnostic and blocked from fitting.
+
+`collect_junction` now requires both freshness separation and original capture separation before admitting a source. The 80 ms audit gate is unchanged. A regression reproduces the divergent clocks and proves the closer source is skipped. The first exporter regression run exposed four old mocked-lineage fixture errors; those fixtures now retain and check the actual owner bytes. All 564 selected tests passed after the spacing correction (`map-capture-spacing-regressions.log`). No native application build or replacement was needed.
+
+After the failure was diagnosed and the original idle owner was verified, `trial-plan-v3.json` declared a separate corrected trial and froze its source archive. `map-training/live-fixed/warm-20261030T205030Z-b2530879e65f`, run `b702f29a05b04aed950c543b9d91edc7`, passed both independent audits:
+
+| Evidence | Result |
+| --- | --- |
+| Map inputs | One M pulse and one Escape pulse, with original PNG sources and native execution journal |
+| G4 source spacing | 93.75 ms for every before/returned interval |
+| Walking | Two verified legs and two photos; 9.702 seconds |
+| Ordinary actions | 86 paired actions: 79 native controller, 7 learned policy |
+| Handoff / ownership | 609.586 ms; one model load and one controller lease |
+| Recording / temperature | Zero recorded losses; 69°C peak with the unchanged 78°C stop |
+| Final release | 13,789.341 ms on the original native lease clock |
+
+The `artifacts/agent/experience/2026-10-30/map-visit-training` export is reserved as **train**, separate from both existing holdouts. `qualified-map-review.json` verifies all 30 retained original-file hashes, both independent audits, ordinary and UI action-file hashes, and the original UI source PNGs. The directed reader recovered 77 native steering weak labels (40 forward, 19 right, 18 left) without fitting. At 20:54 UTC the same host and child were idle, minimized and game-ready; the GPU was 56°C. Both holdout reservations still rejected fitting. This qualifies a bounded map transition and its training provenance, not an independently trained general-purpose policy.

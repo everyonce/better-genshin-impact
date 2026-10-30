@@ -70,7 +70,10 @@ def collect_junction(bridge, folder, label, observer, contract, after_ms, epoch,
             elif not samples or frame['frameId'] > samples[-1]['frameId']:
                 if samples and not all(stationary(frame,other) for other in samples):
                     samples.clear()
-                if not samples or observation_timestamp(frame)-observation_timestamp(samples[-1]) >= 80:
+                # Acquisition delay can make distinct 62.5 ms captures arrive more than 80 ms apart.
+                # Preserve the independent auditor's capture-spacing gate before any map input.
+                if not samples or (observation_timestamp(frame)-observation_timestamp(samples[-1]) >= 80
+                        and frame['sourceFrame']['timestamp100ns']-samples[-1]['sourceFrame']['timestamp100ns'] >= 800_000):
                     samples.append(frame)
                 if len(samples) == 3:
                     image = folder/(label+'.png')

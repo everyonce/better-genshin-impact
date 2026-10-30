@@ -1112,6 +1112,7 @@ def parse_arguments(argv=None):
     parser.add_argument('--recover-junction-map', action='store_true', help='Require a proven interrupted-map recovery before navigation')
     parser.add_argument('--warm-batch-count', type=int, help='Total addressed destination batches on this bounded lease (2 to 12)')
     parser.add_argument('--warm-open-queue', action='store_true', help='Treat the batch count as a ceiling; require an explicit released-boundary finish')
+    parser.add_argument('--warm-endurance', action='store_true', help='Use the explicit 900-second, 40-batch, 256-leg open-queue profile')
     parser.add_argument('--camera-calibration', metavar='CHECKPOINT',
                         help='Trial a holdout-qualified camera response on the street patrol')
     parser.add_argument('--remember-hybrid-bypass', action='store_true',
@@ -1229,8 +1230,12 @@ def parse_arguments(argv=None):
     if args.warm_photo_plan and (args.model != 'open-p2p' or not args.goal_embedding or not args.hybrid_legs
                                  or not args.p2p_execution_feedback or not args.record_dir):
         parser.error('Warm photos require the receipt-backed resident P2P policy, walking embedding and recorded leg budget')
-    if args.warm_photo_plan and (not args.patrol_series_binding or args.seconds > 600 or args.max_observation_age_ms > 150):
-        parser.error('Warm photos require pinned patrol owners, a 600 second maximum and a 150 ms source-age ceiling')
+    from destination_queue_limits import ENDURANCE, STANDARD
+    queue_cap = ENDURANCE if args.warm_endurance else STANDARD
+    if args.warm_endurance and not (args.warm_open_queue and args.warm_batch_count and args.warm_photo_plan):
+        parser.error('Endurance requires a bounded open destination queue')
+    if args.warm_photo_plan and (not args.patrol_series_binding or args.seconds > queue_cap.seconds or args.max_observation_age_ms > 150):
+        parser.error(f'Warm photos require pinned patrol owners, a {queue_cap.seconds} second maximum and a 150 ms source-age ceiling')
     if args.inspect_junction_map or args.recover_junction_map:
         if not args.warm_photo_plan or not args.enable_input or (args.inspect_junction_map and args.recover_junction_map):
             parser.error('Map inspection requires one operation and an input-enabled warm destination plan')
@@ -1238,9 +1243,9 @@ def parse_arguments(argv=None):
             parser.error('Only a fresh map inspection may precede a bounded open destination queue')
     if args.warm_open_queue and args.warm_batch_count is None:
         parser.error('An open queue requires bounded warm destination batches')
-    if args.warm_batch_count is not None and (not args.warm_photo_plan or not 2 <= args.warm_batch_count <= 12
-                                             or not (2 if args.warm_open_queue else 2*args.warm_batch_count) <= args.hybrid_legs <= 96):
-        parser.error('Warm batch count requires a bounded warm destination lease and at most 96 total legs')
+    if args.warm_batch_count is not None and (not args.warm_photo_plan or not 2 <= args.warm_batch_count <= queue_cap.batches
+                                             or not (2 if args.warm_open_queue else 2*args.warm_batch_count) <= args.hybrid_legs <= queue_cap.legs):
+        parser.error(f'Warm batch count requires a bounded warm destination lease and at most {queue_cap.legs} total legs')
     if args.camera_calibration and (args.hybrid_route != STREET_PATROL_ROUTE or not args.enable_input
                                     or not args.resident or args.max_observation_age_ms != 150):
         parser.error('camera-calibration requires the resident live street patrol and its 150 ms input deadline')
@@ -1344,7 +1349,7 @@ def load_policy(args):
             landmark = load_landmark_shadow(args.landmark_shadow)
             if getattr(args, 'photo_qualification', None):
                 from patrol_photo_survey import require_qualified_observer
-                require_qualified_observer(args.photo_qualification, landmark)
+                require_qualified_observer(args.photo_qualification, landmark,execution_context=args)
         from model_adapters import make_adapter
         temperature_options = {}
         if p2p_temperature != 1.0:
@@ -1369,6 +1374,13 @@ def load_policy(args):
             from steering_head import SteeringHead
             policy.steering_shadow = SteeringHead.load(args.steering_shadow)
         if landmark is not None:
+            prepare_observer=getattr(landmark,'prepare',None)
+            if callable(prepare_observer):
+                prepare_observer()
+                policy.metadata['landmarkObserver']=copy.deepcopy(landmark.runtime_metadata)
+                if getattr(landmark,'_scene_photo_admission',None):
+                    policy.metadata['landmarkObserver'].update(authority='single-use-'+landmark._scene_photo_admission['scope'],
+                        photoTrial=copy.deepcopy(landmark._scene_photo_admission))
             policy.landmark_shadow = landmark
             if warm_goal_sha:
                 if (not policy.execution_feedback or not callable(getattr(policy, 'reset', None))
@@ -1438,6 +1450,9 @@ def run_episode(args, policy=None, control=None):
               'controlTransitions': [], 'goalChanges': [],
               'captureQuality': {'check': 'wholeBufferBlackOrWhite', 'usableFrames': 0,
                                  'allBlackFrames': 0, 'allWhiteFrames': 0, 'rejectedPredictions': 0}}
+    if getattr(args,'warm_endurance',False):
+        from destination_queue_limits import ENDURANCE
+        report['queueLimitsProfile'] = ENDURANCE.profile
     if execution_mode != 'off':
         report['executionContext'] = {'mode': execution_mode, 'schema': 'execution-context-v1',
                                       'knowledgeClock': 'client_perf_counter_ns',
@@ -1492,7 +1507,8 @@ def run_episode(args, policy=None, control=None):
             warm = WarmPhotoRequests(args.warm_photo_plan, args.photo_directory, policy.landmark_shadow.checkpoint_id,
                                      args.goal_embedding, bridge.hello, control.run_id, args.hybrid_legs,
                                      batch_count=getattr(args, 'warm_batch_count', None),open_queue=getattr(args,'warm_open_queue',False),
-                                     control_path=control.path if getattr(args,'warm_open_queue',False) else None)
+                                     control_path=control.path if getattr(args,'warm_open_queue',False) else None,
+                                     limits_profile=report.get('queueLimitsProfile'),observer=policy.landmark_shadow)
             if warm.open_queue:
                 queue_control_token = control.prediction_token()
             if warm.identity['goalEmbeddingSha256'] != policy.warm_goal_sha:
@@ -2200,6 +2216,22 @@ def run_episode(args, policy=None, control=None):
             # Hybrid corrections are explicitly attributed above; ordinary proposals remain unchanged.
             if rejection is None:
                 start_deadline = {'startBeforeMs': observed_at+args.max_observation_age_ms} if supports_start_deadline else {}
+                if warm and start_deadline:
+                    # Both constraints are upper bounds. Give the native controller their
+                    # intersection instead of requiring a whole 150 ms window to remain.
+                    try:
+                        start_deadline['startBeforeMs'] = warm.bound_start_deadline(observed_at,start_deadline['startBeforeMs'])
+                    except RuntimeError:
+                        # Keep the original refused prediction separate from genuine native receipts.
+                        refused = dict(type='localActionRefusal',reason='warmHandoffDeadline',transmissionAttempted=False,
+                                       frameId=frame['frameId'],sourceFrame=copy.deepcopy(frame.get('sourceFrame')),
+                                       sourceDeadlineMs=start_deadline['startBeforeMs'],handoffBeforeMs=warm.batch_dispatch_before_ms,
+                                       warmRequestId=warm.current['id'],model=action_model_id,steps=copy.deepcopy(result['steps']),
+                                       rawPolicySteps=copy.deepcopy(result.get('rawPolicySteps')),clientTimeNs=time.perf_counter_ns())
+                        report.setdefault('localActionRefusals',[]).append(refused)
+                        if recorder:
+                            recorder.event(refused)
+                        raise
                 if start_deadline:
                     result.update(start_deadline)
                 request_id = uuid.uuid4().hex

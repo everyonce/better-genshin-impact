@@ -13,6 +13,7 @@ from audit_warm_batches import read_batches,verify_batch_events
 from landmark_recognizer import G4_SHA256, LandmarkRecognizer
 from observation_timing import observation_timestamp
 from patrol_photo_survey import require_qualified_observer
+from destination_queue_limits import queue_limits
 
 
 def starvation_outcome(stage,deadline,clock,groups_by_request,previous):
@@ -69,12 +70,15 @@ def audit_failure(folder,checkpoint,qualification,repo):
     require(not any(e['type']=='warmQueueFinished' for e in events),'Failed run recorded a successful finish')
     accepted=1+sum(e['type']=='warmBatchAccepted' for e in events)
     require(accepted<=len(plans)<=accepted+1 and not(finish and len(plans)!=accepted),'Unexpected staged or orphan successor')
-    admitted=published[:accepted];current=plans[:accepted];edges=batch_edges(current)
+    admitted=published[:accepted];current=plans[:accepted]
+    edges=batch_edges(current,max_batches=queue_limits(admission.get('queueLimitsProfile')).batches)
     broker,shadow=directed_broker(folder,run,supervisor,edges,checkpoint,qualification,admission['batchCount'],
                                   admission['maxLegs'],opened,failed=True)
-    head=LandmarkRecognizer.load(checkpoint)
-    require(head.checkpoint_id==G4_SHA256,'Unexpected photo authority in failure prefix')
+    from weighted_landmark_recognizer import load_landmark_shadow
+    head=load_landmark_shadow(checkpoint)
     require_qualified_observer(qualification,head)
+    from patrol_photo_survey import require_open_queue_photo_authority
+    require_open_queue_photo_authority(head)
     physical=audit(runpath,rec,repository=repo,landmark_checkpoint=checkpoint,destination_plan=plans[0],destination_batches=current,
                    shadow_checkpoint=shadow,failure_prefix=True)
     require(not physical['passed'],'Failure prefix cannot receive a passed physical audit')

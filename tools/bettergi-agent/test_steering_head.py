@@ -5,10 +5,11 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from steering_head import CLASSES, SteeringHead, features
 from hybrid_routes import PATROL_STATIONS, STREET_PATROL_ROUTE
-from train_steering import Run, applied_label, distinct, evaluate, fit, steering_point
+from train_steering import Run, applied_label, distinct, evaluate, fit, read_run, steering_point
 
 
 def observation(yaw=90.):
@@ -40,6 +41,45 @@ def meta(tag, span):
 
 
 class SteeringTests(unittest.TestCase):
+    def test_reader_supplies_qualified_edges_for_directed_native_labels(self):
+        """A queued action becomes a label only through its external plan, without silently skipping the whole run."""
+        frame,decision,receipt=receipt_case()
+        edge=('stair-front','sidewalk-junction',1,'sidewalk-junction')
+        decision['hybridNavigation'].update(navigationMode='itinerary',completedLegs=0,segmentIndex=0,
+            fromStation=edge[0],toStation=edge[1],target=edge[1],destinationOrdinal=1,requestedDestination=edge[3])
+        decision['rawPolicySteps']=[dict(keys=[],mouseDx=0,mouseDy=0)]
+        with tempfile.TemporaryDirectory() as scratch:
+            folder=Path(scratch)
+            path=folder/'patrol.json'
+            path.write_text(json.dumps(dict(status='completed',evidenceComplete=True,runId='run',modelLoads=1,
+                inputRequested=True,segments=[dict(number=1)])))
+            (folder/'patrol-segments').mkdir()
+            recording=folder/'patrol-recording/00001'
+            recording.mkdir(parents=True)
+            part=dict(status='completed',model='open-p2p',residentRunId='run',serverDroppedReceipts=0,
+                observationProfile='p2p-native-hamming-192-v1',
+                recording=dict(droppedFrames=0,droppedEvents=0,abandonedFrames=0,droppedObservations=0),
+                hello=dict(sessionId='lease',ownerEpoch='owner'),decisions=[decision],receipts=[receipt],
+                hybridNavigation=dict(routeId=STREET_PATROL_ROUTE),
+                policyMetadata=dict(implementation='fixture',parameterCount=150_000_000,precision='float16'))
+            (folder/'patrol-segments/00001.json').write_text(json.dumps(part))
+            (recording/'observations.jsonl').write_text(json.dumps(frame)+'\n')
+            proof=dict(verifiedLegs=1,files=[],humanExpertDemonstration=False)
+            with patch('training_itinerary.qualified_edges',return_value=([edge],proof)) as qualified:
+                run=read_run(path)
+                qualified.assert_called_once_with(folder.resolve())
+            self.assertEqual(len(run.samples),1)
+            self.assertEqual(run.samples[0][3],PATROL_STATIONS[edge[1]])
+            self.assertEqual(run.meta['directedItinerary'],proof)
+            from episode_split import reserve_split
+            reserve_split(folder,'run','holdout')
+            with patch('training_itinerary.qualified_edges',return_value=([edge],proof)):
+                heldout=read_run(path)
+            self.assertEqual(heldout.meta['datasetSplit'],'holdout')
+            with self.assertRaisesRegex(ValueError,'cannot be used for fitting'):fit([heldout])
+            with patch('training_itinerary.qualified_edges',side_effect=ValueError('unqualified itinerary')):
+                with self.assertRaisesRegex(ValueError,'unqualified itinerary'):read_run(path)
+
     def test_patrol_goal_comes_from_the_current_directed_leg(self):
         h = dict(target='west-lamp', toStation='west-lamp', fromStation='sidewalk-junction', completedLegs=1)
         self.assertEqual(steering_point(STREET_PATROL_ROUTE, h), PATROL_STATIONS['west-lamp'])

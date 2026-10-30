@@ -123,6 +123,26 @@ $runFolder = Read-Host 'Paste the exact evidence folder printed by the manual la
 
 A graceful finish completes the accepted batch and seals its final station photo before closing. To cancel during movement, create the launcher’s printed `STOP` file with `New-Item -ItemType File -Path (Join-Path $runFolder 'STOP')`. This requests an immediate addressed input release. An empty manual slot at a photographed boundary has a one-second deadline. On expiry the resident keeps input released and reports queue starvation. Publish the next batch or finish while the predecessor is still walking.
 
+### Qualify the frozen GPU scene observer
+
+The experimental scene observer reuses the installed P2P visual encoder with a small frozen prototype bank. It reads only the central image crop. BetterGI still owns localization and route verification; P2P still supplies live visual action proposals. The new observer does not turn native controller experience into human demonstrations or establish general-world navigation.
+
+The October 30 gate progressed through retained-image comparison, exact CUDA graph parity, two fresh shadow leases and a four-photo controlled trial. Each stage has separately retained evidence. G4 remains the ordinary/default observer. The scene checkpoint alone has no photograph authority: `run_scene_photo_trial.py` issues only an exact four-goal permission, and `run_scene_endurance_trial.py` requires the separate reviewed endurance permission. The latter uses the existing automatic publisher, targets 600 seconds of positively witnessed gameplay and stops at a photographed boundary within a 900-second cap. It preserves the 78°C thermal stop, 150 ms freshness limit, 100 ms holds, original owner and subsecond handoffs.
+
+These workstation-specific experiments require the retained comparison artifacts and the original verified RDP pair, idle at the stairs. They reject changed owners and do not create an RDP session or reposition the character automatically. Their printed `STOP` path cancels movement. See [the qualification results, exact scope and failed attempts](../../Docs/research/BetterGI-Recovery-Endurance-2026-10-30.md).
+
+### Export recorded controller experience
+
+`experience_manifest.py` audits one explicitly selected, sealed warm episode and writes a new `manifest.json` plus receipt-backed `actions.jsonl`. It obtains the actual photo observer and qualification from the original saved worker command, including experimental scene permissions. It checks video decodability, source/frame alignment, complete input receipts and retained-file hashes. Native control, learned-policy proposals and recovery actions keep separate provenance. Failed or incomplete evidence remains diagnostic; it is never silently relabeled as successful gameplay.
+
+```powershell
+& 'artifacts/agent/envs/gamescaling/Scripts/python.exe' -B tools/bettergi-agent/experience_manifest.py `
+    --folder PATH_TO_ONE_RETAINED_EPISODE `
+    --output PATH_TO_A_NEW_EXPERIENCE_DIRECTORY --split holdout
+```
+
+Split by whole episode before fitting. The exporter reserves that split in an `experience-split.json` record bound to the original resident manifest. It refuses conflicting exports, and the steering fitter rejects holdout and diagnostic reservations before optimization. The steering reader independently audits directed destination plans before deriving native weak labels. Continuous H.264 recordings contain lossy decoded pixels; archived station RGB and PNG photos retain exact policy pixels. The exporter creates data and qualification evidence only; it does not train or deploy a policy.
+
 ### Inspect the junction world map on SIREN
 
 The map runner uses the existing minimized BetterGI RDP child, one resident GPU model and the qualified G4 observer. Its fixed itinerary starts at the sidewalk junction, visits the west lamp and returns to the junction. The verified R59 receipt binds host PID 10124 to child PID 5520 in RDP session 3 and protects Genshin PID 26240. The launcher checks the live owner and native game binding before walking. In the verified runs, the game window handle was 197360. The same receipt can be used while that exact pair and game are still present. [R59 ownership and deployment evidence](../rdp-automation/README.md#verified-r59-map-test-child-on-siren)

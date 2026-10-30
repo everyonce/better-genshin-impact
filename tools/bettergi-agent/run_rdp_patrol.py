@@ -17,6 +17,7 @@ import uuid
 
 from hybrid_routes import PATROL_STATIONS, STREET_PATROL_ROUTE, itinerary_legs
 from resident_runtime import atomic_json, control_module, read_control_document, select_child
+from destination_queue_limits import ENDURANCE, STANDARD
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -50,6 +51,7 @@ def options(argv=None, parser=None, *, warm=False):
                        help='Record one lossless RGB source for every settled station in the fixed patrol')
     if warm:
         p.set_defaults(photo_station=[])
+        p.add_argument('--endurance', action='store_true', help='Automatic open queue only: at most 900 seconds, 40 batches, 256 legs and 384 MiB')
     else:
         p.add_argument('--photo-station', choices=PATROL_STATIONS, action='append', default=[],
                        help='Collect a verified photo at this station during the patrol')
@@ -61,8 +63,12 @@ def options(argv=None, parser=None, *, warm=False):
     if (warm or args.photo_station or args.photo_qualification) and not (
             (warm or args.photo_station) and args.photo_qualification and args.landmark_shadow):
         p.error('Photo stations require both --landmark-shadow and --photo-qualification')
-    if not (15 <= args.seconds <= 600 and (warm or 1 <= args.circuits <= 32)):
-        p.error('Set --circuits between 1 and 32 and --seconds between 15 and 600.')
+    endurance = getattr(args, 'endurance', False)
+    if endurance and (not getattr(args, 'open_queue', False) or getattr(args, 'manual', False)):
+        p.error('--endurance requires an automatic open destination queue.')
+    limits = ENDURANCE if endurance else STANDARD
+    if not (15 <= args.seconds <= limits.seconds and (warm or 1 <= args.circuits <= 32)):
+        p.error(f'Set --circuits between 1 and 32 and --seconds between 15 and {limits.seconds}.')
     return args
 
 
@@ -102,7 +108,7 @@ def patrol_argv(args, session, folder):
                '--max-observation-age-ms=150', '--action-hold-ms=100', '--enable-input', '--resident',
                '--rdp-session-id', str(session), '--observation-profile=p2p-native-hamming-192-v1',
                '--seconds', str(args.seconds), '--segment-seconds', str(min(30, args.seconds)),
-               '--preview', '--record-max-mib=160', '--record-dir', str(folder/'patrol-recording'),
+               '--preview', '--record-max-mib='+str((ENDURANCE if getattr(args,'endurance',False) else STANDARD).recording_mib), '--record-dir', str(folder/'patrol-recording'),
                '--ffmpeg', str(args.ffmpeg.resolve()), '--output', str(folder/'patrol.json')]
     if args.steering_shadow:
         command.append('--steering-shadow=' + str(args.steering_shadow.resolve()))
@@ -127,6 +133,8 @@ def patrol_argv(args, session, folder):
             command.append('--warm-batch-count=' + str(args.batches))
             if getattr(args,'open_queue',False):
                 command.append('--warm-open-queue')
+            if getattr(args,'endurance',False):
+                command.append('--warm-endurance')
     if args.camera_calibration:
         command.append('--camera-calibration=' + str(args.camera_calibration.resolve()))
     return command
@@ -311,6 +319,8 @@ def run(args, folder, *, series=None):
     state = dict(windowsSessionId=session, rootPid=root['processId'], childPid=child['processId'],
                  circuits=args.circuits, wallTimeLimitSeconds=args.seconds, stopAtC=STOP_C,
                  runId=None, stopReason=None, stopRequested=False, verified=False)
+    if getattr(args,'endurance',False):
+        state['queueLimitsProfile'] = ENDURANCE.profile
     try:
         if series is not None:
             series.admit(lifecycle, root, child)

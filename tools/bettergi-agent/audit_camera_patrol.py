@@ -84,7 +84,7 @@ def audit_camera(parts, entries, recordings, frames, route, checkpoint):
                     and f.get('inputAvailable') is True and gate.get('ready') is True and gate.get('sourceFrameId') == f['frameId']
                     and gate.get('sourceFrame') == f['sourceFrame'] and f['motionEvidence']['status'] == 'normal'
                     and f['motionEvidence']['spaceKeyMatched'] is False
-                    and d['observationTimestampMs'] == t and (d.get('startBeforeMs') == t+150
+                    and d['observationTimestampMs'] == t and (type(d.get('startBeforeMs')) in (int,float) and t < d['startBeforeMs'] <= t+150
                     or ack.get('type') == 'notSubmitted' and d.get('startBeforeMs') is None),
                     'Calibrated turn lacks fresh world pose, source deadline or checkpoint provenance')
             target = h['toStation']
@@ -124,7 +124,7 @@ def audit_camera(parts, entries, recordings, frames, route, checkpoint):
                     s = applied[0]
                     require(len(applied) == 1 and s.get('keys') == [] and s['mouseDx'] == dx and s['mouseDy'] == 0 and
                             not s.get('buttons') and not s.get('mouseButtons') and r['acceptedAtMs'] <= s['startedAtMs'] and
-                            t <= s['startedAtMs'] < t+150 and s['startedAtMs'] <= r['endedAtMs'],
+                            t <= s['startedAtMs'] < d['startBeforeMs'] <= t+150 and s['startedAtMs'] <= r['endedAtMs'],
                             'Calibrated receipt differs from the commanded pulse or missed its deadline')
                     totals['applied'] += 1
         if accepted:

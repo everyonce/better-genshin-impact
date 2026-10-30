@@ -222,6 +222,9 @@ def run(args, folder, *, guard_type=WarmGuard):
                        targetGameplaySeconds=args.target_gameplay_seconds,goalsPerBatch=4)
         policy = dict(**planner,maxBatches=args.batches,maxLegs=args.destination_legs,initialPlanSha256=summary['planSha256'],
                       requiredOwnerManifestSha256=owner_sha)
+        if getattr(args,'endurance',False):
+            from destination_queue_limits import ENDURANCE
+            summary['queueLimitsProfile'] = policy['queueLimitsProfile'] = ENDURANCE.profile
         raw = encode(policy)
         exclusive_bytes(folder/'required-owner.json',owner_raw)
         exclusive_bytes(folder/'queue-policy.json',raw)

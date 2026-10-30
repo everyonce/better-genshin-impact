@@ -7,6 +7,7 @@ from pathlib import Path
 from audit_hybrid_run import batch_edges, require
 from hybrid_routes import PATROL_STATIONS
 from observation_timing import observation_timestamp
+from destination_queue_limits import ENDURANCE, queue_limits
 
 
 def canonical_digest(doc):
@@ -26,9 +27,12 @@ def read_batches(folder, plans, initial_bytes, admission, run, stopped, failed=F
     """Match each external committed intent to its unique, untouched envelope and publication acknowledgement."""
     count, cap = admission.get('batchCount'), admission.get('maxLegs')
     opened=admission.get('openQueue') is True
-    require(type(count) is int and 2 <= count <= 12 and type(cap) is int and (2 if opened else 2*count) <= cap <= 96
+    limits=queue_limits(admission.get('queueLimitsProfile'))
+    require(limits != ENDURANCE or opened and admission.get('manualSubmission') is False,
+            'Endurance was not declared as an automatic open queue')
+    require(type(count) is int and 2 <= count <= limits.batches and type(cap) is int and (2 if opened else 2*count) <= cap <= limits.legs
             and (1 if opened or failed else 2) <= len(plans) <= count and (opened or stopped or failed or len(plans) == count)
-            and len(batch_edges(plans)) <= cap, 'Invalid queue batch count or total leg budget')
+            and len(batch_edges(plans,max_batches=limits.batches)) <= cap, 'Invalid queue batch count or total leg budget')
     stop_batch = admission.get('stopInBatch')
     require((type(stop_batch) is int and 2 <= stop_batch == len(plans)
              and admission.get('stopRule') == 'first-request-first-applied') if stopped
@@ -42,7 +46,7 @@ def read_batches(folder, plans, initial_bytes, admission, run, stopped, failed=F
                  batchPlanSha256=canonical_digest(plans[0]),firstRequestOrdinal=1,plan=plans[0])
     batches = [batch]
     for n in range(1,len(plans)+1) if not opened else []:
-        require(len(batch_edges(plans[:n])) + 2*(count-n) <= cap, 'Insufficient remaining budget for announced batches')
+        require(len(batch_edges(plans[:n],max_batches=limits.batches)) + 2*(count-n) <= cap, 'Insufficient remaining budget for announced batches')
     for n,plan in enumerate(plans[1:],2):
         key = f'{n:05d}'
         packets = [key+suffix for suffix in ('.json','.intent.json','.publication.json')]

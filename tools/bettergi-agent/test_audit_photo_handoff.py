@@ -133,7 +133,8 @@ class WarmAuditTests(unittest.TestCase):
             argv=['--rdp-session-id','3','--hybrid-legs','2','--seconds','110',
                   '--patrol-series-binding=100:'+'a'*32+':200:'+'b'*32+':90000000',
                   '--warm-photo-plan='+str(folder/'photo-requests.json'),
-                  '--landmark-shadow='+str(folder/'head.json'),'--photo-qualification='+str(folder/'qual.json')]
+                  '--landmark-shadow='+str(folder/'head.json'),'--photo-qualification='+str(folder/'qual.json'),
+                  '--record-max-mib=160']
             result=dict(jobId=jid,remoteDesktop=True,success=True,timedOut=False,returnCode=0,windowsSessionId=3,
                         runnerProcessId=300,startedAtUtc='2026-10-29T16:12:00Z',endedAtUtc='2026-10-29T16:12:40Z')
             for mutation in ('none','mainDesktop','newProcess','wrongPlan','extraEdges','wrongStop','resultSubstitution'):
@@ -179,13 +180,13 @@ class WarmAuditTests(unittest.TestCase):
                 nav=dict(navigationMode='itinerary',completedLegs=0,segmentIndex=0,destinationOrdinal=1,
                          requestedDestination=b,fromStation=a,toStation=b,target=b,step=step,owner='open-p2p',
                          reason='modelRouteCompatible',pose=frames[2]['navigationPose'])
-                row=dict(frameId=2,hybridNavigation=nav,acceptance=dict(type='accepted',requestId='x'),
+                row=dict(frameId=2,warmRequestId='goal',hybridNavigation=nav,acceptance=dict(type='accepted',requestId='x'),
                          rawPolicySteps=[step.copy()],steps=[step],startBeforeMs=350)
                 run=dict(mode='resident-rdp',observationProfile='p2p-native-hamming-192-v1',recordedBytes=123,
                          recordingBudgetExhausted=False,segments=[dict(processId=200,exitCode=0)])
                 part=dict(recording=dict(recordedBytes=123),decisionHz=10,actionHoldMs=100,maxObservationAgeMs=150,
                           firstInputDeadlinePolicy=dict(serverEnforcementRequested=True),effectiveInputKeys=list('WASD'))
-                actual=dict(index=0,**step)
+                actual=dict(index=0,startedAtMs=220,**step)
                 start=dict(type='hybridStartVerified',frameId=1,samples=[dict(frameId=1)])
                 if mutation=='wrongStep':
                     actual['mouseDx']=20

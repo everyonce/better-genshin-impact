@@ -12,6 +12,7 @@ import uuid
 from destination_batch_sender import (admitted_plans, create_plan, exclusive_bytes, encode, qualification_goals,
                                      read_json, submit, witness_for)
 from hybrid_routes import PATROL_STATIONS, itinerary_legs
+from destination_queue_limits import ENDURANCE, STANDARD
 import run_rdp_patrol as patrol
 from run_patrol_series import SeriesGuard
 import run_warm_photo_requests as warm
@@ -32,9 +33,10 @@ def launch_options(argv):
     parser.add_argument('--destination', nargs=2, action='append', metavar=('NAME','STATION'), help='Initial batch goals')
     parser.add_argument('--stop-in-batch', type=int, help='Stop after the first applied action of this later batch')
     args = patrol.options(argv, parser, warm=True)
-    if (not 2 <= args.batches <= 12 or not (2 if args.open_queue else 2*args.batches) <= args.leg_limit <= 96
+    limits = ENDURANCE if args.endurance else STANDARD
+    if (not 2 <= args.batches <= limits.batches or not (2 if args.open_queue else 2*args.batches) <= args.leg_limit <= limits.legs
             or args.stop_in_batch is not None and not 2 <= args.stop_in_batch <= args.batches):
-        parser.error('Use 2–12 batches, a leg cap between twice the batch count and 96, and an optional later stop batch.')
+        parser.error(f'Use 2–{limits.batches} batches, a leg cap up to {limits.legs}, and an optional later stop batch.')
     if args.open_queue:
         if not args.owner_from or (args.target_gameplay_seconds is None) != args.manual or (
                 args.target_gameplay_seconds is not None and not 1<=args.target_gameplay_seconds<args.seconds):
@@ -171,7 +173,7 @@ def main(argv=None):
         parser.add_argument('--destination',action='append',nargs=2,required=True,metavar=('NAME','STATION'))
     parser.add_argument('--wait-seconds',type=int,default=60)
     args = parser.parse_args(argv)
-    if (not 0 <= args.wait_seconds <= 600 or not 2 <= args.batch <= (13 if finish else 12)
+    if (not 0 <= args.wait_seconds <= 600 or not 2 <= args.batch <= ENDURANCE.batches+int(finish)
             or not finish and not 2 <= len(args.destination) <= 4):
         parser.error('Use 2–4 destinations or an explicit finish, and a wait of at most 600 seconds.')
     folder = args.folder.resolve()

@@ -89,6 +89,8 @@ def read_run(path):
     if (manifest.get('status') != 'completed' or manifest.get('evidenceComplete') is not True
             or not manifest.get('runId') or manifest.get('modelLoads') != 1 or manifest.get('inputRequested') is not True):
         raise ValueError(f'Not a sealed complete single-model input run: {path}')
+    from episode_split import read_split
+    reservation=read_split(path.parent,manifest['runId'])
     decisions, receipts, routes, frames = {}, {}, {}, {}
     leases, epochs, stamps = set(), set(), []
     for entry in manifest['segments']:
@@ -126,6 +128,11 @@ def read_run(path):
                 frames[f['frameId']] = f
     if len(leases) != 1 or len(epochs) != 1:
         raise ValueError('Expected one capture epoch and one control lease')
+    edges,itinerary_proof=None,None
+    if any((row.get('hybridNavigation') or {}).get('navigationMode')=='itinerary' for row in decisions.values()):
+        from training_itinerary import qualified_edges
+        edges,itinerary_proof=qualified_edges(path.parent)
+        digest.update(json.dumps(itinerary_proof,sort_keys=True,separators=(',',':')).encode('utf-8'))
     samples = []
     for k, d in decisions.items():
         f, h = frames.get(k), d.get('hybridNavigation') or {}
@@ -136,7 +143,7 @@ def read_run(path):
             continue
         # The saved point was selected before dispatch on this frame. Never project
         # replay waypoints backward from a subsequently learned detour.
-        goal = steering_point(routes[k], h)
+        goal = steering_point(routes[k], h, edges)
         if goal is None:
             continue
         raw = d.get('rawPolicySteps')
@@ -154,6 +161,11 @@ def read_run(path):
                     precision=policy['precision'], observationProfile=p['observationProfile'],
                     instruction=(policy.get('goal') or {}).get('instruction'),
                     encoderSha256=(policy.get('goal') or {}).get('encoderSha256')))
+    if itinerary_proof is not None:
+        meta['directedItinerary']=itinerary_proof
+    if reservation is not None:
+        meta['datasetSplit']=reservation['split']
+        meta['splitReservation']=reservation
     return Run(meta, samples)
 
 
@@ -175,6 +187,8 @@ def distinct(metas):
 def fit(runs):
     """Fit a deterministic class-balanced multinomial linear model using training rows only."""
     import numpy as np
+    from episode_split import require_fit_allowed
+    require_fit_allowed([r.meta for r in runs])
     distinct([r.meta for r in runs])
     samples = [s for r in runs for s in r.samples]
     x, y = np.array([s[0] for s in samples]), np.array([s[1] for s in samples])

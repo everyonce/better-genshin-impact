@@ -10,6 +10,7 @@ from audit_destination_retries import RELEASE_REJECTED, RELEASE_RETRY, RETRY, ve
 from hybrid_routes import (COURTYARD_ROUTE, PATROL_STATIONS, STAIR_POST_ROUTE, STREET_PATROL_ROUTE,
                            camera_correction, route_heading, route_points)
 from observation_timing import observation_timestamp
+from destination_queue_limits import ENDURANCE, STANDARD, queue_limits
 
 
 def require(condition, message):
@@ -44,9 +45,10 @@ def destination_edges(plan):
     return edges
 
 
-def batch_edges(plans):
+def batch_edges(plans, *, max_batches=12):
     """Expand the separately committed plans in sequence, preserving global request and segment numbers."""
-    require(isinstance(plans,list) and 1 <= len(plans) <= 12, 'Invalid destination batch budget')
+    require(type(max_batches) is int and 1 <= max_batches <= ENDURANCE.batches
+            and isinstance(plans,list) and 1 <= len(plans) <= max_batches, 'Invalid destination batch budget')
     edges, ordinal, station = [], 0, None
     for i,plan in enumerate(plans):
         require(i == 0 or plan.get('start') == station and not plan.get('confirmFirstArrival'),
@@ -774,7 +776,12 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
     if destination_batches is not None:
         require(destination_plan is not None and destination_batches and destination_batches[0] == destination_plan,
                 'Initial plan does not match the first authorized batch')
-        edges = batch_edges(destination_batches)
+        admission_path=Path(run_path).with_name('warm-launcher.json')
+        admission=json.loads(admission_path.read_bytes()) if admission_path.is_file() else {}
+        limits=queue_limits(admission.get('queueLimitsProfile'))
+        require(limits!=ENDURANCE or admission.get('openQueue') is True and admission.get('manualSubmission') is False,
+                'Extended route proof requires its declared automatic endurance profile')
+        edges = batch_edges(destination_batches,max_batches=limits.batches)
     if failure_prefix:
         require(edges and run.get('status')=='failed' and run.get('endReason')=='error' and run.get('failedLeases')==1
                 and run.get('evidenceComplete') is False,'Expected an explicitly failed directed lease')

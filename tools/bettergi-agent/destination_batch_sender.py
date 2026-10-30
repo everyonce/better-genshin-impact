@@ -8,6 +8,7 @@ import uuid
 
 from hybrid_routes import itinerary_legs
 from destination_queue_policy import choose
+from destination_queue_limits import queue_limits
 import run_rdp_patrol as patrol
 from warm_photo_requests import validate_plan
 
@@ -70,8 +71,13 @@ def qualification_goals(start, batch, witness_frame):
 
 def admitted_plans(folder):
     """Read operator commitments in sequence, separately from the files received by the resident."""
+    summary = read_json(folder/'warm-launcher.json')
+    limits = queue_limits(summary.get('queueLimitsProfile'))
+    count = summary.get('batchCount')
+    if type(count) is not int or not 2 <= count <= limits.batches:
+        raise ValueError('Invalid declared batch count for committed plan history')
     plans = [read_json(folder/'photo-requests.json')]
-    for ordinal in range(2,14):
+    for ordinal in range(2,count+2):
         path = folder/'batches'/f'{ordinal:05d}.intent.json'
         if not path.exists():
             break
@@ -112,10 +118,11 @@ def witness_for(folder, status, plans):
 def submit(folder, expected_batch, destinations=None, admit=None, *, finish=False):
     """Commit and deliver a single dynamically selected successor under an exclusive per-batch issuer claim."""
     summary = read_json(folder/'warm-launcher.json')
+    limits = queue_limits(summary.get('queueLimitsProfile'))
     opened = summary.get('openQueue') is True
     if (summary.get('status') != 'running' or summary.get('computer','').split('.')[0].upper() != 'SIREN'
             or (folder/'STOP').exists()
-            or not 2 <= expected_batch <= summary['batchCount']+int(opened) or summary['batchCount']>12
+            or not 2 <= expected_batch <= summary['batchCount']+int(opened) or summary['batchCount']>limits.batches
             or finish and (not opened or destinations is not None)
             or summary.get('stopInBatch') and expected_batch > summary['stopInBatch']):
         raise ValueError('Destination queue is closed or outside its published bounds')
@@ -148,6 +155,7 @@ def submit(folder, expected_batch, destinations=None, admit=None, *, finish=Fals
         policy_raw = (folder/'queue-policy.json').read_bytes()
         policy = json.loads(policy_raw)
         if (hashlib.sha256(policy_raw).hexdigest()!=summary['queuePolicySha256'] or policy['maxLegs']!=summary['maxLegs']
+                or policy.get('queueLimitsProfile')!=summary.get('queueLimitsProfile') or policy['maxLegs']>limits.legs
                 or policy['mode']!=summary['planner']['mode'] or policy['targetGameplaySeconds']!=summary['planner']['targetGameplaySeconds']
                 or policy['maxBatches']!=summary['batchCount'] or policy['initialPlanSha256']!=hashlib.sha256((folder/'photo-requests.json').read_bytes()).hexdigest()):
             raise ValueError('Open queue policy changed')

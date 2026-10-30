@@ -8,3 +8,6 @@ BetterGenshinImpact/User/JsScript/AutoCommissionEnglishPilots/assets/** -text wh
 # Preserve exact native loader/adapter qualification bytes across checkout platforms.
 tools/bettergi-agent/model_adapters.py text eol=lf
 tools/bettergi-agent/p2p_loader.py text eol=lf
+# The frozen scene encoder verifies these exact source bytes before loading.
+tools/bettergi-agent/experiments/p2p_station_features.py text eol=lf
+tools/bettergi-agent/experiments/p2p_station_graph.py text eol=lf

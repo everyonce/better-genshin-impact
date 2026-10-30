@@ -91,6 +91,34 @@ class QueueProducerTests(unittest.TestCase):
         self.assertEqual((final['reason'],final['selectedStations']),('batchLimitReached',[]))
         self.assertEqual(len(sender.admitted_plans(self.folder)),12)
 
+    def test_endurance_publishes_all_forty_batches_before_its_finish_slot(self):
+        """Exercise the real history reader past the old thirteen-slot limit."""
+        from destination_queue_limits import ENDURANCE
+        self.open(cap=40,legs=256,target=800)
+        policy=sender.read_json(self.folder/'queue-policy.json')
+        policy['queueLimitsProfile']=self.summary['queueLimitsProfile']=ENDURANCE.profile
+        raw=sender.encode(policy)
+        (self.folder/'queue-policy.json').write_bytes(raw)
+        self.summary['queuePolicySha256']=hashlib.sha256(raw).hexdigest()
+        (self.folder/'warm-launcher.json').write_bytes(sender.encode(self.summary))
+        for batch in range(2,41):
+            self.issue(batch)
+            self.current(batch,batch)
+            self.assertEqual(len(sender.admitted_plans(self.folder)),batch)
+        self.issue(41)
+        final=sender.read_json(self.folder/'batches/00041.decision.json')
+        self.assertEqual((final['reason'],final['selectedStations']),('batchLimitReached',[]))
+        self.assertEqual(len(sender.admitted_plans(self.folder)),40)
+        with self.assertRaisesRegex(ValueError,'already claimed'):
+            self.issue(14)
+
+    def test_standard_history_cannot_claim_an_endurance_budget(self):
+        self.open(cap=13,legs=104,target=500)
+        with self.assertRaisesRegex(ValueError,'declared batch count'):
+            sender.admitted_plans(self.folder)
+        with self.assertRaisesRegex(ValueError,'outside its published bounds'):
+            self.issue(2)
+
     def test_missing_witness_refuses_early_selection_and_stop_wins(self):
         self.open()
         self.warm['activeFirstAppliedRequestId']=None

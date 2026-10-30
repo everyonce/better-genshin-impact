@@ -1,6 +1,7 @@
 """Exercise addressed successor admission on an inert continuous lease."""
 import hashlib
 import json
+import math
 from pathlib import Path
 import tempfile
 import time
@@ -212,6 +213,26 @@ class DestinationBatchTests(unittest.TestCase):
         self.assertFalse(self.owner.awaiting_batch_dispatch_receipt(bound+2))
         with self.assertRaisesRegex(RuntimeError,'one-second'):
             self.owner.require_batch_dispatch_window(bound+2)
+
+    def test_first_successor_uses_the_intersection_of_both_deadlines(self):
+        """A partial source window may still dispatch, but neither guard can be extended."""
+        receipt=self.pending_first_successor()
+        bound=self.owner.batch_dispatch_before_ms
+        self.assertEqual(self.owner.bound_start_deadline(bound-200,bound-50),bound-50)
+        deadline=self.owner.bound_start_deadline(bound-122,bound+28)
+        self.assertEqual(deadline,math.nextafter(bound,-math.inf))
+        self.assertLess(deadline,bound)
+        self.owner.require_batch_dispatch_window(deadline)
+        for source in (bound,bound+1):
+            with self.subTest(source=source),self.assertRaisesRegex(RuntimeError,'one-second'):
+                self.owner.bound_start_deadline(source,source+150)
+        self.owner.receipt(receipt)
+        self.assertEqual(self.owner.bound_start_deadline(bound,bound+150),bound+150)
+
+    def test_warm_deadline_refuses_invalid_source_clocks(self):
+        for source,deadline in ((1,1),(2,1),(True,2),(1,float('nan')),(1,float('inf'))):
+            with self.subTest(source=source,deadline=deadline),self.assertRaises(ValueError):
+                self.owner.bound_start_deadline(source,deadline)
 
     def test_missing_terminal_has_bounded_wait_and_operator_stop_wins(self):
         self.pending_first_successor()

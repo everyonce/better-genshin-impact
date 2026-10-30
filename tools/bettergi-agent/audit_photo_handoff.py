@@ -15,6 +15,7 @@ from audit_warm_batches import read_batches, verify_batch_events
 from hybrid_routes import STREET_PATROL_ROUTE
 from landmark_recognizer import G4_SHA256, LandmarkRecognizer
 from observation_timing import observation_timestamp
+from destination_queue_limits import queue_limits
 from patrol_photo_survey import require_qualified_observer, validated_targets, verify_photos
 
 
@@ -369,12 +370,42 @@ def photo_proofs(root, report, events, specs, boundaries, head, completed=None, 
     return photos
 
 
+def verify_action_start_deadlines(events, decisions, receipts, frames, recovery=()):
+    """Reconstruct every first-batch deadline from original prior dispatches and its released endpoint."""
+    bounds = {}
+    for event in events:
+        if event['type'] != 'warmBatchAccepted':
+            continue
+        release = event['release']['serverNowMs']
+        prior = [step['startedAtMs'] for receipt in receipts.values() if receipt['frameId'] <= event['frameId']
+                 for step in receipt['appliedSteps'] if step['startedAtMs'] < release]
+        require(prior and event['nextRequestId'] not in bounds, 'Missing unique prior dispatch for the batch handoff')
+        bounds[event['nextRequestId']] = math.nextafter(max(prior)+1000,-math.inf)
+    tagged = [(row,False) for row in decisions]+[(row,True) for row in recovery]
+    for row,is_recovery in sorted(tagged,key=lambda pair:pair[0]['frameId']):
+        accepted = row['acceptance']
+        if accepted.get('type') != 'accepted':
+            continue
+        source = observation_timestamp(frames[row['frameId']])
+        expected = min(source+150,bounds.get(row['warmRequestId'],math.inf))
+        actual = receipts[accepted['requestId']]['appliedSteps']
+        declared = row['arguments']['startBeforeMs'] if is_recovery else row['startBeforeMs']
+        require(source < declared == expected and all(step['startedAtMs'] < expected for step in actual),
+                'Directed first-input deadline differs from its source and original handoff limits')
+        if actual:
+            bounds.pop(row['warmRequestId'],None)
+
+
 def directed_controls(run, supervisor, parts, events, decisions, recovery, receipts, frames, edges, clock, *, failed=False):
     """Authenticate the budgets, source clock, every proposed leg, every terminal step and every endpoint hold."""
+    from destination_queue_limits import queue_limits
+    limits=queue_limits(supervisor.get('queueLimitsProfile'))
+    require(all(p.get('queueLimitsProfile')==supervisor.get('queueLimitsProfile') for p in parts),
+            'Native recordings differ from their supervisor limits profile')
     seconds = supervisor.get('wallTimeLimitSeconds')
-    require(type(seconds) is int and 15 <= seconds <= 600 and run.get('mode') == 'resident-rdp'
+    require(type(seconds) is int and 15 <= seconds <= limits.seconds and run.get('mode') == 'resident-rdp'
             and run.get('observationProfile') == 'p2p-native-hamming-192-v1'
-            and run.get('recordingBudgetExhausted') is False and 0 < run['recordedBytes'] <= 160 * 2**20
+            and run.get('recordingBudgetExhausted') is False and 0 < run['recordedBytes'] <= limits.recording_mib * 2**20
             and run['recordedBytes'] == sum(p['recording']['recordedBytes'] for p in parts)
             and all(e.get('processId') == supervisor['childPid'] and e.get('exitCode') == int(failed and i==len(parts)-1)
                     for i,e in enumerate(run['segments'])),
@@ -405,6 +436,7 @@ def directed_controls(run, supervisor, parts, events, decisions, recovery, recei
                 and .99 <= pose['positionConfidence'] <= 1 and .2 <= pose['yawConfidence'] <= 1
                 and 0 <= pose['yawDegrees'] < 360 and motion.get('status') == 'normal' and motion.get('spaceKeyMatched') is False,
                 'Directed source does not carry its own world-readiness and input gate')
+    verify_action_start_deadlines(events,decisions,receipts,frames,recovery)
     for row in decisions:
         fid = row['frameId']
         leg = bisect_left(verified,fid)
@@ -427,8 +459,7 @@ def directed_controls(run, supervisor, parts, events, decisions, recovery, recei
                     'GPU-owned step does not match the original image-conditioned movement')
         require(h['owner'] in ('open-p2p','hybrid-native','calibrated-camera') and row['steps'] == [step]
                 and step.get('keys') in ([],['W'],['A'],['S'],['D']) and step.get('durationMs') == 100
-                and step.get('mouseDy') == 0 and abs(step.get('mouseDx',999)) <= 350
-                and row['startBeforeMs'] == observation_timestamp(frames[fid])+150,
+                and step.get('mouseDy') == 0 and abs(step.get('mouseDx',999)) <= 350,
                 'Directed action exceeds its input or time budget')
         receipt = receipts[ack['requestId']]
         actual = receipt['appliedSteps']
@@ -445,7 +476,7 @@ def directed_controls(run, supervisor, parts, events, decisions, recovery, recei
         endpoint_release(e,parts,e['warmRequestId'])
     elapsed = max(observation_timestamp(f) for f in frames.values())-min(observation_timestamp(f) for f in frames.values())
     require(0 < elapsed <= seconds*1000, 'Recorded destination actions exceed the supervisor wall-time limit')
-    return dict(wallTimeLimitSeconds=seconds, recordingLimitMiB=160, recordedBytes=run['recordedBytes'],
+    return dict(wallTimeLimitSeconds=seconds, recordingLimitMiB=limits.recording_mib, recordedBytes=run['recordedBytes'],
                 legLimitMs=35000, dispatchLimitMs=150, holdMs=100, sourceSpanSeconds=elapsed/1000)
 
 
@@ -476,6 +507,11 @@ def directed_broker(folder, run, supervisor, edges, landmark_checkpoint, qualifi
             'RDP broker batch budget differs from authorization')
     require(sum(v=='--warm-open-queue' for v in argv)==int(open_queue)
             and not any(v.startswith('--warm-open-queue=') for v in argv),'RDP open-queue authority differs')
+    from destination_queue_limits import ENDURANCE, queue_limits
+    limits=queue_limits(supervisor.get('queueLimitsProfile'))
+    require(sum(v=='--warm-endurance' for v in argv)==int(limits==ENDURANCE)
+            and not any(v.startswith('--warm-endurance=') for v in argv)
+            and value('--record-max-mib')==str(limits.recording_mib), 'RDP limits profile or storage cap differs')
     require(len(binding) == 5 and binding[0] == str(supervisor['rootPid']) and binding[2] == str(supervisor['childPid'])
             and all(re.fullmatch('[0-9a-f]{32}',binding[i]) for i in (1,3))
             and all(str(s['processId']) == binding[2] and s.get('instanceNonce') == binding[3] for s in run['segments'])
@@ -572,9 +608,12 @@ def audit_photo_handoff(run_path, recordings, *, repository, photo_root, request
     opened=admission.get('openQueue') is True
     require((interrupted and allow_incomplete) or run.get('endReason') ==
             ('destinationQueueFinished' if opened else 'hybridLegLimit'), 'Unexpected resident end reason')
-    head = LandmarkRecognizer.load(landmark_checkpoint)
-    require(not opened or head.checkpoint_id==G4_SHA256,'Unexpected photographic authority for the open queue')
+    from weighted_landmark_recognizer import load_landmark_shadow
+    head = load_landmark_shadow(landmark_checkpoint)
     require_qualified_observer(qualification,head)
+    if opened:
+        from patrol_photo_survey import require_open_queue_photo_authority
+        require_open_queue_photo_authority(head)
     supervisor = read(run_path.parent/'launcher.json')
     batches = None
     require(batch_plans is not None or not admission.get('batchCount'), 'Multi-batch broker requires external batch intents')
@@ -582,7 +621,7 @@ def audit_photo_handoff(run_path, recordings, *, repository, photo_root, request
         require(isinstance(batch_plans,list) and batch_plans and plan == batch_plans[0], 'Initial batch declaration differs')
         specs = [spec for p in batch_plans for spec in check_plan(p)]
         batches = read_batches(run_path.parent,batch_plans,plan_bytes,admission,run,interrupted)
-        edges = batch_edges(batch_plans)
+        edges = batch_edges(batch_plans,max_batches=queue_limits(admission.get('queueLimitsProfile')).batches)
         if interrupted:
             stop_goal = batches[admission['stopInBatch']-1]
             specs = specs[:stop_goal['firstRequestOrdinal']]

@@ -23,16 +23,23 @@ def digest(raw):
     return hashlib.sha256(raw).hexdigest()
 
 
-def require_photo_metric(head):
-    """Only the deployed v1 metric family is eligible to authorize a requested photo."""
+def require_photo_metric(head,output=None):
+    """Allow the deployed family, or the explicitly bound four-goal scene experiment."""
     from landmark_recognizer import FORMAT
+    if head.data.get('format')=='bettergi-p2p-scene-shadow-v1':
+        from scene_photo_trial import require_admission
+        require_admission(head,output)
+        return
     require(head.data.get('format') == FORMAT, 'Experimental landmark metrics are shadow-only for photographic goals')
 
 
-def require_qualified_observer(qualification_path, head):
+def require_qualified_observer(qualification_path, head, *, execution_context=None):
     """Verify the loaded family, or the exact G4 digest from an older resident, and recompute its qualification."""
     from landmark_recognizer import G4_SHA256
     from qualify_landmarks import qualify
+    if not isinstance(head,str) and head.data.get('format')=='bettergi-p2p-scene-shadow-v1':
+        from scene_photo_trial import admit
+        return admit(qualification_path,head,execution_context)
     digest_only = type(head) is str
     checkpoint_id = head if digest_only else head.checkpoint_id
     if digest_only:
@@ -50,6 +57,16 @@ def require_qualified_observer(qualification_path, head):
             and result['route'] == STREET_PATROL_ROUTE and result['recommendation'] == 'use-challenger-as-observer',
             'Observer lacks a recomputed promotion for the surveyed route')
     return result
+
+
+def require_open_queue_photo_authority(head):
+    """Keep G4 as the ordinary queue authority; allow only the separately bound experimental endurance claim."""
+    from landmark_recognizer import G4_SHA256
+    if head.checkpoint_id==G4_SHA256:
+        return
+    require(head.data.get('format')=='bettergi-p2p-scene-shadow-v1','Unexpected photographic authority for the open queue')
+    from scene_endurance_trial import require_queue_admission
+    require_queue_admission(head)
 
 
 def validated_targets(targets):
@@ -199,7 +216,7 @@ def verify_photo_survey(output, run_path, recordings, *, repository, landmark_ch
 
 def verify_photos(output, manifest, targets, sources, poses, head, confirm_first=False):
     """Replay the survey journal against the authenticated station sequence through completion."""
-    require_photo_metric(head)
+    require_photo_metric(head,output)
     rows, collected, files, hashes = manifest['journal'], [], set(), set()
     used = 0
     first_confirmation = None

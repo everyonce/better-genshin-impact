@@ -7,6 +7,7 @@ import json
 from audit_hybrid_run import require
 from audit_warm_batches import bounded_bytes, verify_settled_wait
 from observation_timing import observation_timestamp
+from destination_queue_limits import ENDURANCE, queue_limits
 
 STATIONS=('stair-front','sidewalk-junction','west-lamp')
 APPROACHES=('stair-front>sidewalk-junction','sidewalk-junction>stair-front',
@@ -81,7 +82,12 @@ def verify_policy(folder,admission,parts,run_id):
     record=json.loads(owner)
     digest=hashlib.sha256(raw).hexdigest()
     planner=admission['planner']
-    require(set(policy)=={'version','mode','targetGameplaySeconds','goalsPerBatch','maxBatches','maxLegs','initialPlanSha256','requiredOwnerManifestSha256'}
+    profile=admission.get('queueLimitsProfile')
+    limits=queue_limits(profile)
+    extra={'queueLimitsProfile'} if 'queueLimitsProfile' in admission else set()
+    require(set(policy)=={'version','mode','targetGameplaySeconds','goalsPerBatch','maxBatches','maxLegs','initialPlanSha256','requiredOwnerManifestSha256'}|extra
+            and policy.get('queueLimitsProfile')==profile and all(p.get('queueLimitsProfile')==profile for p in parts)
+            and (limits!=ENDURANCE or policy['mode']=='balanced-native-visits-v1' and admission.get('manualSubmission') is False)
             and planner=={k:policy[k] for k in ('version','mode','targetGameplaySeconds','goalsPerBatch')}
             and policy['version']==1 and policy['goalsPerBatch']==4 and policy['mode'] in ('balanced-native-visits-v1','manual')
             and (type(policy['targetGameplaySeconds']) is int and policy['targetGameplaySeconds']>0
@@ -91,7 +97,7 @@ def verify_policy(folder,admission,parts,run_id):
             and hashlib.sha256(owner).hexdigest()==policy['requiredOwnerManifestSha256']==admission['requiredOwnerManifestSha256']
             and record.get('status') in ('completed','stopVerified'),'Open-queue policy or previous supervisor owner receipt differs')
     supervisor=json.loads((folder/'launcher.json').read_bytes())
-    require(supervisor['runId']==run_id and supervisor['rootPid']==record['identity']['root']['processId']
+    require(supervisor.get('queueLimitsProfile')==profile and supervisor['runId']==run_id and supervisor['rootPid']==record['identity']['root']['processId']
             and supervisor['childPid']==record['identity']['child']['processId']
             and supervisor['windowsSessionId']==record['identity']['child']['windowsSessionId'],
             'Unexpected RDP owner for open queue')

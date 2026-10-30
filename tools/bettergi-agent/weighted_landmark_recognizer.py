@@ -47,6 +47,9 @@ def load_landmark_shadow(path):
     """Load one shadow observer and bind its digest to the same bytes used to select its scorer."""
     raw = Path(path).read_bytes()
     data = json.loads(raw)
+    if isinstance(data,dict) and data.get('format')=='bettergi-p2p-scene-shadow-v1':
+        from gpu_landmark_observer import GpuLandmarkObserver
+        return GpuLandmarkObserver(path,raw)
     if (not isinstance(data,dict) or (data.get('format') != FORMAT
             and (data.get('method') == METHOD or data.get('distanceMetric') == METRIC))):
         raise ValueError('G7 distance metadata requires its matching format')

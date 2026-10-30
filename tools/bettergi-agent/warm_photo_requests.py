@@ -87,9 +87,13 @@ class WarmQueueInterrupted(RuntimeError):
 class WarmPhotoRequests:
     """Serial policy-thread state for the current request, its outstanding actions and native release barrier."""
 
-    def __init__(self, plan, directory, checkpoint_id, embedding, hello, run_id, legs, *, batch_count=None, open_queue=False, control_path=None):
+    def __init__(self, plan, directory, checkpoint_id, embedding, hello, run_id, legs, *, batch_count=None, open_queue=False, control_path=None, limits_profile=None, observer=None):
         """Bind the plan, embedding and request journals to this one resident/bridge identity."""
         definition, self.plan_sha = read_plan(plan)
+        if observer is not None and observer.data.get('format')=='bettergi-p2p-scene-shadow-v1':
+            from scene_photo_trial import require_runtime_plan
+            require_runtime_plan(observer,directory,checkpoint_id,run_id,self.plan_sha,open_queue=open_queue,
+                batch_count=batch_count,legs=legs,limits_profile=limits_profile)
         self.requests = definition['requests']
         self.destinations = None
         self.confirm_first = definition.get('confirmFirstArrival', False)
@@ -110,17 +114,26 @@ class WarmPhotoRequests:
         self.first_dispatch = None
         if open_queue:
             from landmark_recognizer import G4_SHA256
+            if checkpoint_id != G4_SHA256:
+                from patrol_photo_survey import require_open_queue_photo_authority
+                if observer is None or observer.checkpoint_id!=checkpoint_id:
+                    raise ValueError('An open destination queue requires deployed G4 or its bound scene experiment')
+                require_open_queue_photo_authority(observer)
             self.control_path = Path(control_path) if control_path is not None else Path(plan).resolve().parent/'patrol.json.control.json'
             telemetry = hello.get('inputTelemetry') or {}
             self.frequency = telemetry.get('stopwatchFrequency')
             self.origin = telemetry.get('sessionOriginAtStopwatchTicks')
-            if (batch_count is None or checkpoint_id != G4_SHA256
+            if (batch_count is None
                     or any(type(v) is not int or v <= 0 for v in (self.frequency,self.origin))):
-                raise ValueError('An open destination queue requires bounded batches, deployed G4 and the native QPC clock')
+                raise ValueError('An open destination queue requires bounded batches and the native QPC clock')
+        from destination_queue_limits import ENDURANCE, queue_limits
+        limits = queue_limits(limits_profile)
+        if limits == ENDURANCE and not open_queue:
+            raise ValueError('Endurance limits require an open destination queue')
         if batch_count is not None:
             reserved = 0 if open_queue or type(batch_count) is not int else 2*(batch_count-1)
-            if (not self.destinations or type(batch_count) is not int or not 2 <= batch_count <= 12
-                    or type(legs) is not int or not sum(self.request_legs) + reserved <= legs <= 96):
+            if (not self.destinations or type(batch_count) is not int or not 2 <= batch_count <= limits.batches
+                    or type(legs) is not int or not sum(self.request_legs) + reserved <= legs <= limits.legs):
                 raise ValueError('Successive destination batches require feasible batch and total edge limits')
             if (set(definition) - {'version','mode','start','requests','confirmFirstArrival'}
                     or any(set(r) != {'id','name','destination','targets'} for r in self.requests)):
@@ -201,10 +214,22 @@ class WarmPhotoRequests:
             self._status()
 
     def require_batch_dispatch_window(self, start_before_ms):
-        """Keep the bridge's full 150 ms source deadline inside the previous batch's one-second handoff."""
+        """Require the native first-input deadline to precede the original one-second handoff limit."""
         if self.batch_dispatch_before_ms is not None and (type(start_before_ms) not in (int,float)
                 or not math.isfinite(start_before_ms) or start_before_ms >= self.batch_dispatch_before_ms):
             raise RuntimeError('Successor dispatch would exceed the one-second warm handoff')
+
+    def bound_start_deadline(self, source_at_ms, source_deadline_ms):
+        """Intersect the source deadline with the strictly earlier handoff bound; never extend either."""
+        if (any(type(value) not in (int,float) or not math.isfinite(value)
+                for value in (source_at_ms,source_deadline_ms)) or source_at_ms >= source_deadline_ms):
+            raise ValueError('Invalid source deadline for a warm action')
+        limit = source_deadline_ms
+        if self.batch_dispatch_before_ms is not None:
+            limit = min(limit,math.nextafter(self.batch_dispatch_before_ms,-math.inf))
+        if limit <= source_at_ms:
+            raise RuntimeError('Successor dispatch would exceed the one-second warm handoff')
+        return limit
 
     def awaiting_batch_dispatch_receipt(self, server_now_ms):
         """Observe without proposing until the first accepted successor yields an actual terminal receipt."""

@@ -17,6 +17,24 @@
  function unknownStamina(o){const s=o&&o.hud&&o.hud.swimStamina;return !s||s.source!=='same-frame-swim-stamina'||!Number.isFinite(s.height);}
  function northLane(m){const dx=m.x+1317.9043,dy=m.y-2573.0947,vx=17.9043,vy=11.9053,l2=vx*vx+vy*vy,t=(dx*vx+dy*vy)/l2;return t>=-.05&&t<=1.1&&Math.abs(dx*vy-dy*vx)/Math.sqrt(l2)<=2;}
  function start(o,now,session,continuation,north){if(north)return base(o,now,session,true)&&o.hud.starfellSwim&&o.hud.starfellSwim.confirmed===true&&o.hud.swimStamina&&o.hud.swimStamina.height>=40&&northLane(o.map);return base(o,now,session)&&(continuation===true?o.hud.starfellSwim.confirmed&&o.hud.swimStamina&&o.hud.swimStamina.source==='same-frame-swim-stamina'&&o.hud.swimStamina.height>=40&&continuationPosition(o.map):o.hud.groundControls&&!o.hud.starfellSwim.confirmed&&Math.hypot(o.map.x+1329.832,o.map.y-2564.187)<=3);}
+ // Camera inspection has no movement authority; crossing still requires measured stamina.
+ function cameraReady(o,now,session){return base(o,now,session)&&Number.isInteger(o.frameId)&&o.frameId>0&&o.hud.groundControls===false&&o.hud.starfellSwim&&o.hud.starfellSwim.source==='same-frame-swim-control'&&o.hud.starfellSwim.confirmed===true&&continuationPosition(o.map);}
+ // A single camera call must be followed by a newer healthy stationary swimming frame.
+ async function inspectCamera(o,api){
+  const result={status:'stopped',actions:0,inputMs:0,cameraAdjustments:0,cameraDy:500,sourceFrameId:o&&o.frameId,fieldFrameId:o&&o.frameId,stationaryVerified:false};
+  let current=o;
+  try{
+   if(!cameraReady(current,api.now(),api.session)){result.reason='Fresh full-health southern-lane swimming required for camera inspection';return result;}
+   result.health=current.hud.health;result.swimStamina=current.hud.swimStamina;
+   await api.pitch(500,current);result.cameraAdjustments=1;
+   await api.sleep(350);current=await api.observe();
+   result.fieldFrameId=current&&current.frameId;result.health=current&&current.hud&&current.hud.health;result.swimStamina=current&&current.hud&&current.hud.swimStamina;
+   if(!cameraReady(current,api.now(),api.session)||current.frameId<=o.frameId||current.timestamp<=o.timestamp){result.reason='Post-camera fresh scoped swimming or full health was not verified';return result;}
+   result.positionDelta=Math.hypot(current.map.x-o.map.x,current.map.y-o.map.y);
+   if(result.positionDelta>0.5){result.reason='Position changed beyond stationary camera inspection bound';return result;}
+   result.stationaryVerified=true;result.reason='One stationary shore camera inspection; inspect stamina before continuation';return result;
+  }catch(error){const failure=error instanceof Error?error:new Error(String(error&&error.message||error));failure.fieldResult=result;throw failure;}finally{api.release();}
+ }
  function distance(o,t){return Math.hypot(o.map.x-t.x,o.map.y-t.y);}
  async function run(o,api){const destination=api.north?{x:-1300,y:2585}:target;let current=o,swam=api.continuation===true,stalls=0;const result={status:'stopped',actions:0,inputMs:0,turns:0,positions:[]};try{
   if(api.continuation&&base(current,api.now(),api.session,api.north)&&current.hud.starfellSwim.confirmed&&(api.north?northLane(current.map):continuationPosition(current.map))&&unknownStamina(current)){await api.sleep(800);current=await api.observe();result.staminaRereads=1;}
@@ -46,5 +64,5 @@
   }
   result.fieldFrameId=current.frameId;result.swimmingObserved=swam;if(!result.reason)result.reason='Bounded crossing ended; inspect ground before continuing';return result;
  }finally{api.release();}}
- const api={region,read,stamina,staminaHeight,base,start,run};root.ActTwoStarfellShore=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
+ const api={region,read,stamina,staminaHeight,base,start,cameraReady,inspectCamera,run};root.ActTwoStarfellShore=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

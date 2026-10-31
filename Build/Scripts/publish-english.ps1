@@ -22,13 +22,14 @@ foreach ($asset in @('Map\Editor\index.html', 'Web\ScriptRepo\index.html')) {
 $retentionScript = Join-Path $PSScriptRoot 'manage-release-retention.ps1'
 & $retentionScript -Repository $repo -Action Apply -PublishDirectory $OutputDirectory
 & (Join-Path $repo 'tools\quest-pilot\check-storage-headroom.ps1') -Repository $repo
-& $DotNet run --project (Join-Path $repo 'Build\BetterGenshinImpact.I18nSync') -p:UseSharedCompilation=false -p:RestoreSources=https://api.nuget.org/v3/index.json -- --project (Join-Path $repo 'BetterGenshinImpact') --check-english
+# Honor the configured NuGet sources and existing package cache throughout publication.
+& $DotNet run --project (Join-Path $repo 'Build\BetterGenshinImpact.I18nSync') -p:UseSharedCompilation=false -- --project (Join-Path $repo 'BetterGenshinImpact') --check-english
 if ($LASTEXITCODE) { throw 'English coverage check failed.' }
 if (!$SkipTests) {
-    & $DotNet test (Join-Path $repo 'Test\BetterGenshinImpact.EnglishTest') -c Release -p:Platform=x64 -m:1 -nr:false -p:UseSharedCompilation=false -p:RestoreSources=https://api.nuget.org/v3/index.json
+    & $DotNet test (Join-Path $repo 'Test\BetterGenshinImpact.EnglishTest') -c Release -p:Platform=x64 -m:1 -nr:false -p:UseSharedCompilation=false
     if ($LASTEXITCODE) { throw 'English interface regression tests failed.' }
 }
-& $DotNet publish (Join-Path $repo 'BetterGenshinImpact\BetterGenshinImpact.csproj') -c Release -p:Platform=x64 -m:1 -nr:false -p:UseSharedCompilation=false -r win-x64 --self-contained true -p:RestoreSources=https://api.nuget.org/v3/index.json -o $OutputDirectory
+& $DotNet publish (Join-Path $repo 'BetterGenshinImpact\BetterGenshinImpact.csproj') -c Release -p:Platform=x64 -m:1 -nr:false -p:UseSharedCompilation=false -r win-x64 --self-contained true -o $OutputDirectory
 if ($LASTEXITCODE) { throw 'English portable publish failed.' }
 foreach ($assetDirectory in @('Map\Editor', 'Web\ScriptRepo')) {
     $destination = Join-Path $OutputDirectory "Assets\$assetDirectory"

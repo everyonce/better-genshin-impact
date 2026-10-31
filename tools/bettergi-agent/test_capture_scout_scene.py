@@ -37,6 +37,9 @@ class PassiveSceneBridge:
         self.frames,self.index,self.commands=copy.deepcopy(frames),0,[]
         self.handle=SimpleNamespace(close=Mock())
         self.hello=dict(inputEnabled=False,combatObservation=copy.deepcopy(CAPABILITY))
+        from native_ground_control import CAPABILITY as GROUND_CAPABILITY
+        self.hello['groundControlObservation']=copy.deepcopy(GROUND_CAPABILITY)
+        self.ground_required=False
         self.native=app/'diagnostics'
         self.native.mkdir()
         self.diagnostics=dict(directory=str(self.native),failed=0,dropped=0,written=0,pending=0,enabled=False)
@@ -53,8 +56,16 @@ class PassiveSceneBridge:
             return dict(enabled=True,capability=capability),b''
         if command=='enableCombatObservation':
             return dict(type='combatObservation',enabled=True,capability=copy.deepcopy(CAPABILITY)),b''
+        if command=='requireGroundControlLayout':
+            from native_ground_control import CAPABILITY as GROUND_CAPABILITY
+            from test_native_ground_control import ground_png
+            self.ground_required=True;self.image=ground_png()
+            return dict(type='groundControlLayout',requiredForInput=True,capability=copy.deepcopy(GROUND_CAPABILITY)),b''
         if command=='frame':
             value=copy.deepcopy(self.frames[min(self.index,len(self.frames)-1)])
+            if self.ground_required:
+                from test_native_ground_control import attach_ground
+                value=attach_ground(value)
             self.index+=1
             if self.diagnostics['enabled'] and not self.diagnostics['written']:
                 name=f"native-frame-{value['frameId']:04d}"
@@ -145,6 +156,9 @@ class PassiveSceneTests(unittest.TestCase):
             self.assertIs(document['enemyIdentityVerified'],False)
             self.assertIs(document['requireSingleEnemyBarCandidate'],True)
         self.assertNotIn('anchor',plan)
+        self.assertNotIn('scoutGroundControlPolicy',plan)
+        self.assertFalse(any(command=='requireGroundControlLayout' for command,_ in self.bridge.commands))
+        self.assertNotIn('nativeGroundControlGate',result)
         self.assertEqual(plan['navigationProfile'],NORTH_SCOUT_PROFILE)
         self.assertEqual(len(result['stableSamples']),3)
         image=self.output/result['selectedImageName']

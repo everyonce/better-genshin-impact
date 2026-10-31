@@ -71,6 +71,26 @@ public sealed partial class AgentActionController(IAgentInput input, bool inputE
     private (int Width, int Height) _viewport;
     /// <summary>Reject inference results that arrive after a result based on a newer observation.</summary>
     private long _lastAcceptedFrameId;
+    /// <summary>One-way optional ground-control gate, enabled before this controller has accepted any action.</summary>
+    private bool _groundControlRequired;
+    /// <summary>Retain a contradictory control layout for the rest of this lease, including after release.</summary>
+    private bool _groundControlTripped;
+    /// <summary>Missing evidence after input begins is terminal until an explicit release disarms this boundary.</summary>
+    private bool _groundInputArmed;
+
+    /// <summary>Revoke pre-negotiation readiness without performing gameplay input or allowing a later downgrade.</summary>
+    public void RequireGroundControlLayout(double now)
+    {
+        lock (_gate)
+        {
+            if (_groundControlRequired || _active is not null || _lastAcceptedFrameId != 0 || _stopped)
+                throw new InvalidOperationException("ground_control_gate_already_used");
+            _groundControlRequired = true;
+            _observations.Clear();
+            _world.Invalidate(now, "ground_controls_unchecked");
+            ClearBlockedInput(now, "ground_controls_unchecked");
+        }
+    }
     /// <summary>Absent by default; production enable is deliberately unavailable pending native-owner integration.</summary>
     private AgentStepApplicationOutbox? _stepApplications;
 
@@ -260,6 +280,15 @@ public sealed partial class AgentActionController(IAgentInput input, bool inputE
             }
             _viewport = viewport;
             var readiness = _world.Observe(observation, now, input.IsAvailable);
+            if (_groundControlRequired)
+            {
+                var controls = observation.GroundControlEvidence;
+                var positive = controls?.Admits(observation) == true;
+                if (!positive && (_groundInputArmed || controls?.State == "valid" || controls?.Reason == "unsupported_geometry"))
+                    _groundControlTripped = true;
+                if (_groundControlTripped || !positive)
+                    readiness = _world.Invalidate(now, _groundControlTripped ? "ground_control_stop" : "ground_controls_unconfirmed");
+            }
             // Recheck after recognition admission so focus lost during this operation also revokes input.
             if (!input.IsAvailable) readiness = _world.Invalidate(now, "window_unavailable");
             if (!readiness.Ready)
@@ -330,6 +359,7 @@ public sealed partial class AgentActionController(IAgentInput input, bool inputE
                     throw new InvalidOperationException("The input release session clock is invalid.");
                 _world.Invalidate(completedAt, "client_release");
             }
+            _groundInputArmed = false;
         }
     }
 
@@ -415,6 +445,7 @@ public sealed partial class AgentActionController(IAgentInput input, bool inputE
             // Retain through the maximum possible deadline for this frame, not just the supplied deadline.
             _requests.Add(request.RequestId, authorityTime + 750);
             _lastAcceptedFrameId = request.FrameId;
+            _groundInputArmed = _groundControlRequired;
             // A replacement preserves held-state continuity until the next tick, but records the interrupted chunk.
             Finish("replaced", "newer_proposal", now, release: false);
             if (applicationBinding is not null) _stepApplications!.Admitted(request.RequestId, applicationBinding);

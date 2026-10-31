@@ -314,7 +314,7 @@ def verify_scout_goal_state(value, label, *, decision=False):
             and value.get('goalChanges',[])==[],'Cached scout has pending/applied goal changes: '+label)
 
 
-def verify_scout_review(request, owner, points, spec=None, *, include_native_capability=False):
+def verify_scout_review(request, owner, points, spec=None, *, include_native_capability=False, include_ground_capability=False):
     """Independently replay original passive review hashes, source joins and stable start observations."""
     profile=spec.profile_id if spec is not None else required_profile(request['routeId'])
     require(profile in SCOUT_PROFILES and request.get('navigationProfile')==profile,'Reviewed scout profile changed')
@@ -394,7 +394,7 @@ def verify_scout_review(request, owner, points, spec=None, *, include_native_cap
     joined=[frame for frame in observations if frame.get('frameId')==metadata.get('frameId')]
     require(joined and all(frame.get('sourceFrame')==metadata.get('sourceFrame') for frame in joined),'Reviewed PNG lost its native source join')
     # Polls of identical pixels may age; immutable source and recognition results must agree.
-    fields=('frameId','sourceFrame','navigationPose','frameWorldReadiness','motionEvidence')
+    fields=('frameId','sourceFrame','navigationPose','frameWorldReadiness','motionEvidence','groundControlEvidence')
     identity={key:joined[0].get(key) for key in fields}
     require(all({key:frame.get(key) for key in fields}==identity for frame in joined),'Repeated image polls contradict original native evidence')
     valid=[]
@@ -406,19 +406,28 @@ def verify_scout_review(request, owner, points, spec=None, *, include_native_cap
     selected=min(valid,key=lambda frame:frame['sourceFrameAgeMs'])
     from native_combat import scene_capability,validate_frame as validate_combat_frame
     native_capability=scene_capability(result)
+    from native_ground_control import scene_capability as ground_scene_capability,require_ground_frame,verify_image_crops,policy as ground_policy
+    ground_capability=ground_scene_capability(result)
+    if ground_capability is not None:
+        require(plan.get('scoutGroundControlPolicy')==ground_policy(),'Reviewed plan omitted its ground-control policy')
+        for frame in result['stableSamples']:require_ground_frame(frame,replay_pixels=True)
+        verify_image_crops(image,selected)
     if native_capability['version']==2:
         require(validate_combat_frame(selected,native_capability) is not None,
                 'Reviewed v2 image lacks its exact native evidence')
     require(selected['sourceFrame']['captureEpoch']==samples[0]['sourceFrame']['captureEpoch']
             and selected['frameWorldReadiness'].get('epoch')==samples[0]['frameWorldReadiness'].get('epoch'),
             'Reviewed PNG belongs to another source/world epoch')
+    if include_ground_capability:return review,native_capability,ground_capability
     return (review,native_capability) if include_native_capability else review
 
 
 def has_scout_guard_evidence(value):
     """Find guard fields or journal markers at any retained level without reinterpreting old HUD evidence."""
     if isinstance(value,dict):
-        return (any(key.startswith('scoutEncounterGuard') or key=='scout_encounter_guard' for key in value)
+        return (any(key.startswith('scoutEncounterGuard') or key in ('scout_encounter_guard','scoutGroundControlPolicy',
+                    'nativeGroundControlObservation','nativeGroundControlGate','groundControlPolicy') for key in value)
+                or value.get('groundControlEvidence') is not None
                 or any(isinstance(value.get(key),str) and value[key].startswith('scoutEncounterGuard')
                        for key in ('type','endReason'))
                 or any(has_scout_guard_evidence(item) for item in value.values()))
@@ -477,6 +486,23 @@ def verify_policy_reuse(run, run_path, proof_path):
                 and 'scoutEncounterGuardPolicy' in manifest,
                 'Northern cached scouting lacks its explicit reviewed-only scope')
     settings=configuration.get('arguments') or {}
+    from native_ground_control import policy as ground_policy,SOURCE_NAMES as ground_source_names
+    ground_required='scoutGroundControlPolicy' in manifest
+    require(('scoutGroundControlPolicy' in session)==ground_required
+            and (settings.get('require_ground_control_layout') is True)==ground_required,
+            'Ground-control declaration differs from original manifest or immutable arguments')
+    if ground_required:
+        require(manifest['scoutGroundControlPolicy']==session['scoutGroundControlPolicy']==configuration.get('groundControlPolicy')==ground_policy(),
+                'Ground-control policy changed in the original proof chain')
+        hashes=configuration.get('groundControlSourceSha256')
+        require(isinstance(hashes,dict) and set(hashes)==set(ground_source_names),'Ground-control runtime source binding is missing')
+        archive=source.parent.parent/'source-snapshot'
+        for name,digest in hashes.items():
+            require(hashlib.sha256(evidence_bytes(archive/name,2*1024*1024)).hexdigest()==digest,
+                    'Archived ground-control runtime bytes changed')
+    else:
+        require('groundControlPolicy' not in configuration and 'groundControlSourceSha256' not in configuration,
+                'Historical worker retains an undeclared ground-control policy')
     executed_history=settings.get('p2p_executed_history',False)
     hold=settings.get('action_hold_ms')
     require(type(executed_history) is bool and type(hold) is int
@@ -536,11 +562,12 @@ def verify_policy_reuse(run, run_path, proof_path):
     else:
         require('routeSpecSha256' not in reuse and 'routeSpecSha256' not in request,'Geometry digest has no explicit specification')
         require(required_profile(request['routeId'])==profile,'Cached fixed route changed scout scope')
-    review,native_capability=verify_scout_review(request,owner,
-        spec.points if spec is not None else route_points(request['routeId']),spec,include_native_capability=True)
+    review,native_capability,ground_capability=verify_scout_review(request,owner,
+        spec.points if spec is not None else route_points(request['routeId']),spec,include_ground_capability=True)
+    require((ground_capability is not None)==ground_required,'Reviewed ground-control contract differs from original worker')
     if 'scoutEncounterGuardPolicy' in session:
         from scout_encounter_guard import binding_from_review,declared_guard_policies,validate_binding
-        expected=binding_from_review(review,request['reviewSha256'],native_capability)
+        expected=binding_from_review(review,request['reviewSha256'],native_capability,ground_capability)
         policies=declared_guard_policies(manifest)
         require(declared_guard_policies(session)==policies and expected['policy'] in policies
                 and manifest.get('stopTemperatureC')==78 and manifest.get('sourceFreshnessMs')==150
@@ -585,6 +612,16 @@ def verify_scout_guard(run, parts, frames, entries, recordings, reuse):
             from native_combat import validate_capability as validate_combat_capability
             validate_combat_capability(part.get('nativeCombatObservation'),guard.native_capability)
             validate_combat_capability((part.get('hello') or {}).get('combatObservation'),guard.native_capability)
+        if guard.ground_capability is not None:
+            from native_ground_control import validate_capability as validate_ground_capability,validate_frame as validate_ground_frame
+            validate_ground_capability(part.get('nativeGroundControlObservation'))
+            validate_ground_capability((part.get('hello') or {}).get('groundControlObservation'))
+            acknowledgement=part.get('nativeGroundControlGate') or {}
+            require(acknowledgement.get('type')=='groundControlLayout' and acknowledgement.get('requiredForInput') is True,
+                    'Native ground-control gate was not explicitly acknowledged')
+            validate_ground_capability(acknowledgement.get('capability'))
+            require((part.get('hybridNavigation') or {}).get('requireGroundControls') is True,
+                    'Hybrid endpoint verifier omitted positive ground-control evidence')
         with (Path(recordings)/f"{entry['number']:05d}"/'events.jsonl').open(encoding='utf-8') as stream:
             for line in stream:
                 event=json.loads(line)
@@ -607,6 +644,8 @@ def verify_scout_guard(run, parts, frames, entries, recordings, reuse):
                     previous_ns=at
                     continue
                 if event.get('type')!='scoutEncounterGuardObservation':continue
+                if guard.ground_capability is not None and event.get('frame',{}).get('type')=='frame':
+                    validate_ground_frame(event['frame'],replay_pixels=True)
                 at=event.get('clientReceivedNs')
                 require(type(at) is int and at>previous_ns,'Scout guard intake clock did not advance')
                 replay=guard.observe(event.get('frame') or {},at)
@@ -617,6 +656,12 @@ def verify_scout_guard(run, parts, frames, entries, recordings, reuse):
                 frame=event['frame']
                 if frame.get('type')=='frame':first_frames.setdefault(frame['frameId'],frame)
         require(part.get('scoutEncounterGuardState')==guard.snapshot(),'Segment scout guard state differs from intake replay')
+        if guard.ground_capability is not None:
+            from native_ground_control import require_ground_frame
+            for proof in part.get('hybridNavigationEvents',[]):
+                if proof.get('type') in ('hybridStartVerified','hybridEndpointVerified'):
+                    for sample in proof.get('samples',[]):
+                        require_ground_frame(frames.get(sample.get('frameId')) or {},replay_pixels=True)
     require(guard.admitted and observations and run.get('scoutEncounterGuardState')==guard.snapshot(),
             'Resident scout guard admission or final state is missing')
     require(set(first_frames)==set(frames) and all(first_frames[key]==sensor_frame(frame) for key,frame in frames.items()),

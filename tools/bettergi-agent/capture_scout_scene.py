@@ -11,6 +11,8 @@ from stream_client import Bridge
 from observation_profiles import P2P_NATIVE
 from navigation_profiles import SCOUT_PROFILE,SCOUT_PROFILES,validate_capability,allows_pose_scope
 from native_combat import negotiate,validate_frame
+from native_ground_control import (negotiate as negotiate_ground,policy as ground_policy,
+                                  validate_frame as validate_ground_frame)
 from hybrid_navigation import yaw_error
 from reviewed_scout_route import CURRENT_SCENE_INSPECTION
 
@@ -55,6 +57,7 @@ def main():
         navigationProfile=args.navigation_profile,maximumObservationSeconds=30,
         sourceFreshnessMs=150,stopTemperatureC=78,captureHelperSha256=hashlib.sha256(helper).hexdigest(),
         modelLoadScope='this-capture-helper-only',
+        **({'scoutGroundControlPolicy':ground_policy()} if args.anchor is not None else {}),
         **(inspection|candidate_filter|({'anchor':args.anchor} if args.anchor is not None else {}))))
 
     def check_owner():
@@ -88,6 +91,8 @@ def main():
         validate_capability(enabled['capability'],args.navigation_profile)
         report['capability']=enabled['capability']
         report['nativeCombatObservation']=negotiate(bridge)
+        if args.anchor is not None:
+            report['nativeGroundControlObservation'],report['nativeGroundControlGate']=negotiate_ground(bridge)
         armed=False
         qualified={}
         deadline=time.monotonic()+30
@@ -101,6 +106,8 @@ def main():
                 report['observations'].append(frame)
                 require(frame['executionContext']['lastSequence']==0,'Unexpected native input history')
                 combat=validate_frame(frame,report['nativeCombatObservation'])
+                ground=validate_ground_frame(frame) if args.anchor is not None else None
+                require(ground is None or ground['reason']!='unsupported_geometry','Ground-control capture requires1920x1080')
                 pose=frame.get('navigationPose') or {}
                 world=frame.get('frameWorldReadiness') or {}
                 motion=frame.get('motionEvidence') or {}
@@ -109,7 +116,8 @@ def main():
                     and .2<=pose['yawConfidence']<=1 and world.get('ready') is True
                     and world.get('sourceFrameId')==frame['frameId'] and frame['worldReadiness']['ready'] is True
                     and motion.get('status')=='normal' and motion.get('spaceKeyMatched') is False
-                    and 0<=frame.get('sourceFrameAgeMs',999)<=150 and combat and combat['state']=='valid')
+                    and 0<=frame.get('sourceFrameAgeMs',999)<=150 and combat and combat['state']=='valid'
+                    and (args.anchor is None or ground and ground['state']=='valid' and ground['groundControlsConfirmed']))
                 if valid and args.require_single_enemy:
                     valid=not combat['redMaskOverloaded'] and len(combat['enemyBarCandidates'])==1
                 if valid:

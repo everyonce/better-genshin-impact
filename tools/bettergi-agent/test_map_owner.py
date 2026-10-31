@@ -213,6 +213,14 @@ class MapOwnerTest(unittest.TestCase):
         folder,result=self.create_next_handoff(prior,result,game,63)
         return prior,folder,result,game
 
+    def create_r64_successor(self):
+        """Seal R63 before preparing the one next package that carries the ground-control guard."""
+        previous,folder,result,game=self.create_r63_successor()
+        prior=folder/'map-owner-lineage.json'
+        write(prior,owner.replacement(previous,folder))
+        folder,result=self.create_next_handoff(prior,result,game,64)
+        return prior,folder,result,game
+
     def test_r60_handoff_keeps_the_same_game_and_rejects_stale_source(self):
         """The newly allowed successor still cannot reuse the discovery from before the R60 replacement."""
         prior,folder,result,game=self.create_r60_successor()
@@ -245,8 +253,8 @@ class MapOwnerTest(unittest.TestCase):
         self.assertEqual(receipt['priorLineageSha256'],hashlib.sha256(prior.read_bytes()).hexdigest())
         self.assertEqual(owner.load_map_owner(prior)['root'],self.ids['root'])
 
-    def test_r63_replays_original_root_and_game_but_rejects_a_seventh_transition(self):
-        """An independently replayed R63 receipt grants no authority to replace it with R64."""
+    def test_r63_replays_original_root_and_game(self):
+        """The historical R63 receipt remains independently replayable after the next extension."""
         prior,folder,result,game=self.create_r63_successor()
         receipt=owner.replacement(prior,folder)
         path=folder/'map-owner-lineage.json'
@@ -254,9 +262,48 @@ class MapOwnerTest(unittest.TestCase):
         self.assertEqual(owner.load_map_owner(path),dict(root=self.ids['root'],child=owner.identity(result['child'])))
         self.assertEqual(receipt['protectedGame'],game)
         self.assertEqual(receipt['priorLineageSha256'],hashlib.sha256(prior.read_bytes()).hexdigest())
-        later,_=self.create_next_handoff(path,result,game,64)
+    def test_r64_replays_original_root_and_game_but_rejects_an_eighth_transition(self):
+        """R64 extends the exact original lineage once; it grants no authority for R65."""
+        prior,folder,result,game=self.create_r64_successor()
+        receipt=owner.replacement(prior,folder)
+        path=folder/'map-owner-lineage.json'
+        write(path,receipt)
+        self.assertEqual(owner.load_map_owner(path),dict(root=self.ids['root'],child=owner.identity(result['child'])))
+        self.assertEqual(receipt['protectedGame'],game)
+        self.assertEqual(receipt['priorLineageSha256'],hashlib.sha256(prior.read_bytes()).hexdigest())
+        later,_=self.create_next_handoff(path,result,game,65)
         with self.assertRaisesRegex(ValueError,'bounded'):owner.replacement(path,later)
-        with self.assertRaisesRegex(ValueError,'Unsupported map release'):owner.target_package(64)
+        with self.assertRaisesRegex(ValueError,'Unsupported map release'):owner.target_package(65)
+
+    def test_r64_retains_the_sealed_game_and_rejects_busy_or_circular_predecessors(self):
+        """The added transition cannot replace a different game, an active child or its own predecessor."""
+        prior,folder,_,game=self.create_r64_successor()
+        before=json.loads((folder/'before.json').read_bytes())
+        for field,value in (('startedFileTime',1),('processId',888),('executable','YuanShen.exe')):
+            write(folder/'game-before.json',dict(game,**{field:value}))
+            with self.subTest(field=field),self.assertRaisesRegex(ValueError,'sealed R63 game lifetime'):
+                owner.replacement(prior,folder)
+        write(folder/'game-before.json',game)
+        changed=deepcopy(before)
+        changed['instances'][1]['serviceOwnsPilot']=True
+        write(folder/'before.json',changed)
+        with self.assertRaises(ValueError):owner.replacement(prior,folder)
+        write(folder/'before.json',before)
+        receipt=json.loads(prior.read_bytes())
+        write(prior,dict(receipt,prior=str(prior)))
+        with self.assertRaisesRegex(ValueError,'bounded'):owner.replacement(prior,folder)
+
+    def test_r64_clean_target_preserves_exact_english_capture_defaults(self):
+        """R64 accepts only the same public capture and fresh English settings as R62/R63."""
+        _,_,result,_=self.create_r64_successor()
+        build,_=owner.target_package(64)
+        config=Path(result['selectedPackage']['targetDirectory'])/'User/config.json'
+        write(config,owner.R62_CLEAN_CAPTURE)
+        self.assertEqual(owner.check_clean_target(build),hashlib.sha256(config.read_bytes()).hexdigest())
+        changed=deepcopy(owner.R62_CLEAN_CAPTURE)
+        changed['otherConfig']['uiCultureInfoName']='zh-CN'
+        write(config,changed)
+        with self.assertRaisesRegex(ValueError,'Unexpected target capture settings'):owner.check_clean_target(build)
 
     def test_r63_rejects_substituted_game_and_stale_or_busy_owners(self):
         """Matching new evidence cannot substitute the protected game or reuse another controller owner."""

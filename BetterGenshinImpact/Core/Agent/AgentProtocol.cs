@@ -100,6 +100,9 @@ public sealed record AgentObservation(long FrameId, double CapturedAtMs, int Sou
     /// <summary>Separate host evidence; omission preserves the existing WGC and unknown-backend wire shape.</summary>
     [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
     public AgentHostSnapshot? HostSnapshot { get; init; }
+    /// <summary>Optional server-produced same-source control layout; clients cannot populate observations.</summary>
+    [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+    public AgentGroundControlEvidence? GroundControlEvidence { get; init; }
 }
 
 /// <summary>Template-only evidence from the exact image being published, never supplied by a client.</summary>

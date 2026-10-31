@@ -159,6 +159,8 @@ class ScoutSessionTests(unittest.TestCase):
     def make_review(self, route, spec=None):
         """Join one explicit review to fresh immutable native-plan, image and observation fixtures."""
         self.reviews+=1
+        manifest_path=self.settings.directory/'manifest.json'
+        ground_required=(manifest_path.is_file() and 'scoutGroundControlPolicy' in json.loads(manifest_path.read_bytes()))
         folder=self.live/f'review-{self.reviews}'
         folder.mkdir()
         image=folder/'01-frame-000000000001.png'
@@ -175,8 +177,7 @@ class ScoutSessionTests(unittest.TestCase):
                 frameWorldReadiness=dict(ready=True,sourceFrameId=number,sourceFrame=source,epoch=1),
                 worldReadiness=dict(ready=True),motionEvidence=dict(status='normal',spaceKeyMatched=False),
                 executionContext=dict(lastSequence=0)))
-        write_json(folder/'plan.json',dict(owner=self.owner,enableInput=False,modelLoaded=False,
-                                         navigationProfile=scout.SCOUT_PROFILE))
+        plan=dict(owner=self.owner,enableInput=False,modelLoaded=False,navigationProfile=scout.SCOUT_PROFILE)
         result=dict(status='completed',inputEnabled=False,modelLoaded=False,
             ownerIdleMinimizedAfter=True,stableSamples=frames,observations=frames)
         if getattr(self,'native_contract_version',1)==2:
@@ -189,6 +190,15 @@ class ScoutSessionTests(unittest.TestCase):
                 evidence=native_frame(2)['combatEvidence']
                 evidence.update(frameId=frame['frameId'],sourceFrame=copy.deepcopy(source),enemyBarCandidates=[])
                 frame.update(type='frame',sourceWidth=1920,sourceHeight=1080,combatEvidence=evidence)
+        if ground_required:
+            from test_native_ground_control import attach_ground,ground_png
+            from native_ground_control import CAPABILITY,policy
+            frames[:]=[attach_ground(frame) for frame in frames]
+            image.write_bytes(ground_png());image_sha=scout.file_sha(image)
+            plan['scoutGroundControlPolicy']=policy()
+            result.update(nativeGroundControlObservation=copy.deepcopy(CAPABILITY),
+                nativeGroundControlGate=dict(type='groundControlLayout',requiredForInput=True,capability=copy.deepcopy(CAPABILITY)))
+        write_json(folder/'plan.json',plan)
         write_json(folder/'result.json',result)
         write_json(image.with_suffix('.json'),dict(frames[0],imageSha256=image_sha))
         path=folder/'review.json'
@@ -219,6 +229,15 @@ class ScoutSessionTests(unittest.TestCase):
         result_path=review.parent/'result.json';result=json.loads(result_path.read_bytes())
         result.pop('nativeCombatObservation');write_json(result_path,result)
         with self.assertRaisesRegex(ValueError,'negotiation changed'):scout.review_evidence(review,manifest,0)
+
+    def test_new_ground_worker_cannot_admit_a_historical_normal_motion_review(self):
+        """Historical normal motion remains readable evidence, but cannot authorize new ground-only scouting."""
+        from native_ground_control import policy as ground_policy
+        route=scout.SCOUT_GRASS_ROUTE;review=self.make_review(route)
+        manifest=dict(owner=self.owner,routes={route:[list(point) for point in scout.route_points(route)]},
+                      scoutEncounterGuardPolicy=scout.guard_policy(),scoutGroundControlPolicy=ground_policy())
+        with self.assertRaisesRegex(ValueError,'ground-control scene declaration is missing'):
+            scout.review_evidence(review,manifest,0)
 
     def driver(self, watch):
         """Simulate separately supplied requests only after each prior leg has fully returned."""
@@ -257,6 +276,9 @@ class ScoutSessionTests(unittest.TestCase):
         if self.admit_guard:
             from test_scout_encounter_guard import sample
             frame=sample(health=args.scout_encounter_guard['baselineHealthFraction'],version=args.scout_encounter_guard['policy']['version'])
+            if 'nativeGroundControlObservation' in args.scout_encounter_guard:
+                from test_native_ground_control import attach_ground
+                frame=attach_ground(frame)
             control.scout_encounter_guard.observe(frame,1)
             control.scout_encounter_guard.check_dispatch(frame,2)
         policy.history.append('prior-leg-history')
@@ -686,6 +708,8 @@ class ScoutSessionTests(unittest.TestCase):
             for frame in native['observations']+native['stableSamples']:
                 frame['sourceFrame']['timestamp100ns']=frame['frameId']*1_000_000
                 frame['frameWorldReadiness']['sourceFrame']['timestamp100ns']=frame['frameId']*1_000_000
+                if frame.get('groundControlEvidence'):
+                    frame['groundControlEvidence']['sourceFrame']=copy.deepcopy(frame['sourceFrame'])
             write_json(endpoint/'result.json',native)
             metadata_path=endpoint/Path(value['imageName']).with_suffix('.json')
             metadata=json.loads(metadata_path.read_bytes());metadata['sourceFrame']['timestamp100ns']=1_000_000

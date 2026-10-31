@@ -40,6 +40,12 @@ public sealed class AgentStreamWireTests
         Assert.Equal(new[] { "unknown", "normal", "climb", "fly" }, hello["motionEvidence"]!["statuses"]!.Values<string>());
         Assert.False(hello["motionEvidence"]!["normalIsGroundedProof"]!.Value<bool>());
         Assert.True(hello["motionEvidence"]!["sameFrame"]!.Value<bool>());
+        Assert.Equal(1, hello["groundControlObservation"]!["version"]!.Value<int>());
+        Assert.Equal(AgentGroundControlEvidence.MethodName, hello["groundControlObservation"]!["method"]!.Value<string>());
+        Assert.Equal(1920, hello["groundControlObservation"]!["sourceWidth"]!.Value<int>());
+        Assert.Equal(1080, hello["groundControlObservation"]!["sourceHeight"]!.Value<int>());
+        Assert.False(hello["groundControlObservation"]!["authorizesInput"]!.Value<bool>());
+        Assert.False(hello["groundControlObservation"]!["physicallyGrounded"]!.Value<bool>());
         Assert.True(hello["worldReadiness"]!["requiredForInput"]!.Value<bool>());
         Assert.Equal(2, hello["worldReadiness"]!["confirmationFrames"]!.Value<int>());
         Assert.Equal(150, hello["worldReadiness"]!["maxAgeMs"]!.Value<double>());

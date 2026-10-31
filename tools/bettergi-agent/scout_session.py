@@ -32,6 +32,8 @@ from run_patrol_series import SeriesGuard
 from reviewed_scout_route import ReviewedScoutRoute,reviewed_route_policy,require_navigation_review_scene
 from scout_encounter_guard import binding_from_review,guard_policy,supported_guard_policies,declared_guard_policies
 from native_combat import scene_capability,validate_frame as validate_combat_frame
+from native_ground_control import (policy as ground_policy,scene_capability as ground_scene_capability,
+    require_ground_frame,source_contract as ground_source_contract)
 from episode_split import reserve_split
 from audit_scout_obstacle import (OBSTACLE_ERROR, audit_failed_prefix, recovery_policy,
                                  source_contract, verify_recovery_request)
@@ -97,6 +99,8 @@ def model_contract(args):
     checkpoint_sha=file_sha(checkpoint)
     require(checkpoint_sha==OPEN_P2P_SHA256,'The scout session requires the exact deployed Open P2P checkpoint')
     contract=dict(arguments=immutable_arguments(args),checkpointSha256=checkpoint_sha,goalSha256=file_sha(goal))
+    if getattr(args,'require_ground_control_layout',False):
+        contract.update(groundControlPolicy=ground_policy(),groundControlSourceSha256=ground_source_contract())
     if getattr(args,'p2p_executed_history',False):
         from p2p_executed_history import executed_history_policy
         contract.update(executedHistorySourceSha256=executed_history_sources(),
@@ -315,6 +319,7 @@ def leg_arguments(settings, owner, route, folder, binding, remaining_mib, review
     args=client.parse_arguments(argv)
     args.patrol_series_binding=runtime.parse_series_binding(binding) if binding else None
     args.record_max_mib=remaining_mib
+    args.require_ground_control_layout=True
     return args
 
 
@@ -384,7 +389,13 @@ def review_evidence(path, manifest, after_ns):
             and result.get('modelLoaded') is False and result.get('ownerIdleMinimizedAfter') is True
             and len(result.get('stableSamples',[]))==3 and not result.get('error'), 'The passive endpoint did not complete cleanly')
     native_capability=scene_capability(result)
-    guard_binding=binding_from_review(review,review_sha,native_capability)
+    ground_capability=ground_scene_capability(result,required='scoutGroundControlPolicy' in manifest)
+    require(('scoutGroundControlPolicy' in manifest)==(ground_capability is not None)
+            and (ground_capability is None or manifest['scoutGroundControlPolicy']==ground_policy()),
+            'Reviewed ground-control declaration differs from the worker')
+    if ground_capability is not None:
+        require(plan.get('scoutGroundControlPolicy')==ground_policy(),'Passive plan omitted its ground-control policy')
+    guard_binding=binding_from_review(review,review_sha,native_capability,ground_capability)
     if native_capability['version']==2 or 'scoutEncounterGuardPolicy' in manifest:
         require(guard_binding['policy'] in declared_guard_policies(manifest),
                 'This worker did not declare the reviewed native guard version')
@@ -392,6 +403,7 @@ def review_evidence(path, manifest, after_ns):
     for frame in samples:
         require(frame in result.get('observations',[]),'Stable scene sample is not an original native observation')
         qualify_review_frame(frame,points[0],profile)
+        if ground_capability is not None:require_ground_frame(frame,replay_pixels=True)
     for before,after in zip(samples,samples[1:]):
         a,b=before['sourceFrame'],after['sourceFrame']
         p,q=before['navigationPose'],after['navigationPose']
@@ -410,7 +422,7 @@ def review_evidence(path, manifest, after_ns):
     require(joined and all(frame.get('sourceFrame')==metadata.get('sourceFrame') for frame in joined),
             'The reviewed image is not joined to its original native source')
     # Repeated polls may age the same pixels, but cannot change their immutable recognition/source evidence.
-    fields=('frameId','sourceFrame','navigationPose','frameWorldReadiness','motionEvidence')
+    fields=('frameId','sourceFrame','navigationPose','frameWorldReadiness','motionEvidence','groundControlEvidence')
     identity={key:joined[0].get(key) for key in fields}
     require(all({key:frame.get(key) for key in fields}==identity for frame in joined),
             'Repeated image polls contain conflicting source or recognition evidence')
@@ -421,6 +433,9 @@ def review_evidence(path, manifest, after_ns):
         qualified.append(frame)
     require(qualified,'The reviewed image has no fresh qualified world-readiness observation')
     selected=min(qualified,key=lambda frame:frame['sourceFrameAgeMs'])
+    if ground_capability is not None:
+        from native_ground_control import verify_image_crops
+        verify_image_crops(image,selected)
     if native_capability['version']==2:
         require(validate_combat_frame(selected,native_capability) is not None,
                 'Reviewed v2 image lacks its exact native evidence')
@@ -571,12 +586,15 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
         configuration=model_contract(base)
         if 'executedHistorySourceSha256' in configuration:
             archive_executed_history_sources(directory,configuration['executedHistorySourceSha256'])
+        if 'groundControlSourceSha256' in configuration:
+            archive_executed_history_sources(directory,configuration['groundControlSourceSha256'])
         checkpoint_stamp=file_stamp(base.checkpoint)
         manifest=dict(version=1,sessionId=session_id,owner=owner,worker=dict(processId=os.getpid(),windowsSessionId=owner['child']['windowsSessionId']),
             routes={route:[list(point) for point in route_points(route)] for route in routes},navigationProfile=profile,
             modelConfigurationSha256=canonical_sha(configuration),configuration=configuration,
             stopTemperatureC=78,sourceFreshnessMs=150,actionHoldMs=base.action_hold_ms,legDeadlineSeconds=35,sessionSeconds=settings.seconds,
-            scoutEncounterGuardPolicy=guard_policy(),scoutEncounterGuardPolicies=supported_guard_policies())
+            scoutEncounterGuardPolicy=guard_policy(),scoutEncounterGuardPolicies=supported_guard_policies(),
+            scoutGroundControlPolicy=ground_policy())
         manifest.update(history_declaration(base))
         if getattr(settings,'allow_reviewed_routes',False):manifest['reviewedScoutRoutePolicy']=reviewed_route_policy(profile)
         if getattr(settings,'allow_inspected_obstacle_recovery',False):
@@ -607,6 +625,9 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
                 'Cached scout scope or leg deadline changed')
         require(file_stamp(args.checkpoint)==checkpoint_stamp and file_sha(args.goal_embedding)==configuration['goalSha256'],
                 'Cached checkpoint or instruction bytes changed')
+        require(configuration.get('groundControlPolicy')==ground_policy()
+                and configuration.get('groundControlSourceSha256')==ground_source_contract(),
+                'Ground-control policy or runtime source changed')
         if 'recoverySourceSha256' in manifest:
             require(source_contract()==manifest['recoverySourceSha256'],'Inspected recovery runtime source changed')
         if 'executedHistorySourceSha256' in configuration:
@@ -631,7 +652,8 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
         proof=dict(version=1,kind='scout-policy-session',sessionId=session_id,worker=manifest['worker'],owner=owner,navigationProfile=profile,
                    modelConfigurationSha256=manifest['modelConfigurationSha256'],configuration=configuration,
                    checkpointSha256=OPEN_P2P_SHA256,modelLoads=1,modelLoadSeconds=state['modelLoadSeconds'],
-                   scoutEncounterGuardPolicy=guard_policy(),scoutEncounterGuardPolicies=copy.deepcopy(manifest['scoutEncounterGuardPolicies']))
+                   scoutEncounterGuardPolicy=guard_policy(),scoutEncounterGuardPolicies=copy.deepcopy(manifest['scoutEncounterGuardPolicies']),
+                   scoutGroundControlPolicy=ground_policy())
         proof.update(history_declaration(base))
         if 'reviewedScoutRoutePolicy' in manifest:proof['reviewedScoutRoutePolicy']=manifest['reviewedScoutRoutePolicy']
         if 'inspectedObstacleRecoveryPolicy' in manifest:

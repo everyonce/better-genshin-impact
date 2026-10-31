@@ -921,9 +921,10 @@ def validate_combat_trial_options(args, policy, control):
 class CombatTrialRecorder:
     """Make any lost combat label or source pixels terminal instead of continuing inference."""
 
-    def __init__(self, recorder):
+    def __init__(self, recorder, scope='Combat trial'):
         """Wrap only this explicit trial's existing bounded recorder."""
         self.recorder = recorder
+        self.scope = scope
 
     def __getattr__(self, name):
         """Keep the ordinary recorder's status and finalization interface intact."""
@@ -935,7 +936,7 @@ class CombatTrialRecorder:
                   ('dropped', 'dropped_events', 'dropped_observations', 'abandoned_frames')}
         losses = {name: value for name, value in losses.items() if type(value) is not int or value != 0}
         if result is False or self.recorder.error or losses:
-            raise RuntimeError('Combat trial ' + label + ' retention failed: ' + str(self.recorder.error)
+            raise RuntimeError(self.scope + ' ' + label + ' retention failed: ' + str(self.recorder.error)
                                + ('; counters=' + str(losses) if losses else ''))
 
     def event(self, item):
@@ -1831,6 +1832,7 @@ def run_episode(args, policy=None, control=None):
             if getattr(args, 'hybrid_navigation', False):
                 hybrid = HybridNavigation(configured['capability'], route_id,
                     remember_bypass=getattr(args, 'remember_hybrid_bypass', False),
+                    **({'require_ground_controls':True} if scout_guard is not None and scout_guard.ground_capability is not None else {}),
                     **({'action_hold_ms': args.action_hold_ms} if executed_history else {}),
                     navigation_profile=navigation_profile, reviewed_scout_route=getattr(args,'reviewed_scout_route',None), **itinerary)
                 report['hybridNavigation'] = hybrid.snapshot()
@@ -1842,6 +1844,11 @@ def run_episode(args, policy=None, control=None):
                 validate_combat_capability(native_combat_capability,scout_guard.native_capability)
             report['nativeCombatObservation'] = copy.deepcopy(native_combat_capability)
             report['nativeCombatEvidenceFrames'] = 0
+        if getattr(args,'require_ground_control_layout',False) and (scout_guard is None or scout_guard.ground_capability is None):
+            raise RuntimeError('Ground-only scout input requires its immutable reviewed control-layout binding')
+        if scout_guard is not None and scout_guard.ground_capability is not None:
+            from native_ground_control import negotiate as negotiate_ground
+            report['nativeGroundControlObservation'],report['nativeGroundControlGate']=negotiate_ground(bridge)
         if getattr(args, 'inspect_junction_map', False) or getattr(args,'recover_junction_map',False):
             from map_inspection_client import inspect_before_navigation
             if not warm or warm.itinerary_start != 'sidewalk-junction' or warm.destinations != ('west-lamp','sidewalk-junction'):
@@ -1884,6 +1891,9 @@ def run_episode(args, policy=None, control=None):
                                           preview=args.preview, retain_policy_rgb=getattr(args,'retain_policy_rgb',False)) if args.record_dir else None
         if combat_guard is not None:
             recorder = CombatTrialRecorder(recorder)
+        elif scout_guard is not None and scout_guard.ground_capability is not None and not executed_history:
+            if recorder is None:raise ValueError('Ground-control scout requires bounded retained source evidence')
+            recorder = CombatTrialRecorder(recorder,scope='Ground-control scout')
         if executed_history:
             recorder = ExecutedHistoryRecorder(recorder)
         if climb:
@@ -2098,6 +2108,9 @@ def run_episode(args, policy=None, control=None):
                             verify_frame(metadata, pixels, profile_contract)
                             from native_combat import validate_frame
                             validate_frame(metadata,native_combat_capability)
+                            if scout_guard.ground_capability is not None:
+                                from native_ground_control import validate_frame as validate_ground_frame
+                                validate_ground_frame(metadata)
                             if len(pixels) != metadata['width'] * metadata['height'] * 3:
                                 raise ValueError('Trigger RGB payload does not match declared dimensions')
                             metadata['clientReceivedNs'] = arrived
@@ -2464,8 +2477,9 @@ def run_episode(args, policy=None, control=None):
             if executed_history:
                 recorder.check()
             if recorder and recorder.error and not recording_error_reported:
-                if combat_guard is not None:
-                    raise RuntimeError('Combat trial recording failed: ' + str(recorder.error))
+                if combat_guard is not None or scout_guard is not None and scout_guard.ground_capability is not None:
+                    scope='Combat trial' if combat_guard is not None else 'Ground-control scout'
+                    raise RuntimeError(scope+' recording failed: ' + str(recorder.error))
                 print(json.dumps({'recordingError': recorder.error, 'inferenceContinues': True}), file=sys.stderr, flush=True)
                 recording_error_reported = True
             if not sleep_until(min(cadence.next_at, deadline), stopped) or time.perf_counter() >= deadline:

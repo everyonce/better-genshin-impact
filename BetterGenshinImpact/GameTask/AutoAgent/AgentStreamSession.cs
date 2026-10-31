@@ -85,6 +85,8 @@ public sealed class AgentStreamSession
     private bool _navigationGuidanceEnabled;
     /// <summary>Optional same-image HUD analysis; ordinary streams do not pay its native pixel-processing cost.</summary>
     private bool _combatObservationEnabled;
+    /// <summary>Explicit one-way ground-only gate; historical streams retain their original motion semantics.</summary>
+    private bool _groundControlEnabled;
     /// <summary>Published before the enable flag and immutable once the capture thread may construct its recognizer.</summary>
     private string _navigationProfileId = AgentNavigationProfile.Courtyard;
     /// <summary>Explicit one-shot UI authority; ordinary actions always use the original world guard.</summary>
@@ -216,6 +218,13 @@ public sealed class AgentStreamSession
             var recognitionMs = Stopwatch.GetElapsedTime(recognitionStarted).TotalMilliseconds;
             var observation = new AgentObservation(frameId, capturedAt, source.Width, source.Height, evidence, recognitionMs, sourceFrame)
             { HostSnapshot = hostSnapshot };
+            if (Volatile.Read(ref _groundControlEnabled))
+            {
+                // Raw HUD evidence is inspected before readiness confirmation; otherwise the new gate could never bootstrap.
+                var rawMotion = AgentMotionRecognizer.Recognize(source, evidence == AgentWorldEvidence.WorldHud);
+                observation = observation with
+                { GroundControlEvidence = AgentGroundControlRecognizer.Recognize(source, observation, rawMotion) };
+            }
             // A negative frame releases input before RGB conversion or transport can delay it.
             var readiness = controller.RegisterFrame(observation, NowMs);
             // Inspect these same native pixels after the safety gate; never take another capture for motion hints.
@@ -436,6 +445,19 @@ public sealed class AgentStreamSession
                     await WriteAsync(pipe, new { type = "combatObservation", enabled = true,
                         capability = AgentCombatRecognizer.Capability }, null, ct);
                     break;
+                case "requireGroundControlLayout":
+                    try
+                    {
+                        if (_experimentalQueuedStepApplications)
+                            throw new InvalidOperationException("ground_control_queue_unsupported");
+                        controller.RequireGroundControlLayout(NowMs);
+                        Volatile.Write(ref _groundControlEnabled, true);
+                    }
+                    catch (InvalidOperationException error)
+                    { await WriteAsync(pipe, new { type = "rejected", reason = error.Message }, null, ct); break; }
+                    await WriteAsync(pipe, new { type = "groundControlLayout", requiredForInput = true,
+                        capability = AgentGroundControlRecognizer.Capability }, null, ct);
+                    break;
                 case "enableStepApplications":
                     JObject confirmation;
                     try
@@ -477,6 +499,7 @@ public sealed class AgentStreamSession
                                 motionEvidence = MotionForReadiness(frame.MotionEvidence, frame.Readiness, currentReadiness),
                                 navigationPose = frame.NavigationPose,
                                 combatEvidence = frame.CombatEvidence,
+                                groundControlEvidence = frame.Observation.GroundControlEvidence,
                                 frame.Observation.SourceFrame,
                                 sourceTimestampKind = frame.Observation.SourceFrame is null ? "unknown" : "wgc_reported_compositor_qpc",
                                 sourceFrameAgeMs = frame.Observation.SourceFrame is { } sourceTiming
@@ -597,6 +620,7 @@ public sealed class AgentStreamSession
         supportsReadinessSnapshots = true, diagnostics = _snapshots.Snapshot(),
         navigationGuidance = AgentNavigationRecognizer.Capability,
         combatObservation = AgentCombatRecognizer.Capability,
+        groundControlObservation = AgentGroundControlRecognizer.Capability,
         navigationProfiles = new[] { AgentNavigationProfile.Courtyard, AgentNavigationProfile.MondstadtSurface,
             AgentNavigationProfile.MondstadtCombatScout, AgentNavigationProfile.MondstadtNorthCombatScout },
         worldReadiness = new

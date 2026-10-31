@@ -34,7 +34,7 @@ def declared_guard_policies(document):
     return supported_guard_policies()
 
 
-def binding_from_review(review, review_sha, capability=None):
+def binding_from_review(review, review_sha, capability=None, ground_capability=None):
     """Bind the estimated-health threshold to the exact manually inspected review bytes."""
     health, maximum = review.get('inspectedHealth'), review.get('inspectedMaximumHealth')
     if (type(health) is not int or type(maximum) is not int or not 0 < health <= maximum
@@ -44,6 +44,10 @@ def binding_from_review(review, review_sha, capability=None):
     binding=dict(policy=guard_policy(contract), reviewSha256=review_sha, inspectedHealth=health,
                  inspectedMaximumHealth=maximum, baselineHealthFraction=health/maximum)
     if contract['version']==2:binding['nativeCombatObservation']=contract
+    if ground_capability is not None:
+        from native_ground_control import validate_capability as validate_ground_capability,policy as ground_policy
+        binding.update(nativeGroundControlObservation=validate_ground_capability(ground_capability),
+                       groundControlPolicy=ground_policy())
     return binding
 
 
@@ -51,7 +55,8 @@ def validate_binding(binding):
     """Reject changed settings, extra fields and a baseline detached from its reviewed integer health."""
     if not isinstance(binding, dict):
         raise ValueError('Scout encounter guard binding or fixed settings changed')
-    expected=binding_from_review(binding,binding.get('reviewSha256'),binding.get('nativeCombatObservation'))
+    expected=binding_from_review(binding,binding.get('reviewSha256'),binding.get('nativeCombatObservation'),
+                                 binding.get('nativeGroundControlObservation'))
     if binding!=expected:
         raise ValueError('Scout encounter guard binding or fixed settings changed')
     # Equality alone treats True as 1; canonical JSON also binds the numeric and boolean types.
@@ -75,7 +80,7 @@ def sensor_frame(frame):
         if isinstance(value,list):return [retained(item) for item in value]
         return value
     return retained({key: frame[key] for key in ('type', 'frameId', 'sourceFrame', 'sourceWidth',
-        'sourceHeight', 'sourceFrameAgeMs', 'combatEvidence') if key in frame})
+        'sourceHeight', 'sourceFrameAgeMs', 'combatEvidence', 'groundControlEvidence') if key in frame})
 
 
 class ScoutEncounterStop(RuntimeError):
@@ -88,6 +93,7 @@ class ScoutEncounterGuard:
         """Start released with no admitted health evidence, preserving the original reviewed binding."""
         self.binding = validate_binding(binding)
         self.native_capability=validate_capability(self.binding.get('nativeCombatObservation',CAPABILITY))
+        self.ground_capability=self.binding.get('nativeGroundControlObservation')
         self.sha256 = binding_sha(binding)
         self._lock = threading.RLock()
         self.intake_lock = self._lock
@@ -104,11 +110,17 @@ class ScoutEncounterGuard:
     def snapshot(self):
         """Publish detached scalar state and the original triggering metadata before reader teardown."""
         with self._lock:
-            return dict(bindingSha256=self.sha256, observations=self.observations,
+            result=dict(bindingSha256=self.sha256, observations=self.observations,
                         distinctSources=self.distinct_sources, admitted=self.admitted,
                         armed=self.armed, releases=self.releases, lastRelease=copy.deepcopy(self.last_release),
                         state='tripped' if self.trip else 'ready' if self.reason=='healthyNativeEvidence' else 'waiting',
                         reason=self.reason, lastObservation=copy.deepcopy(self.last), trip=copy.deepcopy(self.trip))
+            # Exact inline pixels remain in the observation event and recorder frame, not every repeated state snapshot.
+            if self.ground_capability is not None:
+                for item in (result['lastObservation'],result['trip']):
+                    for crop in ((item or {}).get('frame',{}).get('groundControlEvidence') or {}).get('crops',[]):
+                        crop.pop('rgbBase64',None)
+            return result
 
     def observe(self, frame, received_ns):
         """Inspect every poll, including repeated sources; absent startup sensors never grant admission."""
@@ -121,6 +133,12 @@ class ScoutEncounterGuard:
                          bindingSha256=self.sha256, clientReceivedNs=received_ns, frame=retained)
             reason, unavailable, evidence = None, False, None
             try:
+                ground=None
+                if self.ground_capability is not None:
+                    from native_ground_control import validate_frame as validate_ground_frame
+                    ground=validate_ground_frame(frame) if frame.get('type')=='frame' else None
+                elif frame.get('groundControlEvidence') is not None:
+                    raise ValueError('Undeclared native ground-control evidence')
                 evidence = validate_frame(frame,self.native_capability) if frame.get('type') == 'frame' else None
                 if evidence is None or evidence['state'] == 'unavailable':
                     reason, unavailable = 'nativeSensorUnavailable', True
@@ -138,6 +156,8 @@ class ScoutEncounterGuard:
                                                        if key not in ('frameId', 'recognitionMs')}
                             if source != prior or immutable(evidence) != immutable(before['combatEvidence']):
                                 reason = 'nativeSensorEvidenceChanged'
+                            elif self.ground_capability is not None and immutable(ground or {})!=immutable(before.get('groundControlEvidence') or {}):
+                                reason = 'nativeGroundControlEvidenceChanged'
                     if reason is None:
                         if evidence['redMaskOverloaded']:
                             reason = 'ambiguousEnemyBarEvidence'
@@ -153,6 +173,14 @@ class ScoutEncounterGuard:
                         if before is None or source['timestamp100ns'] > before['sourceFrame']['timestamp100ns']:
                             self.distinct_sources += 1
                         self.last = dict(index=self.observations, clientReceivedNs=received_ns, frame=retained)
+                if self.ground_capability is not None:
+                    # A positive swim/contradictory layout must win even when the native input gate made combat unavailable.
+                    if ground is not None and ground['state']=='valid' and not ground['groundControlsConfirmed']:
+                        reason,unavailable=('swimControlHint' if ground['swimHintPixels']>=4 else 'groundControlsUnconfirmed'),False
+                    elif ground is not None and ground['reason']=='unsupported_geometry':
+                        reason,unavailable='groundControlGeometryUnsupported',False
+                    elif ground is None or ground['state']=='unavailable':
+                        if reason is None or unavailable:reason,unavailable='groundControlEvidenceUnavailable',True
             except (ValueError, TypeError, KeyError, AttributeError, OverflowError) as error:
                 reason = 'invalidNativeSensorEvidence'
                 event['validationError'] = str(error)[:512]
@@ -189,6 +217,11 @@ class ScoutEncounterGuard:
         with self._lock:
             if self.trip:
                 raise ScoutEncounterStop('Scout encounter guard: '+self.trip['reason'])
+            if self.ground_capability is not None:
+                from native_ground_control import require_ground_frame
+                try:require_ground_frame(frame)
+                except (ValueError,TypeError,KeyError) as error:
+                    raise ScoutEncounterStop('Scout encounter guard: ground-control dispatch evidence unavailable') from error
             evidence = validate_frame(frame,self.native_capability)
             if (self.reason!='healthyNativeEvidence' or self.last is None
                     or evidence is None or evidence['state'] != 'valid'

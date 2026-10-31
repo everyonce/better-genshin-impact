@@ -39,11 +39,12 @@ class HybridNavigation:
 
     def __init__(self, capability, route_id=COURTYARD_ROUTE, remember_bypass=False, *,
                  itinerary_destinations=None, itinerary_start='stair-front', stationary_photo_retries=False,
-                 navigation_profile=PROFILE, reviewed_scout_route=None, action_hold_ms=100):
+                 navigation_profile=PROFILE, reviewed_scout_route=None, action_hold_ms=100, require_ground_controls=False):
         # Short receipt-serialized trials change the hold, never the one-shot mouse delta.
         if type(action_hold_ms) is not int or action_hold_ms not in (50,60,100):
             raise ValueError('Hybrid navigation requires a 50, 60 or 100 ms action hold')
         self.action_hold_ms=action_hold_ms
+        self.require_ground_controls=require_ground_controls
         validate_capability(capability,navigation_profile)
         self.reviewed_scout_route=reviewed_scout_route
         if reviewed_scout_route is not None:
@@ -126,6 +127,7 @@ class HybridNavigation:
                     lastPose=copy.deepcopy(self.last_pose))
         if self.reviewed_scout_route is not None:
             result.update(routeSpec=self.reviewed_scout_route.document(),routeSpecSha256=self.reviewed_scout_route.sha256)
+        if self.require_ground_controls:result['requireGroundControls']=True
         if self.destinations:
             result.update(completedDestinations=self.completed_destinations, **self.segment)
         elif self.segment:
@@ -506,6 +508,11 @@ class HybridNavigation:
                 self._fail('destination_photo_deadline')
             if not self.latest_pose_usable(frame):
                 self._fail('destination_photo_pose_unavailable')
+        if self.require_ground_controls:
+            from native_ground_control import validate_frame as validate_ground_frame
+            controls=validate_ground_frame(frame)
+            if controls is None or controls['state']=='unavailable':return 'groundControlsUnavailable'
+            if not controls['groundControlsConfirmed']:self._fail('ground_controls_unconfirmed')
         pose = frame.get('navigationPose') or {}
         if pose.get('state') != 'valid' or pose.get('frameId') != frame.get('frameId'):
             return 'poseUnavailable'

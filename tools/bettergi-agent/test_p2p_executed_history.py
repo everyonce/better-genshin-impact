@@ -10,7 +10,7 @@ import torch
 from torch.utils import _pytree
 
 from model_adapters import OpenP2PAdapter
-from p2p_executed_history import (MODE, KEYBOARD, encode_controller_step, executed_history_policy,
+from p2p_executed_history import (MODE, KEYBOARD, ExecutedHistoryCadence, encode_controller_step, executed_history_policy,
                                   source_after_terminal, teacher_forced_step,
                                   validate_action_mapping, verify_completed_receipt)
 import test_p2p_action_codec as official
@@ -33,6 +33,69 @@ def receipt_fixture(selected=None):
                        index=0, startedAtMs=100.1, keys=selected['keys'][:],
                        mouseDx=selected['mouseDx'], mouseDy=selected['mouseDy'])])
     return request, accepted, receipt
+
+
+class ExecutedCadenceTests(unittest.TestCase):
+    """Sampling waits retain a prediction permit instead of spending another decision period."""
+    def test_startup_sampling_does_not_invent_prediction_slots(self):
+        cadence = ExecutedHistoryCadence(10, 1.)
+        for now in (1., 1.005, 1.04, 1.12):
+            cadence.advance(now)
+            self.assertAlmostEqual(cadence.next_at, now+.005)
+            self.assertAlmostEqual(cadence.remaining(now), .005)
+        cadence.prediction_started(1.125)
+        cadence.advance(1.15)
+        self.assertAlmostEqual(cadence.next_at, 1.225)
+
+    def test_repeated_source_waits_preserve_the_same_minimum_start_time(self):
+        cadence = ExecutedHistoryCadence(10, 0.)
+        cadence.prediction_started(0.)
+        for now in (.025, .060, .080):
+            cadence.advance(now)
+            self.assertAlmostEqual(cadence.next_at, .100)
+        for now in (.100, .105, .120):
+            cadence.advance(now)
+            self.assertAlmostEqual(cadence.next_at, now+.005)
+        cadence.prediction_started(.125)
+        cadence.advance(.150)
+        self.assertAlmostEqual(cadence.next_at, .225)
+
+    def test_slow_receipt_rebases_without_catchup_or_an_extra_full_period(self):
+        cadence = ExecutedHistoryCadence(10, 0.)
+        cadence.prediction_started(0.)
+        cadence.advance(.340)
+        self.assertAlmostEqual(cadence.next_at, .345)
+        cadence.prediction_started(.345)
+        cadence.advance(.350)
+        self.assertAlmostEqual(cadence.next_at, .445)
+        with self.assertRaisesRegex(RuntimeError, 'before its cadence'):
+            cadence.prediction_started(.400)
+        cadence.prediction_started(.445)
+        cadence.advance(.470)
+        self.assertAlmostEqual(cadence.next_at, .545)
+
+    def test_both_hold_lengths_share_the_prediction_rate_limit(self):
+        for hold in (50, 60):
+            with self.subTest(hold=hold):
+                cadence = ExecutedHistoryCadence(10, 0.)
+                cadence.prediction_started(0.)
+                # Receipt arrival includes inference and the commanded horizon;
+                # neither the terminal poll nor a source retry consumes a new slot.
+                cadence.advance(.025+hold/1000)
+                self.assertAlmostEqual(cadence.next_at, .100)
+                cadence.advance(.105)
+                self.assertAlmostEqual(cadence.next_at, .110)
+                cadence.prediction_started(.110)
+                cadence.advance(.120)
+                self.assertAlmostEqual(cadence.next_at, .210)
+
+    def test_invalid_frequencies_and_early_predictions_are_rejected(self):
+        for hz in (0, -1, True, float('nan'), float('inf'), '10'):
+            with self.subTest(hz=hz), self.assertRaises(ValueError):
+                ExecutedHistoryCadence(hz, 0.)
+        cadence = ExecutedHistoryCadence(10, 1.)
+        with self.assertRaisesRegex(RuntimeError, 'before its cadence'):
+            cadence.prediction_started(.99)
 
 
 class ExecutedCodecTests(unittest.TestCase):

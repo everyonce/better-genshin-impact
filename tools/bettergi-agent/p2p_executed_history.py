@@ -24,6 +24,31 @@ MOUSE_Y_EDGES = (-150.1, -24.1, -12.1, -7.1, -4.1, -3.1, -1.1, -.1,
                  0, 1, 3, 4, 7, 12, 24, 150)
 
 
+class ExecutedHistoryCadence:
+    """Limit prediction starts while polling post-terminal sources without another full period."""
+    def __init__(self, hz, now):
+        """Keep sampling waits separate from the next permitted model prediction."""
+        if type(hz) not in (int, float) or not math.isfinite(hz) or hz <= 0:
+            raise ValueError('Executed-history decision frequency must be finite and positive')
+        self.period = 1 / hz
+        self.next_at = self._next_prediction_at = now
+        self._wait_period = min(.005, self.period)
+
+    def remaining(self, now):
+        """Return the cancellable wait before the next control/source check."""
+        return max(0, self.next_at - now)
+
+    def prediction_started(self, now):
+        """Consume a decision slot only when the serial loop actually begins inference."""
+        if now < self._next_prediction_at - 1e-9:
+            raise RuntimeError('Executed-history prediction started before its cadence')
+        self._next_prediction_at = now + self.period
+
+    def advance(self, now):
+        """Retry sampling promptly after an overrun, without accumulating decision slots."""
+        self.next_at = max(self._next_prediction_at, now + self._wait_period)
+
+
 def executed_history_policy(hold_ms):
     """Return the immutable descriptor used by launch, reuse and offline replay."""
     if type(hold_ms) is not int or hold_ms not in (50, 60):

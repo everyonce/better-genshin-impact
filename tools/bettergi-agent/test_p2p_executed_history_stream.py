@@ -17,7 +17,7 @@ from hybrid_navigation import START, END
 from hybrid_routes import SCOUT_GRASS_ROUTE, route_heading
 from navigation_profiles import SCOUT_PROFILE
 from observation_profiles import P2P_NATIVE
-from p2p_executed_history import (MODE, ExecutedHistoryRecorder, encode_controller_step,
+from p2p_executed_history import (MODE, ExecutedHistoryCadence, ExecutedHistoryRecorder, encode_controller_step,
                                   validate_executed_history_options, verify_completed_receipt)
 from reviewed_scout_route import ReviewedScoutRoute
 from scout_encounter_guard import ScoutEncounterGuard
@@ -178,6 +178,38 @@ def run_fixture(folder, bridge=None, policy=None, recorder=None, *, control=None
     return result, json.loads((Path(folder)/'run.json').read_text(encoding='utf-8')), recorder, bridge, policy
 
 
+def delay_post_terminal_source(bridge, policy, interrupt=None):
+    """Repeat the last pre-terminal source twice, preserving its immutable fields and exact receipt."""
+    state = dict(saved=None, active=False, repeats=[], mainPollsWhileWaiting=[])
+    owner_thread, request = threading.get_ident(), bridge.request
+
+    def transform(row):
+        """Let only the normal background reader replace the temporarily repeated source."""
+        if not bridge.terminal_returned:
+            state['saved'] = copy.deepcopy(row)
+        elif len(bridge.actions) == 1 and len(state['repeats']) < 2:
+            current = row
+            row = copy.deepcopy(state['saved'])
+            row.update(receipts=copy.deepcopy(current.get('receipts', [])), serverNowMs=bridge.now())
+            row['sourceFrameAgeMs'] = row['serverNowMs']-row['sourceFrame']['capturedAtMs']
+            state['active'] = True
+            state['repeats'].append((len(policy.images), len(bridge.actions)))
+            if interrupt and len(state['repeats']) == 2:
+                row = interrupt(row, current)
+        else:
+            state['active'] = False
+        return row
+
+    def observed_request(command, **arguments):
+        """Expose accidental foreground frame polling during local-only source waits."""
+        if command == 'frame' and state['active'] and threading.get_ident() == owner_thread:
+            state['mainPollsWhileWaiting'].append(len(policy.images))
+        return request(command, **arguments)
+
+    bridge.user_transform, bridge.request = transform, observed_request
+    return state
+
+
 class SerializedStreamTests(unittest.TestCase):
     """Exercise native/model selection, exact terminal feedback and capture concurrency."""
     def test_three_completed_actions_preserve_history_and_verify_endpoint(self):
@@ -267,6 +299,91 @@ class SerializedStreamTests(unittest.TestCase):
             self.assertTrue(all(row['steps'][0]['durationMs'] == 60 for row in bridge.actions))
             self.assertTrue(all(row['rawPolicySteps'][0]['durationMs'] == 50 for row in report['decisions']))
             self.assertEqual(len(report['executedHistoryEvents']), 3)
+
+    def test_prediction_start_clock_limits_both_holds_without_pending_overlap(self):
+        for hold in (50, 60):
+            with self.subTest(hold=hold), tempfile.TemporaryDirectory() as folder:
+                bridge = HistoryBridge()
+                policy = HistoryPolicy(lambda:self.assertIsNone(bridge.pending))
+                args = inert_arguments(folder, hold=hold)
+                args.decision_hz, args.fps = 10., 20.
+                _, report, _, _, _ = run_fixture(folder, bridge, policy, args=args)
+                starts = [row['frameTiming']['predictionStartedAtClientNs'] for row in report['decisions']]
+                self.assertEqual(len(starts), 3)
+                # This is a minimum interval, with no assertion about host wakeup latency.
+                self.assertTrue(all(right-left >= 100_000_000-1 for left, right in zip(starts, starts[1:])))
+                self.assertEqual(report['executedHistoryScheduling']['policy'], 'prediction-start-minimum-v1')
+                self.assertEqual([row['history']['afterFrames'] for row in report['executedHistoryEvents']], [1, 2, 3])
+
+    def test_source_waits_keep_the_permit_and_do_not_force_poll_the_pipe(self):
+        with tempfile.TemporaryDirectory() as folder:
+            bridge, policy, trace = HistoryBridge(), HistoryPolicy(), []
+            delayed = delay_post_terminal_source(bridge, policy)
+            args = inert_arguments(folder)
+            args.decision_hz, args.fps = 10., 20.
+            advance = ExecutedHistoryCadence.advance
+
+            def observed_advance(cadence, now):
+                """Record scheduling arithmetic without mocking the clock or relaxing source admission."""
+                advance(cadence, now)
+                trace.append((now, cadence.next_at, len(policy.images), delayed['active']))
+
+            with patch.object(ExecutedHistoryCadence, 'advance', observed_advance):
+                _, report, _, _, _ = run_fixture(folder, bridge, policy, args=args)
+            self.assertEqual(delayed['repeats'], [(1, 1), (1, 1)])
+            self.assertEqual(delayed['mainPollsWhileWaiting'], [])
+            start = report['decisions'][0]['frameTiming']['predictionStartedAtClientNs']/1e9
+            overdue = [(now, next_at) for now, next_at, count, waiting in trace
+                       if count == 1 and waiting and now >= start+.1]
+            self.assertGreaterEqual(len(overdue), 2)
+            for now, next_at in overdue:
+                self.assertAlmostEqual(next_at, now+.005, places=7)
+            events = report['executedHistoryEvents']
+            self.assertEqual([row['history']['afterFrames'] for row in events], [1, 2, 3])
+            for before, after in zip(events, events[1:]):
+                self.assertGreater(after['observationTimestampMs'], before['receipt']['endedAtMs'])
+                self.assertGreater(after['frameId'], before['frameId'])
+                self.assertGreater(after['sourceFrame']['timestamp100ns'], before['sourceFrame']['timestamp100ns'])
+
+    def test_source_waits_still_observe_stop_pause_hazard_and_recording_failure(self):
+        for interruption in ('stop', 'pause', 'hazard', 'recording'):
+            with self.subTest(interruption=interruption), tempfile.TemporaryDirectory() as folder:
+                bridge, policy, triggered = HistoryBridge(), HistoryPolicy(), []
+                control = dormant_control(folder, frozen_goal=True)
+
+                class WaitingRecorder(HistoryRecorder):
+                    """Reject a sensor event only after the first action has terminal evidence."""
+                    def event(self, event):
+                        """A source wait must retain the same strict recorder gate as inference."""
+                        if interruption == 'recording' and triggered and event.get('type') == 'scoutEncounterGuardObservation':
+                            return False
+                        return super().event(event)
+
+                def interrupt(row, current):
+                    """Change authority or introduce fresh hazardous evidence while no source is eligible."""
+                    triggered.append(True)
+                    if interruption in ('stop', 'pause'):
+                        with control._lock:
+                            control._command, control._epoch = interruption, control._epoch+1
+                    elif interruption == 'hazard':
+                        row = current
+                        row['combatEvidence']['enemyBarCandidates'] = sample(candidates=True)['combatEvidence']['enemyBarCandidates']
+                    return row
+
+                delayed = delay_post_terminal_source(bridge, policy, interrupt)
+                args, recorder = inert_arguments(folder), WaitingRecorder()
+                args.decision_hz, args.fps = 10., 20.
+                if interruption == 'stop':
+                    _, report, _, _, _ = run_fixture(folder, bridge, policy, recorder, control=control, args=args)
+                    self.assertEqual(report['endReason'], 'userStop')
+                else:
+                    with self.assertRaises(Exception):
+                        run_fixture(folder, bridge, policy, recorder, control=control, args=args)
+                self.assertTrue(triggered)
+                self.assertEqual((len(bridge.actions), len(policy.images), len(policy.commits)), (1, 1, 1))
+                self.assertEqual(delayed['mainPollsWhileWaiting'], [])
+                self.assertTrue(bridge.released.is_set())
+                self.assertTrue(recorder.closed)
 
     def test_duplicate_and_unknown_receipts_cannot_authorize_another_prediction(self):
         for mutate in (lambda rows:rows+copy.deepcopy(rows),

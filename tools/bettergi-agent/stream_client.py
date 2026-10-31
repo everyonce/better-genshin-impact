@@ -1651,7 +1651,7 @@ def action_response_accepted(response, request_id, payload=b''):
 
 def run_episode(args, policy=None, control=None):
     """Run one owned bridge lease with an optional already-loaded model and live controls."""
-    from p2p_executed_history import (MODE as EXECUTED_HISTORY_MODE, ExecutedHistoryRecorder,
+    from p2p_executed_history import (MODE as EXECUTED_HISTORY_MODE, ExecutedHistoryCadence, ExecutedHistoryRecorder,
         encode_controller_step, executed_history_policy, source_after_terminal, validate_executed_history_options)
     executed_history = validate_executed_history_options(args, policy, control, require_bound=True)
     combat_binding = validate_combat_trial_options(args, policy, control)
@@ -2191,7 +2191,12 @@ def run_episode(args, policy=None, control=None):
         raise
     remaining = min(args.seconds, max(0, args.lease_deadline-time.monotonic())) if getattr(args, 'lease_deadline', None) else args.seconds
     deadline = time.perf_counter() + remaining
-    cadence = DecisionCadence(args.decision_hz, time.perf_counter(), resume_immediately=args.soft_cadence)
+    cadence = (ExecutedHistoryCadence(args.decision_hz, time.perf_counter()) if executed_history else
+               DecisionCadence(args.decision_hz, time.perf_counter(), resume_immediately=args.soft_cadence))
+    if executed_history:
+        report['executedHistoryScheduling'] = dict(policy='prediction-start-minimum-v1',
+            minimumPredictionIntervalMs=cadence.period * 1000, waitingSourceRetryMs=5,
+            nativeAdmissionIntervalGuaranteed=False)
     previous = None
     hold_reason = None
     last_readiness_epoch = None
@@ -2562,9 +2567,18 @@ def run_episode(args, policy=None, control=None):
                 report['receiptHistoryResets'] += 1
             refresh_ms = 0.0
             if policy is not None and args.fresh_frame_at_decision:
-                refresh_started = time.perf_counter_ns()
-                poll_frame()
-                refresh_ms = (time.perf_counter_ns()-refresh_started)/1e6
+                # The 5 ms executed-history wait only inspects the reader's latest
+                # source. Force-refresh once a new post-terminal candidate exists,
+                # rather than turning those local waits into 200 pipe polls/second.
+                refresh_allowed = True
+                if executed_history:
+                    candidate = latest.newer_than(previous)
+                    refresh_allowed = (candidate is not None and scout_guard.snapshot()['state'] == 'ready'
+                        and source_after_terminal(candidate[0], observation_timestamp(candidate[0]), history_predecessor))
+                if refresh_allowed:
+                    refresh_started = time.perf_counter_ns()
+                    poll_frame()
+                    refresh_ms = (time.perf_counter_ns()-refresh_started)/1e6
             if scout_guard is not None and scout_guard.snapshot()['state']!='ready':
                 # Released/startup sensor gaps wait before either recovery or world-transition
                 # handling. A newer terminal trip is still checked by each dispatch boundary.
@@ -2750,6 +2764,10 @@ def run_episode(args, policy=None, control=None):
                     frameWorldReady=(frame.get('frameWorldReadiness') or {}).get('ready') is True,
                     currentWorldReady=(frame.get('worldReadiness') or {}).get('ready') is True)
             predict_started = time.perf_counter_ns()
+            if executed_history:
+                # Receipt/source sampling does not consume another decision slot.
+                # The permit is anchored here, so slow work cannot create catch-up bursts.
+                cadence.prediction_started(predict_started / 1e9)
             profile_argument = {'observation_profile': P2P_NATIVE} if profile_contract['profile'] == P2P_NATIVE else {}
             execution_snapshot = None
             if execution_mode != 'off':
@@ -2765,6 +2783,8 @@ def run_episode(args, policy=None, control=None):
             now = time.perf_counter_ns()
             policy_ms = (now-predict_started)/1e6
             timing = frame_timing(frame, predict_started, selected_at, refresh_ms)
+            if executed_history:
+                timing['predictionStartedAtClientNs'] = predict_started
             observed_at = observation_timestamp(frame)
             # Add the full round trip as a conservative bound for server-to-client transfer.
             age = timing['serverAgeAtReceiptMs'] + (now-frame['clientReceivedNs'])/1e6 + frame['transportRoundTripMs']

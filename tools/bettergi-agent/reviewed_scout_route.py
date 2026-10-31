@@ -5,21 +5,24 @@ import json
 import math
 from pathlib import Path
 
-from navigation_profiles import SCOUT_BOUNDS,SCOUT_PROFILE
+from navigation_profiles import SCOUT_PROFILE,SCOUT_PROFILES,scout_scope
 
 
-def reviewed_route_policy():
+def reviewed_route_policy(profile=SCOUT_PROFILE):
     """Return a fresh declaration of the bounded geometry authority granted at worker startup."""
-    return dict(version=1,profileId=SCOUT_PROFILE,maximumLength=40,maximumLegs=1)
+    scout_scope(profile)
+    return dict(version=1,profileId=profile,maximumLength=40,maximumLegs=1)
 
 
 @dataclass(frozen=True)
 class ReviewedScoutRoute:
     """Own exactly two immutable finite endpoints inside the existing scout localization bounds."""
     points: tuple
+    profile_id: str = SCOUT_PROFILE
 
     def __post_init__(self):
         """Normalize both direct construction and JSON input without retaining mutable caller lists."""
+        bounds,_=scout_scope(self.profile_id)
         if not isinstance(self.points,(tuple,list)) or len(self.points)!=2:
             raise ValueError('A reviewed scout route requires exactly two endpoints')
         points=[]
@@ -28,7 +31,7 @@ class ReviewedScoutRoute:
                     or any(type(value) not in (int,float) or type(value) is float and not math.isfinite(value) for value in point)):
                 raise ValueError('Reviewed scout coordinates must be finite numeric pairs')
             x,y=point
-            if not (SCOUT_BOUNDS['minX']<=x<=SCOUT_BOUNDS['maxX'] and SCOUT_BOUNDS['minY']<=y<=SCOUT_BOUNDS['maxY']):
+            if not (bounds['minX']<=x<=bounds['maxX'] and bounds['minY']<=y<=bounds['maxY']):
                 raise ValueError('Reviewed scout geometry escaped the existing scope')
             points.append((float(x),float(y)))
         if not 0<math.dist(*points)<=40:
@@ -39,13 +42,13 @@ class ReviewedScoutRoute:
     def from_document(cls, document):
         """Accept only the versioned scout geometry schema, with no hidden destinations or options."""
         if (not isinstance(document,dict) or set(document)!={'version','profileId','points'}
-                or type(document['version']) is not int or document['version']!=1 or document['profileId']!=SCOUT_PROFILE):
+                or type(document['version']) is not int or document['version']!=1 or document['profileId'] not in SCOUT_PROFILES):
             raise ValueError('Unexpected reviewed scout route schema or profile')
-        return cls(document['points'])
+        return cls(document['points'],document['profileId'])
 
     def document(self):
         """Return detached canonical geometry for request, controller and audit evidence."""
-        return dict(version=1,profileId=SCOUT_PROFILE,points=[list(point) for point in self.points])
+        return dict(version=1,profileId=self.profile_id,points=[list(point) for point in self.points])
 
     @property
     def sha256(self):
@@ -72,7 +75,7 @@ def validate_reviewed_options(args):
     route=getattr(args,'reviewed_scout_route',None)
     if route is None:return None
     if (type(route) is not ReviewedScoutRoute or args.hybrid_route!=route.route_id
-            or args.navigation_profile!=SCOUT_PROFILE or not args.resident or not args.enable_input
+            or args.navigation_profile!=route.profile_id or not args.resident or not args.enable_input
             or args.model!='open-p2p' or not args.hybrid_navigation or args.hybrid_legs!=1
             or not 0<args.seconds<=35 or args.max_observation_age_ms!=150 or args.action_hold_ms!=100
             or args.patrol_series_binding is None or getattr(args,'remember_hybrid_bypass',False)):

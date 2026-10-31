@@ -44,7 +44,7 @@ class HybridNavigation:
         self.reviewed_scout_route=reviewed_scout_route
         if reviewed_scout_route is not None:
             if (type(reviewed_scout_route) is not ReviewedScoutRoute or route_id!=reviewed_scout_route.route_id
-                    or navigation_profile!=SCOUT_PROFILE or remember_bypass or itinerary_destinations is not None):
+                    or navigation_profile!=reviewed_scout_route.profile_id or remember_bypass or itinerary_destinations is not None):
                 raise ValueError('Reviewed scout geometry cannot change scope or enable another route mode')
         elif required_profile(route_id)!=navigation_profile:
             raise ValueError('Fixed route and explicit navigation profile differ')

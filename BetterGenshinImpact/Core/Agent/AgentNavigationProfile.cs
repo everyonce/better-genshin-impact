@@ -9,6 +9,8 @@ public static class AgentNavigationProfile
     public const string MondstadtSurface = "mondstadt-surface-hybrid-v1";
     /// <summary>Explicit local scope for approaching encounters east of the surveyed bridge.</summary>
     public const string MondstadtCombatScout = "mondstadt-combat-scout-v1";
+    /// <summary>Separate read-only local scope from the camp through the northern Statue and tracked encounter area.</summary>
+    public const string MondstadtNorthCombatScout = "mondstadt-north-combat-scout-v1";
     /// <summary>Minimum numeric world X inside the original anchor's local search area.</summary>
     public const double MinimumX = -1100;
     /// <summary>Maximum numeric world X inside the original anchor's local search area.</summary>
@@ -29,9 +31,22 @@ public static class AgentNavigationProfile
     public const double ScoutAnchorX = -1165;
     /// <summary>Fixed local search center keeps the new area within the existing local matcher radius.</summary>
     public const double ScoutAnchorY = 2265;
+    /// <summary>Minimum numeric X of the northern scouting rectangle, translated by -150.</summary>
+    public const double NorthScoutMinimumX = -1500;
+    /// <summary>Maximum numeric X of the northern scouting rectangle, translated by -150.</summary>
+    public const double NorthScoutMaximumX = -1130;
+    /// <summary>Southern numerical limit of the northern scouting rectangle, translated by +380.</summary>
+    public const double NorthScoutMinimumY = 2430;
+    /// <summary>Northern numerical limit of the northern scouting rectangle, translated by +380.</summary>
+    public const double NorthScoutMaximumY = 2860;
+    /// <summary>Fixed northern search center preserves the original scouting rectangle's local matching radius.</summary>
+    public const double NorthScoutAnchorX = -1315;
+    /// <summary>Fixed northern search center is selected by profile, never supplied by the caller.</summary>
+    public const double NorthScoutAnchorY = 2645;
 
     /// <summary>Omission preserves the original contract; arbitrary scope names are never accepted.</summary>
-    public static bool IsSupported(string? profileId) => profileId is null or Courtyard or MondstadtSurface or MondstadtCombatScout;
+    public static bool IsSupported(string? profileId) => profileId is null or Courtyard or MondstadtSurface
+        or MondstadtCombatScout or MondstadtNorthCombatScout;
 
     /// <summary>Constrain the named layer and location independently of the numerical confidence checks.</summary>
     public static bool AllowsPosition(string? profileId, double x, double y, string? layerId) => profileId switch
@@ -41,6 +56,9 @@ public static class AgentNavigationProfile
             && x is >= MinimumX and <= MaximumX && y is >= MinimumY and <= MaximumY,
         MondstadtCombatScout => layerId is "City_102" or "MapBack_2"
             && x is >= ScoutMinimumX and <= ScoutMaximumX && y is >= ScoutMinimumY and <= ScoutMaximumY,
+        MondstadtNorthCombatScout => layerId is "City_102" or "MapBack_2"
+            && x is >= NorthScoutMinimumX and <= NorthScoutMaximumX
+            && y is >= NorthScoutMinimumY and <= NorthScoutMaximumY,
         _ => false
     };
 }

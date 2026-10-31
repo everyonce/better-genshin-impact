@@ -598,7 +598,7 @@ public sealed class AgentStreamSession
         navigationGuidance = AgentNavigationRecognizer.Capability,
         combatObservation = AgentCombatRecognizer.Capability,
         navigationProfiles = new[] { AgentNavigationProfile.Courtyard, AgentNavigationProfile.MondstadtSurface,
-            AgentNavigationProfile.MondstadtCombatScout },
+            AgentNavigationProfile.MondstadtCombatScout, AgentNavigationProfile.MondstadtNorthCombatScout },
         worldReadiness = new
         {
             version = 1, requiredForInput = true, method = "paimon_hud_and_modal_templates",

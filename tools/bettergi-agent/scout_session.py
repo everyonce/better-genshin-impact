@@ -27,7 +27,7 @@ from hybrid_routes import SCOUT_GRASS_ROUTE, SCOUT_GROVE_ROUTE, SCOUT_ROUTES, ro
 from hybrid_navigation import yaw_error
 from resident_runtime import OPEN_P2P_SHA256
 from map_owner import load_map_owner
-from navigation_profiles import SCOUT_PROFILE, allows_pose_scope, required_profile
+from navigation_profiles import SCOUT_PROFILE, SCOUT_PROFILES, allows_pose_scope, required_profile, scout_scope
 from run_patrol_series import SeriesGuard
 from reviewed_scout_route import ReviewedScoutRoute,reviewed_route_policy
 from scout_encounter_guard import binding_from_review,guard_policy
@@ -225,10 +225,16 @@ class SessionWatch:
 
 def leg_arguments(settings, owner, route, folder, binding, remaining_mib, reviewed_route=None):
     """Reuse the validated patrol argument builder and preserve its default Open P2P behavior."""
+    profile=getattr(settings,'navigation_profile',SCOUT_PROFILE)
+    require(profile in SCOUT_PROFILES,'Unknown local scout profile')
+    require(reviewed_route.profile_id==profile if reviewed_route is not None else required_profile(route)==profile,
+            'The scout route and selected localization scope differ')
+    # Obtain existing model/capture defaults, then replace geometry and its profile together before resident parsing.
     options=patrol.options(['--route',SCOUT_GRASS_ROUTE if reviewed_route is not None else route,'--legs','1','--navigation-profile',SCOUT_PROFILE,'--seconds','35',
         '--source',str(settings.source),'--checkpoint',str(settings.checkpoint),
         '--goal-embedding',str(settings.goal_embedding),'--ffmpeg',str(settings.ffmpeg),
         '--native-combat-observation','--retain-policy-rgb'])
+    options.navigation_profile=profile
     argv=patrol.patrol_argv(options,owner['child']['windowsSessionId'],folder)[5:]
     if reviewed_route is not None:
         require(route==reviewed_route.route_id,'Explicit scout route identity changed')
@@ -242,11 +248,11 @@ def leg_arguments(settings, owner, route, folder, binding, remaining_mib, review
     return args
 
 
-def qualify_review_frame(frame, anchor):
+def qualify_review_frame(frame, anchor, profile=SCOUT_PROFILE):
     """Require the existing scout's same-source, grounded-looking, fresh pose at the reviewed start."""
     pose,world,source=frame.get('navigationPose') or {},frame.get('frameWorldReadiness') or {},frame.get('sourceFrame') or {}
     require(pose.get('state')=='valid' and pose.get('frameId')==frame.get('frameId')
-            and allows_pose_scope(pose,SCOUT_PROFILE),'Reviewed pose is invalid or outside the scout scope')
+            and allows_pose_scope(pose,profile),'Reviewed pose is invalid or outside the scout scope')
     require(.99<=pose.get('positionConfidence',0)<=1 and .2<=pose.get('yawConfidence',0)<=1
             and type(pose.get('yawDegrees')) in (int,float) and math.isfinite(pose['yawDegrees']),
             'Reviewed pose confidence or heading is invalid')
@@ -264,15 +270,26 @@ def qualify_review_frame(frame, anchor):
     require(math.dist((pose['x'],pose['y']),anchor)<=2,'Reviewed pose differs from the frozen route start')
 
 
+def session_profile(manifest):
+    """Keep historical scout records unchanged; northern workers require explicit reviewed geometry only."""
+    profile=manifest.get('navigationProfile',SCOUT_PROFILE)
+    require(profile in SCOUT_PROFILES,'Unknown worker navigation profile')
+    if profile!=SCOUT_PROFILE:
+        require(manifest.get('reviewedScoutRoutePolicy')==reviewed_route_policy(profile) and manifest.get('routes')=={},
+                'The northern worker requires explicit reviewed routes and no inherited fixed routes')
+    return profile
+
+
 def review_evidence(path, manifest, after_ns):
     """Bind one explicit visual review to its unchanged, input-disabled native endpoint and image."""
     review,review_sha=read_json(path,16384)
+    profile=session_profile(manifest)
     route=review.get('routeId')
     spec=None
     if 'routeSpec' in review:
-        require(manifest.get('reviewedScoutRoutePolicy')==reviewed_route_policy(),'This worker did not authorize reviewed geometry')
+        require(manifest.get('reviewedScoutRoutePolicy')==reviewed_route_policy(profile),'This worker did not authorize reviewed geometry')
         spec=ReviewedScoutRoute.from_document(review['routeSpec'])
-        require(route==spec.route_id and review.get('points')==spec.document()['points']
+        require(spec.profile_id==profile and route==spec.route_id and review.get('points')==spec.document()['points']
                 and review.get('routeSpecSha256',spec.sha256)==spec.sha256,'Reviewed scout geometry or identity changed')
         points=spec.points
     else:
@@ -289,7 +306,7 @@ def review_evidence(path, manifest, after_ns):
     plan,plan_sha=read_json(endpoint/'plan.json')
     result,result_sha=read_json(endpoint/'result.json',4*1024*1024)
     require(plan.get('owner')==manifest['owner'] and plan.get('enableInput') is False
-            and plan.get('modelLoaded') is False and plan.get('navigationProfile')==SCOUT_PROFILE,
+            and plan.get('modelLoaded') is False and plan.get('navigationProfile')==profile,
             'The native review belongs to another owner or input scope')
     require(result.get('status')=='completed' and result.get('inputEnabled') is False
             and result.get('modelLoaded') is False and result.get('ownerIdleMinimizedAfter') is True
@@ -297,7 +314,7 @@ def review_evidence(path, manifest, after_ns):
     samples=result['stableSamples']
     for frame in samples:
         require(frame in result.get('observations',[]),'Stable scene sample is not an original native observation')
-        qualify_review_frame(frame,points[0])
+        qualify_review_frame(frame,points[0],profile)
     for before,after in zip(samples,samples[1:]):
         a,b=before['sourceFrame'],after['sourceFrame']
         p,q=before['navigationPose'],after['navigationPose']
@@ -322,7 +339,7 @@ def review_evidence(path, manifest, after_ns):
             'Repeated image polls contain conflicting source or recognition evidence')
     qualified=[]
     for frame in joined:
-        try:qualify_review_frame(frame,points[0])
+        try:qualify_review_frame(frame,points[0],profile)
         except (ValueError,KeyError,TypeError):continue
         qualified.append(frame)
     require(qualified,'The reviewed image has no fresh qualified world-readiness observation')
@@ -352,7 +369,7 @@ def validate_request(path, manifest, after_id, after_ns):
     require(isinstance(request['requestId'],str) and re.fullmatch('[a-f0-9]{32}',request['requestId'])
             and path.stem==request['requestId'], 'Invalid scout request identity')
     require(request['afterRequestId']==after_id and request['modelConfigurationSha256']==manifest['modelConfigurationSha256']
-            and request['navigationProfile']==SCOUT_PROFILE and type(request['maximumLegs']) is int
+            and request['navigationProfile']==session_profile(manifest) and type(request['maximumLegs']) is int
             and request['maximumLegs']==1,'The request changed its predecessor, model or navigation scope')
     evidence=review_evidence(request['reviewFile'],manifest,after_ns)
     require(('routeSpec' in request)==('routeSpec' in evidence),'Request geometry is absent from the fresh review')
@@ -369,7 +386,7 @@ def submit(directory, review):
     require(state.get('sessionId')==manifest['sessionId'] and state.get('state')=='awaitingReview'
             and not (directory/'STOP').exists(),'The scout worker is not waiting for a reviewed request')
     request=dict(version=1,sessionId=manifest['sessionId'],requestId=uuid.uuid4().hex,
-        afterRequestId=state['afterRequestId'],navigationProfile=SCOUT_PROFILE,maximumLegs=1,
+        afterRequestId=state['afterRequestId'],navigationProfile=session_profile(manifest),maximumLegs=1,
         modelConfigurationSha256=manifest['modelConfigurationSha256'],reviewFile=str(live_path(review)),
         **review_evidence(review,manifest,state['reviewAfterUnixNs']))
     if state.get('pendingObstacleRecovery') is not None:
@@ -447,27 +464,46 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
     (directory/'requests').mkdir()
     started_ns=time.time_ns()
     session_id=uuid.uuid4().hex
-    routes=settings.routes or [SCOUT_GRASS_ROUTE,SCOUT_GROVE_ROUTE]
-    require(routes and len(set(routes))==len(routes) and all(route in SCOUT_ROUTES and required_profile(route)==SCOUT_PROFILE
-            for route in routes),'Only explicitly registered scout routes may enter a worker')
-    base=leg_arguments(settings,owner,routes[0],directory/'bootstrap',None,settings.record_max_mib)
-    configuration=model_contract(base)
-    checkpoint_stamp=file_stamp(base.checkpoint)
-    manifest=dict(version=1,sessionId=session_id,owner=owner,worker=dict(processId=os.getpid(),windowsSessionId=owner['child']['windowsSessionId']),
-        routes={route:[list(point) for point in route_points(route)] for route in routes},
-        modelConfigurationSha256=canonical_sha(configuration),configuration=configuration,
-        stopTemperatureC=78,sourceFreshnessMs=150,actionHoldMs=100,legDeadlineSeconds=35,sessionSeconds=settings.seconds,
-        scoutEncounterGuardPolicy=guard_policy())
-    if getattr(settings,'allow_reviewed_routes',False):manifest['reviewedScoutRoutePolicy']=reviewed_route_policy()
-    if getattr(settings,'allow_inspected_obstacle_recovery',False):
-        manifest.update(inspectedObstacleRecoveryPolicy=recovery_policy(),recoverySourceSha256=source_contract())
-    runtime.atomic_json(directory/'manifest.json',manifest)
-    state=dict(version=1,sessionId=session_id,state='loading',modelLoads=0,modelLoadSeconds=0.0,
-        afterRequestId=None,reviewAfterUnixNs=started_ns,seenRequestIds=[],legs=[],recordedBytes=0,recordedBytesComplete=True)
-    if 'inspectedObstacleRecoveryPolicy' in manifest:
-        state.update(inspectedObstacleRecoveriesUsed=0,pendingObstacleRecovery=None)
-    watch=None
-    policy=None
+    profile=getattr(settings,'navigation_profile',SCOUT_PROFILE)
+    _,anchor=scout_scope(profile)
+    bootstrap_spec=None
+    if profile==SCOUT_PROFILE:
+        routes=settings.routes or [SCOUT_GRASS_ROUTE,SCOUT_GROVE_ROUTE]
+        require(routes and len(set(routes))==len(routes) and all(route in SCOUT_ROUTES and required_profile(route)==profile
+                for route in routes),'Only explicitly registered scout routes may enter a worker')
+        bootstrap_route=routes[0]
+    else:
+        require(not settings.routes and getattr(settings,'allow_reviewed_routes',False),
+                'Northern scouting requires explicit reviewed routes, not the original fixed routes')
+        routes=[]
+        # This geometry supplies loader arguments only; it is never submitted or executed by the worker.
+        bootstrap_spec=ReviewedScoutRoute(((anchor['x'],anchor['y']),(anchor['x']+1,anchor['y'])),profile)
+        bootstrap_route=bootstrap_spec.route_id
+    # Establish the real, non-extending owner/deadline binding before parsing loader-only geometry.
+    # Construction starts read-only identity monitoring; startup failures must retire it too.
+    watch=watch_factory(directory,settings,owner,lifecycle)
+    try:
+        base=leg_arguments(settings,owner,bootstrap_route,directory/'bootstrap',watch.binding(),settings.record_max_mib,bootstrap_spec)
+        configuration=model_contract(base)
+        checkpoint_stamp=file_stamp(base.checkpoint)
+        manifest=dict(version=1,sessionId=session_id,owner=owner,worker=dict(processId=os.getpid(),windowsSessionId=owner['child']['windowsSessionId']),
+            routes={route:[list(point) for point in route_points(route)] for route in routes},navigationProfile=profile,
+            modelConfigurationSha256=canonical_sha(configuration),configuration=configuration,
+            stopTemperatureC=78,sourceFreshnessMs=150,actionHoldMs=100,legDeadlineSeconds=35,sessionSeconds=settings.seconds,
+            scoutEncounterGuardPolicy=guard_policy())
+        if getattr(settings,'allow_reviewed_routes',False):manifest['reviewedScoutRoutePolicy']=reviewed_route_policy(profile)
+        if getattr(settings,'allow_inspected_obstacle_recovery',False):
+            manifest.update(inspectedObstacleRecoveryPolicy=recovery_policy(),recoverySourceSha256=source_contract())
+        runtime.atomic_json(directory/'manifest.json',manifest)
+        state=dict(version=1,sessionId=session_id,state='loading',modelLoads=0,modelLoadSeconds=0.0,
+            afterRequestId=None,reviewAfterUnixNs=started_ns,seenRequestIds=[],legs=[],recordedBytes=0,recordedBytesComplete=True)
+        if 'inspectedObstacleRecoveryPolicy' in manifest:
+            state.update(inspectedObstacleRecoveriesUsed=0,pendingObstacleRecovery=None)
+        policy=None
+
+    except BaseException:
+        watch.close()
+        raise
 
     def publish():
         """Expose small session evidence without copying images, checkpoints or inference state."""
@@ -478,8 +514,9 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
         require(immutable_arguments(args)==configuration['arguments'],'Cached model configuration changed')
         spec=getattr(args,'reviewed_scout_route',None)
         route_allowed=(args.hybrid_route in manifest['routes'] if spec is None else
-                       manifest.get('reviewedScoutRoutePolicy')==reviewed_route_policy() and args.hybrid_route==spec.route_id)
-        require(args.navigation_profile==SCOUT_PROFILE and route_allowed and args.seconds==35,
+                       manifest.get('reviewedScoutRoutePolicy')==reviewed_route_policy(profile)
+                       and spec.profile_id==profile and args.hybrid_route==spec.route_id)
+        require(args.navigation_profile==profile and route_allowed and args.seconds==35,
                 'Cached scout scope or leg deadline changed')
         require(file_stamp(args.checkpoint)==checkpoint_stamp and file_sha(args.goal_embedding)==configuration['goalSha256'],
                 'Cached checkpoint or instruction bytes changed')
@@ -488,7 +525,6 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
 
     try:
         publish()
-        watch=watch_factory(directory,settings,owner,lifecycle)
         watch.start()
         began=time.monotonic()
         policy=(loader or client.load_policy)(base)
@@ -497,7 +533,7 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
                 'A resettable, goal-conditioned Open P2P policy is required')
         verify_configuration(base)
         watch.check()
-        proof=dict(version=1,kind='scout-policy-session',sessionId=session_id,worker=manifest['worker'],owner=owner,
+        proof=dict(version=1,kind='scout-policy-session',sessionId=session_id,worker=manifest['worker'],owner=owner,navigationProfile=profile,
                    modelConfigurationSha256=manifest['modelConfigurationSha256'],configuration=configuration,
                    checkpointSha256=OPEN_P2P_SHA256,modelLoads=1,modelLoadSeconds=state['modelLoadSeconds'],
                    scoutEncounterGuardPolicy=guard_policy())
@@ -548,7 +584,7 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
             reuse=dict(version=1,sessionId=session_id,worker=manifest['worker'],owner=owner,
                 modelConfigurationSha256=manifest['modelConfigurationSha256'],sessionProof=str(directory/'policy-proof.json'),
                 sessionProofSha256=proof_sha,requestId=request['requestId'],requestFile=str(path),requestSha256=request_sha,
-                routeId=request['routeId'],navigationProfile=SCOUT_PROFILE,
+                routeId=request['routeId'],navigationProfile=profile,
                 scoutEncounterGuard=copy.deepcopy(request['scoutEncounterGuard']))
             if spec is not None:reuse.update(routeSpec=spec.document(),routeSpecSha256=spec.sha256)
             if pending_recovery is not None:reuse['obstacleRecovery']=copy.deepcopy(pending_recovery)
@@ -668,6 +704,7 @@ def options(argv=None):
     run.add_argument('--owner-from',type=Path,required=True)
     run.add_argument('--seconds',type=int,default=600)
     run.add_argument('--route',dest='routes',action='append',choices=SCOUT_ROUTES)
+    run.add_argument('--navigation-profile',choices=SCOUT_PROFILES,default=SCOUT_PROFILE)
     run.add_argument('--allow-reviewed-routes',action='store_true',help='Allow fresh explicit two-point scout reviews within the existing scope')
     run.add_argument('--allow-inspected-obstacle-recovery',action='store_true',
                      help='Retain only the loaded policy after at most one fully audited geometric stop; require a new reviewed route')
@@ -686,9 +723,12 @@ def options(argv=None):
     geometry=modes.add_parser('route-spec',help='Describe one explicit geometry without launching or submitting a leg')
     geometry.add_argument('--start',type=float,nargs=2,required=True)
     geometry.add_argument('--end',type=float,nargs=2,required=True)
+    geometry.add_argument('--navigation-profile',choices=SCOUT_PROFILES,default=SCOUT_PROFILE)
     args=parser.parse_args(argv)
     if args.command=='run' and not (30<=args.seconds<=1800 and 1<=args.record_max_mib<=160):
         parser.error('Keep the session within 30-1800 seconds and 1-160 MiB')
+    if args.command=='run' and args.navigation_profile!=SCOUT_PROFILE and (args.routes or not args.allow_reviewed_routes):
+        parser.error('Northern scouting requires --allow-reviewed-routes and no fixed --route')
     return args
 
 
@@ -697,7 +737,7 @@ def main():
     args=options()
     if args.command=='run':return run_session(args)
     if args.command=='route-spec':
-        spec=ReviewedScoutRoute((args.start,args.end))
+        spec=ReviewedScoutRoute((args.start,args.end),args.navigation_profile)
         print(json.dumps(dict(routeId=spec.route_id,points=spec.document()['points'],routeSpec=spec.document(),routeSpecSha256=spec.sha256)))
         return 0
     if args.command=='submit':print(json.dumps(submit(args.session,args.review)))

@@ -177,6 +177,46 @@ class ChildReconciliationTests(unittest.TestCase):
         self.assertEqual(result['replacementEvidence']['existingTargetConfigSha256'],digest)
         config.unlink()  # Once the restart is acknowledged the application owns its new settings.
 
+    def test_pinned_upgrade_accepts_stopped_pilot_only_after_explicit_release(self):
+        """A released pilot can be replaced once without stopping it or the original primary."""
+        self.child = dict(self.previous,pilotState='stopped',taskRunning=False,
+                          agentStreamRunning=False,serviceOwnsPilot=False)
+        digest = hashlib.sha256((self.target/'User/config.json').read_bytes()).hexdigest()
+        result = self.pinned_upgrade(target_config_sha256=digest)
+        self.assertEqual(self.commands,['restartApp'])
+        self.assertTrue(result['childReplaced'])
+        self.assertFalse(result['childStartDispatched'])
+        self.assertEqual(result['root']['instanceNonce'],'root-epoch')
+
+    def test_stopped_pilot_with_active_missing_or_untyped_ownership_never_dispatches(self):
+        """Every stopped-state release flag must be present and the literal boolean false."""
+        missing = object()
+        released = dict(self.previous,pilotState='stopped',taskRunning=False,
+                        agentStreamRunning=False,serviceOwnsPilot=False)
+        for field in ('taskRunning','agentStreamRunning','serviceOwnsPilot'):
+            for value in (missing,True,None,0,'false'):
+                self.child = released.copy()
+                if value is missing:self.child.pop(field)
+                else:self.child[field] = value
+                with self.subTest(field=field,value=value), self.assertRaisesRegex(control.ControlError,'busy|unknown'):
+                    self.pinned_upgrade()
+        self.assertEqual(self.commands,[])
+        self.assertFalse((self.previous_path/'User/ExternalControl').exists())
+
+    def test_stopped_pilot_rechecks_ownership_before_the_atomic_restart(self):
+        """A task taking ownership during final preparation prevents the sole restart dispatch."""
+        self.child = dict(self.previous,pilotState='stopped',taskRunning=False,
+                          agentStreamRunning=False,serviceOwnsPilot=False)
+        original = control.enable_restart
+        def reacquired(*args):
+            """Simulate a competing owner after restart opt-in but before the final native request."""
+            original(*args)
+            self.child['serviceOwnsPilot'] = True
+        with patch.object(control,'enable_restart',side_effect=reacquired):
+            with self.assertRaisesRegex(control.ControlError,'busy|unknown'):
+                self.pinned_upgrade()
+        self.assertEqual(self.commands,[])
+
     def test_pinned_upgrade_rejects_changed_preflight_config_bytes(self):
         self.child = self.previous.copy()
         with self.assertRaisesRegex(control.ControlError,'configuration hash changed'):
@@ -434,7 +474,8 @@ class ChildReconciliationTests(unittest.TestCase):
 
     def test_missing_or_busy_idle_fields_never_trigger_stop_or_restart(self):
         cases = [('taskRunning', True), ('taskRunning', None), ('pilotState', None),
-                 ('automationState', None), ('automationState', 'stopping'), ('agentStreamRunning', True)]
+                 ('automationState', None), ('automationState', 'stopping'), ('agentStreamRunning', True),
+                 ('serviceOwnsPilot', True), ('serviceOwnsPilot', None), ('serviceOwnsPilot', 0)]
         for key, value in cases:
             with self.subTest(key=key, value=value):
                 self.child = {**self.previous, key: value}

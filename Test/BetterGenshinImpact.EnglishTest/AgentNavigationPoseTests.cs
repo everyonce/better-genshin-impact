@@ -1,8 +1,11 @@
 using BetterGenshinImpact.Core.Agent;
 using BetterGenshinImpact.GameTask.AutoAgent;
+using BetterGenshinImpact.UnitTest.GameTaskTests;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
+using System.Reflection;
+using Vanara.PInvoke;
 using Xunit;
 
 namespace BetterGenshinImpact.EnglishTest;
@@ -10,6 +13,108 @@ namespace BetterGenshinImpact.EnglishTest;
 /// <summary>Native guidance cannot promote weak matches or reuse pose fields on an unavailable frame.</summary>
 public sealed class AgentNavigationPoseTests
 {
+    /// <summary>The separately named northern scope keeps finite coordinates, exact layers and the original confidence gates.</summary>
+    [Theory]
+    [InlineData(-1500, 2430, .99, .2, "MapBack_2", true)]
+    [InlineData(-1500, 2860, .99, .2, "City_102", true)]
+    [InlineData(-1130, 2430, .99, .2, "City_102", true)]
+    [InlineData(-1130, 2860, .99, .2, "MapBack_2", true)]
+    [InlineData(-1315, 2645, .999, .8, "MapBack_2", true)]
+    [InlineData(-1261.02734375, 2444.220703125, .999, .8, "MapBack_2", true)]
+    [InlineData(-1323.474, 2566.115, .999, .8, "MapBack_2", true)]
+    [InlineData(-1500.01, 2645, .999, .8, "MapBack_2", false)]
+    [InlineData(-1129.99, 2645, .999, .8, "MapBack_2", false)]
+    [InlineData(-1315, 2429.99, .999, .8, "MapBack_2", false)]
+    [InlineData(-1315, 2860.01, .999, .8, "MapBack_2", false)]
+    [InlineData(-1315, 2645, .989, .8, "MapBack_2", false)]
+    [InlineData(-1315, 2645, .999, .199, "MapBack_2", false)]
+    [InlineData(-1315, 2645, 1.001, .8, "MapBack_2", false)]
+    [InlineData(-1315, 2645, .999, 1.001, "MapBack_2", false)]
+    [InlineData(-1315, 2645, .999, .8, "MapBack_1", false)]
+    [InlineData(-1315, 2645, .999, .8, "City_103", false)]
+    [InlineData(-1315, 2645, .999, .8, null, false)]
+    [InlineData(double.NaN, 2645, .999, .8, "MapBack_2", false)]
+    [InlineData(-1315, double.PositiveInfinity, .999, .8, "MapBack_2", false)]
+    public void NorthScoutingScopePreservesQualification(double x, double y, double position,
+        double yaw, string? layer, bool accepted)
+    {
+        Assert.Equal(accepted, AgentNavigationPose.IsQualified(x, y, 15, position, yaw, layer,
+            AgentNavigationProfile.MondstadtNorthCombatScout));
+    }
+
+    /// <summary>Opting into the translated rectangle never broadens either old outdoor scope or the omitted default.</summary>
+    [Fact]
+    public void NorthScoutingRequiresItsExactProfileAndLeavesOldScopesUnchanged()
+    {
+        Assert.True(AgentNavigationProfile.IsSupported(AgentNavigationProfile.MondstadtNorthCombatScout));
+        Assert.False(AgentNavigationProfile.IsSupported("mondstadt-north-combat-scout-v1 "));
+        Assert.False(AgentNavigationProfile.IsSupported("MONDSTADT-NORTH-COMBAT-SCOUT-V1"));
+        foreach (var profile in new[] { null, AgentNavigationProfile.Courtyard,
+            AgentNavigationProfile.MondstadtSurface, AgentNavigationProfile.MondstadtCombatScout })
+        {
+            Assert.True(AgentNavigationProfile.IsSupported(profile));
+            Assert.False(AgentNavigationPose.IsQualified(-1323.474, 2566.115, 15, .999, .8, "MapBack_2", profile));
+        }
+        Assert.True(AgentNavigationPose.IsQualified(-1165, 2265, 15, .999, .8, "MapBack_2",
+            AgentNavigationProfile.MondstadtCombatScout));
+        Assert.False(AgentNavigationPose.IsQualified(-1165, 2265, 15, .999, .8, "MapBack_2",
+            AgentNavigationProfile.MondstadtNorthCombatScout));
+    }
+
+    /// <summary>Only the fixed rectangle and search anchor translate; all advertised read-only guarantees remain identical.</summary>
+    [Fact]
+    public void NorthScoutingCapabilityIsOnlyATranslatedLocalScope()
+    {
+        var north = JObject.FromObject(AgentNavigationRecognizer.GetCapability(AgentNavigationProfile.MondstadtNorthCombatScout));
+        var scout = JObject.FromObject(AgentNavigationRecognizer.GetCapability(AgentNavigationProfile.MondstadtCombatScout));
+        Assert.Equal("mondstadt-north-combat-scout-v1", north["profileId"]!.Value<string>());
+        Assert.Equal(-1500, north["bounds"]!["minX"]!.Value<double>());
+        Assert.Equal(-1130, north["bounds"]!["maxX"]!.Value<double>());
+        Assert.Equal(2430, north["bounds"]!["minY"]!.Value<double>());
+        Assert.Equal(2860, north["bounds"]!["maxY"]!.Value<double>());
+        foreach (var field in new[] { "minX", "maxX", "minY", "maxY" })
+            Assert.Equal(scout["bounds"]![field]!.Value<double>() + (field.EndsWith('X') ? -150 : 380),
+                north["bounds"]![field]!.Value<double>());
+        Assert.Equal(-1315, north["searchAnchor"]!["x"]!.Value<double>());
+        Assert.Equal(2645, north["searchAnchor"]!["y"]!.Value<double>());
+        Assert.Equal(scout["searchAnchor"]!["x"]!.Value<double>() - 150, north["searchAnchor"]!["x"]!.Value<double>());
+        Assert.Equal(scout["searchAnchor"]!["y"]!.Value<double>() + 380, north["searchAnchor"]!["y"]!.Value<double>());
+        // Comparing the remaining wire fields also protects the original route heading anchors and confidence contract.
+        foreach (var capability in new[] { north, scout })
+        {
+            capability.Remove("profileId");
+            capability.Remove("bounds");
+            capability.Remove("searchAnchor");
+        }
+        Assert.True(JToken.DeepEquals(scout, north));
+        Assert.True(north["sameFrame"]!.Value<bool>());
+        Assert.True(north["readOnly"]!.Value<bool>());
+        Assert.True(north["localOnly"]!.Value<bool>());
+        Assert.False(north["normalIsGroundedProof"]!.Value<bool>());
+        Assert.Equal(new[] { "City_102", "MapBack_2" }, north["allowedLayerIds"]!.Values<string>());
+        Assert.Equal(.99, north["minimumPositionConfidence"]!.Value<double>());
+        Assert.Equal(.2, north["minimumYawConfidence"]!.Value<double>());
+    }
+
+    /// <summary>The input-disabled hello adds only the named profile and retains the existing source-age and default guidance contract.</summary>
+    [Fact]
+    public void HelloAdvertisesNorthScoutingWithoutInputAuthority()
+    {
+        using var runtime = TestGameRuntime.Create(new FakeSystemInfo(new RECT(0, 0, 1920, 1080), 1));
+        var session = new AgentStreamSession(runtime);
+        var helloMethod = typeof(AgentStreamSession).GetMethod("CreateHello", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var hello = JObject.FromObject(helloMethod.Invoke(session, [false])!);
+        Assert.Equal(new[] { AgentNavigationProfile.Courtyard, AgentNavigationProfile.MondstadtSurface,
+            AgentNavigationProfile.MondstadtCombatScout, AgentNavigationProfile.MondstadtNorthCombatScout },
+            hello["navigationProfiles"]!.Values<string>());
+        Assert.False(hello["inputEnabled"]!.Value<bool>());
+        Assert.True(JToken.DeepEquals(JObject.FromObject(AgentNavigationRecognizer.Capability), hello["navigationGuidance"]));
+        Assert.Equal(150, hello["sourceFrameTiming"]!["maxAgeMs"]!.Value<int>());
+        Assert.Equal(2, hello["sourceFrameTiming"]!["distinctFramesForConfirmation"]!.Value<int>());
+        Assert.Equal(150, hello["worldReadiness"]!["maxAgeMs"]!.Value<int>());
+        Assert.True(hello["worldReadiness"]!["requiredForInput"]!.Value<bool>());
+    }
+
     /// <summary>The separate scouting scope retains strict confidence, layer, and rectangular limits.</summary>
     [Theory]
     [InlineData(-1350, 2050, .99, .2, "MapBack_2", true)]

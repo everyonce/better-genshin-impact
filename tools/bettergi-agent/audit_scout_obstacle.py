@@ -8,7 +8,7 @@ import stat
 from audit_hybrid_run import (evidence_bytes, evidence_document, require, verify_policy_reuse,
                              verify_scout_goal_state, verify_scout_guard, verify_scout_review)
 from hybrid_routes import camera_correction, route_heading, route_points
-from navigation_profiles import SCOUT_PROFILE, allows_pose_scope
+from navigation_profiles import SCOUT_PROFILE, SCOUT_PROFILES, allows_pose_scope, validate_capability
 from observation_timing import observation_timestamp
 from policy_rgb_archive import RGB192_BYTES
 from reviewed_scout_route import ReviewedScoutRoute
@@ -133,7 +133,7 @@ def native_stop_contract(context):
         'Native stop lacks its final owned release pair')
 
 
-def input_contract(part, frames, events, points):
+def input_contract(part, frames, events, points, profile=SCOUT_PROFILE):
     """Join every proposal/admission/terminal receipt and independently verify the native selection."""
     decisions=part.get('decisions') or []
     for event in events:
@@ -167,7 +167,7 @@ def input_contract(part, frames, events, points):
         pose,gate=frame.get('navigationPose') or {},frame.get('frameWorldReadiness') or {}
         h=decision.get('hybridNavigation') or {}
         require(h.get('pose')==pose and pose.get('state')=='valid' and pose.get('frameId')==frame.get('frameId')
-            and allows_pose_scope(pose,SCOUT_PROFILE) and .99<=pose.get('positionConfidence',0)<=1
+            and allows_pose_scope(pose,profile) and .99<=pose.get('positionConfidence',0)<=1
             and .2<=pose.get('yawConfidence',0)<=1 and gate.get('ready') is True
             and gate.get('sourceFrameId')==frame['frameId'] and gate.get('sourceFrame')==frame.get('sourceFrame')
             and (frame.get('motionEvidence') or {}).get('status')=='normal'
@@ -333,6 +333,10 @@ def audit_failed_prefix(folder, request):
     spec=ReviewedScoutRoute.from_document(request['routeSpec']) if 'routeSpec' in request else None
     points=spec.points if spec is not None else route_points(request['routeId'])
     navigation=part.get('hybridNavigation') or {}
+    profile=request.get('navigationProfile')
+    require(profile in SCOUT_PROFILES and navigation.get('profileId')==profile,
+            'Failed prefix changed its explicit scout localization scope')
+    validate_capability(part.get('navigationGuidance') or {},profile)
     starts=[row for row in part.get('hybridNavigationEvents',[]) if row.get('type')=='hybridStartVerified']
     require(len(starts)==1 and navigation.get('routeId')==starts[0].get('routeId')==request['routeId']
         and navigation.get('phase')=='failed' and navigation.get('completedLegs')==0
@@ -349,7 +353,7 @@ def audit_failed_prefix(folder, request):
         require(all(pose.get(key)==sample.get(key) for key in ('x','y','yawDegrees'))
             and observation_timestamp(frame)==sample.get('atMs')
             and math.dist((pose['x'],pose['y']),points[0])<=2,'Failed route start/source changed')
-    inputs=input_contract(part,frames,events,points)
+    inputs=input_contract(part,frames,events,points,profile)
     require(max(decision['frameId'] for decision in part['decisions'])<final['frameId'],
         'New input was proposed at or after the geometric stop')
     stalled=stationary_stop_contract(part,frames,points)
@@ -398,6 +402,10 @@ def verify_recovery_request(request, witness, owner):
     session_file=Path(failed_run['policyReuse']['sessionProof'])
     session,_=evidence_document(session_file)
     manifest,_=evidence_document(session_file.parent/'manifest.json')
+    profile=manifest.get('navigationProfile',SCOUT_PROFILE)
+    require(profile in SCOUT_PROFILES and session.get('navigationProfile',SCOUT_PROFILE)==profile
+        and failed_request.get('navigationProfile')==request.get('navigationProfile')==profile,
+        'Inspected recovery cannot change the original worker localization scope')
     require(manifest.get('inspectedObstacleRecoveryPolicy')==session.get('inspectedObstacleRecoveryPolicy')==recovery_policy()
         and manifest.get('recoverySourceSha256')==session.get('recoverySourceSha256')==source_contract()
         and request.get('sessionId')==failed_request.get('sessionId')==manifest.get('sessionId')

@@ -16,7 +16,7 @@ from hybrid_routes import (COURTYARD_ROUTE, PATROL_STATIONS, STAIR_POST_ROUTE, S
 from observation_timing import observation_timestamp
 from destination_queue_limits import ENDURANCE, STANDARD, queue_limits
 from hybrid_routes import SURFACE_ROUTES
-from navigation_profiles import COURTYARD_PROFILE,SURFACE_PROFILE,SCOUT_PROFILE,validate_capability,allows_pose_scope,required_profile
+from navigation_profiles import COURTYARD_PROFILE,SURFACE_PROFILE,SCOUT_PROFILE,SCOUT_PROFILES,validate_capability,allows_pose_scope,required_profile
 from reviewed_scout_route import ReviewedScoutRoute,load_reviewed_route,reviewed_route_policy
 
 
@@ -62,6 +62,8 @@ def verify_scout_goal_state(value, label, *, decision=False):
 
 def verify_scout_review(request, owner, points, spec=None):
     """Independently replay original passive review hashes, source joins and stable start observations."""
+    profile=spec.profile_id if spec is not None else required_profile(request['routeId'])
+    require(profile in SCOUT_PROFILES and request.get('navigationProfile')==profile,'Reviewed scout profile changed')
     review,review_sha=evidence_document(request.get('reviewFile'),16384)
     require(review_sha==request.get('reviewSha256') and review.get('routeId')==request['routeId']
             and review.get('points')==[list(point) for point in points],'Original scout review or route changed')
@@ -81,7 +83,7 @@ def verify_scout_review(request, owner, points, spec=None):
     require(plan_sha==request.get('nativePlanSha256') and result_sha==request.get('nativeResultSha256'),
             'Original native plan or result bytes changed')
     require(plan.get('owner')==owner and plan.get('enableInput') is False and plan.get('modelLoaded') is False
-            and plan.get('navigationProfile')==SCOUT_PROFILE,'Original native review changed owner or passive scope')
+            and plan.get('navigationProfile')==profile,'Original native review changed owner or passive scope')
     samples,observations=result.get('stableSamples'),result.get('observations')
     require(result.get('status')=='completed' and result.get('inputEnabled') is False and result.get('modelLoaded') is False
             and result.get('ownerIdleMinimizedAfter') is True and not result.get('error')
@@ -98,7 +100,7 @@ def verify_scout_review(request, owner, points, spec=None):
         pose,world,source=frame.get('navigationPose') or {},frame.get('frameWorldReadiness') or {},frame.get('sourceFrame') or {}
         require(isinstance(pose,dict) and isinstance(world,dict) and isinstance(source,dict)
                 and pose.get('state')=='valid' and type(pose.get('frameId')) is int
-                and pose['frameId']==frame['frameId'] and allows_pose_scope(pose,SCOUT_PROFILE)
+                and pose['frameId']==frame['frameId'] and allows_pose_scope(pose,profile)
                 and finite(pose.get('positionConfidence')) and .99<=pose['positionConfidence']<=1
                 and finite(pose.get('yawConfidence')) and .2<=pose['yawConfidence']<=1
                 and finite(pose.get('yawDegrees')),'Reviewed pose is outside its qualified scout scope')
@@ -205,6 +207,13 @@ def verify_policy_reuse(run, run_path, proof_path):
             'Original scout manifest belongs to another policy session')
     require(('scoutEncounterGuardPolicy' in session)==('scoutEncounterGuardPolicy' in manifest),
             'Scout encounter guard declaration differs from the original session manifest')
+    profile=manifest.get('navigationProfile',SCOUT_PROFILE)
+    require(profile in SCOUT_PROFILES and session.get('navigationProfile',SCOUT_PROFILE)==profile,
+            'Cached worker navigation profile differs from its original manifest')
+    if profile!=SCOUT_PROFILE:
+        require(manifest.get('routes')=={} and manifest.get('reviewedScoutRoutePolicy')==reviewed_route_policy(profile)
+                and 'scoutEncounterGuardPolicy' in manifest,
+                'Northern cached scouting lacks its explicit reviewed-only scope')
     settings=configuration.get('arguments') or {}
     require(settings.get('model')=='open-p2p' and settings.get('history')==41 and settings.get('cuda_graph') is True
             and settings.get('p2p_fast_start') is True and settings.get('goal_intent')=='ground-navigation'
@@ -227,19 +236,19 @@ def verify_policy_reuse(run, run_path, proof_path):
     require(request_sha==reuse.get('requestSha256') and request.get('sessionId')==reuse['sessionId']
             and request.get('requestId')==reuse['requestId'] and request.get('modelConfigurationSha256')==fingerprint
             and type(request.get('maximumLegs')) is int and request['maximumLegs']==1
-            and request.get('navigationProfile')==reuse.get('navigationProfile')==SCOUT_PROFILE
+            and request.get('navigationProfile')==reuse.get('navigationProfile')==profile
             and request.get('routeId')==reuse.get('routeId'),
             'The fresh reviewed request changed before reuse audit')
     spec=None
     if 'routeSpec' in reuse or 'routeSpec' in request:
         spec=ReviewedScoutRoute.from_document(request.get('routeSpec'))
-        require(session.get('reviewedScoutRoutePolicy')==reviewed_route_policy()
+        require(session.get('reviewedScoutRoutePolicy')==reviewed_route_policy(profile) and spec.profile_id==profile
                 and reuse.get('routeSpec')==request['routeSpec']==spec.document()
                 and reuse.get('routeSpecSha256')==request.get('routeSpecSha256')==spec.sha256
                 and reuse['routeId']==spec.route_id,'Cached geometry differs from its explicitly authorized reviewed request')
     else:
         require('routeSpecSha256' not in reuse and 'routeSpecSha256' not in request,'Geometry digest has no explicit specification')
-        require(required_profile(request['routeId'])==SCOUT_PROFILE,'Cached fixed route changed scout scope')
+        require(required_profile(request['routeId'])==profile,'Cached fixed route changed scout scope')
     review=verify_scout_review(request,owner,spec.points if spec is not None else route_points(request['routeId']),spec)
     if 'scoutEncounterGuardPolicy' in session:
         from scout_encounter_guard import binding_from_review,guard_policy,validate_binding
@@ -1155,9 +1164,10 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
     require(len(starts) == 1, 'Expected one independently admitted starting endpoint')
     require(len(endpoints) >= minimum_legs, 'Insufficient verified route legs')
     route_id = starts[0].get('routeId', COURTYARD_ROUTE)
-    expected_profile='mondstadt-combat-scout-v1' if spec is not None else required_profile(route_id)
+    expected_profile=spec.profile_id if spec is not None else required_profile(route_id)
     if reuse is not None:
-        require(route_id==reuse['routeId'] and expected_profile=='mondstadt-combat-scout-v1'
+        require(route_id==reuse['routeId'] and expected_profile in SCOUT_PROFILES
+                and expected_profile==reuse.get('navigationProfile')
                 and len(endpoints)==1 and run.get('endReason')=='hybridLegLimit',
                 'Cached policy source observations belong to another reviewed scout route')
         samples=endpoints[0].get('samples')

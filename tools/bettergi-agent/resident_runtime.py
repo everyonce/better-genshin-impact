@@ -370,10 +370,12 @@ def run_resident(args, load_policy, run_episode, *, policy_reuse=None):
     try:
         if policy_reuse is not None:
             from scout_encounter_guard import ScoutEncounterGuard,validate_binding
+            from navigation_profiles import SCOUT_PROFILES
             guard_binding=validate_binding(policy_reuse.get('scoutEncounterGuard'))
             if (getattr(args,'scout_encounter_guard',None)!=guard_binding
                     or not getattr(args,'native_combat_observation',False)
-                    or getattr(args,'navigation_profile',None)!='mondstadt-combat-scout-v1'
+                    or getattr(args,'navigation_profile',None) not in SCOUT_PROFILES
+                    or policy_reuse.get('navigationProfile')!=args.navigation_profile
                     or args.max_observation_age_ms!=150 or args.action_hold_ms!=100 or args.seconds>35):
                 raise ValueError('Cached scout requires its unchanged reviewed encounter guard and limits')
             control.scout_encounter_guard=ScoutEncounterGuard(guard_binding)

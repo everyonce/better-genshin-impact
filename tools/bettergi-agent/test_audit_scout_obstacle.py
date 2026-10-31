@@ -8,8 +8,10 @@ import unittest
 
 import audit_scout_obstacle as audit
 from hybrid_routes import route_points,route_heading,SCOUT_GRASS_ROUTE,SCOUT_GROVE_ROUTE
+from navigation_profiles import SCOUT_PROFILE
 from scout_encounter_guard import ScoutEncounterGuard,binding_from_review,guard_policy,sensor_frame
 import test_audit_hybrid_run as shared
+from test_navigation_profiles import route_capability
 from test_scout_encounter_guard import sample
 
 
@@ -92,7 +94,8 @@ def fixture(root):
         continuity=dict(previousReport=None,sameBridgeLease=False,pendingProposals=[],pendingRecoveryActions=[],sourceFrames=[]),
         framesReceived=25,recording=recording,scoutEncounterGuard=binding,scoutEncounterGuardState=guard.snapshot(),
         acceptedInputActions=21,decisions=decisions,receipts=receipts,
-        hybridNavigation=dict(routeId=SCOUT_GRASS_ROUTE,phase='failed',completedLegs=0,
+        navigationGuidance=route_capability(SCOUT_GRASS_ROUTE),
+        hybridNavigation=dict(profileId=SCOUT_PROFILE,routeId=SCOUT_GRASS_ROUTE,phase='failed',completedLegs=0,
             failure='survey_obstacle_requires_inspection',lastPose=frames[-1]['navigationPose']),
         hybridNavigationEvents=[dict(type='hybridStartVerified',routeId=SCOUT_GRASS_ROUTE,samples=start_samples)],
         stop=dict(type='stopped',receipts=[copy.deepcopy(receipts[-1])],executionContext=dict(active=None,telemetryComplete=True,

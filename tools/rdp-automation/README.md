@@ -1,5 +1,7 @@
 # BetterGI RDP automation
 
+Fresh process-identity checks can run through the existing ordinary-user RDP command broker. A console-session access denial does not establish that the game or child exited: the unchanged `OwnedProcess` check successfully read the original game and child creation times from an ordinary session-3 worker on 2026-10-31. Keep the original PID, session, creation time and nonce checks; use that same-session verification path before a pinned replacement. This uses the broker's existing temporary least-privilege task and requires no new elevated launcher or UAC prompt for the identity query. The retained probe is `artifacts/live/2026-10-30-endurance/ordinary-rdp-identity-probe-20261031T1327Z`.
+
 See the [current agent status](../../Docs/research/BetterGI-Agent-Status.md) for the deployed build, pending repair and measured model latency.
 
 This local Python 3.11 CLI controls explicitly enabled BetterGI instances. The primary instance hosts the separate RDP window; capture, game automation and ordinary commands run in the child session. It uses the existing same-user named pipe, verifies its Windows PID/session/owner, and pins mutations to a fresh instance nonce. It contains no credential handling or game/dependency installation.

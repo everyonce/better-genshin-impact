@@ -141,7 +141,7 @@ public sealed class IdleRestartReservationTests
         typeof(GameRuntimeService).GetField("_startLock", flags)!.SetValue(runtime, startLock);
         typeof(GameRuntimeService).GetField("_stopTask", flags)!.SetValue(runtime, stopped.Task);
         var pending = (Task<GameRuntime?>)typeof(GameRuntimeService).GetMethod("StartCoreAsync", flags)!
-            .Invoke(runtime, [CancellationToken.None, 0L])!;
+            .Invoke(runtime, [CancellationToken.None, 0L, false])!;
         Assert.False(pending.IsCompleted);
         typeof(GameRuntimeService).GetField("_restartReserved", flags)!.SetValue(runtime, true);
         stopped.SetResult();

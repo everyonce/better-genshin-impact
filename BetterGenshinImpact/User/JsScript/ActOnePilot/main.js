@@ -587,7 +587,7 @@ eval(file.readTextSync('bgi.js'));
                     }
                     var resume=await resumeWolfBeforeAuthorizedStep(request);
                     if (!resume.applicable||resume.ready) {
-                        await runner.process(request, function () { return { runNavigation: ActOneMission.runNavigation, runDialogue: ActOneMission.runDialogue, runQuestStep:ActOneMission.runQuestStep, run: ActOneCombat.run, recover: ActOneRecovery.run }; },resume.ready?resume.observation:undefined);
+                        await runner.process(request, function () { return { runNavigation: ActOneMission.runNavigation, runDialogue: ActOneMission.runDialogue, runQuestStep:ActOneMission.runQuestStep, run: ActOneCombat.run, recover: ActOneRecovery.run, recoverStatuePanel:ActOneRecovery.runStatuePanel }; },resume.ready?resume.observation:undefined);
                         if(safetyFault&&request.mission==='questStep'&&request.step==='actTwoRecover'){
                             var recovered=readObservation(),recoveryReceipt=JSON.parse(file.readTextSync('receipts/'+session+'/'+request.id+'.json'));
                             if(recoveryReceipt.session===session&&recoveryReceipt.id===request.id&&recoveryReceipt.details&&recoveryReceipt.details.result&&

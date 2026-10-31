@@ -30,6 +30,11 @@ var ActOnePilot = (function () {
         if (!integer(r.createdAt, now - 30000, now)) return 'Expired or future request';
         if (typeof r.mission !== 'string' || ['observe', 'stop', 'keyPress', 'look', 'navigation', 'dialogue', 'combat', 'recover', 'questStep'].indexOf(r.mission) < 0) return 'Unknown mission';
         var allowed = ['id', 'session', 'expectedFrameId', 'createdAt', 'mission'];
+        // This explicit recovery scope cannot silently become a general recovery request.
+        if (Object.prototype.hasOwnProperty.call(r, 'statuePanelOnly')) {
+            if (r.mission !== 'recover' || r.statuePanelOnly !== true) return 'statuePanelOnly requires true on recover';
+            allowed.push('statuePanelOnly');
+        }
         if (r.mission === 'keyPress') { allowed.push('key'); if (keys.indexOf(r.key) < 0) return 'Key is not allowed'; }
         if (r.mission === 'look') { allowed.push('dx'); if (!integer(r.dx, -250, 250) || r.dx === 0) return 'Invalid look delta'; }
         if (r.mission === 'questStep') {
@@ -180,7 +185,13 @@ var ActOnePilot = (function () {
                 } else if (req.mission === 'recover') {
                     if (!enabled) throw new Error('Input is disabled');
                     var recoveryFresh = await observe();
-                    routeResult = await missionFactory().recover(recoveryFresh, api, observe);
+                    if (req.statuePanelOnly === true) {
+                        if (typeof api.statuePanelRecoveryReady !== 'function' || !api.statuePanelRecoveryReady(recoveryFresh))
+                            throw new Error('Fresh original-account Kaeya Statue healing panel required');
+                        var panelRecovery = missionFactory().recoverStatuePanel;
+                        if (typeof panelRecovery !== 'function') throw new Error('Panel-only Statue recovery is unavailable');
+                        routeResult = await panelRecovery(recoveryFresh, api, observe);
+                    } else routeResult = await missionFactory().recover(recoveryFresh, api, observe);
                     if (routeResult.status === 'stopped' && routeResult.characterMenuAction !== undefined) {
                         var characterActions=['selectAmber','openLevel','close','addXpOne','confirmXpOne','closeLevel'], events=api.events()||[], matches=events.filter(function(event){return event&&event.type==='wolfCharacterRecoveryAction';});
                         var actionEvent=matches.length===1?matches[0]:null;

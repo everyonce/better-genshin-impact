@@ -114,6 +114,66 @@ var ActOneRecovery = (function () {
         return !!(safeDescentWorld(current)&&h.climbing===false&&hp&&
             initialHealth.current-hp.current<=initialHealth.max*0.1);
     }
+    // Shared healing branch; the opt-in entry never runs generic recovery fallbacks.
+    async function healFromPanel(current,api,observe,panelOnly) {
+        function panelReady(o){return hasStatueHealingPanel(o)&&(!panelOnly||
+            typeof api.statuePanelRecoveryReady==='function'&&api.statuePanelRecoveryReady(o));}
+        // The Statue restores one tenth of max HP per portrait click.
+        // Passive recovery has already restored at least half; cap at five clicks.
+        for(var healClick=0;healClick<5;healClick++) {
+            if(panelOnly&&!panelReady(current))return {status:'stopped',reason:'Panel-only Statue evidence changed; no fallback input sent',heals:healClick};
+            api.checkStop();await api.healTravelerAtStatue();await api.sleep(700);current=await observe();
+            for(var panelPoll=0;!panelOnly&&panelPoll<3&&!panelReady(current);panelPoll++) {
+                api.checkStop();await api.sleep(500);current=await observe();
+            }
+            if(!panelReady(current))
+                return {status:'stopped',reason:'Verified Statue healing panel did not return after bounded animation wait; no further input sent',heals:healClick+1};
+        }
+        if(panelOnly&&!panelReady(current))return {status:'stopped',reason:'Panel-only Statue evidence changed before Escape',heals:5};
+        api.checkStop();await api.keyPress('VK_ESCAPE');await api.sleep(700);current=await observe();
+        for(var hpPoll=0;hpPoll<6 && !current.hud.world;hpPoll++){api.checkStop();await api.sleep(350);current=await observe();}
+        var restored=current.hud.health;
+        if(panelOnly&&(typeof api.statuePanelRecoveryWorldReady!=='function'||!api.statuePanelRecoveryWorldReady(current)))
+            return {status:'stopped',reason:'Panel-only Statue recovery did not verify full original-account Kaeya health',heals:5,health:restored};
+        if(current.hud.world && restored && restored.current/restored.max>=0.95) {
+            var journalPrevious=current,paused=await api.pauseCombat();current=await observe();
+            // A single pause key may precede settled journal OCR; only observe this transition.
+            for(var journalPoll=0;paused&&!current.hud.journal&&journalPoll<3;journalPoll++) {
+                if(typeof journalPrevious.session!=='string'||!journalPrevious.session||current.session!==journalPrevious.session||
+                    !Number.isInteger(journalPrevious.frameId)||!Number.isInteger(current.frameId)||current.frameId<=journalPrevious.frameId||
+                    !Number.isFinite(journalPrevious.timestamp)||!Number.isFinite(current.timestamp)||current.timestamp<=journalPrevious.timestamp)
+                    return {status:'stopped',reason:'Statue healed but journal transition lacks fresh same-session evidence',health:restored,paused:false};
+                api.checkStop();await api.sleep(350);api.checkStop();journalPrevious=current;
+                current=await observe();api.checkStop();
+                if(!current||!current.hud||current.session!==journalPrevious.session||!Number.isInteger(current.frameId)||current.frameId<=journalPrevious.frameId||
+                    !Number.isFinite(current.timestamp)||current.timestamp<=journalPrevious.timestamp)
+                    return {status:'stopped',reason:'Statue healed but journal transition did not produce a fresh same-session frame',health:restored,paused:false};
+            }
+            if(panelOnly&&(typeof api.statuePanelRecoveryPauseReady!=='function'||!api.statuePanelRecoveryPauseReady(current)))
+                return {status:'stopped',reason:'Panel-only Statue journal lacks fresh original-account evidence',health:restored,paused:false};
+            return {status:paused&&current.hud.journal?'completed':'stopped',reason:'Statue healing applied',health:restored,paused:current.hud.journal};
+        }
+        return {status:'stopped',reason:'Inspect screen after Statue healing',health:restored};
+    }
+    // A failed scoped entry is terminal; it cannot poll into walking or another recovery task.
+    async function runStatuePanel(current,api,observe) {
+        api.checkStop();
+        if(typeof api.statuePanelRecoveryReady!=='function'||!api.statuePanelRecoveryReady(current))
+            return {status:'stopped',reason:'Fresh original-account Kaeya Statue healing panel required',statuePanelOnly:true,heals:0};
+        var previous=current;
+        // Every later frame is a new same-session observation; none may open another branch.
+        async function scopedObserve(){
+            var next=await observe();
+            if(!next||next.session!==previous.session||!Number.isInteger(next.frameId)||next.frameId<=previous.frameId||
+               !Number.isFinite(next.timestamp)||next.timestamp<=previous.timestamp)
+                throw new Error('Panel-only Statue observation is not a newer same-session source');
+            previous=next;return next;
+        }
+        var result=await healFromPanel(current,api,scopedObserve,true);
+        result.statuePanelOnly=true;
+        result.sourceFrameId=current.frameId;
+        return result;
+    }
     async function run(current, api, observe, depth) {
         depth=depth||0;
         if(depth>4) return {status:'stopped',reason:'Recovery transition limit reached'};
@@ -258,38 +318,7 @@ var ActOneRecovery = (function () {
             var descent=await descendClimb(current,api,observe);
             if(descent) return descent;
         }
-        if(hasStatueHealingPanel(current)) {
-            // The Statue restores one tenth of max HP per portrait click.
-            // Passive recovery has already restored at least half; cap at five clicks.
-            for(var healClick=0;healClick<5;healClick++) {
-                api.checkStop();await api.healTravelerAtStatue();await api.sleep(700);current=await observe();
-                for(var panelPoll=0;panelPoll<3&&!hasStatueHealingPanel(current);panelPoll++) {
-                    api.checkStop();await api.sleep(500);current=await observe();
-                }
-                if(!hasStatueHealingPanel(current))
-                    return {status:'stopped',reason:'Verified Statue healing panel did not return after bounded animation wait; no further input sent',heals:healClick+1};
-            }
-            api.checkStop();await api.keyPress('VK_ESCAPE');await api.sleep(700);current=await observe();
-            for(var hpPoll=0;hpPoll<6 && !current.hud.world;hpPoll++){api.checkStop();await api.sleep(350);current=await observe();}
-            var restored=current.hud.health;
-            if(current.hud.world && restored && restored.current/restored.max>=0.95) {
-                var journalPrevious=current,paused=await api.pauseCombat();current=await observe();
-                // A single pause key may precede settled journal OCR; only observe this transition.
-                for(var journalPoll=0;paused&&!current.hud.journal&&journalPoll<3;journalPoll++) {
-                    if(typeof journalPrevious.session!=='string'||!journalPrevious.session||current.session!==journalPrevious.session||
-                        !Number.isInteger(journalPrevious.frameId)||!Number.isInteger(current.frameId)||current.frameId<=journalPrevious.frameId||
-                        !Number.isFinite(journalPrevious.timestamp)||!Number.isFinite(current.timestamp)||current.timestamp<=journalPrevious.timestamp)
-                        return {status:'stopped',reason:'Statue healed but journal transition lacks fresh same-session evidence',health:restored,paused:false};
-                    api.checkStop();await api.sleep(350);api.checkStop();journalPrevious=current;
-                    current=await observe();api.checkStop();
-                    if(!current||!current.hud||current.session!==journalPrevious.session||!Number.isInteger(current.frameId)||current.frameId<=journalPrevious.frameId||
-                        !Number.isFinite(current.timestamp)||current.timestamp<=journalPrevious.timestamp)
-                        return {status:'stopped',reason:'Statue healed but journal transition did not produce a fresh same-session frame',health:restored,paused:false};
-                }
-                return {status:paused&&current.hud.journal?'completed':'stopped',reason:'Statue healing applied',health:restored,paused:current.hud.journal};
-            }
-            return {status:'stopped',reason:'Inspect screen after Statue healing',health:restored};
-        }
+        if(hasStatueHealingPanel(current)) return await healFromPanel(current,api,observe,false);
         var statueSpeaker=(current.ocr||[]).some(function(r){return r.text.trim()==='Statue of The Seven' && r.y>830 && r.y<910;});
         if(statueSpeaker) {
             if(!(current.ocr||[]).some(function(r){return /^Statue.s Blessing$/i.test(r.text.trim());})) {
@@ -361,6 +390,6 @@ var ActOneRecovery = (function () {
         if(paused) {current=await observe();paused=current.hud.journal===true;}
         return {status:healed&&paused?'completed':'stopped',reason:healed?'Recovered at Starfell Lake Statue':'Recovery health not verified',health:hp,paused:paused,moves:moves,turns:turns};
     }
-    return {run:run, safeClimbingWorld:safeClimbingWorld, safeStatueInteraction:safeStatueInteraction, hasStatueHealingPanel:hasStatueHealingPanel};
+    return {run:run, runStatuePanel:runStatuePanel, safeClimbingWorld:safeClimbingWorld, safeStatueInteraction:safeStatueInteraction, hasStatueHealingPanel:hasStatueHealingPanel};
 })();
 if(typeof module!=='undefined'&&module.exports) module.exports=ActOneRecovery;

@@ -311,6 +311,29 @@ function actOneStatueAlternativePower(rows) {
        r.width<450||r.width>530||r.height<20||r.height>50||Number(match[1])>10000)return null;
     return Number(match[1]);
 }
+// A panel-only request binds the original account and the recorded third Kaeya card.
+// These are legacy completed-observation wall times, not native AgentStream QPC ages.
+function actOneStatuePanelRecoveryReady(o,now,session) {
+    var h=o&&o.hud,rows=o&&o.ocr;
+    if(!o||o.session!==session||!Number.isInteger(o.frameId)||o.frameId<1||!Number.isFinite(now)||
+       !Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>1000||o.map!==null||!h||
+       h.world!==false||h.journal!==false||h.bigMap!==false||h.choice!==false||h.dialogueReady!==false||
+       h.auto!==false||h.climbing!==false||!Array.isArray(rows))return false;
+    function one(predicate){return rows.filter(predicate).length===1;}
+    if(!one(function(r){return /^(?:UID)?[: ]*693306810$/.test(String(r.text||'').trim())&&r.x>1600&&r.y>1030;})||
+       !one(function(r){return String(r.text||'').trim()==='Click on the character portrait to restore HP'&&r.y<100;})||
+       !one(function(r){return /^Statue.s Blessing$/.test(String(r.text||'').trim())&&r.x>1400&&r.y<100;}))return false;
+    var cards=rows.filter(function(r){return /^Lv\.?\s*[1-9][0-9]?$/.test(String(r.text||'').trim())&&
+        [r.x,r.y,r.width,r.height].every(Number.isFinite)&&r.x>=430&&r.x<=510&&
+        r.y>=210&&r.y<=255&&r.width>=30&&r.width<=90&&r.height>=15&&r.height<=40;});
+    if(cards.length!==1||!/^Lv\.?\s*20$/.test(String(cards[0].text||'').trim()))return false;
+    var power=rows.filter(function(r){return /^Restorative Power:/.test(String(r.text||'').trim());});
+    if(power.length!==1)return false;
+    var r=power[0],literal=/^Restorative Power:\s*([0-9]{1,5})\s*\/\s*10000$/.exec(String(r.text||'').trim()),
+        amount=literal?Number(literal[1]):actOneStatueAlternativePower(rows);
+    return Number.isFinite(amount)&&amount>0&&amount<=10000&&[r.x,r.y,r.width,r.height].every(Number.isFinite)&&
+        r.x>=1380&&r.x<=1420&&r.y>=580&&r.y<=630&&r.width>=450&&r.width<=530&&r.height>=20&&r.height<=50;
+}
 function actOneLisaLockedTemplePanel(o,now,session){
     if(!o||o.session!==session||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>1000||
        !o.hud||o.hud.world||o.hud.health||o.hud.auto||o.hud.dialogueReady||!Array.isArray(o.ocr))return false;
@@ -7908,8 +7931,31 @@ function createActOneAdapter(sessionId) {
             if(choices.length!==1) throw new Error('Unique Statue blessing option required');
             var r=choices[0];events.push({type:'statueBlessing',startedAt:Date.now()});click(Math.round(r.x+r.width/2),Math.round(r.y+r.height/2));
         },
+        // The engine's immutable copy must still name the adapter's current capture.
+        statuePanelRecoveryReady: function (o) {
+            return !!(request&&request.mission==='recover'&&request.statuePanelOnly===true&&lastObservation&&o&&
+                o.session===lastObservation.session&&o.frameId===lastObservation.frameId&&o.timestamp===lastObservation.timestamp&&
+                actOneStatuePanelRecoveryReady(o,Date.now(),request.session));
+        },
+        // The scoped branch may leave the panel only for verified full-health Kaeya and its pause.
+        statuePanelRecoveryWorldReady: function (o) {
+            return !!(request&&request.mission==='recover'&&request.statuePanelOnly===true&&lastObservation&&o&&
+                o.session===lastObservation.session&&o.frameId===lastObservation.frameId&&o.timestamp===lastObservation.timestamp&&
+                actOneStatueHealingVerified(o,Date.now(),request.session)&&o.hud.health.max===4015);
+        },
+        // A settled pause must still belong to the same freshly captured original account.
+        statuePanelRecoveryPauseReady: function (o) {
+            var now=Date.now();
+            return !!(request&&request.mission==='recover'&&request.statuePanelOnly===true&&lastObservation&&o&&
+                o.session===request.session&&o.session===lastObservation.session&&o.frameId===lastObservation.frameId&&
+                o.timestamp===lastObservation.timestamp&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&
+                o.hud&&o.hud.journal===true&&o.hud.world===false&&Array.isArray(o.ocr)&&
+                o.ocr.filter(function(r){return /^(?:UID)?[: ]*693306810$/.test(String(r.text||'').trim())&&r.x>1600&&r.y>1030;}).length===1);
+        },
         healTravelerAtStatue: async function () {
             checkStop();
+            if(request&&request.statuePanelOnly===true&&!actOneStatuePanelRecoveryReady(lastObservation,Date.now(),request.session))
+                throw new Error('Fresh original-account Kaeya Statue healing panel required');
             if(!lastObservation || Date.now()-lastObservation.timestamp>1000 ||
                !lastObservation.ocr.some(function(r){return /Click on the character portrait to restore HP/.test(r.text) && r.y<100;}) ||
                !lastObservation.ocr.some(function(r){return /^Statue.s Blessing$/.test(r.text.trim()) && r.x>1400 && r.y<100;}) ||
@@ -7919,9 +7965,13 @@ function createActOneAdapter(sessionId) {
             // The recorded starter roster has Traveler, Amber, then Kaeya.
             // Heal the third portrait only when its card is present in this panel.
             var portraits=actOneStatueHealingPortraits(lastObservation.ocr);
-            events.push({type:'healStarterParty',portraits:portraits,y:160,startedAt:Date.now()});
+            var healEvent={type:'healStarterParty',portraits:portraits,y:160,startedAt:Date.now()};
+            if(request&&request.statuePanelOnly===true){healEvent.statuePanelOnly=true;healEvent.frameId=lastObservation.frameId;}
+            events.push(healEvent);
             for(var portraitIndex=0;portraitIndex<portraits.length;portraitIndex++){
                 if(portraitIndex){await sleep(300);checkStop();}
+                if(request&&request.statuePanelOnly===true&&!actOneStatuePanelRecoveryReady(lastObservation,Date.now(),request.session))
+                    throw new Error('Panel-only Statue source expired before a portrait click');
                 if(request.step==='actTwoStatueHeal')await actOneAccountUiClick({checkStop:checkStop,ready:ready,move:moveMouseTo,down:leftButtonDown,up:leftButtonUp,sleep:sleep},{x:portraits[portraitIndex],y:160});else click(portraits[portraitIndex],160);
             }
         },

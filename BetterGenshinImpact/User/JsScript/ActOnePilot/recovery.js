@@ -131,7 +131,10 @@ var ActOneRecovery = (function () {
         }
         if(panelOnly&&!panelReady(current))return {status:'stopped',reason:'Panel-only Statue evidence changed before Escape',heals:5};
         api.checkStop();await api.keyPress('VK_ESCAPE');await api.sleep(700);current=await observe();
-        for(var hpPoll=0;hpPoll<6 && !current.hud.world;hpPoll++){api.checkStop();await api.sleep(350);current=await observe();}
+        // A world frame can precede settled controls/health; scoped recovery waits for its complete predicate.
+        function recoveryWorldReady(o){return panelOnly?typeof api.statuePanelRecoveryWorldReady==='function'&&
+            api.statuePanelRecoveryWorldReady(o):o&&o.hud&&o.hud.world;}
+        for(var hpPoll=0;hpPoll<6&&!recoveryWorldReady(current);hpPoll++){api.checkStop();await api.sleep(350);current=await observe();}
         var restored=current.hud.health;
         if(panelOnly&&(typeof api.statuePanelRecoveryWorldReady!=='function'||!api.statuePanelRecoveryWorldReady(current)))
             return {status:'stopped',reason:'Panel-only Statue recovery did not verify full original-account Kaeya health',heals:5,health:restored};

@@ -8248,6 +8248,8 @@ function createActOneAdapter(sessionId) {
                 }
                 var recoverWolfSafe=!!recoverWolfProven;
                 var recoverWolfFoodDomainRequest=!!(request&&request.mission==='recover'&&(wolfContinueAttempted||wolfRecoveryFoodCloseAttempted));
+                // The panel-only branch also needs the existing same-capture E/Q repair after Escape.
+                var recoverStatuePanelRequest=!!(request&&request.mission==='recover'&&request.statuePanelOnly===true);
                 var safeWorldCandidate=!!pos&&!!hp&&!auto&&!journal&&!bigMap;
                 if(!tutorialStep&&actOneGlideForwardState(rows,pos,hp,{world:safeWorldCandidate,auto:auto,journal:journal,bigMap:bigMap,
                     dialogueReady:actOneDialogueReady(rows,choice),choice:auto&&choice,objectiveChanged:/objective updated|quest completed/i.test(text)})) tutorialStep='glideForward';
@@ -8258,7 +8260,7 @@ function createActOneAdapter(sessionId) {
                     objectiveRows.some(function(r){return actOneLisaObjective(r.text);});
                 var indoorControlRequest=actTwoIndoorControlCandidate(request,rows,hp,{auto:auto,journal:journal,bigMap:bigMap,choice:choice,dialogueReady:actOneDialogueReady(rows,choice),tutorialStep:tutorialStep},objectiveRows);
                 if((pos||regionalObservation||indoorControlRequest||(request&&request.mission==='questStep'&&/^(falcon|wolf)/.test(request.step))||windriseControlRequest||recoverWolfSafe||recoverWolfFoodDomainRequest)&&hp&&!auto&&!journal&&!bigMap&&!(auto&&choice)&&!tutorialStep&&
-                   (!request||request.mission!=='recover'||recoverWolfSafe)&&actOneNeedsControlCrop(rows)) {
+                   (!request||request.mission!=='recover'||recoverWolfSafe||recoverStatuePanelRequest)&&actOneNeedsControlCrop(rows)) {
                     var control0=Date.now(),controlLocal=scaledRows(img,1520,985,390,80);
                     rows=actOneMergeControlCropRows(rows,controlLocal,1520,985);
                     controlOcrMs=Date.now()-control0;ocrMs=Date.now()-o0;

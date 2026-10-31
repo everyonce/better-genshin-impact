@@ -144,6 +144,30 @@ test('partial health cannot be relabeled full Kaeya recovery', async () => {
   assert.deepEqual(f.calls.filter(row => row[0] === 'key'), [['key', 'VK_ESCAPE']]);
 });
 
+test('full health waits passively for settled ground controls before the single journal key', async () => {
+  let worldFrames = 0;
+  const f = fixture(o => {
+    if (o.hud.world && ++worldFrames <= 2) o.hud.groundControls = false;
+  });
+  await f.runner.observe();
+  assert.equal(await f.runner.process(f.request(), () => f.policy), 'completed');
+  assert.equal(worldFrames, 3);
+  assert.equal(f.context.events.filter(row => row.type === 'healStarterParty').length, 5);
+  assert.deepEqual(f.calls.filter(row => row[0] === 'key'), [['key', 'VK_ESCAPE'], ['key', 'VK_J']]);
+});
+
+test('missing ground controls exhaust the existing passive budget without another heal or pause key', async () => {
+  let worldFrames = 0;
+  const f = fixture(o => {
+    if (o.hud.world) { worldFrames++; o.hud.groundControls = false; }
+  });
+  await f.runner.observe();
+  await assert.rejects(f.runner.process(f.request(), () => f.policy), /full original-account Kaeya/);
+  assert.equal(worldFrames, 7);
+  assert.equal(f.context.events.filter(row => row.type === 'healStarterParty').length, 5);
+  assert.deepEqual(f.calls.filter(row => row[0] === 'key'), [['key', 'VK_ESCAPE']]);
+});
+
 test('repeated source time and foreign-account journal cannot finish the scoped branch', async () => {
   for (const mutate of [
     (o, frame) => { if (frame === 3) o.timestamp = 100002; },

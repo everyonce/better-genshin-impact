@@ -6,7 +6,7 @@ video presentation time is an index, not an assumption about capture cadence.
 """
 import argparse
 import copy
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 import hashlib
 import json
 import math
@@ -881,6 +881,132 @@ def scout_dispatch(guard, report, recorder, frame, request_id):
     return marker
 
 
+def validate_combat_trial_options(args, policy, control):
+    """Keep the explicit single-lease combat authority separate from navigation and scout reuse."""
+    binding = getattr(args, 'combat_trial_binding', None)
+    if binding is None:
+        if getattr(control, 'combat_trial_guard', None) is not None:
+            raise ValueError('Combat trial authority cannot be removed or reused')
+        return None
+    from combat_trial_guard import validate_binding, canonical
+    validate_binding(binding)
+    if (control is None or getattr(control, 'frozen_goal', False) is not True
+            or getattr(control, 'combat_trial_guard', None) is not None
+            or getattr(control, 'scout_encounter_guard', None) is not None
+            or policy is None or args.model != 'open-p2p' or not getattr(policy, 'execution_feedback', False)
+            or getattr(policy, 'combat_trial_goal_sha256', None) != binding['goalSha256']
+            or canonical(getattr(args, 'combat_trial_owner', None)) != canonical(binding['owner'])):
+        raise ValueError('Combat trial requires its original frozen owner and separately loaded goal')
+    forbidden = ('resident', 'lease_output', 'patrol_series_binding', 'scout_encounter_guard',
+                 'combat_shadow', 'hybrid_navigation', 'hybrid_observe', 'navigation_guidance', 'navigation_progress',
+                 'navigation_climb_recovery', 'navigation_idle_reset_seconds', 'warm_photo_plan',
+                 'camera_calibration', 'steering_shadow', 'landmark_shadow', 'photo_station')
+    if (any(getattr(args, key, None) for key in forbidden) or args.execution_context != 'off'
+            or not args.enable_input or not args.native_combat_observation or not args.require_world_ready
+            or args.observation_profile != P2P_NATIVE or args.input_keys != 'LBUTTON'
+            or args.max_input_actions != 3 or not 0 < args.seconds <= 5
+            or not 0 < args.max_observation_age_ms <= 150 or args.action_hold_ms != 100
+            or not args.record_dir or not args.retain_policy_rgb or not 0 < args.record_max_mib <= 160
+            or not args.p2p_execution_feedback or not args.p2p_prewarm or not args.soft_cadence):
+        raise ValueError('Combat trial requires one recorded bounded pure-LBUTTON lease without other controllers')
+    child = binding['owner']['child']
+    if (getattr(args, 'expected_process_id', None) != child['processId']
+            or getattr(args, 'expected_session_id', None) != child['windowsSessionId']
+            or not args.goal_embedding
+            or hashlib.sha256(Path(args.goal_embedding).read_bytes()).hexdigest() != binding['goalSha256']):
+        raise ValueError('Combat trial child or goal file differs from its review')
+    return copy.deepcopy(binding)
+
+
+class CombatTrialRecorder:
+    """Make any lost combat label or source pixels terminal instead of continuing inference."""
+
+    def __init__(self, recorder):
+        """Wrap only this explicit trial's existing bounded recorder."""
+        self.recorder = recorder
+
+    def __getattr__(self, name):
+        """Keep the ordinary recorder's status and finalization interface intact."""
+        return getattr(self.recorder, name)
+
+    def _require_retention(self, result, label):
+        """Treat asynchronous queue eviction as loss even before the recorder publishes an error."""
+        losses = {name: getattr(self.recorder, name, 0) for name in
+                  ('dropped', 'dropped_events', 'dropped_observations', 'abandoned_frames')}
+        losses = {name: value for name, value in losses.items() if type(value) is not int or value != 0}
+        if result is False or self.recorder.error or losses:
+            raise RuntimeError('Combat trial ' + label + ' retention failed: ' + str(self.recorder.error)
+                               + ('; counters=' + str(losses) if losses else ''))
+
+    def event(self, item):
+        """Reject failed or silently refused journal writes before another dispatch."""
+        result = self.recorder.event(item)
+        self._require_retention(result, 'journal')
+        return result
+
+    def put(self, metadata, pixels):
+        """Require exact pixels as well as source metadata for every retained trial observation."""
+        result = self.recorder.put(metadata, pixels)
+        self._require_retention(result, 'RGB')
+        return result
+
+
+def combat_trial_release(bridge, guard, report, recorder, reason):
+    """Serialize release/disarm with intake and retain the exact reply before journal failure."""
+    from combat_trial_guard import retained
+    with guard.intake_lock:
+        reply, payload = bridge.request('release')
+        now = time.perf_counter_ns()
+        report.setdefault('combatTrialReleases', []).append(dict(response=retained(reply),
+            payloadBytes=len(payload), clientTimeNs=now, reason=reason))
+        event = guard.acknowledge_release(reply, len(payload), now, reason)
+        report['combatTrialGuardState'] = event['state']
+        if recorder:
+            recorder.event(event)
+        last = event['state']['lastRelease']
+        if last is None or last['clientTimeNs'] != now:
+            raise RuntimeError('Combat trial release was not acknowledged')
+        return reply, payload
+
+
+def close_combat_setup_failure(args, bridge, guard, report, recorder, error, reason):
+    """Close every acquired resource before rethrowing the original pre-loop failure."""
+    report['error'] = str(error)
+    report['status'], report['endReason'] = 'failed', 'combatTrialSetupFailure'
+    report['combatTrialGuardState'] = guard.fail(reason, time.perf_counter_ns(), error=str(error))['state']
+    cleanup_errors = []
+
+    def retain_cleanup(operation, failure):
+        """Keep cleanup errors separate so they never replace the initiating exception."""
+        cleanup_errors.append(dict(operation=operation, error=str(failure)))
+        error.add_note('Combat trial ' + operation + ' cleanup failed: ' + str(failure))
+
+    try:
+        combat_trial_release(bridge, guard, report, None, reason)
+    except Exception as failure:
+        retain_cleanup('release', failure)
+    if recorder is not None:
+        try:
+            report['recording'] = recorder.close()
+            if report['recording'].get('error'):
+                retain_cleanup('recorder', report['recording']['error'])
+        except Exception as failure:
+            retain_cleanup('recorder', failure)
+    try:
+        bridge.handle.close()
+    except Exception as failure:
+        retain_cleanup('bridge', failure)
+    report['combatTrialGuardState'] = guard.snapshot()
+    report['combatTrialCleanupErrors'] = cleanup_errors
+    error.combat_trial_cleanup_errors = cleanup_errors
+    try:
+        target = Path(args.output)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(report, indent=2), encoding='utf-8')
+    except Exception as failure:
+        retain_cleanup('report', failure)
+
+
 class ClimbRecoveryStream:
     """Serial integration of pure recovery intents with the existing standard bridge.
 
@@ -1519,6 +1645,8 @@ def action_response_accepted(response, request_id, payload=b''):
 
 def run_episode(args, policy=None, control=None):
     """Run one owned bridge lease with an optional already-loaded model and live controls."""
+    combat_binding = validate_combat_trial_options(args, policy, control)
+    combat_guard = None
     hybrid_observe = validate_hybrid_observe_options(args)
     navigation_profile = validate_navigation_scope_options(args)
     native_combat_enabled = getattr(args,'native_combat_observation',False)
@@ -1557,6 +1685,14 @@ def run_episode(args, policy=None, control=None):
         except Exception:
             bridge.handle.close()
             raise
+    if combat_binding is not None:
+        try:
+            from combat_trial_guard import CombatTrialGuard
+            combat_guard = CombatTrialGuard(combat_binding, args.combat_trial_owner, bridge.hello, time.perf_counter_ns())
+            control.combat_trial_guard = combat_guard
+        except Exception:
+            bridge.handle.close()
+            raise
     if execution_mode != 'off':
         from execution_bridge import ExecutionContextBridge, decision_context
         try:
@@ -1591,6 +1727,9 @@ def run_episode(args, policy=None, control=None):
     if scout_guard is not None:
         report['scoutEncounterGuard'] = copy.deepcopy(scout_guard.binding)
         report['scoutEncounterGuardState'] = scout_guard.snapshot()
+    if combat_guard is not None:
+        report['combatTrialGuard'] = combat_binding
+        report['combatTrialGuardState'] = combat_guard.snapshot()
     if execution_mode != 'off':
         report['executionContext'] = {'mode': execution_mode, 'schema': 'execution-context-v1',
                                       'knowledgeClock': 'client_perf_counter_ns',
@@ -1636,7 +1775,13 @@ def run_episode(args, policy=None, control=None):
     climb = None
     hybrid = None
     terminal_climb_error = None
+    recorder = None
     try:
+        # Snapshot caller-owned metadata before creating recorder/encoder resources.
+        if combat_guard is not None:
+            report['policyMetadata'] = copy.deepcopy(policy.metadata) if policy else None
+            report['initialGoalState'] = control.goal_state()
+            report['residentRunId'] = control.run_id
         warm = None
         queue_control_token = None
         itinerary = {}
@@ -1715,10 +1860,15 @@ def run_episode(args, policy=None, control=None):
         else:
             recorder = AsyncVideoRecorder(args.record_dir, args.ffmpeg, args.fps, args.record_max_mib*2**20,
                                           preview=args.preview, retain_policy_rgb=getattr(args,'retain_policy_rgb',False)) if args.record_dir else None
+        if combat_guard is not None:
+            recorder = CombatTrialRecorder(recorder)
         if climb:
             climb.recorder = recorder
-    except Exception:
-        bridge.handle.close()
+    except Exception as error:
+        if combat_guard is not None:
+            close_combat_setup_failure(args, bridge, combat_guard, report, recorder, error, 'setupFailure')
+        else:
+            bridge.handle.close()
         raise
     stopped = threading.Event()
     progress = None
@@ -1735,12 +1885,24 @@ def run_episode(args, policy=None, control=None):
     report['capturePollHz'] = args.fps
     report['maxObservationAgeMs'] = args.max_observation_age_ms
     # A later set_goal mutates adapter metadata; this episode's starting identity is immutable.
-    report['policyMetadata'] = copy.deepcopy(policy.metadata) if policy else None
-    report['initialGoalState'] = control.goal_state() if control else None
-    report['residentRunId'] = control.run_id if control else None
+    if combat_guard is None:
+        report['policyMetadata'] = copy.deepcopy(policy.metadata) if policy else None
+        report['initialGoalState'] = control.goal_state() if control else None
+        report['residentRunId'] = control.run_id if control else None
     report['serverDroppedReceipts'] = 0
+
+    def record_initial_event(event):
+        """Release an admitted combat lease even if its first journal write fails before reader setup."""
+        try:
+            recorder.event(event)
+        except Exception as error:
+            if combat_guard is not None:
+                close_combat_setup_failure(args, bridge, combat_guard, report, recorder, error, 'recordingFailure')
+            raise
+
     if recorder:
-        recorder.event({'type': 'episodeStart', 'sessionId': bridge.hello['sessionId'],
+        record_initial_event({'type': 'episodeStart', 'sessionId': bridge.hello['sessionId'],
+                        **({'combatTrialGuard': combat_binding} if combat_guard is not None else {}),
                         **({'hostSourceContract': report['hostSourceContract']} if host_contract.policy is not None else {}),
                         'proposalJournal': report['proposalJournal'],
                         'clock': bridge.hello.get('clock'), 'clockFrequency': bridge.hello.get('clockFrequency'),
@@ -1766,9 +1928,18 @@ def run_episode(args, policy=None, control=None):
     def collect_receipts(metadata):
         nonlocal unapplied_receipt_sequence
         # No JSON serialization, flushing, or filesystem access occurs here.
+        if combat_guard is not None and (metadata.get('receipts') or metadata.get('droppedReceipts', 0)):
+            from combat_trial_guard import retained
+            report.setdefault('combatTrialReceiptEnvelopes', []).append(retained({key: metadata.get(key)
+                for key in ('type', 'serverNowMs', 'receipts', 'droppedReceipts')}))
         for receipt in metadata.get('receipts', []):
             report['receipts'].append(receipt)
             receipt_inbox.append(receipt)
+            if combat_guard is not None:
+                event = combat_guard.receipt(receipt, time.perf_counter_ns())
+                report['combatTrialGuardState'] = event['state']
+                if recorder:
+                    recorder.event(event)
             if archive and len(receipt_inbox) > 4096:
                 raise RuntimeError('Policy receipt inbox overflow; execution feedback is incomplete')
             if progress:
@@ -1785,7 +1956,8 @@ def run_episode(args, policy=None, control=None):
             if recorder:
                 recorder.fail('Server dropped execution receipts; this episode has incomplete labels')
 
-    receive_lock = scout_guard.intake_lock if scout_guard is not None else threading.Lock()
+    receive_lock = (combat_guard.intake_lock if combat_guard is not None else
+                    scout_guard.intake_lock if scout_guard is not None else threading.Lock())
     received_frame_id = None
     recovery_capture_context = None
 
@@ -1794,16 +1966,70 @@ def run_episode(args, policy=None, control=None):
         return [item for item in items if getattr(policy, 'execution_feedback', False)
                 and item.get('modelId') == args.model and not item.get('appliedSteps')]
 
+    @contextmanager
+    def combat_intake_boundary():
+        """Latch and attempt release before a failed frame/journal operation drops the shared intake lock."""
+        try:
+            yield
+        except Exception as error:
+            if combat_guard is not None:
+                stopped.set()
+                report['combatTrialGuardState'] = combat_guard.fail('frameProcessingFailure', time.perf_counter_ns(), error=str(error))['state']
+                report.setdefault('endReason', 'combatTrialGuard')
+                try:
+                    released, _ = combat_trial_release(bridge, combat_guard, report,
+                        recorder if recorder and not recorder.error else None, 'combatTrialFailure')
+                    collect_receipts(released)
+                except Exception as release_error:
+                    report['combatTrialReleaseError'] = str(release_error)
+            raise
+
     def poll_frame():
         """Serialize frame ingestion so scheduled and just-in-time polls cannot reorder evidence."""
         nonlocal server_snapshot
         nonlocal received_frame_id
         nonlocal recovery_interruption_sequence
         nonlocal recovery_capture_context
-        with receive_lock:
+        with receive_lock, combat_intake_boundary():
             start = time.perf_counter_ns()
             metadata, pixels = bridge.request('frame')
             arrived = time.perf_counter_ns()
+            if combat_guard is not None:
+                event = combat_guard.observe(metadata, arrived, round_trip_ms=(arrived-start)/1e6)
+                report['combatTrialGuardState'] = event['state']
+                trip = event['state']['trip']
+                if trip:
+                    # A hazard is never published to policy. Keep its original event and,
+                    # where ordinary validations succeed, exact RGB before reader failure.
+                    stopped.set()
+                    report['endReason'] = 'combatTrialGuard'
+                    try:
+                        recorder.event(event)
+                    except Exception as error:
+                        report['combatTrialTriggerJournalError'] = str(error)
+                    try:
+                        host_contract.validate(metadata)
+                        verify_frame(metadata, pixels, profile_contract)
+                        from native_combat import validate_frame
+                        validate_frame(metadata)
+                        if len(pixels) != metadata['width'] * metadata['height'] * 3:
+                            raise ValueError('Combat trigger RGB payload does not match declared dimensions')
+                        metadata.update(clientReceivedNs=arrived, transportRoundTripMs=(arrived-start)/1e6,
+                                        frameQuality=rgb_frame_quality(pixels))
+                        report['captureQuality'][metadata['frameQuality'] + 'Frames'] += 1
+                        report['framesReceived'] += 1
+                        if metadata.get('combatEvidence') is not None:
+                            report['nativeCombatEvidenceFrames'] += 1
+                        report['combatTrialTriggerRecorded'] = bool(recorder.put(recording_frame_metadata(metadata, execution_mode), pixels))
+                    except Exception as error:
+                        report['combatTrialTriggerCaptureError'] = str(error)
+                    try:
+                        collect_receipts(metadata)
+                    except Exception as error:
+                        report['combatTrialTriggerReceiptError'] = str(error)
+                    from combat_trial_guard import CombatTrialStop
+                    raise CombatTrialStop('Combat trial stopped: ' + trip['reason'])
+                recorder.event(event)
             if scout_guard is not None:
                 guard_event = scout_guard.observe(metadata, arrived)
                 report['scoutEncounterGuardState'] = guard_event['state']
@@ -1871,6 +2097,9 @@ def run_episode(args, policy=None, control=None):
                 recovery_capture_context = context
             server_snapshot = (time.perf_counter(), metadata)
             collect_receipts(metadata)
+            if combat_guard is not None and combat_guard.snapshot()['trip'] is not None:
+                from combat_trial_guard import CombatTrialStop
+                raise CombatTrialStop('Combat trial receipt evidence failed')
             if metadata.get('type') == 'frame' and metadata['frameId'] != received_frame_id:
                 if len(pixels) != metadata['width'] * metadata['height'] * 3:
                     raise ValueError('RGB payload does not match declared dimensions')
@@ -1909,7 +2138,12 @@ def run_episode(args, policy=None, control=None):
             stopped.set()
 
     producer = threading.Thread(target=receive, daemon=True)
-    producer.start()
+    try:
+        producer.start()
+    except Exception as error:
+        if combat_guard is not None:
+            close_combat_setup_failure(args, bridge, combat_guard, report, recorder, error, 'readerStartFailure')
+        raise
     remaining = min(args.seconds, max(0, args.lease_deadline-time.monotonic())) if getattr(args, 'lease_deadline', None) else args.seconds
     deadline = time.perf_counter() + remaining
     cadence = DecisionCadence(args.decision_hz, time.perf_counter(), resume_immediately=args.soft_cadence)
@@ -1930,6 +2164,14 @@ def run_episode(args, policy=None, control=None):
     def hold(reason, force_release=False, preserve_navigation=False):
         """Release once per interruption and clear stale context without unloading weights."""
         nonlocal hold_reason
+        if combat_guard is not None:
+            from combat_trial_guard import CombatTrialStop
+            report['combatTrialGuardState'] = combat_guard.fail('inputInterrupted', time.perf_counter_ns(), interruption=reason)['state']
+            try:
+                released, _ = combat_trial_release(bridge, combat_guard, report, recorder, reason)
+                collect_receipts(released)
+            finally:
+                raise CombatTrialStop('Combat trial interrupted: ' + reason)
         idle_recovery.interrupt(reason)
         if hybrid and reason != 'hybridEndpoint' and not preserve_navigation:
             hybrid.interrupt(reason)
@@ -2108,6 +2350,8 @@ def run_episode(args, policy=None, control=None):
     try:
         while time.perf_counter() < deadline and not stopped.is_set():
             if recorder and recorder.error and not recording_error_reported:
+                if combat_guard is not None:
+                    raise RuntimeError('Combat trial recording failed: ' + str(recorder.error))
                 print(json.dumps({'recordingError': recorder.error, 'inferenceContinues': True}), file=sys.stderr, flush=True)
                 recording_error_reported = True
             if not sleep_until(min(cadence.next_at, deadline), stopped) or time.perf_counter() >= deadline:
@@ -2145,6 +2389,10 @@ def run_episode(args, policy=None, control=None):
                     if item:
                         previous = item[0]['frameId']
             command, control_error = control.snapshot() if control else ('run', None)
+            if combat_guard is not None and command != 'run':
+                report['endReason'] = 'userStop' if command == 'stop' else 'userPause'
+                report['combatTrialGuardState'] = combat_guard.fail(report['endReason'], time.perf_counter_ns(), controlError=control_error)['state']
+                break
             goal_state = control.goal_identity() if control else {
                 'policyGoalVersion': 0, 'appliedGoalRequestId': None,
                 'goalIntent': getattr(args, 'goal_intent', 'unspecified')}
@@ -2215,6 +2463,27 @@ def run_episode(args, policy=None, control=None):
                 # handling. A newer terminal trip is still checked by each dispatch boundary.
                 cadence.advance(time.perf_counter())
                 continue
+            if combat_guard is not None:
+                with receive_lock:
+                    state = combat_guard.tick(time.perf_counter_ns())
+                    report['combatTrialGuardState'] = state
+                    if state['trip'] is not None:
+                        from combat_trial_guard import CombatTrialStop
+                        raise CombatTrialStop('Combat trial stopped: ' + state['trip']['reason'])
+                    if state['trialComplete']:
+                        report['endReason'] = 'combatTrialComplete'
+                        break
+                    if state['phase'] == 'awaitingRelease':
+                        released, _ = combat_trial_release(bridge, combat_guard, report, recorder, 'completedCombatPulse')
+                        collect_receipts(released)
+                        last_readiness_epoch = released['worldReadiness']['epoch']
+                        latest.clear()
+                        state = combat_guard.snapshot()
+                    if state['phase'] != 'ready' or not state['evidenceReady']:
+                        # No inference, superseding action, generic release or automatic resume
+                        # can overtake the owned terminal receipt and post-release source barrier.
+                        cadence.advance(time.perf_counter())
+                        continue
             # Keep observing while the admitted first successor action produces its original terminal receipt.
             awaiting_dispatch = warm and warm.awaiting_batch_dispatch_receipt(server_snapshot[1].get('serverNowMs'))
             if climb and not awaiting_dispatch and not awaiting_photo and not awaiting_batch and not awaiting_release_retry:
@@ -2473,14 +2742,31 @@ def run_episode(args, policy=None, control=None):
                         steps=result['steps'], **start_deadline)
                     # Intake and dispatch share this gate only for guarded scouts: a newer latched
                     # hazard can never be overtaken by an inference that started on healthy pixels.
-                    with (receive_lock if scout_guard is not None else nullcontext()):
+                    with (receive_lock if scout_guard is not None or combat_guard is not None else nullcontext()):
                         if scout_guard is not None:
                             result['scoutEncounterGuard'] = scout_dispatch(scout_guard,report,recorder,frame,request_id)
-                        return transmit_bound_action(bridge,warm,report,arguments,'unacknowledgedAction',evidence)
-                submitted, response = control.guarded_submit(control_token, submit_action) if warm else (True, submit_action())
+                        if combat_guard is not None:
+                            marker = combat_guard.prepare_action(frame, result, request_id, time.perf_counter_ns(),
+                                owner=args.combat_trial_owner, hello=bridge.hello)
+                            result['combatTrialGuard'] = marker
+                            report['combatTrialGuardState'] = marker['state']
+                            recorder.event(marker)
+                            if marker['type'] != 'combatTrialDispatch':
+                                return dict(type='notSubmitted', reason=marker['reason']), b''
+                            arguments = marker['arguments']
+                            result['startBeforeMs'] = arguments['startBeforeMs']
+                            evidence.update(expiresAtMs=arguments['expiresAtMs'], startBeforeMs=arguments['startBeforeMs'])
+                        response = transmit_bound_action(bridge,warm,report,arguments,'unacknowledgedAction',evidence)
+                        if combat_guard is not None:
+                            event = combat_guard.admission(response[0], len(response[1]), time.perf_counter_ns())
+                            report['combatTrialGuardState'] = event['state']
+                            recorder.event(event)
+                        return response
+                submitted, response = control.guarded_submit(control_token, submit_action) if warm or combat_guard is not None else (True, submit_action())
                 if submitted:
                     result['acceptance'], response_payload = response
-                    committed = action_response_accepted(result['acceptance'], request_id, response_payload)
+                    committed = (False if combat_guard is not None and result['acceptance'].get('type') == 'notSubmitted'
+                                 else action_response_accepted(result['acceptance'], request_id, response_payload))
                     if warm and committed:
                         warm.accepted(request_id, frame['frameId'])
                 else:
@@ -2531,6 +2817,8 @@ def run_episode(args, policy=None, control=None):
                                 **({'warmRequestId': result['warmRequestId']} if warm else {}),
                                 **({'scoutEncounterGuard': result['scoutEncounterGuard']}
                                    if 'scoutEncounterGuard' in result else {}),
+                                **({'combatTrialGuard': result['combatTrialGuard']}
+                                   if 'combatTrialGuard' in result else {}),
                                 **({key: result[key] for key in ('episodeStep', 'validHistoryFrames', 'cudaGraphActive')}
                                    if warm and warm.destinations else {}),
                                 'proposalJournalVersion': 2,
@@ -2562,7 +2850,7 @@ def run_episode(args, policy=None, control=None):
                                 framesReceived=report['framesReceived'], acceptedInputActions=report['acceptedInputActions'],
                                 policyWallMs=policy_ms, observationAgeMs=age,
                                 latestAcceptance=result['acceptance'])
-            if args.max_input_actions is not None and report['acceptedInputActions'] >= args.max_input_actions:
+            if combat_guard is None and args.max_input_actions is not None and report['acceptedInputActions'] >= args.max_input_actions:
                 report['endReason'] = 'maxInputActions'
                 break  # Normal stop/receipt cleanup releases the input owner immediately.
             if idle_recovery.threshold is not None:
@@ -2606,6 +2894,8 @@ def run_episode(args, policy=None, control=None):
                     control.publish(navigationIdleRecovery=report['navigationIdleRecovery'])
             cadence.advance(time.perf_counter())
     except Exception as exc:
+        if combat_guard is not None:
+            report['combatTrialGuardState'] = combat_guard.fail('episodeFailure', time.perf_counter_ns(), error=str(exc))['state']
         if not record_open_queue_boundary_error(warm,exc,getattr(hybrid,'failure',None),report,recorder):
             episode_failure = exc
             report['error'] = str(exc)
@@ -2614,6 +2904,21 @@ def run_episode(args, policy=None, control=None):
             raise
     finally:
         stopped.set()
+        if combat_guard is not None:
+            # Release is unconditional, including failed recording, unknown admission,
+            # an interrupted final hold and an already latched reader hazard.
+            with receive_lock:
+                state = combat_guard.snapshot()
+                if not state['trialComplete'] and state['trip'] is None:
+                    report['combatTrialGuardState'] = combat_guard.fail('trialEndedBeforeDrain', time.perf_counter_ns())['state']
+                try:
+                    released, _ = combat_trial_release(bridge, combat_guard, report,
+                        recorder if recorder and not recorder.error else None, 'combatTrialTeardown')
+                    collect_receipts(released)
+                except Exception as error:
+                    stop_failure = error
+                    report['combatTrialReleaseError'] = str(error)
+                    report['combatTrialGuardState'] = combat_guard.fail('terminalReleaseFailure', time.perf_counter_ns(), error=str(error))['state']
         producer.join(timeout=3)
         if climb and climb.helper.blocks_model:
             terminal_climb_error = climb.terminate('lease_ended_during_recovery', cleanup_allowed=not producer.is_alive())
@@ -2623,8 +2928,12 @@ def run_episode(args, policy=None, control=None):
                     diagnostic_status = bridge.request('status')[0]
                     collect_receipts(diagnostic_status)
                     report['readinessDiagnosticsBeforeStop'] = diagnostic_status.get('diagnostics')
-                report['stop'] = bridge.request('stop')[0]
+                report['stop'], stop_payload = bridge.request('stop')
                 collect_receipts(report['stop'])
+                if combat_guard is not None and (report['stop'].get('type') != 'stopped' or stop_payload):
+                    report['combatTrialGuardState'] = combat_guard.fail('invalidStopAcknowledgement', time.perf_counter_ns(),
+                        response=report['stop'], payloadBytes=len(stop_payload))['state']
+                    raise RuntimeError('Combat trial stop was not acknowledged')
             except Exception as exc:
                 stop_failure = exc
                 report['stopError'] = str(exc)
@@ -2647,12 +2956,38 @@ def run_episode(args, policy=None, control=None):
             report['finalGoalState'] = control.goal_state()
             if report['finalGoalState']['goalError']:
                 report.setdefault('error', report['finalGoalState']['goalError'])
+            if combat_guard is not None:
+                try:
+                    raw_control = json.loads(control.path.read_text(encoding='utf-8'))
+                    report['combatTrialFinalControl'] = copy.deepcopy(raw_control)
+                    goal_state = report['finalGoalState']
+                    if (not isinstance(raw_control, dict)
+                            or raw_control.get('version') != 1 or raw_control.get('runId') != control.run_id
+                            or raw_control.get('command') not in ('run', 'pause', 'stop')
+                            or any(key in raw_control for key in ('goalRequestId', 'goalEmbedding', 'goalIntent'))
+                            or goal_state['goalRequestId'] is not None or goal_state['policyGoalVersion'] != 0
+                            or goal_state['appliedGoalRequestId'] is not None or goal_state['goalError']
+                            or hashlib.sha256(Path(args.goal_embedding).read_bytes()).hexdigest() != combat_binding['goalSha256']
+                            or getattr(policy, 'combat_trial_goal_sha256', None) != combat_binding['goalSha256']):
+                        raise RuntimeError('Combat trial frozen goal was changed or requested to change')
+                except Exception as error:
+                    report['combatTrialGuardState'] = combat_guard.fail('goalMutation', time.perf_counter_ns(), error=str(error))['state']
         if scout_guard is not None:
             report['scoutEncounterGuardState'] = scout_guard.snapshot()
             if report['scoutEncounterGuardState']['trip'] is not None:
                 report.setdefault('error', 'Scout encounter guard: '+report['scoutEncounterGuardState']['trip']['reason'])
             elif not report['scoutEncounterGuardState']['admitted']:
                 report.setdefault('error', 'Scout encounter guard never admitted native health evidence')
+        if combat_guard is not None:
+            state = combat_guard.snapshot()
+            report['combatTrialGuardState'] = state
+            # A journal failure may interrupt the ordinary proposal accounting after
+            # a valid native acknowledgement; retain the known admission count anyway.
+            report['acceptedInputActions'] = state['acceptedActions']
+            if state['trip'] is not None or not state['trialComplete']:
+                report.setdefault('error', 'Combat trial incomplete: ' + (state['trip']['reason'] if state['trip'] else state['phase']))
+            else:
+                report['endReason'] = 'combatTrialComplete'
         report.setdefault('endReason', 'noUsableFrames' if report.get('captureError') else
                           'streamError' if report.get('streamError') else 'error' if report.get('error') else
                           'durationElapsed' if time.perf_counter() >= deadline else 'stopped')
@@ -2701,16 +3036,32 @@ def run_episode(args, policy=None, control=None):
             report['episodeFailure'] = dict(type=type(failure).__name__,
                 transportOperation=transport_origin(failure))
         if recorder:
-            recorder.event({'type': 'captureQualitySummary', 'captureQuality': dict(report['captureQuality']),
-                            'captureError': report.get('captureError')})
-            recorder.event({'type': 'episodeEnd', 'endReason': report['endReason'],
-                            'maxInputActions': args.max_input_actions,
-                            'acceptedInputActions': report['acceptedInputActions']})
-            if archive:
-                manifest = archive.finish(report)
-                report['status'] = manifest['status']
-            else:
-                report['recording'] = recorder.close()
+            try:
+                recorder.event({'type': 'captureQualitySummary', 'captureQuality': dict(report['captureQuality']),
+                                'captureError': report.get('captureError')})
+                recorder.event({'type': 'episodeEnd', 'endReason': report['endReason'],
+                                'maxInputActions': args.max_input_actions,
+                                'acceptedInputActions': report['acceptedInputActions']})
+            except Exception as error:
+                if combat_guard is None:
+                    raise
+                report['recordingFinalizationError'] = str(error)
+                report['combatTrialGuardState'] = combat_guard.fail('recordingFailure', time.perf_counter_ns(), error=str(error))['state']
+                report.setdefault('error', 'Combat trial journal finalization failed')
+            try:
+                if archive:
+                    manifest = archive.finish(report)
+                    report['status'] = manifest['status']
+                else:
+                    report['recording'] = recorder.close()
+            except Exception as error:
+                if combat_guard is None:
+                    raise
+                report['recording'] = dict(error=str(error))
+            if combat_guard is not None and (recorder.error or report.get('recording', {}).get('error')):
+                report['combatTrialGuardState'] = combat_guard.fail('recordingFailure', time.perf_counter_ns(),
+                    error=recorder.error or report['recording']['error'])['state']
+                report.setdefault('error', 'Combat trial recording failed')
             # A late encoder/finalizer failure also vetoes a previously identified pipe loss.
             if failure is not None and (recorder.error or report.get('recording', {}).get('error')):
                 forbid_reconnect(failure, 'recordingFailure')

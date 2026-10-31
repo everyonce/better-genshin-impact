@@ -549,3 +549,20 @@ python tools/bettergi-agent/scout_session.py stop --session $newSession
 Explicit geometry is immutable, directed, limited to two points and 40 units, and confined to the existing scout bounds. Its complete hash is bound through the original review, request, cached-policy proof and controller evidence. It does not register a global route or authorize an automatic obstacle detour. The independent auditor requires both `--policy-reuse-proof <patrol.json.reuse.json>` and `--reviewed-scout-route <leg/reviewed-route.json>` for these legs. Ordinary audits retain their one-model-load requirement.
 
 An intentional stop produces terminal session state `stopped` and process code 1; assess its reason separately from completed leg audits. Keep failed trials and native recordings as diagnostics, and reserve diagnostic or holdout episodes before export so they cannot enter fitting. See the [live measurements and limitations](../../Docs/research/BetterGI-Native-Combat-Observation-2026-10-31.md).
+
+### Bounded combat prototype
+
+`combat_trial.py` runs one separate normal-attack experiment in the original minimized RDP session. It loads the installed Open P2P model once with FP16, H41, CUDA graph prewarm and accepted-input history. The trial lasts at most five seconds and admits at most three unchanged pure-LBUTTON proposals, each held for 100 ms. It requires two fresh native observations of one enemy-bar candidate. Every attack must finish, release explicitly, and receive healthy target evidence from a source at least 60 ms after release before another attack. Movement, camera changes, other keys, goal changes, reconnects and automatic retries are excluded from this initial experiment.
+
+Preparation requires a separately inspected native image and its original passive plan/result/sidecar. The review uses `kind: combat-trial-review-v1`, `sceneLabel: enemy-visible`, `attacksAllowed: ["LBUTTON"]`, the exact `combat_trial_guard.trial_policy()`, sealed root/child identity, inspected HP/max HP, image and goal hashes, an inspection note, and `reviewedAtUnixNs`. Both the review and original compositor source must remain within 120 seconds, including after model prewarm. A scene with distant visible enemies but no native candidate cannot start this trial.
+
+```powershell
+python tools/bettergi-agent/combat_trial.py prepare `
+  --directory $newTrial --owner-from $ownerLineage --review $combatReview `
+  --native-plan $nativePlan --native-scene $nativeScene `
+  --sidecar $nativeMetadata --image $nativePng
+python tools/bettergi-agent/combat_trial.py launch --plan "$newTrial/plan.json"
+python tools/bettergi-agent/audit_combat_trial.py --trial $newTrial --output $newAudit
+```
+
+`combat_trial.py stop --plan "$newTrial/plan.json"` stops that consumed trial. Its plan cannot be reused. The ordinary RDP worker retains the original sources, review, exact policy RGB, proposals, admissions, terminal receipts and releases. Thermal/telemetry/owner checks stay active during loading; an uncertain start remains unresolved. Any recording loss prevents completion. The replay checks every guard transition and exact source/response joins; three drained pulses establish only the bounded transport trial, not enemy damage or a kill. All completed and failed trial recordings remain diagnostic-only.

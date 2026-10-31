@@ -17,6 +17,8 @@ from hybrid_routes import (COURTYARD_ROUTE, PATROL_SEGMENTS, PATROL_STATIONS, ST
 PROFILE = COURTYARD_ROUTE
 START, END = route_points(COURTYARD_ROUTE)
 from navigation_profiles import validate_capability,allows_pose_scope,required_profile
+from reviewed_scout_route import ReviewedScoutRoute
+from navigation_profiles import SCOUT_PROFILE
 
 
 def yaw_error(a, b):
@@ -37,13 +39,18 @@ class HybridNavigation:
 
     def __init__(self, capability, route_id=COURTYARD_ROUTE, remember_bypass=False, *,
                  itinerary_destinations=None, itinerary_start='stair-front', stationary_photo_retries=False,
-                 navigation_profile=PROFILE):
+                 navigation_profile=PROFILE, reviewed_scout_route=None):
         validate_capability(capability,navigation_profile)
-        if required_profile(route_id)!=navigation_profile:
+        self.reviewed_scout_route=reviewed_scout_route
+        if reviewed_scout_route is not None:
+            if (type(reviewed_scout_route) is not ReviewedScoutRoute or route_id!=reviewed_scout_route.route_id
+                    or navigation_profile!=SCOUT_PROFILE or remember_bypass or itinerary_destinations is not None):
+                raise ValueError('Reviewed scout geometry cannot change scope or enable another route mode')
+        elif required_profile(route_id)!=navigation_profile:
             raise ValueError('Fixed route and explicit navigation profile differ')
         self.navigation_profile=navigation_profile
         self.route_id = route_id
-        self.start, self.end = route_points(route_id)
+        self.start, self.end = reviewed_scout_route.points if reviewed_scout_route is not None else route_points(route_id)
         self.bypass = HybridBypass(route_id) if remember_bypass else None
         self.phase = 'admitting'
         self.target = self.end
@@ -113,6 +120,8 @@ class HybridNavigation:
                     completedLegs=self.legs, selections=dict(self.selections),
                     recoveryAttempts=self.total_recoveries, failure=self.failure,
                     lastPose=copy.deepcopy(self.last_pose))
+        if self.reviewed_scout_route is not None:
+            result.update(routeSpec=self.reviewed_scout_route.document(),routeSpecSha256=self.reviewed_scout_route.sha256)
         if self.destinations:
             result.update(completedDestinations=self.completed_destinations, **self.segment)
         elif self.segment:
@@ -305,7 +314,7 @@ class HybridNavigation:
 
     def _begin_recovery(self, trigger_kind):
         """Share the finite retreat and sidestep budget across distinct obstacle triggers."""
-        if self.route_id in SURVEY_ROUTES:
+        if self.route_id in SURVEY_ROUTES or self.reviewed_scout_route is not None:
             self._fail('survey_obstacle_requires_inspection')
         if self.recovery_attempts >= 2:
             self._fail('obstacle_recovery_exhausted')
@@ -550,13 +559,15 @@ class HybridNavigation:
                 if math.dist((x, y), anchor) > 2 and yaw_error(route_heading(pose, anchor), pose[key]) > 1.1:
                     self._fail('native_bearing_mismatch')
         if self.phase == 'admitting':
-            allowed_starts = (self.start,) if self.segment else (self.start, self.end)
+            allowed_starts = (self.start,) if self.segment or self.reviewed_scout_route is not None else (self.start, self.end)
             near = min(math.hypot(x - p[0], y - p[1]) for p in allowed_starts)
             if near > 2:
                 self._fail('verified_endpoint_start_required')
             if not self._sample(pose, at):
                 return 'confirmingStart'
             admission = dict(sourceEpoch=epoch, samples=copy.deepcopy(self.samples))
+            if self.reviewed_scout_route is not None:
+                admission.update(routeSpec=self.reviewed_scout_route.document(),routeSpecSha256=self.reviewed_scout_route.sha256)
             if self.segment:
                 admission.update(station=self.segment['fromStation'], **self.segment)
             else:

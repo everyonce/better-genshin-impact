@@ -21,13 +21,33 @@ def document(path, request_id='a' * 32, command='run'):
             'goalRequestId': request_id, 'goalEmbedding': str(Path(path).resolve())}
 
 
-def dormant_control(directory):
+def dormant_control(directory, *, frozen_goal=False):
     """Suppress only the monitor thread so concurrent-policy transitions are deterministic."""
     with patch.object(runtime.threading, 'Thread'):
-        return runtime.ResidentControl(Path(directory)/'control.json', Path(directory)/'status.json', 'c' * 32)
+        return runtime.ResidentControl(Path(directory)/'control.json', Path(directory)/'status.json', 'c' * 32,
+                                       frozen_goal=frozen_goal)
 
 
 class GoalControlTests(unittest.TestCase):
+    def test_frozen_goal_releases_and_terminates_before_loading_any_replacement(self):
+        """Cached scout controls reject both run and paused goal requests without touching the tensor."""
+        for command in ('run','pause'):
+            with self.subTest(command=command),tempfile.TemporaryDirectory() as directory:
+                control=dormant_control(directory,frozen_goal=True)
+                control.set_initial_goal({'instruction':'original'},'ground-navigation')
+                request=dict(document(Path(directory)/'replacement.json',command=command),goalIntent='ground-navigation')
+                control._observe(request,None)
+                policy=SimpleNamespace(set_goal=Mock())
+                release=Mock()
+                with self.assertRaisesRegex(RuntimeError,'frozen scout request'):
+                    runtime.apply_pending_goal(control,policy,release)
+                release.assert_called_once()
+                policy.set_goal.assert_not_called()
+                self.assertEqual(control.goal_state()['policyGoalVersion'],0)
+                self.assertIsNone(control.goal_state()['appliedGoalRequestId'])
+                self.assertEqual(control.goal_state()['goalRequestStatus'],'failed')
+                self.assertEqual(control.goal_state()['goalMetadata'],{'instruction':'original'})
+
     def test_cli_goal_preserves_pause_and_plain_commands_preserve_request_identity(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)/'control.json'
@@ -230,6 +250,42 @@ class GoalEpisodeTests(unittest.TestCase):
             self.assertEqual([event['policyGoalVersion'] for event in proposals], [0, 0, 1])
             self.assertEqual(len([event for event in recorder.events if event.get('type') == 'policyGoalChange']), 1)
             self.assertEqual(recorder.events[0]['policyMetadata']['goal']['instruction'], 'old goal')
+
+    def test_frozen_scout_goal_interrupts_inflight_prediction_without_replacement_or_next_input(self):
+        """The real stream loop releases and stops when a goal arrives during cached inference."""
+        with tempfile.TemporaryDirectory() as directory:
+            control=dormant_control(directory,frozen_goal=True)
+            control.set_initial_goal({'instruction':'fixed scout'},'ground-navigation')
+            request=dict(document(Path(directory)/'replacement.json'),goalIntent='ground-navigation')
+            class Policy(FakePolicy):
+                """Inject one external goal while an otherwise valid CPU prediction is in flight."""
+                def predict(self,image,size):
+                    result=super().predict(image,size)
+                    control._observe(request,None)
+                    return result
+            class Bridge(ScriptedBridge):
+                """Expose release receipts so shutdown is checked without native input."""
+                def request(self,command,**kwargs):
+                    if command=='release':
+                        self.commands.append(command)
+                        return {'type':'released','receipts':[]},b''
+                    return super().request(command,**kwargs)
+            policy,recorder=Policy(),CapturingRecorder()
+            policy.set_goal=Mock()
+            bridge=Bridge([bytes(range(12))])
+            bridge.hello['supportsRelease']=True
+            with self.assertRaisesRegex(RuntimeError,'frozen scout request'):
+                self.run_synthetic(directory,control,policy,bridge,recorder)
+            report=json.loads((Path(directory)/'episode.json').read_bytes())
+            self.assertEqual(report['status'],'failed')
+            self.assertIn('frozen scout request',report['error'])
+            policy.set_goal.assert_not_called()
+            self.assertNotIn('action',bridge.commands)
+            self.assertIn('release',bridge.commands)
+            self.assertEqual(bridge.commands[-1],'stop')
+            self.assertEqual(report['finalGoalState']['policyGoalVersion'],0)
+            self.assertEqual(report['finalGoalState']['goalRequestStatus'],'failed')
+            self.assertEqual(report['decisions'][0]['acceptance']['reason'],'residentControlEpochChanged')
 
     def test_bad_goal_keeps_capture_evidence_but_cannot_fall_back_to_old_actions(self):
         with tempfile.TemporaryDirectory() as directory:

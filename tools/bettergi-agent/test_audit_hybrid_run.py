@@ -1,10 +1,12 @@
 """Tampered local evidence must not become a verified gameplay result."""
+import copy
+import hashlib
 import json
 from pathlib import Path
 import tempfile
 import unittest
 
-from audit_hybrid_run import audit, audit_bypasses, audit_rebind
+from audit_hybrid_run import audit, audit_bypasses, audit_rebind, verify_policy_reuse
 from hybrid_navigation import START, END
 from hybrid_routes import LAMPPOST_ROUTE, PATROL_STATIONS, STAIR_POST_ROUTE, STREET_PATROL_ROUTE, route_heading, route_points
 
@@ -44,6 +46,129 @@ class HybridAuditTests(unittest.TestCase):
         (root/'run.json').write_text(json.dumps(run), encoding='utf-8')
         return audit(root/'run.json', root/'recording', repository=root,
                      minimum_obstacle_passages=minimum_obstacle_passages, **minimums)
+
+    def test_explicit_cached_scout_still_requires_independent_route_and_input_evidence(self):
+        """Opt-in zero-load accounting cannot skip a single original endpoint/source/receipt check."""
+        from hybrid_routes import SCOUT_GRASS_ROUTE
+        from navigation_profiles import SCOUT_PROFILE
+        from test_navigation_profiles import route_capability
+        for corrupt in (False,True):
+            with self.subTest(corrupt=corrupt),tempfile.TemporaryDirectory() as directory:
+                root=Path(directory).resolve()/'session'/'legs'/('e'*32)
+                root.mkdir(parents=True)
+                def setup(run,part,frames):
+                    """Move the existing independent trace onto one registered scout edge."""
+                    start,goal=route_points(SCOUT_GRASS_ROUTE)
+                    part['hybridNavigation'].update(routeId=SCOUT_GRASS_ROUTE,profileId=SCOUT_PROFILE)
+                    part['navigationGuidance']=route_capability(SCOUT_GRASS_ROUTE)
+                    part['hybridNavigationEvents'][0]['routeId']=SCOUT_GRASS_ROUTE
+                    for number,frame in enumerate(frames):
+                        frame['navigationPose'].update(x=(start if number==0 else goal)[0],
+                            y=(start if number==0 else goal)[1],layerId='MapBack_2')
+                    for sample,frame in zip(part['hybridNavigationEvents'][-1]['samples'],frames[1:]):
+                        sample.update({key:frame['navigationPose'][key] for key in ('x','y','yawDegrees')})
+                    CachedPolicyAuditTests.proof(root/'run.json',run,part=part)
+                    if corrupt:part['receipts'].clear()
+                if corrupt:
+                    with self.assertRaises(ValueError):
+                        self.fixture(root,setup,policy_reuse_proof=Path(str(root/'run.json')+'.reuse.json'))
+                else:
+                    result=self.fixture(root,setup,policy_reuse_proof=Path(str(root/'run.json')+'.reuse.json'))
+                    self.assertEqual((result['modelLoads'],result['verifiedLegs']),(0,1))
+                    self.assertEqual(result['policyReuse']['runId'],'9'*32)
+
+    def test_cached_parts_and_decisions_cannot_hide_goal_changes_and_plain_pause_remains_valid(self):
+        """Inspect every original goal snapshot and decision, while retaining the original leg deadline."""
+        fields=dict(policyGoalVersion=1,appliedGoalRequestId='applied',goalRequestId='pending',
+                    goalRequestStatus='pending',goalError='failed',goalIntent='combat')
+        cases=[(location,key,value,False) for location in ('initialGoalState','finalGoalState','leaseInitialGoalState') for key,value in fields.items()]
+        cases += [(location,'snapshot',None,True) for location in ('initialGoalState','finalGoalState','leaseInitialGoalState')]
+        cases += [('decision',key,value,False) for key,value in fields.items()]
+        cases += [('decision',key,None,True) for key in ('policyGoalVersion','appliedGoalRequestId','goalIntent','controlEpoch')]
+        cases += [('part','goalChanges',[dict(status='pending')],False),('part','goalChanges',None,True),
+                  ('pause',None,None,False),('deadline',None,None,False)]
+        for location,key,value,remove in cases:
+            with self.subTest(location=location,key=key,remove=remove),tempfile.TemporaryDirectory() as directory:
+                root=Path(directory).resolve()/'session'/'legs'/('e'*32);root.mkdir(parents=True)
+                def setup(run,part,frames):
+                    """Mutate goal evidence only after creating a fully source-bound successful scout trace."""
+                    CachedPolicyAuditTests.scout_trace(root,run,part,frames)
+                    if location=='pause':
+                        run['controlEpoch']=2;part['finalGoalState']['controlEpoch']=2
+                        part['decisions'][0]['controlEpoch']=2
+                        part['controlTransitions']=[dict(type='controlTransition',state='held',reason='operatorPause',clientTimeNs=100),
+                                                    dict(type='controlTransition',state='running',reason='explicitRun',clientTimeNs=200)]
+                    elif location=='deadline':
+                        for frame,sample in zip(frames[1:],part['hybridNavigationEvents'][-1]['samples']):
+                            frame['capturedAtMs']+=35000;frame['sourceFrame']['capturedAtMs']+=35000;sample['atMs']+=35000
+                    elif remove and key=='snapshot':part.pop(location)
+                    else:
+                        target=part['decisions'][0] if location=='decision' else part if location=='part' else part[location]
+                        if remove:target.pop(key,None)
+                        else:target[key]=value
+                kwargs=dict(policy_reuse_proof=Path(str(root/'run.json')+'.reuse.json'))
+                if location=='pause':self.assertTrue(self.fixture(root,setup,**kwargs)['passed'])
+                else:
+                    with self.assertRaises(ValueError):self.fixture(root,setup,**kwargs)
+
+    def test_explicit_geometry_is_independently_replayed_with_original_source_and_input_checks(self):
+        """A rehashed proof cannot replace the reviewed route, its directed start, endpoint or receipts."""
+        from reviewed_scout_route import ReviewedScoutRoute
+        from hybrid_routes import SCOUT_GRASS_ROUTE
+        from navigation_profiles import SCOUT_PROFILE
+        from test_navigation_profiles import route_capability
+        spec=ReviewedScoutRoute(((-1135,2267),(-1142,2255)))
+        other=ReviewedScoutRoute(((-1135,2267),(-1140,2253)))
+        for corrupt in (None,'explicit','missing','controller','start','endpoint','reverse','receipt','proof','request','authority','review'):
+            with self.subTest(corrupt=corrupt),tempfile.TemporaryDirectory() as directory:
+                root=Path(directory).resolve()/'session'/'legs'/('e'*32)
+                root.mkdir(parents=True)
+                def setup(run,part,frames):
+                    """Record one custom edge without registering or mutating any global route table."""
+                    geometry=dict(routeId=spec.route_id,routeSpec=spec.document(),routeSpecSha256=spec.sha256)
+                    part['hybridNavigation'].update(profileId=SCOUT_PROFILE,**copy.deepcopy(geometry))
+                    part['navigationGuidance']=route_capability(SCOUT_GRASS_ROUTE)
+                    part['hybridNavigationEvents'][0].update(copy.deepcopy(geometry))
+                    for index,frame in enumerate(frames):
+                        point=spec.points[0 if index==0 else 1]
+                        frame['navigationPose'].update(x=point[0],y=point[1],layerId='MapBack_2')
+                    if corrupt=='start':frames[0]['navigationPose']['x']+=4
+                    if corrupt=='endpoint':
+                        for frame in frames[1:]:frame['navigationPose']['x']+=4
+                    for sample,frame in zip(part['hybridNavigationEvents'][-1]['samples'],frames[1:]):
+                        sample.update({key:frame['navigationPose'][key] for key in ('x','y','yawDegrees')})
+                    if corrupt=='reverse':part['hybridNavigationEvents'][0]['target']='start'
+                    if corrupt=='controller':part['hybridNavigation']['routeSpec']=other.document()
+                    if corrupt=='receipt':part['receipts'].clear()
+                    proof,reuse=CachedPolicyAuditTests.proof(root/'run.json',run,reviewed_scout_route=spec,part=part)
+                    if corrupt=='proof':reuse['routeSpec']=other.document()
+                    if corrupt=='request':
+                        path=Path(reuse['requestFile'])
+                        request=json.loads(path.read_bytes())
+                        request['routeSpec']=other.document()
+                        reuse['requestSha256']=CachedPolicyAuditTests.write(path,request)
+                    if corrupt=='authority':
+                        path=Path(reuse['sessionProof'])
+                        session=json.loads(path.read_bytes())
+                        del session['reviewedScoutRoutePolicy']
+                        reuse['sessionProofSha256']=CachedPolicyAuditTests.write(path,session)
+                    if corrupt=='review':
+                        request=json.loads(Path(reuse['requestFile']).read_bytes())
+                        path=Path(request['reviewFile'])
+                        review=json.loads(path.read_bytes())
+                        review['routeSpec']=other.document()
+                        CachedPolicyAuditTests.write(path,review)
+                    if corrupt in ('proof','request','authority'):
+                        run.update(policyReuse=copy.deepcopy(reuse),policyReuseSha256=CachedPolicyAuditTests.write(proof,reuse))
+                args=dict(policy_reuse_proof=Path(str(root/'run.json')+'.reuse.json'),
+                          reviewed_scout_route=None if corrupt=='missing' else other if corrupt=='explicit' else spec)
+                if corrupt:
+                    with self.assertRaises(ValueError):self.fixture(root,setup,**args)
+                else:
+                    result=self.fixture(root,setup,**args)
+                    self.assertEqual((result['modelLoads'],result['verifiedLegs'],result['controllerLeases']),(0,1,1))
+                    self.assertEqual(result['routeSpecSha256'],spec.sha256)
+                    self.assertEqual(result['routeSpec'],spec.document())
 
     @staticmethod
     def patrol_run(run, part, frames, legs=8, itinerary=None):
@@ -596,3 +721,287 @@ class BypassAuditTests(unittest.TestCase):
                          no_replay_walk, new_drop):
             with self.subTest(mutation=mutation.__name__), self.assertRaises(ValueError):
                 self.replay(mutation)
+
+
+class CachedPolicyAuditTests(unittest.TestCase):
+    """Prove zero-load claims only through the original immutable one-load session and fresh run."""
+    @staticmethod
+    def write(path, document):
+        """Persist exact proof bytes and return their digest for tamper-evident links."""
+        path.parent.mkdir(parents=True,exist_ok=True)
+        raw=json.dumps(document,sort_keys=True).encode()
+        path.write_bytes(raw)
+        return hashlib.sha256(raw).hexdigest()
+
+    @staticmethod
+    def goal_state(epoch=0):
+        """Describe an unchanged ground goal while permitting an ordinary pause/resume epoch."""
+        return dict(controlEpoch=epoch,policyGoalVersion=0,appliedGoalRequestId=None,goalRequestId=None,
+                    goalRequestStatus=None,goalError=None,goalIntent='ground-navigation')
+
+    @classmethod
+    def scout_trace(cls, root, run, part, frames):
+        """Bind the general endpoint fixture to a real scout scope and a complete cached review chain."""
+        from hybrid_routes import SCOUT_GRASS_ROUTE
+        from navigation_profiles import SCOUT_PROFILE
+        from test_navigation_profiles import route_capability
+        start,goal=route_points(SCOUT_GRASS_ROUTE)
+        part['hybridNavigation'].update(routeId=SCOUT_GRASS_ROUTE,profileId=SCOUT_PROFILE)
+        part['navigationGuidance']=route_capability(SCOUT_GRASS_ROUTE)
+        part['hybridNavigationEvents'][0]['routeId']=SCOUT_GRASS_ROUTE
+        for index,frame in enumerate(frames):
+            point=start if index==0 else goal
+            frame['navigationPose'].update(x=point[0],y=point[1],layerId='MapBack_2')
+        for sample,frame in zip(part['hybridNavigationEvents'][-1]['samples'],frames[1:]):
+            sample.update({key:frame['navigationPose'][key] for key in ('x','y','yawDegrees')})
+        return cls.proof(root/'run.json',run,part=part)
+
+    @classmethod
+    def reviewed_scene(cls, session_dir, owner, route_id, points, spec=None):
+        """Produce independently readable native/image fixtures instead of mocking the admission verifier."""
+        folder=session_dir/'native-review'
+        folder.mkdir(parents=True,exist_ok=True)
+        frames=[]
+        for number in (1,2,3):
+            source=dict(captureEpoch='native-review-source',timestamp100ns=number*1_000_000,freshnessAtMs=number*100)
+            frames.append(dict(frameId=number,sourceFrame=source,sourceFrameAgeMs=40,
+                navigationPose=dict(state='valid',frameId=number,x=points[0][0],y=points[0][1],layerId='MapBack_2',
+                    positionConfidence=.999,yawConfidence=.8,yawDegrees=47),
+                worldReadiness=dict(ready=True),frameWorldReadiness=dict(ready=True,sourceFrameId=number,sourceFrame=source,epoch=1),
+                motionEvidence=dict(status='normal',spaceKeyMatched=False),executionContext=dict(lastSequence=0)))
+        plan=dict(owner=owner,enableInput=False,modelLoaded=False,navigationProfile='mondstadt-combat-scout-v1')
+        result=dict(status='completed',inputEnabled=False,modelLoaded=False,ownerIdleMinimizedAfter=True,
+                    observations=copy.deepcopy(frames),stableSamples=copy.deepcopy(frames))
+        image=folder/'01-frame-000000000002.png'
+        image.write_bytes(b'\x89PNG\r\n\x1a\nsynthetic reviewed pixels')
+        image_sha=hashlib.sha256(image.read_bytes()).hexdigest()
+        metadata=dict(frameId=2,sourceFrame=frames[1]['sourceFrame'],imageSha256=image_sha)
+        review=dict(routeId=route_id,points=[list(point) for point in points],nativeEndpoint=str(folder),imageName=image.name,
+                    imageSha256=image_sha,attacksAllowed=False,maximumLegs=1,inspectedHealth=2354,
+                    inspectedMaximumHealth=2764,visualReview='Synthetic clear ground at the directed start')
+        if spec is not None:review.update(routeSpec=spec.document(),routeSpecSha256=spec.sha256)
+        review_path=session_dir/'review.json'
+        return dict(reviewFile=str(review_path),reviewSha256=cls.write(review_path,review),
+            nativePlanSha256=cls.write(folder/'plan.json',plan),nativeResultSha256=cls.write(folder/'result.json',result),
+            imageSha256=image_sha,imageMetadataSha256=cls.write(image.with_suffix('.json'),metadata))
+
+    @classmethod
+    def proof(cls, run_path, run, settings_changes=None, checkpoint_sha=None, reviewed_scout_route=None, part=None):
+        """Construct only local synthetic evidence; no checkpoint or GPU resource is opened."""
+        from hybrid_routes import SCOUT_GRASS_ROUTE
+        from resident_runtime import OPEN_P2P_SHA256
+        checkpoint_sha=checkpoint_sha or OPEN_P2P_SHA256
+        session_dir=run_path.parent.parent.parent
+        owner=dict(root=dict(processId=11,windowsSessionId=1,instanceNonce='a'*32),
+                   child=dict(processId=22,windowsSessionId=3,instanceNonce='b'*32))
+        worker=dict(processId=33,windowsSessionId=3)
+        settings=dict(model='open-p2p',history=41,cuda_graph=True,p2p_fast_start=True,
+            goal_intent='ground-navigation',observation_profile='p2p-native-hamming-192-v1',
+            max_observation_age_ms=150,action_hold_ms=100,hybrid_legs=1)
+        settings.update(settings_changes or {})
+        configuration=dict(arguments=settings,checkpointSha256=checkpoint_sha,goalSha256='f'*64)
+        fingerprint=hashlib.sha256(json.dumps(configuration,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+        session=dict(version=1,kind='scout-policy-session',sessionId='c'*32,worker=worker,owner=owner,
+            configuration=configuration,modelConfigurationSha256=fingerprint,checkpointSha256=checkpoint_sha,
+            modelLoads=1,modelLoadSeconds=17.5)
+        if reviewed_scout_route is not None:
+            from reviewed_scout_route import reviewed_route_policy
+            session['reviewedScoutRoutePolicy']=reviewed_route_policy()
+        source=session_dir/'policy-proof.json'
+        source_sha=cls.write(source,session)
+        request=dict(version=1,sessionId='c'*32,requestId='e'*32,modelConfigurationSha256=fingerprint,
+            maximumLegs=1,navigationProfile='mondstadt-combat-scout-v1',routeId=SCOUT_GRASS_ROUTE)
+        if reviewed_scout_route is not None:
+            request.update(routeId=reviewed_scout_route.route_id,routeSpec=reviewed_scout_route.document(),
+                           routeSpecSha256=reviewed_scout_route.sha256)
+        points=reviewed_scout_route.points if reviewed_scout_route is not None else route_points(SCOUT_GRASS_ROUTE)
+        request.update(cls.reviewed_scene(session_dir,owner,request['routeId'],points,reviewed_scout_route))
+        request_path=session_dir/'requests'/('e'*32+'.json')
+        request_sha=cls.write(request_path,request)
+        reuse=dict(version=1,sessionId='c'*32,runId='9'*32,worker=worker,owner=owner,
+            modelConfigurationSha256=fingerprint,sessionProof=str(source),sessionProofSha256=source_sha,
+            requestId='e'*32,requestFile=str(request_path),requestSha256=request_sha,
+            routeId=SCOUT_GRASS_ROUTE,navigationProfile='mondstadt-combat-scout-v1')
+        if reviewed_scout_route is not None:
+            reuse.update({key:request[key] for key in ('routeId','routeSpec','routeSpecSha256')})
+        proof_path=Path(str(run_path)+'.reuse.json')
+        digest=cls.write(proof_path,reuse)
+        run.update(runId='9'*32,windowsSessionId=3,modelLoads=0,modelLoadSeconds=0.0,
+            observationProfile='p2p-native-hamming-192-v1',policyReuse=copy.deepcopy(reuse),policyReuseSha256=digest,
+            endReason='hybridLegLimit')
+        run.update(cls.goal_state(),goalChanges=[])
+        if part is not None:
+            part.update(initialGoalState=cls.goal_state(),finalGoalState=cls.goal_state(),leaseInitialGoalState=cls.goal_state(),goalChanges=[])
+            for decision in part.get('decisions',[]):
+                decision.update(controlEpoch=0,policyGoalVersion=0,appliedGoalRequestId=None,goalIntent='ground-navigation')
+        run.setdefault('segments',[{}])
+        for segment in run['segments']:segment.update(processId=22,instanceNonce='b'*32)
+        return proof_path,reuse
+
+    def test_zero_load_requires_explicit_matching_proof(self):
+        """Ordinary audits retain their original one-load contract unchanged."""
+        self.assertIsNone(verify_policy_reuse(dict(modelLoads=1),'unused',None))
+        with self.assertRaises(ValueError):verify_policy_reuse(dict(modelLoads=0),'unused',None)
+        with tempfile.TemporaryDirectory() as directory:
+            run={}
+            path=Path(directory).resolve()/'session'/'legs'/('e'*32)/'run.json'
+            proof,_=self.proof(path,run)
+            self.assertEqual(verify_policy_reuse(run,path,proof)['runId'],'9'*32)
+            proof.unlink()
+            with self.assertRaises((ValueError,OSError)):verify_policy_reuse(run,path,proof)
+
+    @classmethod
+    def reseal_request(cls, run, proof_path, reuse, request):
+        """Rehash a test mutation so semantic validation, rather than a stale outer digest, must reject it."""
+        reuse['requestSha256']=cls.write(Path(reuse['requestFile']),request)
+        run.update(policyReuse=copy.deepcopy(reuse),policyReuseSha256=cls.write(proof_path,reuse))
+
+    def test_fixed_and_custom_proofs_reopen_every_original_review_artifact(self):
+        """Removing or changing a nested artifact invalidates an otherwise unchanged reuse chain."""
+        from reviewed_scout_route import ReviewedScoutRoute
+        for spec in (None,ReviewedScoutRoute(((-1135,2267),(-1142,2255)))):
+            for selected in ('review','plan','result','image','metadata'):
+                for remove in (False,True):
+                    with self.subTest(custom=spec is not None,file=selected,remove=remove),tempfile.TemporaryDirectory() as directory:
+                        run={};path=Path(directory).resolve()/'session'/'legs'/('e'*32)/'run.json'
+                        proof,reuse=self.proof(path,run,reviewed_scout_route=spec)
+                        request=json.loads(Path(reuse['requestFile']).read_bytes());review_path=Path(request['reviewFile'])
+                        review=json.loads(review_path.read_bytes());folder=Path(review['nativeEndpoint']);image=folder/review['imageName']
+                        target=dict(review=review_path,plan=folder/'plan.json',result=folder/'result.json',image=image,metadata=image.with_suffix('.json'))[selected]
+                        verify_policy_reuse(run,path,proof)
+                        if remove:target.unlink()
+                        else:target.write_bytes(target.read_bytes()+b'\n')
+                        with self.assertRaises((ValueError,OSError)):verify_policy_reuse(run,path,proof)
+
+    def test_rehashed_native_review_must_still_prove_owner_scope_and_stable_start(self):
+        """A freshly hashed false passive review cannot authorize another owner, pose, motion or source."""
+        cases=('owner','plan-input','plan-model','profile','result-input','result-status','cleanup','missing-sample',
+               'start','scope','confidence','stale','motion','space','input-history','gap','yaw','world-source',
+               'missing-world-epoch','image-source','duplicate-poll')
+        for case in cases:
+            with self.subTest(case=case),tempfile.TemporaryDirectory() as directory:
+                run={};path=Path(directory).resolve()/'session'/'legs'/('e'*32)/'run.json'
+                proof,reuse=self.proof(path,run);request=json.loads(Path(reuse['requestFile']).read_bytes())
+                review=json.loads(Path(request['reviewFile']).read_bytes());folder=Path(review['nativeEndpoint'])
+                plan=json.loads((folder/'plan.json').read_bytes());result=json.loads((folder/'result.json').read_bytes())
+                metadata_path=(folder/review['imageName']).with_suffix('.json');metadata=json.loads(metadata_path.read_bytes())
+                if case=='owner':plan['owner']['child']['instanceNonce']='8'*32
+                if case=='plan-input':plan['enableInput']=True
+                if case=='plan-model':plan['modelLoaded']=True
+                if case=='profile':plan['navigationProfile']='other'
+                if case=='result-input':result['inputEnabled']=True
+                if case=='result-status':result['status']='failed'
+                if case=='cleanup':result['ownerIdleMinimizedAfter']=False
+                if case=='missing-sample':result['observations'].pop(0)
+                for frames in (result['stableSamples'],result['observations']):
+                    for frame in frames:
+                        if case=='missing-world-epoch':frame['frameWorldReadiness'].pop('epoch')
+                        if frame['frameId']!=3:continue
+                        pose=frame['navigationPose']
+                        if case=='start':pose['x']+=5
+                        if case=='scope':pose['layerId']='Unknown'
+                        if case=='confidence':pose['positionConfidence']=.98
+                        if case=='stale':frame['sourceFrameAgeMs']=151
+                        if case=='motion':frame['motionEvidence']['status']='climbing'
+                        if case=='space':frame['motionEvidence']['spaceKeyMatched']=True
+                        if case=='input-history':frame['executionContext']['lastSequence']=1
+                        if case=='gap':
+                            frame['sourceFrame']['freshnessAtMs']=251
+                            frame['frameWorldReadiness']['sourceFrame']['freshnessAtMs']=251
+                        if case=='yaw':pose['yawDegrees']+=4
+                        if case=='world-source':frame['frameWorldReadiness']['sourceFrameId']=99
+                if case=='image-source':metadata['sourceFrame']['captureEpoch']='other'
+                if case=='duplicate-poll':
+                    poll=copy.deepcopy(result['observations'][1]);poll['navigationPose']['x']+=.1
+                    result['observations'].append(poll)
+                request.update(nativePlanSha256=self.write(folder/'plan.json',plan),nativeResultSha256=self.write(folder/'result.json',result),
+                               imageMetadataSha256=self.write(metadata_path,metadata))
+                self.reseal_request(run,proof,reuse,request)
+                with self.assertRaises(ValueError):verify_policy_reuse(run,path,proof)
+
+    def test_rehashed_oversized_image_metadata_is_refused_before_json_decoding(self):
+        """A valid nested hash cannot authorize an unbounded metadata read."""
+        with tempfile.TemporaryDirectory() as directory:
+            run={};path=Path(directory).resolve()/'session'/'legs'/('e'*32)/'run.json'
+            proof,reuse=self.proof(path,run);request=json.loads(Path(reuse['requestFile']).read_bytes())
+            review=json.loads(Path(request['reviewFile']).read_bytes())
+            metadata_path=(Path(review['nativeEndpoint'])/review['imageName']).with_suffix('.json')
+            metadata=json.loads(metadata_path.read_bytes());metadata['padding']='x'*65536
+            request['imageMetadataSha256']=self.write(metadata_path,metadata)
+            self.reseal_request(run,proof,reuse,request)
+            with self.assertRaisesRegex(ValueError,'bounded size'):verify_policy_reuse(run,path,proof)
+
+    def test_image_join_requires_a_fresh_qualified_poll_but_accepts_identical_repeated_polls(self):
+        """Retain real repeated polling without allowing an unqualified PNG to borrow other stable samples."""
+        for qualified in (False,True):
+            with self.subTest(qualified=qualified),tempfile.TemporaryDirectory() as directory:
+                run={};path=Path(directory).resolve()/'session'/'legs'/('e'*32)/'run.json'
+                proof,reuse=self.proof(path,run);request=json.loads(Path(reuse['requestFile']).read_bytes())
+                review=json.loads(Path(request['reviewFile']).read_bytes());folder=Path(review['nativeEndpoint'])
+                result=json.loads((folder/'result.json').read_bytes());poll=copy.deepcopy(result['observations'][1])
+                if qualified:
+                    poll['sourceFrameAgeMs']=200
+                else:
+                    poll.update(frameId=4,sourceFrameAgeMs=151)
+                    poll['navigationPose']['frameId']=4
+                    poll['frameWorldReadiness']['sourceFrameId']=4
+                    metadata_path=(folder/review['imageName']).with_suffix('.json')
+                    metadata=json.loads(metadata_path.read_bytes());metadata['frameId']=4
+                    request['imageMetadataSha256']=self.write(metadata_path,metadata)
+                result['observations'].append(poll)
+                request['nativeResultSha256']=self.write(folder/'result.json',result)
+                self.reseal_request(run,proof,reuse,request)
+                if qualified:self.assertEqual(verify_policy_reuse(run,path,proof)['runId'],run['runId'])
+                else:
+                    with self.assertRaisesRegex(ValueError,'qualified fresh'):verify_policy_reuse(run,path,proof)
+
+    def test_cached_resident_goal_request_history_cannot_be_hidden_by_version_zero(self):
+        """Pending, rejected and applied changes are all disallowed for the frozen cached policy."""
+        changes=dict(policyGoalVersion=1,appliedGoalRequestId='applied',goalRequestId='pending',goalRequestStatus='pending',
+                     goalError='encoder failed',goalIntent='combat',goalChanges=[dict(status='requested')])
+        for field,value in changes.items():
+            for remove in (False,True):
+                with self.subTest(field=field,remove=remove),tempfile.TemporaryDirectory() as directory:
+                    run={};path=Path(directory).resolve()/'session'/'legs'/('e'*32)/'run.json';proof,_=self.proof(path,run)
+                    if remove:run.pop(field)
+                    else:run[field]=value
+                    with self.assertRaises(ValueError):verify_policy_reuse(run,path,proof)
+
+    def test_replayed_or_mismatched_run_session_worker_owner_request_is_rejected(self):
+        """Rehashing an altered per-run proof cannot sever its original session/request bindings."""
+        changes={
+            'run':lambda reuse:reuse.update(runId='8'*32),
+            'session':lambda reuse:reuse.update(sessionId='8'*32),
+            'worker':lambda reuse:reuse['worker'].update(processId=44),
+            'child':lambda reuse:reuse['owner']['child'].update(instanceNonce='8'*32),
+            'configuration':lambda reuse:reuse.update(modelConfigurationSha256='8'*64),
+            'request':lambda reuse:reuse.update(requestSha256='8'*64),
+            'route':lambda reuse:reuse.update(routeId='other-route'),
+        }
+        for name,change in changes.items():
+            with self.subTest(name=name),tempfile.TemporaryDirectory() as directory:
+                run={}
+                path=Path(directory).resolve()/'session'/'legs'/('e'*32)/'run.json'
+                proof,reuse=self.proof(path,run)
+                change(reuse)
+                run.update(policyReuse=copy.deepcopy(reuse),policyReuseSha256=self.write(proof,reuse))
+                with self.assertRaises(ValueError):verify_policy_reuse(run,path,proof)
+
+    def test_self_consistent_proof_cannot_change_policy_sampling_or_input_limits(self):
+        """Even fully rehashed documents must still describe the reviewed Open P2P configuration."""
+        for change in (dict(history=42),dict(action_hold_ms=101),dict(max_observation_age_ms=151),dict(hybrid_legs=2)):
+            with self.subTest(change=change),tempfile.TemporaryDirectory() as directory:
+                run={}
+                path=Path(directory).resolve()/'session'/'legs'/('e'*32)/'run.json'
+                proof,_=self.proof(path,run,change)
+                with self.assertRaises(ValueError):verify_policy_reuse(run,path,proof)
+
+    def test_landmark_checkpoint_cannot_be_a_cached_open_p2p_policy(self):
+        """Reject the prior wrong model pin even when every proof hash is internally consistent."""
+        from landmark_recognizer import G4_SHA256
+        with tempfile.TemporaryDirectory() as directory:
+            run={}
+            path=Path(directory).resolve()/'session'/'legs'/('e'*32)/'run.json'
+            proof,_=self.proof(path,run,checkpoint_sha=G4_SHA256)
+            with self.assertRaisesRegex(ValueError,'Open P2P checkpoint changed'):
+                verify_policy_reuse(run,path,proof)

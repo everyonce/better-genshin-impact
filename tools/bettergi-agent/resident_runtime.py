@@ -1,6 +1,7 @@
 """Keep one local GPU policy resident across authenticated RDP bridge leases."""
 import copy
 import ctypes
+import hashlib
 import importlib
 import json
 import os
@@ -15,6 +16,10 @@ import uuid
 from navigation_idle_recovery import GOAL_INTENTS
 from stream_segments import EvidencePublicationError
 from bridge_transport import is_transport_failure
+
+
+# Exact installed Open P2P 150M policy checkpoint; unrelated to the small G4 landmark prototype.
+OPEN_P2P_SHA256 = '2a3b43121144ca2d9c2b8aa605e313184c98ac5ef6d2c3b530c2d353d886c5bc'
 
 
 def atomic_json(path, value):
@@ -69,7 +74,7 @@ def read_command(path, run_id):
 
 class ResidentControl:
     """Poll local commands and write progress away from capture and inference threads."""
-    def __init__(self, path, status_path, run_id):
+    def __init__(self, path, status_path, run_id, *, frozen_goal=False):
         self.path, self.status_path, self.run_id = Path(path), Path(status_path), run_id
         self.path.parent.mkdir(parents=True, exist_ok=True)
         # Exclusive creation prevents an old run's resume command from authorizing this run.
@@ -85,6 +90,8 @@ class ResidentControl:
         self._applied_goal_id = None
         self._goal_metadata = None
         self._goal_intent = 'unspecified'
+        # Cached scout requests bind their instruction before the monitor starts.
+        self.frozen_goal = frozen_goal
         # Only the serial policy thread owns this recovery latch across bridge leases.
         self.navigation_idle_recovery = None
         self._goal_events = []
@@ -254,6 +261,8 @@ def apply_pending_goal(control, policy, before_change):
     # Release failures terminate the episode; continuing would leave input ownership uncertain.
     try:
         before_change()
+        if control.frozen_goal:
+            raise RuntimeError('External goal change interrupted the frozen scout request')
     except Exception as error:
         control.finish_goal(request, error=error)
         raise
@@ -328,9 +337,16 @@ def completed_passive_observation(args, summary, end_reason):
             and any(part.get('framesReceived',0)>0 for part in summary['segments']))
 
 
-def run_resident(args, load_policy, run_episode):
+def run_resident(args, load_policy, run_episode, *, policy_reuse=None):
     """Own one bounded run, retaining weights/graphs through pause and bridge replacement."""
     require_current_rdp(args.rdp_session_id)
+    if getattr(args,'reviewed_scout_route',None) is not None:
+        from reviewed_scout_route import validate_reviewed_options
+        route=validate_reviewed_options(args)
+        # A geometry-only CLI invocation cannot bypass the session's fresh reviewed request.
+        if (not isinstance(policy_reuse,dict) or policy_reuse.get('routeSpec')!=route.document()
+                or policy_reuse.get('routeSpecSha256')!=route.sha256 or policy_reuse.get('routeId')!=route.route_id):
+            raise ValueError('Reviewed geometry requires its matching cached-session request proof')
     binding = getattr(args, 'patrol_series_binding', None)
     if binding and (socket.gethostname().split('.')[0].upper() != 'SIREN' or time.monotonic_ns() >= binding[4]):
         raise RuntimeError('Series lease is outside its SIREN host or time bound')
@@ -339,7 +355,8 @@ def run_resident(args, load_policy, run_episode):
     lifecycle = control_module()
     output = Path(args.output)
     run_id = uuid.uuid4().hex
-    control = ResidentControl(args.control_file or str(output)+'.control.json', str(output)+'.status.json', run_id)
+    control = ResidentControl(args.control_file or str(output)+'.control.json', str(output)+'.status.json', run_id,
+                              frozen_goal=policy_reuse is not None)
     summary = {'version': 1, 'runId': run_id, 'mode': 'resident-rdp', 'status': 'loading',
                'observationProfile': observation_profile,
                'controlFile': str(control.path.resolve()), 'windowsSessionId': args.rdp_session_id,
@@ -353,10 +370,27 @@ def run_resident(args, load_policy, run_episode):
     try:
         control.publish(state='loading', inputRequested=args.enable_input)
         loading_started = time.monotonic()
+        # The Windows monotonic clock used for deadlines may be too coarse for a cached acquisition.
+        acquisition_started_ns = time.perf_counter_ns()
         policy = load_policy(args)
+        policy_acquire_seconds = (time.perf_counter_ns()-acquisition_started_ns)/1e9
         control.set_initial_goal(getattr(policy, 'metadata', {}).get('goal'), getattr(args, 'goal_intent', 'unspecified'))
         summary['modelLoadSeconds'] = time.monotonic()-loading_started
         summary['modelLoads'] = int(policy is not None)
+        if policy_reuse is not None:
+            # Only an explicit in-process caller can claim reuse. Bind its immutable
+            # session proof to this freshly created resident ID before any bridge starts.
+            if policy is None or not isinstance(policy_reuse, dict) or 'runId' in policy_reuse:
+                raise ValueError('A loaded policy and fresh, run-independent reuse evidence are required')
+            reuse = dict(copy.deepcopy(policy_reuse), runId=run_id)
+            raw = json.dumps(reuse, indent=2, allow_nan=False).encode('utf-8')
+            if len(raw) > 16384:
+                raise ValueError('Policy reuse evidence exceeds its bounded size')
+            with Path(str(output)+'.reuse.json').open('xb') as stream:
+                stream.write(raw)
+            summary.update(modelLoads=0, modelLoadSeconds=0.0, policyAcquireSeconds=policy_acquire_seconds,
+                           policyAcquireClock='perf_counter_ns',
+                           policyReuse=reuse, policyReuseSha256=hashlib.sha256(raw).hexdigest())
         deadline = time.monotonic() + args.seconds
         if binding:
             deadline = min(deadline, binding[4]/1e9)

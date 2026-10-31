@@ -513,3 +513,33 @@ python tools/bettergi-agent/survey_surface_camera.py `
 ```
 
 The hook retains original source/receipt evidence and allows only horizontal mouse pulses with empty key lists. It measures each settled response, stops within three degrees of the requested heading, and refuses absent, reversed or excessive responses. The whole survey is bounded to 35 seconds and twelve corrections, with the established 150 ms freshness, 100 ms holds, 78°C stop, telemetry-loss stop and exact minimized RDP identity. Creating `STOP` in its evidence directory cancels it. It does not restart on failure. Capture a fresh input-disabled native scene afterward before declaring another movement leg. Camera surveys are diagnostic and do not load or train a policy model.
+
+## Keep a scout policy loaded between reviewed legs
+
+`scout_session.py` keeps the installed Open P2P weights and CUDA graph in one ordinary-token RDP worker. Each explicit request gets a fresh resident run and one controller lease; the bridge closes before the next passive inspection. Pass this worker command to the existing RDP command broker, with workspace TEMP/TMP, a new evidence directory, and the sealed original owner lineage:
+
+```powershell
+& $gpuPython -B -X utf8 tools/bettergi-agent/scout_session.py run `
+  --directory $newSession --owner-from $lineage --seconds 600 `
+  --route mondstadt-combat-scout-north-meadow-v1 --allow-reviewed-routes
+```
+
+The worker requires the original minimized owner and an ordinary token in its RDP session. It submits no destinations itself. The default lifetime is 600 seconds; an explicit `--seconds` may retain the policy for up to 1800 seconds. The recording cap remains 160 MiB. Thermal, telemetry-loss, ownership and operator stops remain active while loading and waiting. A failed leg stops the worker. Each movement leg retains the 35-second deadline, 150 ms source freshness and 100 ms hold limit.
+
+The scout's text goal stays fixed for the session. An external goal request releases input and fails the leg before changing the model; a late goal request also prevents another leg. Start a new session to select another instruction. A plain pause followed by an explicit run remains within the original 35-second deadline. Independent replay checks the original review/native/image files as well as unchanged goal state throughout the recorded run.
+
+After startup or the preceding completed leg, capture and inspect a fresh input-disabled native scene. A review names its `nativeEndpoint`, `imageName`, `imageSha256`, inspected health/max health, and `visualReview`; it must declare `attacksAllowed: false` and `maximumLegs: 1`. The source must contain three stationary, same-epoch observations and a matching full native PNG. Repeated polls are allowed only when their immutable source evidence agrees.
+
+For a registered route, include its `routeId` and exact `points`. To choose a different short path, generate the four geometry fields and include them in that same visual review:
+
+```powershell
+python tools/bettergi-agent/scout_session.py route-spec `
+  --start $startX $startY --end $endX $endY
+python tools/bettergi-agent/scout_session.py submit `
+  --session $newSession --review $freshReview
+python tools/bettergi-agent/scout_session.py stop --session $newSession
+```
+
+Explicit geometry is immutable, directed, limited to two points and 40 units, and confined to the existing scout bounds. Its complete hash is bound through the original review, request, cached-policy proof and controller evidence. It does not register a global route or authorize an automatic obstacle detour. The independent auditor requires both `--policy-reuse-proof <patrol.json.reuse.json>` and `--reviewed-scout-route <leg/reviewed-route.json>` for these legs. Ordinary audits retain their one-model-load requirement.
+
+An intentional stop produces terminal session state `stopped` and process code 1; assess its reason separately from completed leg audits. Keep failed trials and native recordings as diagnostics, and reserve diagnostic or holdout episodes before export so they cannot enter fitting. See the [live measurements and limitations](../../Docs/research/BetterGI-Native-Combat-Observation-2026-10-31.md).

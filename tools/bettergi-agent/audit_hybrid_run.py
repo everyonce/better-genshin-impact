@@ -1,8 +1,12 @@
 """Audit recorded fixed-route endpoint and software-input evidence; no game or GPU access."""
 import argparse
+import hashlib
 import json
 import math
+import os
 from pathlib import Path
+import re
+import stat
 import statistics
 
 from audit_camera_patrol import audit_camera, compare_patrols, yaw_reversals
@@ -12,13 +16,214 @@ from hybrid_routes import (COURTYARD_ROUTE, PATROL_STATIONS, STAIR_POST_ROUTE, S
 from observation_timing import observation_timestamp
 from destination_queue_limits import ENDURANCE, STANDARD, queue_limits
 from hybrid_routes import SURFACE_ROUTES
-from navigation_profiles import COURTYARD_PROFILE,SURFACE_PROFILE,validate_capability,allows_pose_scope,required_profile
+from navigation_profiles import COURTYARD_PROFILE,SURFACE_PROFILE,SCOUT_PROFILE,validate_capability,allows_pose_scope,required_profile
+from reviewed_scout_route import ReviewedScoutRoute,load_reviewed_route,reviewed_route_policy
 
 
 def require(condition, message):
     """Fail closed on incomplete evidence rather than inferring successful gameplay."""
     if not condition:
         raise ValueError(message)
+
+
+def evidence_bytes(path, maximum):
+    """Read one bounded regular local file without following symbolic, junction or hard-link aliases."""
+    require(isinstance(path,(str,Path)) and str(path),'Missing local evidence path')
+    path=Path(path).absolute()
+    require(not str(path).startswith(('\\\\','//')) and path.resolve(strict=True)==path,
+            'Linked or remote cached-policy evidence is not admitted')
+    with path.open('rb') as stream:
+        info=os.fstat(stream.fileno())
+        require(stat.S_ISREG(info.st_mode) and info.st_nlink==1 and 0<info.st_size<=maximum,
+                'Cached-policy evidence is linked, nonregular or exceeds its bounded size')
+        raw=stream.read(maximum+1)
+    require(len(raw)==info.st_size and len(raw)<=maximum,'Cached-policy evidence changed size while reading')
+    return raw
+
+
+def evidence_document(path, maximum=1024*1024):
+    """Decode a bounded evidence object while hashing its exact original bytes."""
+    raw=evidence_bytes(path,maximum)
+    value=json.loads(raw.decode('utf-8-sig'))
+    require(isinstance(value,dict),'Expected cached-policy evidence object')
+    return value,hashlib.sha256(raw).hexdigest()
+
+
+def verify_scout_goal_state(value, label, *, decision=False):
+    """Allow pause/resume epochs while forbidding pending, applied or failed goal replacement."""
+    require(isinstance(value,dict) and type(value.get('policyGoalVersion')) is int and value['policyGoalVersion']==0
+            and value.get('goalIntent')=='ground-navigation' and type(value.get('controlEpoch')) is int
+            and value['controlEpoch']>=0,'Cached scout goal state changed or is missing: '+label)
+    fields=('appliedGoalRequestId',) if decision else ('appliedGoalRequestId','goalRequestId','goalRequestStatus','goalError')
+    require(all(key in value and value[key] is None for key in fields)
+            and all(value.get(key) is None for key in ('goalRequestId','goalRequestStatus','goalError'))
+            and value.get('goalChanges',[])==[],'Cached scout has pending/applied goal changes: '+label)
+
+
+def verify_scout_review(request, owner, points, spec=None):
+    """Independently replay original passive review hashes, source joins and stable start observations."""
+    review,review_sha=evidence_document(request.get('reviewFile'),16384)
+    require(review_sha==request.get('reviewSha256') and review.get('routeId')==request['routeId']
+            and review.get('points')==[list(point) for point in points],'Original scout review or route changed')
+    if spec is not None:
+        require(review.get('routeSpec')==spec.document() and review.get('routeSpecSha256',spec.sha256)==spec.sha256,
+                'Original visual review geometry changed')
+    else:
+        require('routeSpec' not in review and 'routeSpecSha256' not in review,'Fixed review contains undeclared geometry')
+    require(review.get('attacksAllowed') is False and type(review.get('maximumLegs')) is int and review['maximumLegs']==1
+            and type(review.get('inspectedHealth')) is int and type(review.get('inspectedMaximumHealth')) is int
+            and 0<review['inspectedHealth']<=review['inspectedMaximumHealth']
+            and isinstance(review.get('visualReview'),str) and review['visualReview'].strip(),'Original scout scene/health review is incomplete')
+    require(isinstance(review.get('nativeEndpoint'),str),'Missing original native review directory')
+    endpoint=Path(review['nativeEndpoint']).absolute()
+    plan,plan_sha=evidence_document(endpoint/'plan.json')
+    result,result_sha=evidence_document(endpoint/'result.json',4*1024*1024)
+    require(plan_sha==request.get('nativePlanSha256') and result_sha==request.get('nativeResultSha256'),
+            'Original native plan or result bytes changed')
+    require(plan.get('owner')==owner and plan.get('enableInput') is False and plan.get('modelLoaded') is False
+            and plan.get('navigationProfile')==SCOUT_PROFILE,'Original native review changed owner or passive scope')
+    samples,observations=result.get('stableSamples'),result.get('observations')
+    require(result.get('status')=='completed' and result.get('inputEnabled') is False and result.get('modelLoaded') is False
+            and result.get('ownerIdleMinimizedAfter') is True and not result.get('error')
+            and isinstance(samples,list) and len(samples)==3 and isinstance(observations,list)
+            and all(isinstance(frame,dict) for frame in observations),'Original passive review did not complete cleanly')
+
+    def finite(value):
+        """Reject boolean and nonfinite observation measurements before arithmetic."""
+        return type(value) in (int,float) and (type(value) is int or math.isfinite(value))
+
+    def qualified(frame):
+        """Join grounded-looking, fresh native evidence to the directed route's reviewed start."""
+        require(isinstance(frame,dict) and type(frame.get('frameId')) is int and frame['frameId']>0,'Invalid reviewed source frame')
+        pose,world,source=frame.get('navigationPose') or {},frame.get('frameWorldReadiness') or {},frame.get('sourceFrame') or {}
+        require(isinstance(pose,dict) and isinstance(world,dict) and isinstance(source,dict)
+                and pose.get('state')=='valid' and type(pose.get('frameId')) is int
+                and pose['frameId']==frame['frameId'] and allows_pose_scope(pose,SCOUT_PROFILE)
+                and finite(pose.get('positionConfidence')) and .99<=pose['positionConfidence']<=1
+                and finite(pose.get('yawConfidence')) and .2<=pose['yawConfidence']<=1
+                and finite(pose.get('yawDegrees')),'Reviewed pose is outside its qualified scout scope')
+        live,motion,execution=frame.get('worldReadiness'),frame.get('motionEvidence'),frame.get('executionContext')
+        require(world.get('ready') is True and type(world.get('sourceFrameId')) is int
+                and world['sourceFrameId']==frame['frameId'] and world.get('sourceFrame')==source
+                and type(world.get('epoch')) is int and world['epoch']>=0
+                and isinstance(live,dict) and live.get('ready') is True,'Reviewed world readiness lost its source join')
+        require(isinstance(motion,dict) and motion.get('status')=='normal' and motion.get('spaceKeyMatched') is False
+                and finite(frame.get('sourceFrameAgeMs')) and 0<=frame['sourceFrameAgeMs']<=150
+                and isinstance(execution,dict) and type(execution.get('lastSequence')) is int and execution['lastSequence']==0,
+                'Reviewed image is stale, nongrounded or contains input')
+        require(isinstance(source.get('captureEpoch'),str) and source['captureEpoch']
+                and type(source.get('timestamp100ns')) is int and source['timestamp100ns']>0
+                and finite(source.get('freshnessAtMs')) and math.dist((pose['x'],pose['y']),points[0])<=2,
+                'Reviewed source provenance or starting position changed')
+
+    for sample in samples:
+        require(sample in observations,'Stable review sample is not an original observation')
+        qualified(sample)
+    for before,after in zip(samples,samples[1:]):
+        a,b=before['sourceFrame'],after['sourceFrame'];p,q=before['navigationPose'],after['navigationPose']
+        require(a['captureEpoch']==b['captureEpoch'] and a['timestamp100ns']<b['timestamp100ns']
+                and before['frameId']<after['frameId'] and 80<=b['freshnessAtMs']-a['freshnessAtMs']<=250
+                and before['frameWorldReadiness'].get('epoch')==after['frameWorldReadiness'].get('epoch')
+                and math.dist((p['x'],p['y']),(q['x'],q['y']))<=.35
+                and abs((p['yawDegrees']-q['yawDegrees']+180)%360-180)<=3,'Reviewed start is not stable in one source/world epoch')
+    name=review.get('imageName')
+    require(isinstance(name,str) and Path(name).name==name and name.endswith('.png')
+            and not any(char in name for char in '/\\:'),'Invalid original reviewed PNG name')
+    image=endpoint/name
+    image_sha=hashlib.sha256(evidence_bytes(image,16*1024*1024)).hexdigest()
+    metadata,metadata_sha=evidence_document(image.with_suffix('.json'),65536)
+    require(metadata_sha==request.get('imageMetadataSha256')
+            and image_sha==request.get('imageSha256')==review.get('imageSha256')==metadata.get('imageSha256'),
+            'Original reviewed PNG or image metadata bytes changed')
+    joined=[frame for frame in observations if frame.get('frameId')==metadata.get('frameId')]
+    require(joined and all(frame.get('sourceFrame')==metadata.get('sourceFrame') for frame in joined),'Reviewed PNG lost its native source join')
+    # Polls of identical pixels may age; immutable source and recognition results must agree.
+    fields=('frameId','sourceFrame','navigationPose','frameWorldReadiness','motionEvidence')
+    identity={key:joined[0].get(key) for key in fields}
+    require(all({key:frame.get(key) for key in fields}==identity for frame in joined),'Repeated image polls contradict original native evidence')
+    valid=[]
+    for frame in joined:
+        try:qualified(frame)
+        except (ValueError,KeyError,TypeError):continue
+        valid.append(frame)
+    require(valid,'Reviewed PNG has no qualified fresh native observation')
+    selected=min(valid,key=lambda frame:frame['sourceFrameAgeMs'])
+    require(selected['sourceFrame']['captureEpoch']==samples[0]['sourceFrame']['captureEpoch']
+            and selected['frameWorldReadiness'].get('epoch')==samples[0]['frameWorldReadiness'].get('epoch'),
+            'Reviewed PNG belongs to another source/world epoch')
+
+
+def verify_policy_reuse(run, run_path, proof_path):
+    """Opt in to a fresh run's cached Open P2P proof; ordinary audits still require one load."""
+    if proof_path is None:
+        require(run.get('modelLoads') == 1,'The ordinary route audit requires one model load')
+        return None
+
+    document=evidence_document
+    verify_scout_goal_state(run,'resident summary')
+    require(run.get('goalChanges')==[],'Cached resident goal-change journal is missing or nonempty')
+
+    run_path=Path(run_path).resolve()
+    require(Path(proof_path).resolve()==Path(str(run_path)+'.reuse.json'),'Reuse proof is not beside its original run')
+    reuse,digest=document(proof_path,16384)
+    require(reuse==run.get('policyReuse') and digest==run.get('policyReuseSha256')
+            and type(run.get('modelLoads')) is int and run['modelLoads']==0 and run.get('modelLoadSeconds')==0,
+            'A cached run must honestly report zero loads and its exact reuse proof')
+    require(reuse.get('version')==1 and re.fullmatch('[a-f0-9]{32}',str(reuse.get('sessionId','')))
+            and re.fullmatch('[a-f0-9]{32}',str(reuse.get('requestId','')))
+            and re.fullmatch('[a-f0-9]{32}',str(run.get('runId','')))
+            and reuse.get('runId')==run['runId'],'Reuse evidence belongs to another resident run')
+    source=Path(reuse['sessionProof']).absolute()
+    require(source.name=='policy-proof.json' and source.parent==run_path.parent.parent.parent
+            and run_path.parent.name==reuse['requestId'],'Reuse evidence belongs to another session directory or request')
+    session,session_sha=document(source)
+    require(session_sha==reuse.get('sessionProofSha256') and session.get('version')==1
+            and session.get('kind')=='scout-policy-session' and session.get('sessionId')==reuse['sessionId']
+            and type(session.get('modelLoads')) is int and session['modelLoads']==1,
+            'The original one-load policy session was not proven')
+    configuration=session.get('configuration')
+    fingerprint=hashlib.sha256(json.dumps(configuration,sort_keys=True,separators=(',',':'),allow_nan=False).encode()).hexdigest()
+    from resident_runtime import OPEN_P2P_SHA256
+    require(isinstance(configuration,dict) and fingerprint==session.get('modelConfigurationSha256')==reuse.get('modelConfigurationSha256')
+            and session.get('checkpointSha256')==configuration.get('checkpointSha256')==OPEN_P2P_SHA256,
+            'Cached model configuration or Open P2P checkpoint changed')
+    settings=configuration.get('arguments') or {}
+    require(settings.get('model')=='open-p2p' and settings.get('history')==41 and settings.get('cuda_graph') is True
+            and settings.get('p2p_fast_start') is True and settings.get('goal_intent')=='ground-navigation'
+            and settings.get('observation_profile')=='p2p-native-hamming-192-v1'
+            and settings.get('max_observation_age_ms')==150 and settings.get('action_hold_ms')==100
+            and settings.get('hybrid_legs')==1 and run.get('observationProfile')==settings['observation_profile'],
+            'The cached policy changed its reviewed preprocessing or action limits')
+    worker,owner=session.get('worker'),session.get('owner')
+    require(isinstance(worker,dict) and isinstance(owner,dict) and worker==reuse.get('worker') and owner==reuse.get('owner'),
+            'The cached worker or native owner identity changed')
+    require(type(worker.get('processId')) is int and worker['processId']>0
+            and worker['processId'] not in (owner['root']['processId'],owner['child']['processId'])
+            and worker.get('windowsSessionId')==owner['child']['windowsSessionId']==run.get('windowsSessionId')
+            and all(part.get('processId')==owner['child']['processId'] and part.get('instanceNonce')==owner['child']['instanceNonce']
+                    for part in run.get('segments',[])), 'Cached run and worker do not share the exact native child')
+    request_path=Path(reuse['requestFile']).absolute()
+    require(request_path.parent==source.parent/'requests' and request_path.stem==reuse['requestId'],
+            'The cached run is not bound to its original explicit request')
+    request,request_sha=document(request_path,16384)
+    require(request_sha==reuse.get('requestSha256') and request.get('sessionId')==reuse['sessionId']
+            and request.get('requestId')==reuse['requestId'] and request.get('modelConfigurationSha256')==fingerprint
+            and type(request.get('maximumLegs')) is int and request['maximumLegs']==1
+            and request.get('navigationProfile')==reuse.get('navigationProfile')==SCOUT_PROFILE
+            and request.get('routeId')==reuse.get('routeId'),
+            'The fresh reviewed request changed before reuse audit')
+    spec=None
+    if 'routeSpec' in reuse or 'routeSpec' in request:
+        spec=ReviewedScoutRoute.from_document(request.get('routeSpec'))
+        require(session.get('reviewedScoutRoutePolicy')==reviewed_route_policy()
+                and reuse.get('routeSpec')==request['routeSpec']==spec.document()
+                and reuse.get('routeSpecSha256')==request.get('routeSpecSha256')==spec.sha256
+                and reuse['routeId']==spec.route_id,'Cached geometry differs from its explicitly authorized reviewed request')
+    else:
+        require('routeSpecSha256' not in reuse and 'routeSpecSha256' not in request,'Geometry digest has no explicit specification')
+        require(required_profile(request['routeId'])==SCOUT_PROFILE,'Cached fixed route changed scout scope')
+    verify_scout_review(request,owner,spec.points if spec is not None else route_points(request['routeId']),spec)
+    return reuse
 
 
 # Derive the expected sequence independently of the planner's leg-advance logic.
@@ -765,7 +970,7 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
           minimum_climb_passages=0, minimum_bypass_replays=0, minimum_bypass_rebinds=0, minimum_circuits=0,
           camera_checkpoint=None, minimum_calibrated_actions=0, shadow_checkpoint=None,
           landmark_checkpoint=None, ffmpeg='ffmpeg', ffprobe='ffprobe', destination_plan=None, destination_batches=None,
-          failure_prefix=False):
+          failure_prefix=False, policy_reuse_proof=None, reviewed_scout_route=None):
     """Join endpoint samples to retained same-frame poses and actions to terminal receipts."""
     require(minimum_legs >= 1 and min(minimum_obstacle_passages, minimum_climb_passages,
                                       minimum_bypass_replays, minimum_bypass_rebinds, minimum_circuits,
@@ -789,11 +994,24 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
                 and run.get('evidenceComplete') is False,'Expected an explicitly failed directed lease')
     require(failure_prefix or run.get('status') == 'completed' and run.get('evidenceComplete') is True,
             'Resident run did not finish with complete evidence')
-    require(run.get('modelLoads') == 1 and run.get('inputRequested') is True,
-            'Expected one resident GPU model and an input-enabled trial')
+    reuse=verify_policy_reuse(run,run_path,policy_reuse_proof)
+    spec=reviewed_scout_route
+    if spec is not None:
+        require(type(spec) is ReviewedScoutRoute and reuse is not None
+                and reuse.get('routeSpec')==spec.document() and reuse.get('routeSpecSha256')==spec.sha256,
+                'Independent reviewed geometry does not match this run\'s cached request')
+        require(not failure_prefix and edges is None and minimum_legs==1,'Reviewed geometry is one complete directed scout leg')
+    else:
+        require(reuse is None or 'routeSpec' not in reuse,'Reviewed geometry must be supplied explicitly for independent replay')
+    require(run.get('inputRequested') is True,'Expected an input-enabled trial')
     parts, frames = [], {}
     for entry in run['segments']:
         part = json.loads((Path(repository)/entry['report']).read_text(encoding='utf-8-sig'))
+        if reuse is not None:
+            for key in ('initialGoalState','finalGoalState','leaseInitialGoalState'):
+                verify_scout_goal_state(part.get(key),key)
+            require(part.get('goalChanges')==[],'Cached part goal-change journal is missing or nonempty')
+            for decision in part.get('decisions',[]):verify_scout_goal_state(decision,'decision',decision=True)
         parts.append(part)
         recording = part.get('recording') or {}
         require(recording.get('complete') is True and recording.get('workerRetired') is True,
@@ -824,10 +1042,19 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
     require(len(starts) == 1, 'Expected one independently admitted starting endpoint')
     require(len(endpoints) >= minimum_legs, 'Insufficient verified route legs')
     route_id = starts[0].get('routeId', COURTYARD_ROUTE)
+    expected_profile='mondstadt-combat-scout-v1' if spec is not None else required_profile(route_id)
+    if reuse is not None:
+        require(route_id==reuse['routeId'] and expected_profile=='mondstadt-combat-scout-v1'
+                and len(endpoints)==1 and run.get('endReason')=='hybridLegLimit',
+                'Cached policy source observations belong to another reviewed scout route')
+        samples=endpoints[0].get('samples')
+        require(isinstance(samples,list) and len(samples)==3,'Cached scout endpoint lacks its three original samples')
+        require(0<=samples[-1]['atMs']-starts[0]['atMs']<=35000,
+                'Cached scout leg exceeded its unchanged 35-second deadline')
     navigation_profile=parts[0]['hybridNavigation'].get('profileId',COURTYARD_PROFILE)
     require(all(part['hybridNavigation'].get('profileId',COURTYARD_PROFILE)==navigation_profile for part in parts),
             'Navigation scope changed within the run')
-    require(required_profile(route_id)==navigation_profile,
+    require(expected_profile==navigation_profile,
             'Fixed route and explicit localization scope differ')
     if navigation_profile!=COURTYARD_PROFILE:
         for part in parts:validate_capability(part.get('navigationGuidance') or {},navigation_profile)
@@ -839,7 +1066,12 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
                         'Surface pose left its explicit scope or confidence bounds')
     require(all(p['hybridNavigation'].get('routeId', COURTYARD_ROUTE) == route_id for p in parts),
             'Fixed route changed within the run')
-    start, end = route_points(route_id)
+    if spec is not None:
+        require(route_id==spec.route_id and starts[0]['target']=='end'
+                and all(row.get('routeSpec')==spec.document() and row.get('routeSpecSha256')==spec.sha256
+                        for row in [starts[0],*(part['hybridNavigation'] for part in parts)]),
+                'Controller geometry or its directed starting endpoint differs from the explicit review')
+    start, end = spec.points if spec is not None else route_points(route_id)
     patrol = route_id == STREET_PATROL_ROUTE
     if edges is not None:
         closed=run.get('endReason')=='destinationQueueFinished'
@@ -983,9 +1215,9 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
     require(len(replays) >= minimum_bypass_replays, f'Only {len(replays)} verified bypass replays')
     rebinds = sum(len(r['rebinds']) for r in replays)
     require(rebinds >= minimum_bypass_rebinds, f'Only {rebinds} verified bypass rebinds')
-    return dict(version=1, passed=not failure_prefix, scope='directed-destination-endpoint-and-software-input-joins' if edges is not None
+    result=dict(version=1, passed=not failure_prefix, scope='directed-destination-endpoint-and-software-input-joins' if edges is not None
                 else 'fixed-route-endpoint-and-software-input-joins', routeId=route_id,
-                verifiedLegs=len(endpoints), controllerLeases=1, modelLoads=1,
+                verifiedLegs=len(endpoints), controllerLeases=1, modelLoads=run['modelLoads'],
                 verifiedCircuits=len(circuits), patrolCircuits=circuits, partialPatrolLegs=[] if edges is not None else partial,
                 **({'directedLegs':partial,'releaseReissues':reissues,'stationaryPhotoRetries':[dict(originalFrameId=fid,
                     frameIds=[e['frameId'] for e in attempts]) for fid,attempts in retries.items()]} if edges is not None else {}),
@@ -1002,6 +1234,10 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
                 verifiedBypassRebinds=rebinds,
                 verifiedCameraRebinds=sum(b['cameraAllowanceUsed'] for r in replays for b in r['rebinds']),
                 physicalInputDeliveryVerified=False, generalNavigationQualified=False)
+    if reuse is not None:result['policyReuse']=reuse
+    if spec is not None:
+        result.update(scope='reviewed-scout-endpoint-and-software-input-joins',routeSpec=spec.document(),routeSpecSha256=spec.sha256)
+    return result
 
 
 def main():
@@ -1010,6 +1246,8 @@ def main():
     parser.add_argument('--run', required=True)
     parser.add_argument('--recordings', required=True)
     parser.add_argument('--repository', default=str(Path(__file__).resolve().parents[2]))
+    parser.add_argument('--policy-reuse-proof',type=Path,help='Explicit fresh-run proof for a zero-load cached scout leg')
+    parser.add_argument('--reviewed-scout-route',type=Path,help='Explicit immutable geometry to replay independently against native observations')
     parser.add_argument('--minimum-legs', type=int, default=1)
     parser.add_argument('--destination-plan', help='Verify the exact directed edges of this frozen destination plan')
     parser.add_argument('--batch-intent', action='append', type=Path,
@@ -1050,7 +1288,8 @@ def main():
                    landmark_checkpoint=args.landmark_checkpoint, ffmpeg=args.ffmpeg, ffprobe=args.ffprobe,
                    minimum_climb_passages=args.minimum_climb_passages,
                    minimum_bypass_rebinds=args.minimum_bypass_rebinds,
-                   minimum_bypass_replays=args.minimum_bypass_replays)
+                   minimum_bypass_replays=args.minimum_bypass_replays,policy_reuse_proof=args.policy_reuse_proof,
+                   reviewed_scout_route=load_reviewed_route(args.reviewed_scout_route) if args.reviewed_scout_route else None)
     if args.baseline_run:
         baseline = audit(args.baseline_run, args.baseline_recordings, repository=args.repository, minimum_circuits=1)
         result['patrolComparison'] = compare_patrols(baseline, result)

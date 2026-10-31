@@ -807,7 +807,9 @@ def validate_navigation_scope_options(args):
     """Keep the new outdoor scope explicit and confined to its declared route family."""
     profile=getattr(args,'navigation_profile',COURTYARD_PROFILE)
     if profile not in NAVIGATION_PROFILES:raise ValueError('Unsupported navigation profile')
-    if getattr(args,'hybrid_navigation',False) and required_profile(getattr(args,'hybrid_route',None) or COURTYARD_ROUTE)!=profile:
+    from reviewed_scout_route import validate_reviewed_options
+    reviewed=validate_reviewed_options(args)
+    if reviewed is None and getattr(args,'hybrid_navigation',False) and required_profile(getattr(args,'hybrid_route',None) or COURTYARD_ROUTE)!=profile:
         raise ValueError('Fixed routes require their exact explicit navigation profile')
     if profile!=COURTYARD_PROFILE and not (getattr(args,'navigation_guidance',False) or getattr(args,'hybrid_navigation',False)):
         raise ValueError('A surface or scouting profile requires explicit native navigation guidance')
@@ -1145,6 +1147,8 @@ def parse_arguments(argv=None):
                         help='Run the full hybrid loop with native input disabled for bounded qualification')
     parser.add_argument('--hybrid-route', choices=EXECUTABLE_ROUTE_IDS,
                         help='Choose a surveyed fixed route; defaults to the original courtyard segment')
+    parser.add_argument('--reviewed-scout-route',metavar='JSON',
+                        help='Explicit scout geometry; requires a reviewed cached-session request')
     parser.add_argument('--steering-shadow', metavar='CHECKPOINT',
                         help='Record a trained steering prediction after each hybrid decision has settled')
     parser.add_argument('--landmark-shadow', metavar='CHECKPOINT',
@@ -1175,6 +1179,12 @@ def parse_arguments(argv=None):
                         help='Opt into bounded native screenshots on visual readiness changes in the RDP BetterGI app')
     parser.add_argument('--output', required=True)
     args = parser.parse_args(argv)
+    if args.reviewed_scout_route:
+        if args.hybrid_route:parser.error('Choose either a fixed route or an explicit reviewed scout specification')
+        from reviewed_scout_route import load_reviewed_route
+        try:args.reviewed_scout_route=load_reviewed_route(args.reviewed_scout_route)
+        except (ValueError,OSError) as error:parser.error(str(error))
+        args.hybrid_route=args.reviewed_scout_route.route_id
     try:
         validate_model_profile(args.observation_profile, args.model)
     except ValueError as error:
@@ -1236,7 +1246,7 @@ def parse_arguments(argv=None):
         from resident_runtime import parse_series_binding
         passive_pose = not args.enable_input and ((args.model == 'observe' and args.navigation_guidance)
                                                   or args.combat_shadow)
-        bounded_extension = (args.hybrid_navigation and args.hybrid_route in ROUTE_IDS and 1 <= args.hybrid_legs <= 4
+        bounded_extension = (args.hybrid_navigation and (args.hybrid_route in ROUTE_IDS or args.reviewed_scout_route is not None) and 1 <= args.hybrid_legs <= 4
                              and args.max_observation_age_ms <= 150 and args.action_hold_ms is not None
                              and args.action_hold_ms <= 100)
         if not (args.resident and (passive_pose or bounded_extension
@@ -1616,7 +1626,7 @@ def run_episode(args, policy=None, control=None):
             if getattr(args, 'hybrid_navigation', False):
                 hybrid = HybridNavigation(configured['capability'], route_id,
                     remember_bypass=getattr(args, 'remember_hybrid_bypass', False),
-                    navigation_profile=navigation_profile, **itinerary)
+                    navigation_profile=navigation_profile, reviewed_scout_route=getattr(args,'reviewed_scout_route',None), **itinerary)
                 report['hybridNavigation'] = hybrid.snapshot()
                 report['hybridNavigationEvents'] = []
         if native_combat_enabled:

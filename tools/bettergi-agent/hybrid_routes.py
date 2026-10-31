@@ -33,7 +33,15 @@ FIELD_JUNCTION_ROUTE = 'mondstadt-field-junction-v1'
 FIELD_NORTH_ROUTE = 'mondstadt-field-north-v1'
 FIELD_EAST_ROUTE = 'mondstadt-field-east-v1'
 SCOUT_ENTRY_ROUTE = 'mondstadt-combat-scout-entry-v1'
-SCOUT_ROUTES = (SCOUT_ENTRY_ROUTE,)
+SCOUT_GRASS_ROUTE = 'mondstadt-combat-scout-grass-v1'
+SCOUT_GROVE_ROUTE = 'mondstadt-combat-scout-grove-v1'
+SCOUT_APRON_ROUTE = 'mondstadt-combat-scout-north-apron-v1'
+SCOUT_MEADOW_ROUTE = 'mondstadt-combat-scout-north-meadow-v1'
+SCOUT_INLAND_SLOPE_ROUTE = 'mondstadt-combat-scout-inland-slope-v1'
+SCOUT_INLAND_GAP_ROUTE = 'mondstadt-combat-scout-inland-gap-v1'
+SCOUT_FOREST_EDGE_ROUTE = 'mondstadt-combat-scout-forest-edge-v1'
+SCOUT_ROUTES = (SCOUT_ENTRY_ROUTE,SCOUT_GRASS_ROUTE,SCOUT_GROVE_ROUTE,SCOUT_APRON_ROUTE,SCOUT_MEADOW_ROUTE,
+                SCOUT_INLAND_SLOPE_ROUTE,SCOUT_INLAND_GAP_ROUTE,SCOUT_FOREST_EDGE_ROUTE)
 SURFACE_ROUTES = (BRIDGE_APPROACH_ROUTE,BRIDGE_ENTRY_ROUTE,BRIDGE_MIDDLE_ROUTE,BRIDGE_EXIT_ROUTE,FIELD_JUNCTION_ROUTE,FIELD_NORTH_ROUTE,FIELD_EAST_ROUTE)
 SURVEY_ROUTES = (STREET_EXTENSION_ROUTE,STREET_TURN_ROUTE,STREET_CONTINUE_ROUTE,STREET_JUNCTION_ROUTE,
                  STREET_STAIRS_ROUTE,STREET_LOWER_LANE_ROUTE,STREET_DESCENT_ROUTE,STREET_LOWER_STEPS_ROUTE,
@@ -47,6 +55,20 @@ EXECUTABLE_ROUTE_IDS = tuple(route for route in ROUTE_IDS if route not in BLOCKE
 
 # The default segment is also advertised as the bridge's native heading anchors.
 _POINTS = {
+    # Fresh R61 scene: a short northeast continuation on visible grass, before the trees farther ahead.
+    SCOUT_GRASS_ROUTE: ((-1095.24,2203.18),(-1104,2211)),
+    # Continue between the inspected trunks on the visible grass before the distant rocks.
+    SCOUT_GROVE_ROUTE: ((-1104,2211),(-1118,2223)),
+    # The north-facing native scene shows this short grassy apron before the rocks farther ahead.
+    SCOUT_APRON_ROUTE: ((-1118,2223),(-1118,2235)),
+    # A proposed continuation only; an independent endpoint scene must clear it before admission.
+    SCOUT_MEADOW_ROUTE: ((-1118,2235),(-1118,2250)),
+    # The inspected northeast view exposes this short grass slope between the visible trees.
+    SCOUT_INLAND_SLOPE_ROUTE: ((-1118,2250),(-1135,2267)),
+    # Candidate continuation only; the slope endpoint must independently clear this line before use.
+    SCOUT_INLAND_GAP_ROUTE: ((-1135,2267),(-1150,2282)),
+    # Candidate forest approach; registration alone never admits movement through unseen terrain.
+    SCOUT_FOREST_EDGE_ROUTE: ((-1150,2282),(-1160,2307)),
     # Candidate through the grass beyond the last inspected fence end; live use still requires a fresh scene review.
     SCOUT_ENTRY_ROUTE: ((-1090,2194),(-1115,2194)),
     # Reuse the already surveyed junction/stair edge as a single reversible leg.

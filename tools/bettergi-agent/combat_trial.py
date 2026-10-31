@@ -24,7 +24,8 @@ import resident_runtime as runtime
 import run_rdp_patrol as patrol
 import stream_client as client
 from combat_trial_guard import (bind_review, canonical, proposal_rejection, trial_policy,
-                               SINGLE_SCOPE, GROUP_SCOPE, combat_scope, scope_fields)
+                               SINGLE_SCOPE, GROUP_SCOPE, FOUR_SCOPE, SCOPE_MAXIMUMS,
+                               combat_scope, scope_fields, scope_maximum)
 from episode_split import reserve_split, read_split
 from map_owner import load_map_owner
 from policy_rgb_archive import RGB192_BYTES
@@ -577,9 +578,9 @@ def episode_arguments(plan):
     if 'binding' in plan:
         args.combat_trial_binding = copy.deepcopy(plan['binding'])
         args.combat_trial_owner = copy.deepcopy(plan['owner'])
-        if combat_scope(plan) == GROUP_SCOPE:
-            args.combat_trial_scope = GROUP_SCOPE
-            args.combat_trial_maximum_enemy_candidates = 3
+        if combat_scope(plan) != SINGLE_SCOPE:
+            args.combat_trial_scope = combat_scope(plan)
+            args.combat_trial_maximum_enemy_candidates = scope_maximum(combat_scope(plan))
     else:
         require(plan.get('kind') == PREPARATION_KIND and plan.get('inputEnabled') is False,
                 'Only a zero-input preparation may load without combat authority')
@@ -806,9 +807,9 @@ def run_worker(plan_path, *, lifecycle=None, loader=None, episode=None, identity
         # This stamp is minted only after the original goal survived both sides
         # of loading; the stream checks it again before opening its pipe.
         policy.combat_trial_goal_sha256 = plan['binding']['goalSha256']
-        if combat_scope(plan) == GROUP_SCOPE:
-            policy.combat_trial_scope = GROUP_SCOPE
-            policy.combat_trial_maximum_enemy_candidates = 3
+        if combat_scope(plan) != SINGLE_SCOPE:
+            policy.combat_trial_scope = combat_scope(plan)
+            policy.combat_trial_maximum_enemy_candidates = scope_maximum(combat_scope(plan))
         report['policyMetadata'] = copy.deepcopy(policy.metadata)
         control.set_initial_goal(copy.deepcopy(policy.metadata.get('goal')), 'stationary')
         client.validate_combat_trial_options(args, policy, control)
@@ -1031,12 +1032,12 @@ def main(argv=None):
         prepare_parser.add_argument('--' + ('native-plan' if name == 'plan' else 'native-scene' if name == 'scene' else name),
                                     dest=name, type=Path, required=True)
     prepare_parser.add_argument('--maximum-review-age-seconds', type=int, default=MAX_REVIEW_AGE_SECONDS)
-    prepare_parser.add_argument('--combat-scope', choices=(SINGLE_SCOPE, GROUP_SCOPE), default=SINGLE_SCOPE)
+    prepare_parser.add_argument('--combat-scope', choices=tuple(SCOPE_MAXIMUMS), default=SINGLE_SCOPE)
     paused_parser = commands.add_parser('prepare-paused')
     paused_parser.add_argument('--directory', type=Path, required=True)
     paused_parser.add_argument('--owner-from', type=Path, required=True)
     paused_parser.add_argument('--pause-from', type=Path, required=True)
-    paused_parser.add_argument('--combat-scope', choices=(SINGLE_SCOPE, GROUP_SCOPE), default=SINGLE_SCOPE)
+    paused_parser.add_argument('--combat-scope', choices=tuple(SCOPE_MAXIMUMS), default=SINGLE_SCOPE)
     for name in ('launch-prepared', 'worker-prepared', 'stop-prepared', 'record-resume', 'arm'):
         command_parser = commands.add_parser(name)
         command_parser.add_argument('--preparation', type=Path, required=True)

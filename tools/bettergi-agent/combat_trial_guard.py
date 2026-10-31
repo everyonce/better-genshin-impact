@@ -11,6 +11,7 @@ import hashlib
 import json
 import threading
 from collections import OrderedDict
+from types import MappingProxyType
 
 from native_combat import finite, scene_capability, validate_capability, validate_frame
 
@@ -21,12 +22,21 @@ REVIEW_KIND = 'combat-trial-review-v1'
 PROFILE = 'p2p-native-hamming-192-v1'
 SINGLE_SCOPE = 'single-enemy-v1'
 GROUP_SCOPE = 'reviewed-group-up-to-three-v1'
+FOUR_SCOPE = 'reviewed-group-up-to-four-v1'
+# Only these named reviewed experiments exist; a request cannot tune a numeric cap.
+SCOPE_MAXIMUMS = MappingProxyType({SINGLE_SCOPE: 1, GROUP_SCOPE: 3, FOUR_SCOPE: 4})
+
+
+def scope_maximum(scope):
+    """Resolve one fixed reviewed scope, never a caller-selected arbitrary enemy count."""
+    require(type(scope) is str and scope in SCOPE_MAXIMUMS, 'Unknown combat scope')
+    return SCOPE_MAXIMUMS[scope]
 
 
 def scope_fields(scope):
     """Declare only the named opt-in; omitted fields preserve the original single-enemy bytes."""
-    require(scope in (SINGLE_SCOPE, GROUP_SCOPE), 'Unknown combat scope')
-    return {} if scope == SINGLE_SCOPE else dict(combatScope=GROUP_SCOPE, maximumEnemyBarCandidates=3)
+    maximum = scope_maximum(scope)
+    return {} if scope == SINGLE_SCOPE else dict(combatScope=scope, maximumEnemyBarCandidates=maximum)
 
 
 def combat_scope(value):
@@ -34,23 +44,27 @@ def combat_scope(value):
     require(isinstance(value, dict), 'Missing combat scope document')
     if not any(key in value for key in ('combatScope', 'maximumEnemyBarCandidates')):
         return SINGLE_SCOPE
-    require(value.get('combatScope') == GROUP_SCOPE and type(value.get('maximumEnemyBarCandidates')) is int
-            and value['maximumEnemyBarCandidates'] == 3, 'Invalid explicit combat scope or maximum')
-    return GROUP_SCOPE
+    scope = value.get('combatScope')
+    require(type(scope) is str and scope in SCOPE_MAXIMUMS and scope != SINGLE_SCOPE
+            and type(value.get('maximumEnemyBarCandidates')) is int
+            and value['maximumEnemyBarCandidates'] == scope_maximum(scope), 'Invalid explicit combat scope or maximum')
+    return scope
 
 
 def inspected_count(value, scope):
     """Bind the separately inspected visible count; native candidate count never grants the opt-in."""
     count = value.get('inspectedVisibleEnemyCount')
-    if scope == GROUP_SCOPE:
-        require(type(count) is int and 1 <= count <= 3, 'Group combat requires an inspected visible enemy count of 1..3')
+    maximum = scope_maximum(scope)
+    if scope != SINGLE_SCOPE:
+        require(type(count) is int and 1 <= count <= maximum,
+                'Group combat requires an inspected visible enemy count of 1..' + str(maximum))
     else:
         require(count is None or type(count) is int and count == 1, 'Single-enemy review cannot declare a visible group')
     return count
 
 
 def trial_policy(scope=SINGLE_SCOPE):
-    """Return one of two fixed scopes; the legacy default remains byte-for-byte unchanged."""
+    """Return a named fixed scope; both earlier policies remain byte-for-byte unchanged."""
     result = dict(version=1, maximumSeconds=5, maximumActions=3, maximumSourceAgeMs=150,
                 minimumHoldMs=33, maximumHoldMs=100, stopTemperatureC=78,
                 healthFractionDrop=0.08, admissionSources=2, postActionDelayMs=60,
@@ -135,7 +149,7 @@ def bind_review(review_bytes, plan_bytes, scene_bytes, sidecar_bytes, image_byte
                                        (review_bytes, plan_bytes, scene_bytes, sidecar_bytes, goal_bytes)]
     require(all(isinstance(item, dict) for item in (review, plan, scene, sidecar, goal)), 'Invalid combat review objects')
     scope = combat_scope(review)
-    maximum_candidates = 3 if scope == GROUP_SCOPE else 1
+    maximum_candidates = scope_maximum(scope)
     visible_count = inspected_count(review, scope)
     require(review.get('kind') == REVIEW_KIND and review.get('sceneLabel') == 'enemy-visible'
             and review.get('attacksAllowed') == ['LBUTTON']
@@ -197,7 +211,7 @@ def validate_binding(binding):
     """Reject scout reuse, changed bounds and incomplete combat provenance at construction."""
     scope = combat_scope(binding)
     visible_count = inspected_count(binding, scope)
-    maximum_candidates = 3 if scope == GROUP_SCOPE else 1
+    maximum_candidates = scope_maximum(scope)
     require(binding.get('kind') == KIND
             and canonical(binding.get('policy')) == canonical(trial_policy(scope)), 'Invalid combat trial binding')
     validate_owner(binding.get('owner'))
@@ -246,7 +260,7 @@ class CombatTrialGuard:
         require(type(started_ns) is int and started_ns >= 0, 'Invalid combat start clock')
         self.intake_lock = threading.RLock()
         self._binding = copy.deepcopy(binding)
-        self._maximum_candidates = 3 if combat_scope(binding) == GROUP_SCOPE else 1
+        self._maximum_candidates = scope_maximum(combat_scope(binding))
         self._native_capability=validate_capability(hello.get('combatObservation') if isinstance(hello,dict) else None)
         validate_frame(self._binding['reviewedFrame'],self._native_capability)
         self._sha = digest(canonical(binding))

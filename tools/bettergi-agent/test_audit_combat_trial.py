@@ -7,15 +7,16 @@ import tempfile
 import unittest
 
 from audit_combat_trial import audit_episode, replay_events, verify_retirement, verify_temperatures, verify_preparation_chain
-from combat_trial_guard import CombatTrialGuard, GROUP_SCOPE, scope_fields, trial_policy
+from combat_trial_guard import CombatTrialGuard, GROUP_SCOPE, FOUR_SCOPE, scope_fields, trial_policy,scope_maximum
 from policy_rgb_archive import write_policy_rgb
 from test_combat_trial_guard import HELLO, OWNER, binding, frame, proposal,review_parts,group_review_parts
 from native_combat import CAPABILITY,CAPABILITY_V2,capability_for_version
 
 
-def completed_trace(version=1, *, group=False):
+def completed_trace(version=1, *, group=False, scope=GROUP_SCOPE):
     """Produce three deterministic native pulses without a pipe, clock wait or GPU."""
-    parts=group_review_parts() if group else review_parts();capability=capability_for_version(version)
+    count=scope_maximum(scope) if group else 1
+    parts=group_review_parts(count,count,scope=scope) if group else review_parts();capability=capability_for_version(version)
     if version==2:
         parts[2]['nativeCombatObservation']=copy.deepcopy(capability)
         parts[2]['observations'][0]['combatEvidence'].update(version=2,method=capability['method'])
@@ -26,7 +27,7 @@ def completed_trace(version=1, *, group=False):
 
     def source_frame(*args,**kwargs):
         """Emit one version consistently through the source, native protocol and guard replay."""
-        kwargs.setdefault('candidates',3 if group else 1)
+        kwargs.setdefault('candidates',count)
         value=frame(*args,**kwargs)
         value['combatEvidence'].update(version=version,method=capability['method'])
         return value
@@ -122,6 +123,24 @@ class CombatTrialAuditTests(unittest.TestCase):
                 if change=='none':self.assertTrue(invoke()['trialCompleteVerified'])
                 else:
                     with self.assertRaises(ValueError):invoke()
+
+    def test_four_scope_replay_cannot_downgrade_to_three_or_widen_to_five(self):
+        """The additional fixed scope is replayable without changing any pulse or source contract."""
+        for changed in (None,'three','five'):
+            with self.subTest(changed=changed),tempfile.TemporaryDirectory() as folder:
+                episode,events,frames,authority=completed_trace(2,group=True,scope=FOUR_SCOPE)
+                for index,row in enumerate(frames):
+                    row.update(width=192,height=192,videoFrameIndex=index,
+                        clientReceivedNs=int(row['serverNowMs']*1e6),transportRoundTripMs=1)
+                    row['policyRgb']=write_policy_rgb(Path(folder),index,row,bytes([index])*(192*192*3))
+                if changed=='three':authority.update(scope_fields(GROUP_SCOPE),policy=trial_policy(GROUP_SCOPE))
+                if changed=='five':authority['maximumEnemyBarCandidates']=5
+                if changed:
+                    with self.assertRaises(ValueError):audit_episode(episode,events,frames,Path(folder),authority)
+                else:
+                    result=audit_episode(episode,events,frames,Path(folder),authority)
+                    self.assertTrue(result['trialCompleteVerified'])
+                    self.assertEqual(result['acceptedProposalJoins'],3)
 
     def test_v2_complete_trace_requires_bound_negotiation_and_native_frames(self):
         """Every v2 completion retains its chosen contract; fully valid v1 evidence cannot replace it."""
@@ -402,8 +421,12 @@ class CombatPreparedAuditTests(unittest.TestCase):
         self.fixture.lifecycle.runner = lambda: self.fixture.worker(self.fixture.arm)
         import combat_trial
         from test_combat_trial import FakeWatch
-        self.assertEqual(combat_trial.launch(self.fixture.plan_path, lifecycle=self.fixture.lifecycle,
-            watch_factory=FakeWatch, paused_preparation=True), 0)
+        result=combat_trial.launch(self.fixture.plan_path, lifecycle=self.fixture.lifecycle,
+            watch_factory=FakeWatch, paused_preparation=True)
+        # Preserve the actual failed phase in the test log before TemporaryDirectory cleanup.
+        details={name:json.loads((self.fixture.folder/name).read_bytes()) for name in ('result.json','patrol.json')
+                 if (self.fixture.folder/name).is_file()}
+        self.assertEqual(result,0,json.dumps(details,sort_keys=True))
         self.folder, self.plan, self.wrapper = self.fixture.folder, self.fixture.plan, self.fixture.report()
 
     def document(self, name):
@@ -437,11 +460,21 @@ class CombatPreparedAuditTests(unittest.TestCase):
 
     def test_group_preparation_replays_exact_scope_and_rejects_each_removed_declaration(self):
         """Replay an actual inert group handoff, then independently remove one phase's opt-in."""
+        self._assert_preparation_scope_replay(GROUP_SCOPE)
+
+    def test_four_preparation_replays_exact_scope_and_rejects_each_removed_declaration(self):
+        """The fourth-enemy scope must survive every independently replayed preparation boundary."""
+        self._assert_preparation_scope_replay(FOUR_SCOPE)
+
+    def _assert_preparation_scope_replay(self,scope):
+        """Exercise one named fixed scope through the real inert worker and archived handoff audit."""
         import combat_trial
         from test_combat_trial import CombatPreparedTrialTests,FakeWatch
         fixture=CombatPreparedTrialTests();fixture.setUp()
         try:
-            fixture.configure_group_review();fixture.begin(claim=False,scope=GROUP_SCOPE)
+            maximum=scope_maximum(scope)
+            fixture.configure_group_review(candidates=maximum,visible=maximum,scope=scope)
+            fixture.begin(claim=False,scope=scope)
             fixture.lifecycle.runner=lambda:fixture.worker(fixture.arm)
             self.assertEqual(combat_trial.launch(fixture.plan_path,lifecycle=fixture.lifecycle,
                 watch_factory=FakeWatch,paused_preparation=True),0)

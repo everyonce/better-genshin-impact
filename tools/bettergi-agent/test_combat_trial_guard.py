@@ -7,7 +7,7 @@ import unittest
 
 from combat_trial_guard import (CombatTrialGuard, CombatTrialStop, PROFILE, REVIEW_KIND,
                                bind_review, canonical, proposal_rejection, trial_policy,
-                               SINGLE_SCOPE, GROUP_SCOPE, scope_fields, combat_scope)
+                               SINGLE_SCOPE, GROUP_SCOPE, FOUR_SCOPE, scope_fields, combat_scope)
 from native_combat import CAPABILITY, CAPABILITY_V2, METHOD
 
 
@@ -63,10 +63,10 @@ def binding(parts=None):
     return bind_review(*(canonical(value) if index < 4 else value for index, value in enumerate(parts)))
 
 
-def group_review_parts(candidates=3, visible=3):
+def group_review_parts(candidates=3, visible=3, *, scope=GROUP_SCOPE):
     """Author explicit visual group authority while retaining the same source/image joins."""
     parts = review_parts()
-    parts[0].update(scope_fields(GROUP_SCOPE), policy=trial_policy(GROUP_SCOPE), inspectedVisibleEnemyCount=visible)
+    parts[0].update(scope_fields(scope), policy=trial_policy(scope), inspectedVisibleEnemyCount=visible)
     parts[2]['observations'][0]['combatEvidence']['enemyBarCandidates'] = frame(candidates=candidates)['combatEvidence']['enemyBarCandidates']
     return parts
 
@@ -77,6 +77,41 @@ def proposal(duration=100):
 
 
 class CombatTrialGuardTests(unittest.TestCase):
+    def test_earlier_scope_policies_keep_exact_pre_four_canonical_bytes(self):
+        """Pins were measured before adding the fourth-enemy scope, independent of current assembly."""
+        expected={SINGLE_SCOPE:'cd0aebd5c96097912bac8ea0874a587de862946535933d4d66750b08befb5e1d',
+            GROUP_SCOPE:'5a69d8c207ef4fb3390bc9cc214b21a6442bb3da27e4996c9ebc7aeb7bbf6f72'}
+        for scope,sha in expected.items():
+            self.assertEqual(hashlib.sha256(canonical(trial_policy(scope))).hexdigest(),sha)
+
+    def test_four_scope_requires_explicit_four_review_and_preserves_lower_scope(self):
+        """A fourth visible enemy can never be relabeled as the existing three-enemy scope."""
+        authority=binding(group_review_parts(4,4,scope=FOUR_SCOPE))
+        self.assertEqual(combat_scope(authority),FOUR_SCOPE)
+        self.assertEqual(authority['policy']['maximumEnemyBarCandidates'],4)
+        with self.assertRaises(ValueError):binding(group_review_parts(4,4))
+        for count in (0,5,True):
+            with self.subTest(count=count),self.assertRaises(ValueError):
+                binding(group_review_parts(4,count,scope=FOUR_SCOPE))
+        for scope,maximum in ((FOUR_SCOPE,3),(GROUP_SCOPE,4),('reviewed-group-up-to-five-v1',5),(FOUR_SCOPE,True)):
+            changed=group_review_parts(4,4,scope=FOUR_SCOPE)
+            changed[0].update(combatScope=scope,maximumEnemyBarCandidates=maximum)
+            with self.subTest(scope=scope,maximum=maximum),self.assertRaises(ValueError):binding(changed)
+        with self.assertRaises(ValueError):binding(group_review_parts(0,4,scope=FOUR_SCOPE))
+
+    def test_four_scope_keeps_three_pulse_drain_and_terminal_five_or_target_loss(self):
+        """Only the named target cap changes; zero/five remain terminal after admission."""
+        self.guard=CombatTrialGuard(binding(group_review_parts(4,4,scope=FOUR_SCOPE)),OWNER,HELLO,0)
+        self.current=frame(2,150,candidates=4);self.ready()
+        for _ in range(3):self.drain()
+        self.assertTrue(self.guard.snapshot()['trialComplete'])
+        for count,reason in ((0,'targetLost'),(5,'ambiguousTarget')):
+            self.guard=CombatTrialGuard(binding(group_review_parts(4,4,scope=FOUR_SCOPE)),OWNER,HELLO,0)
+            self.current=frame(2,150,candidates=4);self.ready()
+            current=frame(3,200,candidates=count)
+            for index,candidate in enumerate(current['combatEvidence']['enemyBarCandidates']):candidate['x']=300+index*200
+            self.assertEqual(self.observe(current)['state']['trip']['reason'],reason)
+
     def test_legacy_policy_remains_exact_and_group_never_inferred(self):
         """The default contract has no opt-in fields and still refuses multiple native candidates."""
         self.assertEqual(trial_policy(), dict(version=1, maximumSeconds=5, maximumActions=3, maximumSourceAgeMs=150,

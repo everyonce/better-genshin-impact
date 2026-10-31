@@ -13,7 +13,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 import stream_client as client
-from combat_trial_guard import CombatTrialStop, GROUP_SCOPE
+from combat_trial_guard import CombatTrialStop, GROUP_SCOPE, FOUR_SCOPE
 from native_combat import CAPABILITY
 from test_combat_trial_guard import HELLO, OWNER, PROFILE, binding, frame, proposal, review_parts, group_review_parts
 from test_resident_goals import dormant_control
@@ -121,6 +121,31 @@ class TrialBridge:
 
 
 class CombatTrialStreamTests(unittest.TestCase):
+    def test_four_scope_real_stream_and_mismatched_three_policy_stamp(self):
+        """Four candidates require matching prepared policy and request scope before any native operation."""
+        def four_targets(row):
+            """Preserve unavailable release frames and the native source metadata."""
+            if 'combatEvidence' in row:
+                row['combatEvidence']['enemyBarCandidates']=frame(candidates=4)['combatEvidence']['enemyBarCandidates']
+            return row
+        for changed in (None,'args','policy'):
+            with self.subTest(changed=changed),tempfile.TemporaryDirectory() as folder:
+                args=self.arguments(folder);args.combat_trial_binding=binding(group_review_parts(4,4,scope=FOUR_SCOPE))
+                policy=TrialPolicy()
+                for authority in (args,policy):
+                    authority.combat_trial_scope=FOUR_SCOPE;authority.combat_trial_maximum_enemy_candidates=4
+                if changed:
+                    authority=args if changed=='args' else policy
+                    authority.combat_trial_scope=GROUP_SCOPE;authority.combat_trial_maximum_enemy_candidates=3
+                bridge=TrialBridge(transform=four_targets)
+                if changed:
+                    with self.assertRaisesRegex(ValueError,'scope or maximum'):
+                        self.run_inert(folder,bridge,policy,CapturingRecorder(),args=args)
+                    self.assertEqual(bridge.commands,[])
+                else:
+                    self.assertEqual(self.run_inert(folder,bridge,policy,CapturingRecorder(),args=args),0)
+                    self.assertEqual(len(bridge.actions),3)
+                    self.assertTrue(all(action['steps']==proposal()['steps'] for action in bridge.actions))
     def test_group_scope_three_candidates_uses_same_real_loop_and_exact_pure_attacks(self):
         """Only a matching separately stamped opt-in reaches the ordinary three-pulse stream."""
         def group_targets(row):

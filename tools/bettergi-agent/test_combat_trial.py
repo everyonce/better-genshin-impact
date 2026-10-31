@@ -11,7 +11,7 @@ import unittest
 from unittest.mock import patch
 
 import combat_trial as trial
-from combat_trial_guard import canonical, SINGLE_SCOPE, GROUP_SCOPE, scope_fields, trial_policy, combat_scope
+from combat_trial_guard import canonical, SINGLE_SCOPE, GROUP_SCOPE, FOUR_SCOPE, scope_fields, trial_policy, combat_scope
 from episode_split import read_split
 from test_combat_trial_guard import OWNER, review_parts, proposal
 
@@ -246,10 +246,10 @@ class CombatTrialTests(unittest.TestCase):
         self.load_action = self.episode_action = None
         self.last_args = self.last_policy = None
 
-    def configure_group_review(self, *, candidates=3, visible=3):
+    def configure_group_review(self, *, candidates=3, visible=3, scope=GROUP_SCOPE):
         """Opt in through the original review, never by changing only an observed candidate count."""
         review=json.loads(self.evidence['review'].read_bytes())
-        review.update(scope_fields(GROUP_SCOPE),policy=trial_policy(GROUP_SCOPE),inspectedVisibleEnemyCount=visible)
+        review.update(scope_fields(scope),policy=trial_policy(scope),inspectedVisibleEnemyCount=visible)
         self.evidence['review'].write_bytes(canonical(review))
         scene=json.loads(self.evidence['scene'].read_bytes())
         from test_combat_trial_guard import frame
@@ -290,6 +290,7 @@ class CombatTrialTests(unittest.TestCase):
     def episode(self, args, policy, control):
         """Publish a synthetic drained episode; detailed native replay is covered by stream/guard tests."""
         self.episodes += 1
+        self.last_episode_args = args
         self.assertTrue(control.frozen_goal)
         self.assertEqual(policy.combat_trial_goal_sha256, self.plan['binding']['goalSha256'])
         self.assertEqual((args.history, args.fps, args.decision_hz, args.seconds, args.action_hold_ms), (41, 20, 10, 5, 100))
@@ -878,6 +879,26 @@ class CombatPreparedTrialTests(unittest.TestCase):
             self.assertEqual(combat_scope(value),GROUP_SCOPE)
         self.assertEqual(self.plan['binding']['inspectedVisibleEnemyCount'],3)
         self.assertEqual((self.loads,self.lifecycle.starts,self.episodes),(1,1,1))
+
+    def test_four_scope_preparation_worker_and_request_keep_exact_fixed_maximum(self):
+        """The additional name survives the real inert paused handoff without changing its action budget."""
+        self.configure_group_review(candidates=4,visible=4,scope=FOUR_SCOPE);self.begin(scope=FOUR_SCOPE)
+        self.assertEqual(self.worker(self.arm),0)
+        for value in (self.preparation,json.loads((self.folder/'prepared.json').read_bytes()),
+                      self.plan,self.plan['binding'],self.report()):
+            self.assertEqual(combat_scope(value),FOUR_SCOPE)
+            self.assertEqual(value['maximumEnemyBarCandidates'],4)
+        self.assertEqual(self.last_policy.combat_trial_scope,FOUR_SCOPE)
+        self.assertFalse(hasattr(self.last_args,'combat_trial_maximum_enemy_candidates'))
+        self.assertEqual(self.last_episode_args.combat_trial_maximum_enemy_candidates,4)
+        self.assertEqual((self.loads,self.lifecycle.starts,self.episodes),(1,1,1))
+
+    def test_three_preparation_cannot_arm_a_four_enemy_review(self):
+        """A separately prepared smaller scope cannot inherit the later larger review."""
+        self.begin(scope=GROUP_SCOPE);self.configure_group_review(candidates=4,visible=4,scope=FOUR_SCOPE)
+        self.assertEqual(self.worker(self.arm),1)
+        self.assertEqual((self.loads,self.lifecycle.starts,self.episodes),(1,0,0))
+        self.assertIn('explicitly selected combat scope',self.report()['error'])
 
     def test_default_preparation_rejects_later_group_review_before_lease(self):
         """A fresh image cannot widen the scope fixed before model loading."""

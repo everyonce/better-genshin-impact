@@ -11,6 +11,7 @@ import uuid
 from hybrid_navigation import HybridNavigation
 from hybrid_routes import PATROL_STATIONS
 from navigation_idle_recovery import fresh_frame
+from navigation_profiles import COURTYARD_PROFILE, NAVIGATION_PROFILES, allows_pose_scope
 from observation_profiles import P2P_NATIVE, verify_frame, verify_hello
 from observation_timing import observation_timestamp
 from resident_runtime import atomic_json, control_module, require_current_rdp, verify_bridge_identity
@@ -39,7 +40,7 @@ def stable(rows):
     return max(offsets) - min(offsets) <= 2
 
 
-def qualified(row):
+def qualified(row, profile=COURTYARD_PROFILE):
     """Require normal same-frame pose, both scoped readiness gates and a fresh native WGC source."""
     pose, source = row.get('navigationPose') or {}, row.get('sourceFrame') or {}
     gate, current = row.get('frameWorldReadiness') or {}, row.get('worldReadiness') or {}
@@ -48,7 +49,7 @@ def qualified(row):
             and row.get('sourceTimestampKind') == 'wgc_reported_compositor_qpc'
             and row.get('motionEvidence', {}).get('xKeyMatched') is False
             and row.get('inputAvailable') is True and all(type(v) in (int, float) and math.isfinite(v) for v in values)
-            and pose.get('layerId') == 'City_102' and .99 <= values[3] <= 1 and .2 <= values[4] <= 1
+            and allows_pose_scope(pose, profile) and .99 <= values[3] <= 1 and .2 <= values[4] <= 1
             and 0 <= values[2] < 360 and isinstance(source.get('captureEpoch'), str) and source['captureEpoch']
             and type(source.get('timestamp100ns')) is int and source['timestamp100ns'] > 0
             and gate.get('ready') is True and current.get('ready') is True and type(gate.get('epoch')) is int
@@ -59,11 +60,15 @@ def qualified(row):
 
 class Experiment:
     """Own a single synchronous bridge, track every observed frame and admit just one outstanding pulse."""
-    def __init__(self, bridge, report):
+    def __init__(self, bridge, report, *, station=STATION, profile=COURTYARD_PROFILE, seconds=65, stop_check=None):
+        require(profile in NAVIGATION_PROFILES and len(station) == 2
+                and all(type(v) in (int, float) and math.isfinite(v) for v in station)
+                and type(seconds) in (int, float) and 0 < seconds <= 65, 'Invalid bounded camera scope')
         self.bridge, self.report = bridge, report
+        self.station, self.profile, self.stop_check = tuple(station), profile, stop_check
         self.contract = verify_hello(bridge.hello, P2P_NATIVE, 'observe')
         self.anchor = self.previous = self.pending = self.applied = None
-        self.deadline = time.monotonic() + 65
+        self.deadline = time.monotonic() + seconds
         self.capture_id = self.world_id = None
 
     def collect(self, reply):
@@ -89,6 +94,8 @@ class Experiment:
     def next(self):
         """Poll all delivered metadata, reject changes on cached frames, and return only distinct source frames."""
         while time.monotonic() < self.deadline:
+            if self.stop_check:
+                self.stop_check()
             before = time.perf_counter_ns()
             frame, pixels = self.bridge.request('frame')
             arrived = time.perf_counter_ns()
@@ -101,13 +108,13 @@ class Experiment:
                 if distinct:
                     self.report['observations'].append(dict(frame))
                 self.collect(frame)
-                ok = qualified(frame)
+                ok = qualified(frame, self.profile)
                 if self.anchor is not None:
                     require(ok, 'Source, recognition, freshness or readiness lost during the pulse sequence')
                 if ok:
                     pose, source = frame['navigationPose'], frame['sourceFrame']
                     point = (pose['x'], pose['y'])
-                    require(math.dist(point, STATION) <= 2, 'Character must stand within two units of stair-front')
+                    require(math.dist(point, self.station) <= 2, 'Character left the declared camera station')
                     already_bound = self.anchor is not None
                     if not already_bound:
                         self.anchor = point
@@ -134,6 +141,7 @@ class Experiment:
 
     def pulse(self, dx):
         """Bracket one fixed 100-ms pure turn with a measured stable baseline and settled result."""
+        require(type(dx) is int and 0 < abs(dx) <= 250, 'Camera pulses must be nonzero integers bounded to 250')
         pre = [self.next()]
         while pre[-1]['sourceAtMs'] - pre[0]['sourceAtMs'] < 500:
             pre.append(self.next())
@@ -145,6 +153,8 @@ class Experiment:
         a = dict(requestId=rid, frameId=frame['frameId'], sourceAtMs=at, modelId=MODEL, mouseDx=dx, step=step,
                  preFrameIds=[f['frameId'] for f in pre], postFrameIds=[], settledFrameIds=[])
         self.report['actions'].append(a)
+        if self.stop_check:
+            self.stop_check()
         require(fresh_frame(frame, time.perf_counter_ns(), 150), 'Dispatch frame became stale')
         self.pending, self.applied = a, None
         ack, payload = self.bridge.request('action', requestId=rid, frameId=frame['frameId'], modelId=MODEL,
@@ -167,7 +177,9 @@ class Experiment:
                 if f['sourceAtMs'] - three[0]['sourceAtMs'] >= 100 and stable(end_samples):
                     a['settledFrameIds'] = [v['frameId'] for v in three]
                     self.pending = None
-                    return
+                    return dict(beforeYawDegrees=pre[-1]['navigationPose']['yawDegrees'],
+                                afterYawDegrees=f['navigationPose']['yawDegrees'], mouseDx=dx,
+                                beforeFrameId=pre[-1]['frameId'], afterFrameId=f['frameId'])
                 if not stable(end_samples):
                     end_samples = [f]
 

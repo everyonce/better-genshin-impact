@@ -26,7 +26,12 @@ STREET_ARCH_CLEARANCE_ROUTE = 'mondstadt-street-extension-16-v1'
 STREET_ARCH_EXIT_ROUTE = 'mondstadt-street-extension-17-v1'
 STREET_PATROL_ROUTE = 'mondstadt-street-patrol-v1'
 BRIDGE_APPROACH_ROUTE = 'mondstadt-bridge-approach-v1'
-SURFACE_ROUTES = (BRIDGE_APPROACH_ROUTE,)
+BRIDGE_ENTRY_ROUTE = 'mondstadt-bridge-entry-v1'
+BRIDGE_MIDDLE_ROUTE = 'mondstadt-bridge-middle-v1'
+BRIDGE_EXIT_ROUTE = 'mondstadt-bridge-exit-v1'
+FIELD_JUNCTION_ROUTE = 'mondstadt-field-junction-v1'
+FIELD_NORTH_ROUTE = 'mondstadt-field-north-v1'
+SURFACE_ROUTES = (BRIDGE_APPROACH_ROUTE,BRIDGE_ENTRY_ROUTE,BRIDGE_MIDDLE_ROUTE,BRIDGE_EXIT_ROUTE,FIELD_JUNCTION_ROUTE,FIELD_NORTH_ROUTE)
 SURVEY_ROUTES = (STREET_EXTENSION_ROUTE,STREET_TURN_ROUTE,STREET_CONTINUE_ROUTE,STREET_JUNCTION_ROUTE,
                  STREET_STAIRS_ROUTE,STREET_LOWER_LANE_ROUTE,STREET_DESCENT_ROUTE,STREET_LOWER_STEPS_ROUTE,
                  STREET_STEPS_EXIT_ROUTE,STREET_SMITHY_ROUTE,STREET_GATE_APPROACH_ROUTE,STREET_GATE_ROUTE,
@@ -78,6 +83,16 @@ _POINTS = {
     STREET_ARCH_EXIT_ROUTE: ((-940.00,2225.00),(-952.00,2221.00)),
     # The start is the retained, independently matched outdoor gate frame; qualify live before movement.
     BRIDGE_APPROACH_ROUTE: ((-947.53906,2222.0996),(-960.00,2219.00)),
+    # Turn into the open bridge entrance seen from the verified first outdoor endpoint.
+    BRIDGE_ENTRY_ROUTE: ((-960.00,2219.00),(-976.00,2211.00)),
+    # Continue down the visibly open bridge center after the entry endpoint is verified.
+    BRIDGE_MIDDLE_ROUTE: ((-976.00,2211.00),(-1010.00,2194.00)),
+    # Follow the remaining open roadway past the NPC to the visible far bridge exit.
+    BRIDGE_EXIT_ROUTE: ((-1010.00,2194.00),(-1042.00,2178.00)),
+    # Stay on the open dirt road to the junction visible beyond the far bridge exit.
+    FIELD_JUNCTION_ROUTE: ((-1042.00,2178.00),(-1065.00,2166.00)),
+    # The north-facing scene shows open ground across the road, clear of the right-side fence.
+    FIELD_NORTH_ROUTE: ((-1065.00,2166.00),(-1065.00,2194.00)),
     COURTYARD_ROUTE: ((-867.7041015625, 2281.378173828125), (-874.3662109375, 2274.179931640625)),
     # Surveyed level road on either side of the fixed pavement lamp and planter.
     LAMPPOST_ROUTE: ((-858.70, 2263.65), (-846.30078125, 2261.13671875)),

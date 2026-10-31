@@ -19,6 +19,18 @@ def child(**changes):
 
 
 class ResidentTests(unittest.TestCase):
+    def test_timed_combat_shadow_never_renews_its_pinned_lease(self):
+        """Only explicit retained, input-disabled P2P shadow work may finish without a walking endpoint."""
+        args=SimpleNamespace(model='open-p2p',enable_input=False,combat_shadow=True,
+            retain_policy_rgb=True,observation_profile='p2p-native-hamming-192-v1')
+        summary=dict(segments=[dict(framesReceived=58)],evidenceComplete=True,acceptedInputActions=0)
+        self.assertTrue(runtime.completed_passive_observation(args,summary,'durationElapsed'))
+        for change in (dict(enable_input=True),dict(combat_shadow=False),dict(retain_policy_rgb=False),dict(model='gamescaling')):
+            changed=SimpleNamespace(**(vars(args)|change))
+            self.assertFalse(runtime.completed_passive_observation(changed,summary,'durationElapsed'))
+        self.assertFalse(runtime.completed_passive_observation(args,dict(summary,acceptedInputActions=1),'durationElapsed'))
+        self.assertFalse(runtime.completed_passive_observation(args,summary,'error'))
+
     def test_timed_pinned_observation_uses_sealed_part_frames_and_has_no_input(self):
         args=SimpleNamespace(model='observe',enable_input=False,navigation_guidance=True)
         summary=dict(segments=[dict(framesReceived=58)],evidenceComplete=True,acceptedInputActions=0)

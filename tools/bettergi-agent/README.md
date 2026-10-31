@@ -499,3 +499,13 @@ Official upstreams: [GameScaling](https://github.com/THUSI-Lab/GameScaling), [Op
 `--navigation-profile mondstadt-surface-hybrid-v1` requires R60's explicitly advertised capability. It permits only `City_102` and `MapBack_2`, within world X [-1100, -820] and Y [2100, 2350], retaining the 0.99 position and 0.2 yaw thresholds. The city-only profile remains the default. Surface routes require this profile; old patrols cannot silently inherit it. The coordinator must qualify fresh live coordinates and route consistency before enabling movement, and retain its original owner binding and stop/thermal limits.
 
 `--combat-shadow` records same-frame vision candidates alongside P2P predictions with input disabled. Candidates do not verify enemy identity, authorize attacks, or prove a kill. Exact policy RGB capture is required. Survey extensions stop on obstacles for inspection; failed geometry remains available for evidence replay while being excluded from launch choices.
+
+`survey_surface_camera.py` inspects one compass heading from a verified stationary surface position. Supply the sealed owner lineage, a completed input-disabled native scene from that owner, and a new evidence directory under `artifacts/live`:
+
+```powershell
+python tools/bettergi-agent/survey_surface_camera.py `
+  --owner-lineage $lineage --anchor-scene $nativeScene `
+  --heading 330 --output $newEvidenceDirectory
+```
+
+The hook retains original source/receipt evidence and allows only horizontal mouse pulses with empty key lists. It measures each settled response, stops within three degrees of the requested heading, and refuses absent, reversed or excessive responses. The whole survey is bounded to 35 seconds and twelve corrections, with the established 150 ms freshness, 100 ms holds, 78°C stop, telemetry-loss stop and exact minimized RDP identity. Creating `STOP` in its evidence directory cancels it. It does not restart on failure. Capture a fresh input-disabled native scene afterward before declaring another movement leg. Camera surveys are diagnostic and do not load or train a policy model.

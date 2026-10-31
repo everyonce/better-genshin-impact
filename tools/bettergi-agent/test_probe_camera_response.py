@@ -16,6 +16,7 @@ class CameraBridge:
     def __init__(self):
         self.frame = 0
         self.yaw = 355
+        self.sensitivity = .25
         self.action = None
         self.issued = []
         self.alter = lambda frame: None
@@ -40,7 +41,7 @@ class CameraBridge:
                 receipts = [dict(requestId=fields['requestId'], modelId=probe.MODEL, frameId=fields['frameId'],
                                  status='completed', reason='horizon_complete', acceptedAtMs=ack, endedAtMs=ack+101,
                                  appliedSteps=[dict(index=0, keys=[], mouseDx=dx, mouseDy=0, startedAtMs=ack+1)])]
-                self.yaw = (self.yaw + dx*.25) % 360
+                self.yaw = (self.yaw + dx*self.sensitivity) % 360
                 self.action = None
         pose = dict(state='valid', frameId=i, x=probe.STATION[0], y=probe.STATION[1], layerId='City_102',
                     yawDegrees=self.yaw, positionConfidence=.999, yawConfidence=.8)

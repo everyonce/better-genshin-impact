@@ -317,8 +317,13 @@ def parse_series_binding(value):
 
 
 def completed_passive_observation(args, summary, end_reason):
-    """A timed pose probe can end a pinned lease only with recorded frames and no requested or applied input."""
-    return (args.model=='observe' and not args.enable_input and getattr(args,'navigation_guidance',False)
+    """A timed read-only probe can end its pinned lease with recorded frames and no requested or applied input."""
+    passive=args.model=='observe' and getattr(args,'navigation_guidance',False)
+    if getattr(args,'combat_shadow',False):
+        from combat_observer import validate_shadow_options
+        try:passive=validate_shadow_options(args)
+        except ValueError:return False
+    return (passive and not args.enable_input
             and end_reason=='durationElapsed' and summary['evidenceComplete'] and summary['acceptedInputActions']==0
             and any(part.get('framesReceived',0)>0 for part in summary['segments']))
 
@@ -515,7 +520,7 @@ def run_resident(args, load_policy, run_episode):
                 summary['endReason'] = segment['endReason']
                 break
             if binding:
-                # A pinned passive pose capture ends with its single timed lease. It has no walking goal to complete.
+                # A pinned passive pose or combat capture ends with its timed lease; it has no walking goal to complete.
                 if not episode_error and not lease_failed and completed_passive_observation(args,summary,segment.get('endReason')):
                     summary['endReason'] = 'durationElapsed'
                     break

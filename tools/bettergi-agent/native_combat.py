@@ -1,4 +1,5 @@
 """Validate optional same-image native HUD metadata; this module never grants input authority."""
+import copy
 import math
 
 METHOD='native_hud_color_components_v1'
@@ -6,6 +7,10 @@ CAPABILITY=dict(version=1,method=METHOD,sameFrame=True,readOnly=True,requiresWgc
     minWidth=1280,maxWidth=1920,maxHeight=1080,aspectRatio='16:9',referenceWidth=1920,referenceHeight=1080,
     healthRow=dict(x=808,y=1010,width=304),enemyRegion=dict(x=200,y=100,width=1400,height=800),
     maximumCandidates=16,healthFractionIsEstimate=True,authorizesInput=False,enemyIdentityVerified=False,killVerified=False)
+# Keep the original public aliases byte-for-byte for R62 and archived v1 evidence.
+METHOD_V2='native_hud_color_components_v2'
+CAPABILITY_V2=dict(copy.deepcopy(CAPABILITY),version=2,method=METHOD_V2,
+    enemyRegion=dict(x=200,y=100,width=1400,height=890),rejectsLowerBoundaryComponents=True)
 
 
 def require(condition,message):
@@ -18,29 +23,51 @@ def finite(value):
     return type(value) in (int,float) and math.isfinite(value)
 
 
-def validate_capability(capability):
-    """Accept only the reviewed read-only native analysis contract."""
+def capability_for_version(version):
+    """Resolve one explicit immutable contract without upgrading a historical version."""
+    require(type(version) is int and version in (1,2),'Unknown native combat observation version')
+    return copy.deepcopy(CAPABILITY if version==1 else CAPABILITY_V2)
+
+
+def validate_capability(capability,expected=None):
+    """Accept a known contract and, when supplied, bind it to the negotiated version."""
     require(isinstance(capability,dict),'Missing native combat observation capability')
+    contract=capability_for_version(capability.get('version'))
     require(all(type(capability.get(key)) is type(value) and capability[key]==value
-                for key,value in CAPABILITY.items()),'Native combat observation contract differs')
+                for key,value in contract.items()),'Native combat observation contract differs')
+    if expected is not None:
+        require(contract==validate_capability(expected),'Native combat observation negotiation changed')
+    return contract
 
 
 def negotiate(bridge):
     """Enable pixels-only metadata on the existing authenticated lease, without changing input flags."""
-    validate_capability(bridge.hello.get('combatObservation'))
+    capability=validate_capability(bridge.hello.get('combatObservation'))
     reply,payload=bridge.request('enableCombatObservation')
     require(isinstance(reply,dict) and reply.get('type')=='combatObservation' and reply.get('enabled') is True
             and payload==b'','Native combat observation was not acknowledged')
-    validate_capability(reply.get('capability'))
-    return reply['capability']
+    validate_capability(reply.get('capability'),capability)
+    return capability
 
 
-def validate_frame(frame):
+def scene_capability(scene):
+    """A declared v2 scene must contain matching evidence; absent old declarations mean v1 only."""
+    capability=validate_capability(scene.get('nativeCombatObservation',CAPABILITY))
+    evidence=[validate_frame(row,capability) for row in scene.get('observations',[])
+              if isinstance(row,dict) and row.get('combatEvidence') is not None]
+    require(capability['version']==1 or bool(evidence),'Declared v2 scene lacks native evidence')
+    return capability
+
+
+def validate_frame(frame,capability=None):
     """Keep exact source joins and negative evidence intact; a pending first capture returns no evidence."""
     evidence=frame.get('combatEvidence')
     if evidence is None:return None
     require(isinstance(evidence,dict),'Malformed native combat evidence')
-    require(type(evidence.get('version')) is int and evidence['version']==1 and evidence.get('method')==METHOD,
+    contract=capability_for_version(evidence.get('version'))
+    if capability is not None:
+        validate_capability(contract,capability)
+    require(evidence.get('method')==contract['method'],
             'Unknown native combat evidence version')
     require(all(evidence.get(key) is False for key in ('authorizesInput','enemyIdentityVerified','killVerified')),
             'Native color evidence attempted to claim input or target authority')
@@ -84,12 +111,14 @@ def validate_frame(frame):
     require(color=='unknown' or count>=3,'Native health color lacks its matching prefix')
     require(evidence['reason']==('red_mask_overloaded' if overloaded else 'native_colors_analyzed')
             and (not overloaded or not bars),'Ambiguous red evidence retained a partial target set')
-    left,top,region_width,region_height=(round(value*scale) for value in (200,100,1400,800))
+    region=contract['enemyRegion']
+    left,top,region_width,region_height=(round(region[key]*scale) for key in ('x','y','width','height'))
     for bar in bars:
         require(isinstance(bar,dict) and all(type(bar.get(key)) is int for key in ('x','y','width','height','pixels')),
                 'Malformed native red component')
         x,y,w,h,pixels=(bar[key] for key in ('x','y','width','height','pixels'))
         require(x>=left and y>=top and x+w<=left+region_width and y+h<=top+region_height
+                and (contract['version']==1 or y+h<top+region_height)
                 and 24*scale<=w<=320*scale and max(1,2*scale)<=h<=14*scale and w>=5*h
                 and .7*w*h<=pixels<=w*h,'Native component escaped the declared color/geometry scope')
     return evidence

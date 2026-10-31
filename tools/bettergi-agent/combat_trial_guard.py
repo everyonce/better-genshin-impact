@@ -12,7 +12,7 @@ import json
 import threading
 from collections import OrderedDict
 
-from native_combat import finite, validate_capability, validate_frame
+from native_combat import finite, scene_capability, validate_capability, validate_frame
 
 
 MODEL = 'open-p2p'
@@ -139,7 +139,7 @@ def bind_review(review_bytes, plan_bytes, scene_bytes, sidecar_bytes, image_byte
     require(image_bytes[:8] == b'\x89PNG\r\n\x1a\n' and image_bytes[12:16] == b'IHDR'
             and int.from_bytes(image_bytes[16:20], 'big') == frame['sourceWidth']
             and int.from_bytes(image_bytes[20:24], 'big') == frame['sourceHeight'], 'Combat PNG geometry differs')
-    evidence = validate_frame(frame)
+    evidence = validate_frame(frame,scene_capability(scene))
     require(evidence is not None and evidence['state'] == 'valid'
             and health_reason(evidence, hp / maximum) is None and len(evidence['enemyBarCandidates']) == 1,
             'Reviewed combat scene lacks healthy, unambiguous native target evidence')
@@ -204,6 +204,8 @@ class CombatTrialGuard:
         require(type(started_ns) is int and started_ns >= 0, 'Invalid combat start clock')
         self.intake_lock = threading.RLock()
         self._binding = copy.deepcopy(binding)
+        self._native_capability=validate_capability(hello.get('combatObservation') if isinstance(hello,dict) else None)
+        validate_frame(self._binding['reviewedFrame'],self._native_capability)
         self._sha = digest(canonical(binding))
         self._hello = self._identity(owner, hello)
         self._started = started_ns
@@ -224,7 +226,7 @@ class CombatTrialGuard:
                 and hello.get('supportsRelease') is True and hello.get('supportsStartBeforeMs') is True
                 and hello.get('observationProfile') == PROFILE and type(hello.get('goalVersion')) is int
                 and hello['goalVersion'] == 1 and 'LBUTTON' in hello.get('allowedKeys', []), 'Invalid combat input lease')
-        validate_capability(hello.get('combatObservation'))
+        validate_capability(hello.get('combatObservation'),self._native_capability)
         require(all(isinstance(hello.get(key), str) and bool(hello[key]) for key in ('sessionId', 'ownerEpoch')), 'Missing combat lease identity')
         return {key: hello[key] for key in ('sessionId', 'ownerEpoch', 'goalVersion')}
 
@@ -298,7 +300,7 @@ class CombatTrialGuard:
                 require(isinstance(frame, dict), 'Malformed combat frame')
                 require(type(frame.get('droppedReceipts', 0)) is int and frame.get('droppedReceipts', 0) == 0,
                         'Combat input receipts were lost or unavailable')
-                evidence = validate_frame(frame)
+                evidence = validate_frame(frame,self._native_capability)
                 require(finite(round_trip_ms) and round_trip_ms >= 0, 'Invalid combat transport measurement')
                 if evidence is not None and evidence['state'] == 'valid':
                     reason = health_reason(evidence, self._binding['baselineHealthFraction'])

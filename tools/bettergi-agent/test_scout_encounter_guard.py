@@ -13,21 +13,22 @@ from unittest.mock import patch
 
 import stream_client as client
 from audit_hybrid_run import verify_scout_guard
-from native_combat import CAPABILITY
-from scout_encounter_guard import ScoutEncounterGuard,ScoutEncounterStop,binding_from_review,validate_binding
+from native_combat import CAPABILITY,CAPABILITY_V2,capability_for_version
+from scout_encounter_guard import (ScoutEncounterGuard,ScoutEncounterStop,binding_from_review,validate_binding,
+                                   guard_policy,supported_guard_policies,declared_guard_policies)
 from test_native_combat import native_frame
 from test_resident_goals import dormant_control
 from test_stream_client import CapturingRecorder,FakePolicy,ScriptedBridge
 
 
-def binding():
+def binding(version=1):
     """Use a fixed reviewed 90 percent health baseline independent of the sensor estimate."""
-    return binding_from_review(dict(inspectedHealth=900,inspectedMaximumHealth=1000),'a'*64)
+    return binding_from_review(dict(inspectedHealth=900,inspectedMaximumHealth=1000),'a'*64,capability_for_version(version))
 
 
-def sample(index=1, *, health=.9, candidates=False):
+def sample(index=1, *, health=.9, candidates=False,version=1):
     """Create a complete same-source sensor result without image recognition or native capture."""
-    frame=native_frame()
+    frame=native_frame(version)
     source=dict(frame['sourceFrame'],timestamp100ns=index*1_000_000,
                 capturedAtMs=index*100,acquiredAtMs=index*100+1,freshnessAtMs=index*100)
     frame.update(frameId=index,sourceFrame=source,sourceFrameAgeMs=1)
@@ -43,6 +44,37 @@ def release_ack(stamp=101,epoch=2):
 
 class GuardTests(unittest.TestCase):
     """Exercise stable baseline and terminal decisions across exact native source identities."""
+    def test_v2_requires_an_explicit_capability_without_changing_legacy_limits(self):
+        legacy,modern=binding(),binding(2)
+        self.assertNotIn('nativeCombatObservation',legacy)
+        self.assertEqual(modern['nativeCombatObservation'],CAPABILITY_V2)
+        self.assertEqual(modern['policy'],dict(legacy['policy'],version=2,method=CAPABILITY_V2['method']))
+        self.assertEqual(validate_binding(modern),modern)
+        for change in ('stripped','downgraded','changed'):
+            value=copy.deepcopy(modern)
+            if change=='stripped':value.pop('nativeCombatObservation')
+            if change=='downgraded':value['policy']=legacy['policy']
+            if change=='changed':value['nativeCombatObservation']['enemyRegion']['height']=800
+            with self.subTest(change=change),self.assertRaises(ValueError):validate_binding(value)
+        document=dict(scoutEncounterGuardPolicy=guard_policy())
+        self.assertEqual(declared_guard_policies(document),[guard_policy()])
+        document['scoutEncounterGuardPolicies']=supported_guard_policies()
+        self.assertIn(modern['policy'],declared_guard_policies(document))
+        document['scoutEncounterGuardPolicies'][1]['sourceFreshnessMs']=151
+        with self.assertRaises(ValueError):declared_guard_policies(document)
+
+    def test_v2_guard_stops_on_lower_world_bar_and_latches_contract_changes(self):
+        guard=ScoutEncounterGuard(binding(2));guard.observe(sample(version=2),1)
+        self.assertEqual(guard.snapshot()['state'],'ready')
+        hazard=sample(2,candidates=True,version=2)
+        hazard['combatEvidence']['enemyBarCandidates'][0].update(x=469,y=961,width=120,height=8,pixels=923)
+        self.assertEqual(guard.observe(hazard,2)['state']['trip']['reason'],'enemyBarCandidate')
+        for version in (1,2):
+            guard=ScoutEncounterGuard(binding(version));guard.observe(sample(version=version),1)
+            event=guard.observe(sample(2,version=3-version),2)
+            self.assertEqual(event['state']['trip']['reason'],'invalidNativeSensorEvidence')
+            with self.assertRaises(ScoutEncounterStop):guard.check_dispatch(sample(version=version),3)
+
     def test_binding_rejects_changed_settings_numeric_types_and_baseline(self):
         self.assertEqual(validate_binding(binding()),binding())
         for change in ('threshold','baseline','health','boolean','extra'):
@@ -429,18 +461,32 @@ class ClimbGuardTests(unittest.TestCase):
 
 class GuardAuditTests(unittest.TestCase):
     """Replay the exact guard journal and reject source, dispatch-boundary and policy substitutions."""
-    def fixture(self,folder):
-        guard=ScoutEncounterGuard(binding())
-        frames={index:sample(index) for index in (1,2)}
+    def fixture(self,folder,version=1):
+        guard=ScoutEncounterGuard(binding(version))
+        frames={index:sample(index,version=version) for index in (1,2)}
         events=[guard.observe(frames[index],index*100) for index in frames]
         marker=guard.check_dispatch(frames[2],201)
         events.append(dict(type='scoutEncounterGuardDispatch',requestId='inert-action',marker=marker,
                            frame=copy.deepcopy(frames[2]),state=guard.snapshot()))
-        part=dict(scoutEncounterGuard=binding(),scoutEncounterGuardState=guard.snapshot(),
+        part=dict(scoutEncounterGuard=binding(version),scoutEncounterGuardState=guard.snapshot(),
                   decisions=[dict(frameId=2,acceptance={'type':'accepted','requestId':'inert-action'},scoutEncounterGuard=marker)])
+        if version==2:part.update(nativeCombatObservation=copy.deepcopy(CAPABILITY_V2),hello=dict(combatObservation=copy.deepcopy(CAPABILITY_V2)))
         path=Path(folder)/'00001'/'events.jsonl';path.parent.mkdir()
         path.write_text(''.join(json.dumps(event)+'\n' for event in events),encoding='utf-8')
         return dict(scoutEncounterGuardState=guard.snapshot()),part,frames,events,path
+
+    def test_v2_replay_requires_matching_hello_negotiation_and_observations(self):
+        for change in ('none','missing','hello','frame'):
+            with self.subTest(change=change),tempfile.TemporaryDirectory() as folder:
+                run,part,frames,events,path=self.fixture(folder,2)
+                if change=='missing':part.pop('nativeCombatObservation')
+                if change=='hello':part['hello']['combatObservation']=copy.deepcopy(CAPABILITY)
+                if change=='frame':events[0]['frame']['combatEvidence'].update(version=1,method=CAPABILITY['method'])
+                path.write_text(''.join(json.dumps(event)+'\n' for event in events),encoding='utf-8')
+                invoke=lambda:verify_scout_guard(run,[part],frames,[{'number':1}],folder,{'scoutEncounterGuard':binding(2)})
+                if change=='none':self.assertEqual(invoke()['observations'],2)
+                else:
+                    with self.assertRaises((ValueError,ScoutEncounterStop)):invoke()
 
     def test_normal_intake_replays_and_changed_source_or_dispatch_cannot_pass(self):
         for change in ('none','sensor','source','dispatch','missing','policy','trip'):

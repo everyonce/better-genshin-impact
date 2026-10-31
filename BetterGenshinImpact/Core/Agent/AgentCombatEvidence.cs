@@ -22,9 +22,11 @@ public sealed record AgentCombatEvidence(string State, string Reason, long Frame
     bool RedMaskOverloaded, double RecognitionMs)
 {
     /// <summary>Versioned image-analysis contract, independent of policy choice.</summary>
-    public const string MethodName = "native_hud_color_components_v1";
+    public const string MethodName = "native_hud_color_components_v2";
+    /// <summary>V2 includes close-range bars above the player HUD and rejects a clipped lower edge.</summary>
+    public const int ContractVersion = 2;
     /// <summary>Schema version for the optional evidence block.</summary>
-    public int Version => 1;
+    public int Version => ContractVersion;
     /// <summary>The fixed analysis method used by this observation.</summary>
     public string Method => MethodName;
     /// <summary>Visual candidates never authorize controls.</summary>

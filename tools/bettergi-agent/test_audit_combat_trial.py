@@ -9,26 +9,38 @@ import unittest
 from audit_combat_trial import audit_episode, replay_events, verify_retirement, verify_temperatures
 from combat_trial_guard import CombatTrialGuard
 from policy_rgb_archive import write_policy_rgb
-from test_combat_trial_guard import HELLO, OWNER, binding, frame, proposal
+from test_combat_trial_guard import HELLO, OWNER, binding, frame, proposal,review_parts
+from native_combat import CAPABILITY,CAPABILITY_V2,capability_for_version
 
 
-def completed_trace():
+def completed_trace(version=1):
     """Produce three deterministic native pulses without a pipe, clock wait or GPU."""
-    authority = binding()
-    guard = CombatTrialGuard(authority, OWNER, HELLO, 0)
+    parts=review_parts();capability=capability_for_version(version)
+    if version==2:
+        parts[2]['nativeCombatObservation']=copy.deepcopy(capability)
+        parts[2]['observations'][0]['combatEvidence'].update(version=2,method=capability['method'])
+    authority = binding(parts)
+    hello=dict(copy.deepcopy(HELLO),combatObservation=capability)
+    guard = CombatTrialGuard(authority, OWNER, hello, 0)
     events, frames, decisions, receipts = [], [], [], []
+
+    def source_frame(*args,**kwargs):
+        """Emit one version consistently through the source, native protocol and guard replay."""
+        value=frame(*args,**kwargs)
+        value['combatEvidence'].update(version=version,method=capability['method'])
+        return value
 
     def observe(source):
         """Retain both the intake event and its original image metadata."""
         frames.append(copy.deepcopy(source))
         events.append(guard.observe(source, int(source['serverNowMs'] * 1e6), round_trip_ms=1))
 
-    observe(frame(1, 100))
-    current = frame(2, 150)
+    observe(source_frame(1, 100))
+    current = source_frame(2, 150)
     observe(current)
     for index in range(3):
         at = current['sourceFrame']['freshnessAtMs']
-        marker = guard.prepare_action(current, proposal(), 'attack-' + str(index), int((at + 15) * 1e6), owner=OWNER, hello=HELLO)
+        marker = guard.prepare_action(current, proposal(), 'attack-' + str(index), int((at + 15) * 1e6), owner=OWNER, hello=hello)
         events.append(marker)
         accepted = dict(type='accepted', requestId='attack-' + str(index), receivedAtMs=at + 19, acceptedAtMs=at + 20)
         events.append(guard.admission(accepted, 0, int((at + 30) * 1e6)))
@@ -42,11 +54,11 @@ def completed_trace():
         decisions.append(dict(proposal(), rawPolicySteps=proposal(50)['steps'], frameId=current['frameId'],
                               acceptance=accepted, combatTrialGuard=marker,
                               controllerResampling='explicit-bounded-key-hold; mouse applied once'))
-        current = frame(index + 3, at + 200, epoch=index + 1)
+        current = source_frame(index + 3, at + 200, epoch=index + 1)
         observe(current)
     events.append(guard.acknowledge_release(dict(type='released', serverNowMs=780,
         worldReadiness=dict(ready=False, epoch=4)), 0, 790_000_000, 'combatTrialTeardown'))
-    episode = dict(status='completed', hello=HELLO, combatTrialGuard=authority,
+    episode = dict(status='completed', hello=hello, combatTrialGuard=authority,
         combatTrialGuardState=guard.snapshot(), decisions=decisions, receipts=receipts,
         combatTrialReceiptEnvelopes=[dict(type='frame', serverNowMs=item['endedAtMs'] + 10,
             receipts=[copy.deepcopy(item)], droppedReceipts=0) for item in receipts],
@@ -60,6 +72,7 @@ def completed_trace():
     goal = dict(controlEpoch=0, policyGoalVersion=0, appliedGoalRequestId=None, goalRequestId=None,
                 goalRequestStatus=None, goalError=None, goalMetadata=dict(instruction='fixed combat'), goalIntent='stationary')
     episode.update(initialGoalState=copy.deepcopy(goal), finalGoalState=copy.deepcopy(goal))
+    if version==2:episode['nativeCombatObservation']=copy.deepcopy(capability)
     return episode, events, frames, authority
 
 
@@ -90,6 +103,24 @@ class CombatTrialAuditTests(unittest.TestCase):
         self.assertEqual(report['verifiedRgbFrames'], 5)
         self.assertFalse(report['combatSuccess'])
         self.assertFalse(report['damageVerified'])
+
+    def test_v2_complete_trace_requires_bound_negotiation_and_native_frames(self):
+        """Every v2 completion retains its chosen contract; fully valid v1 evidence cannot replace it."""
+        for change in ('none','missing','reply','hello','frame'):
+            with self.subTest(change=change),tempfile.TemporaryDirectory() as folder:
+                episode,events,frames,authority=completed_trace(2)
+                for index,row in enumerate(frames):
+                    row.update(width=192,height=192,videoFrameIndex=index,
+                               clientReceivedNs=int(row['serverNowMs']*1e6),transportRoundTripMs=1)
+                    row['policyRgb']=write_policy_rgb(Path(folder),index,row,bytes([index])*(192*192*3))
+                if change=='missing':episode.pop('nativeCombatObservation')
+                if change=='reply':episode['nativeCombatObservation']=copy.deepcopy(CAPABILITY)
+                if change=='hello':episode['hello']['combatObservation']=copy.deepcopy(CAPABILITY)
+                if change=='frame':frames[-1]['combatEvidence'].update(version=1,method=CAPABILITY['method'])
+                invoke=lambda:audit_episode(episode,events,frames,Path(folder),authority)
+                if change=='none':self.assertTrue(invoke()['trialCompleteVerified'])
+                else:
+                    with self.assertRaises(ValueError):invoke()
 
     def test_missing_terminal_event_fails_replay(self):
         """A release cannot substitute for the missing terminal execution receipt."""

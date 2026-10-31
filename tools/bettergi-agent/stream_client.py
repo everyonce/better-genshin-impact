@@ -1659,6 +1659,7 @@ def run_episode(args, policy=None, control=None):
     hybrid_observe = validate_hybrid_observe_options(args)
     navigation_profile = validate_navigation_scope_options(args)
     native_combat_enabled = getattr(args,'native_combat_observation',False)
+    native_combat_capability = None
     scout_guard = getattr(control,'scout_encounter_guard',None)
     if getattr(args,'scout_encounter_guard',None) is not None and scout_guard is None:
         raise ValueError('Scout encounter guard requires the reviewed resident owner')
@@ -1835,8 +1836,11 @@ def run_episode(args, policy=None, control=None):
                 report['hybridNavigation'] = hybrid.snapshot()
                 report['hybridNavigationEvents'] = []
         if native_combat_enabled:
-            from native_combat import negotiate
-            report['nativeCombatObservation'] = negotiate(bridge)
+            from native_combat import negotiate,validate_capability as validate_combat_capability
+            native_combat_capability = negotiate(bridge)
+            if scout_guard is not None:
+                validate_combat_capability(native_combat_capability,scout_guard.native_capability)
+            report['nativeCombatObservation'] = copy.deepcopy(native_combat_capability)
             report['nativeCombatEvidenceFrames'] = 0
         if getattr(args, 'inspect_junction_map', False) or getattr(args,'recover_junction_map',False):
             from map_inspection_client import inspect_before_navigation
@@ -2056,7 +2060,7 @@ def run_episode(args, policy=None, control=None):
                         host_contract.validate(metadata)
                         verify_frame(metadata, pixels, profile_contract)
                         from native_combat import validate_frame
-                        validate_frame(metadata)
+                        validate_frame(metadata,native_combat_capability)
                         if len(pixels) != metadata['width'] * metadata['height'] * 3:
                             raise ValueError('Combat trigger RGB payload does not match declared dimensions')
                         metadata.update(clientReceivedNs=arrived, transportRoundTripMs=(arrived-start)/1e6,
@@ -2093,7 +2097,7 @@ def run_episode(args, policy=None, control=None):
                             host_contract.validate(metadata)
                             verify_frame(metadata, pixels, profile_contract)
                             from native_combat import validate_frame
-                            validate_frame(metadata)
+                            validate_frame(metadata,native_combat_capability)
                             if len(pixels) != metadata['width'] * metadata['height'] * 3:
                                 raise ValueError('Trigger RGB payload does not match declared dimensions')
                             metadata['clientReceivedNs'] = arrived
@@ -2133,7 +2137,7 @@ def run_episode(args, policy=None, control=None):
                 verify_frame(metadata, pixels, profile_contract)
                 if native_combat_enabled:
                     from native_combat import validate_frame
-                    validate_frame(metadata)
+                    validate_frame(metadata,native_combat_capability)
             if idle_recovery.threshold is not None:
                 context = capture_context(metadata) if metadata.get('type') == 'frame' else None
                 if recovery_capture_context is not None and context != recovery_capture_context:

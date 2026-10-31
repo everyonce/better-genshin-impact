@@ -2,6 +2,8 @@ using BetterGenshinImpact.Core.Agent;
 using BetterGenshinImpact.GameTask.AutoAgent;
 using Newtonsoft.Json.Linq;
 using OpenCvSharp;
+using System.IO;
+using System.Security.Cryptography;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -27,6 +29,8 @@ public sealed class AgentCombatRecognizerTests(ITestOutputHelper output)
         var observation = Observation(width);
         var evidence = AgentCombatRecognizer.Recognize(pixels, observation, true);
         Assert.Equal("valid", evidence.State);
+        Assert.Equal(2, evidence.Version);
+        Assert.Equal("native_hud_color_components_v2", evidence.Method);
         Assert.Equal("green", evidence.PlayerHealthColor);
         Assert.InRange(evidence.PlayerHealthFractionEstimate!.Value, .89, .92);
         var bar = Assert.Single(evidence.EnemyBarCandidates);
@@ -55,6 +59,50 @@ public sealed class AgentCombatRecognizerTests(ITestOutputHelper output)
         evidence = AgentCombatRecognizer.Recognize(pixels, Observation() with { FrameId = 43 }, true);
         Assert.Equal("unknown", evidence.PlayerHealthColor);
         Assert.Null(evidence.PlayerHealthFractionEstimate);
+    }
+
+    /// <summary>Close-range world bars remain visible while the player's red HUD is always outside the ROI.</summary>
+    [Theory]
+    [InlineData(1280, 3)]
+    [InlineData(1280, 4)]
+    [InlineData(1920, 3)]
+    [InlineData(1920, 4)]
+    public void LowerWorldBarsDoNotIncludeRedPlayerHealth(int width, int channels)
+    {
+        using var pixels = Canvas(width, channels);
+        var scale = width / 1920.0;
+        Fill(pixels, scale, 808, 1008, 180, 7, new Scalar(90, 90, 255, 255));
+        var healthOnly = AgentCombatRecognizer.Recognize(pixels, Observation(width), true);
+        Assert.Equal("red", healthOnly.PlayerHealthColor);
+        Assert.Empty(healthOnly.EnemyBarCandidates);
+        Fill(pixels, scale, 469, 961, 120, 8, new Scalar(90, 90, 255, 255));
+        using var before = pixels.Clone();
+        var evidence = AgentCombatRecognizer.Recognize(pixels, Observation(width), true);
+        var bar = Assert.Single(evidence.EnemyBarCandidates);
+        Assert.Equal((int)Math.Round(469 * scale), bar.X);
+        Assert.Equal((int)Math.Round(961 * scale), bar.Y);
+        Assert.Equal("red", evidence.PlayerHealthColor);
+        Assert.Equal(healthOnly.PlayerHealthFractionEstimate, evidence.PlayerHealthFractionEstimate);
+        Assert.False(evidence.RedMaskOverloaded);
+        Assert.Equal(0, Cv2.Norm(before, pixels));
+    }
+
+    /// <summary>A cropped component must not acquire valid-looking dimensions at the new lower boundary.</summary>
+    [Theory]
+    [InlineData(1280, 3)]
+    [InlineData(1280, 4)]
+    [InlineData(1920, 3)]
+    [InlineData(1920, 4)]
+    public void LowerBoundaryRejectsTouchingAndPartiallyClippedBars(int width, int channels)
+    {
+        var scale = width / 1920.0;
+        foreach (var (top, height, expected) in new[] { (981, 8, 1), (982, 8, 0), (984, 12, 0), (1000, 8, 0) })
+        {
+            using var pixels = Canvas(width, channels);
+            Fill(pixels, scale, 469, top, 120, height, new Scalar(90, 90, 255, 255));
+            var evidence = AgentCombatRecognizer.Recognize(pixels, Observation(width), true);
+            Assert.Equal(expected, evidence.EnemyBarCandidates.Count);
+        }
     }
 
     /// <summary>World or source failures return no prior health or target values, even after a valid frame.</summary>
@@ -121,6 +169,43 @@ public sealed class AgentCombatRecognizerTests(ITestOutputHelper output)
         Assert.False(capability["authorizesInput"]!.Value<bool>());
         Assert.Equal(808, capability["healthRow"]!["x"]!.Value<int>());
         Assert.Equal(304, capability["healthRow"]!["width"]!.Value<int>());
+        Assert.Equal(2, capability["version"]!.Value<int>());
+        Assert.Equal("native_hud_color_components_v2", capability["method"]!.Value<string>());
+        Assert.Equal(100, capability["enemyRegion"]!["y"]!.Value<int>());
+        Assert.Equal(890, capability["enemyRegion"]!["height"]!.Value<int>());
+        Assert.True(capability["rejectsLowerBoundaryComponents"]!.Value<bool>());
+    }
+
+    /// <summary>Replay the two explicit close-range PNGs independently of the older 90%-health negative cohort.</summary>
+    [Fact]
+    public void ExplicitCloseRangeRetainedImageReplay()
+    {
+        // Supply recovery-03/before.png, then camera-05/before.png, separated by a semicolon.
+        var paths = Environment.GetEnvironmentVariable("BETTERGI_COMBAT_V2_REPLAY_IMAGES");
+        if (string.IsNullOrEmpty(paths)) { output.WriteLine("No close-range retained-image replay requested."); return; }
+        var files = paths.Split(';', StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(2, files.Length);
+        var hashes = new[]
+        {
+            "87441fb39a66ab4c73d7611d4cc58bfe08a0befabbd9ec9284e3ebc538c6cf02",
+            "063d02457090e09e4ba4f8bf130323c580e6e797442bf7350ffd9189e5b82bc6"
+        };
+        for (var index = 0; index < files.Length; index++)
+        {
+            Assert.Equal(hashes[index], Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(files[index]))).ToLowerInvariant());
+            using var pixels = Cv2.ImRead(files[index]);
+            Assert.False(pixels.Empty());
+            var evidence = AgentCombatRecognizer.Recognize(pixels, Observation(pixels.Width), true);
+            Assert.Equal("valid", evidence.State);
+            Assert.Equal("green", evidence.PlayerHealthColor);
+            Assert.Equal(210.0 / 304, evidence.PlayerHealthFractionEstimate);
+            Assert.Equal(133, evidence.PlayerHealthMatchingPixels);
+            Assert.False(evidence.RedMaskOverloaded);
+            Assert.Equal(index == 0 ? 1 : 0, evidence.EnemyBarCandidates.Count);
+            if (index == 0)
+                Assert.Equal(new AgentEnemyBarCandidate(469, 961, 120, 8, 923), Assert.Single(evidence.EnemyBarCandidates));
+            output.WriteLine($"V2 retained HUD: {files[index]}; candidates={evidence.EnemyBarCandidates.Count}; recognitionMs={evidence.RecognitionMs:F4}");
+        }
     }
 
     /// <summary>When explicitly supplied, replay preserved local PNGs and report measured CPU cost without launching BetterGI.</summary>

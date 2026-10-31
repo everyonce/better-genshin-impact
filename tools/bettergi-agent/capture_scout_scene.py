@@ -100,7 +100,7 @@ def main():
             if frame.get('type')=='frame':
                 report['observations'].append(frame)
                 require(frame['executionContext']['lastSequence']==0,'Unexpected native input history')
-                combat=validate_frame(frame)
+                combat=validate_frame(frame,report['nativeCombatObservation'])
                 pose=frame.get('navigationPose') or {}
                 world=frame.get('frameWorldReadiness') or {}
                 motion=frame.get('motionEvidence') or {}

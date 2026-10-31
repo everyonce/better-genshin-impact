@@ -28,6 +28,10 @@ public sealed class AgentStreamWireTests
         var method = typeof(AgentStreamSession).GetMethod("CreateHello", BindingFlags.NonPublic | BindingFlags.Instance)!;
         var hello = JObject.FromObject(method.Invoke(session, [false])!);
         Assert.False(hello["inputEnabled"]!.Value<bool>());
+        Assert.Equal(2, hello["combatObservation"]!["version"]!.Value<int>());
+        Assert.Equal("native_hud_color_components_v2", hello["combatObservation"]!["method"]!.Value<string>());
+        Assert.Equal(890, hello["combatObservation"]!["enemyRegion"]!["height"]!.Value<int>());
+        Assert.True(hello["combatObservation"]!["rejectsLowerBoundaryComponents"]!.Value<bool>());
         Assert.True(hello["supportsRelease"]!.Value<bool>());
         Assert.True(hello["supportsStartBeforeMs"]!.Value<bool>());
         Assert.Equal(500, hello["maxActionStartAgeMs"]!.Value<double>());

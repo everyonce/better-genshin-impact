@@ -6,7 +6,7 @@ import unittest
 
 from combat_trial_guard import (CombatTrialGuard, CombatTrialStop, PROFILE, REVIEW_KIND,
                                bind_review, canonical, proposal_rejection, trial_policy)
-from native_combat import CAPABILITY, METHOD
+from native_combat import CAPABILITY, CAPABILITY_V2, METHOD
 
 
 OWNER = dict(root=dict(processId=11, windowsSessionId=1, instanceNonce='root'),
@@ -67,6 +67,26 @@ def proposal(duration=100):
 
 
 class CombatTrialGuardTests(unittest.TestCase):
+    def test_v2_review_binds_lease_and_every_later_observation(self):
+        """A lower-screen reviewed target cannot silently switch the detector contract."""
+        parts=review_parts();parts[2]['nativeCombatObservation']=copy.deepcopy(CAPABILITY_V2)
+        selected=parts[2]['observations'][0]['combatEvidence']
+        selected.update(version=2,method=CAPABILITY_V2['method'])
+        selected['enemyBarCandidates'][0].update(x=469,y=961,width=120,height=8,pixels=923)
+        bound=binding(parts)
+        hello=dict(copy.deepcopy(HELLO),combatObservation=copy.deepcopy(CAPABILITY_V2))
+        guard=CombatTrialGuard(bound,OWNER,hello,0)
+        for index in (1,2):
+            current=frame(index,100+index*50)
+            current['combatEvidence'].update(version=2,method=CAPABILITY_V2['method'])
+            guard.observe(current,int(current['serverNowMs']*1e6),round_trip_ms=1)
+        self.assertEqual(guard.snapshot()['phase'],'ready')
+        wrong=frame(3,300)
+        self.assertIsNotNone(guard.observe(wrong,310_000_000,round_trip_ms=1)['state']['trip'])
+        with self.assertRaises(ValueError):CombatTrialGuard(bound,OWNER,HELLO,0)
+        parts[2].pop('nativeCombatObservation')
+        with self.assertRaises(ValueError):binding(parts)
+
     def setUp(self):
         """Start every test with independent pure authority and no active controller."""
         self.guard = CombatTrialGuard(binding(), copy.deepcopy(OWNER), copy.deepcopy(HELLO), 0)

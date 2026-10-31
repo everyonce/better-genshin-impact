@@ -15,15 +15,18 @@ public static class AgentCombatRecognizer
     private const int MaximumComponents = 256;
     /// <summary>Bound the number of published candidates in each frame.</summary>
     private const int MaximumCandidates = 16;
+    /// <summary>End at reference y=990, above the player health HUD beginning around y=1008.</summary>
+    private const int EnemyRegionHeight = 890;
 
     /// <summary>Explicit, opt-in contract; neither the colors nor the candidates grant control authority.</summary>
     public static object Capability => new
     {
-        version = 1, method = AgentCombatEvidence.MethodName, sameFrame = true, readOnly = true,
+        version = AgentCombatEvidence.ContractVersion, method = AgentCombatEvidence.MethodName, sameFrame = true, readOnly = true,
         requiresWgcSourceIdentity = true, minWidth = 1280, maxWidth = 1920, maxHeight = 1080,
         aspectRatio = "16:9", referenceWidth = 1920, referenceHeight = 1080,
         healthRow = new { x = 808, y = 1010, width = 304 },
-        enemyRegion = new { x = 200, y = 100, width = 1400, height = 800 },
+        enemyRegion = new { x = 200, y = 100, width = 1400, height = EnemyRegionHeight },
+        rejectsLowerBoundaryComponents = true,
         maximumCandidates = MaximumCandidates, healthFractionIsEstimate = true,
         authorizesInput = false, enemyIdentityVerified = false, killVerified = false
     };
@@ -50,7 +53,7 @@ public static class AgentCombatRecognizer
             var health = ReadHealth(source, scale);
             // Match BetterGI's native red health-bar color without using its global tracker or a second capture.
             var region = new Rect((int)Math.Round(200 * scale), (int)Math.Round(100 * scale),
-                (int)Math.Round(1400 * scale), (int)Math.Round(800 * scale));
+                (int)Math.Round(1400 * scale), (int)Math.Round(EnemyRegionHeight * scale));
             using var crop = new Mat(source, region);
             using var mask = new Mat();
             Cv2.InRange(crop, new Scalar(82, 82, 247, 0), new Scalar(98, 98, 255, 255), mask);
@@ -73,6 +76,10 @@ public static class AgentCombatRecognizer
                     var width = stats.At<int>(index, (int)ConnectedComponentsTypes.Width);
                     var height = stats.At<int>(index, (int)ConnectedComponentsTypes.Height);
                     var pixels = stats.At<int>(index, (int)ConnectedComponentsTypes.Area);
+                    var top = activeArea.Y + stats.At<int>(index, (int)ConnectedComponentsTypes.Top);
+                    // A component on the last ROI row may continue into the excluded HUD band.
+                    // Do not promote its truncated height into a complete close-range candidate.
+                    if (top + height >= region.Height) continue;
                     if (width < 24 * scale || width > 320 * scale || height < Math.Max(1, 2 * scale)
                         || height > 14 * scale || width < height * 5 || pixels < width * height * .7) continue;
                     candidates.Add(new AgentEnemyBarCandidate(

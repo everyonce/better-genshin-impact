@@ -205,6 +205,14 @@ class MapOwnerTest(unittest.TestCase):
         folder,result=self.create_next_handoff(prior,result,game,62)
         return prior,folder,result,game
 
+    def create_r63_successor(self):
+        """Seal the complete R62 chain before preparing its explicitly supported successor."""
+        previous,folder,result,game=self.create_r62_successor()
+        prior=folder/'map-owner-lineage.json'
+        write(prior,owner.replacement(previous,folder))
+        folder,result=self.create_next_handoff(prior,result,game,63)
+        return prior,folder,result,game
+
     def test_r60_handoff_keeps_the_same_game_and_rejects_stale_source(self):
         """The newly allowed successor still cannot reuse the discovery from before the R60 replacement."""
         prior,folder,result,game=self.create_r60_successor()
@@ -226,8 +234,8 @@ class MapOwnerTest(unittest.TestCase):
         self.assertEqual(owner.load_map_owner(path),dict(root=self.ids['root'],child=owner.identity(result['child'])))
         self.assertEqual(receipt['protectedGame'],game)
         self.assertEqual(owner.load_map_owner(prior)['root'],self.ids['root'])
-    def test_r62_replays_original_root_and_game_but_rejects_a_sixth_transition(self):
-        """The explicit R61-to-R62 extension does not admit a fully populated R63 successor."""
+    def test_r62_replays_original_root_and_game(self):
+        """The historical R62 receipt remains independently replayable after the next extension."""
         prior,folder,result,game=self.create_r62_successor()
         receipt=owner.replacement(prior,folder)
         path=folder/'map-owner-lineage.json'
@@ -236,9 +244,75 @@ class MapOwnerTest(unittest.TestCase):
         self.assertEqual(receipt['protectedGame'],game)
         self.assertEqual(receipt['priorLineageSha256'],hashlib.sha256(prior.read_bytes()).hexdigest())
         self.assertEqual(owner.load_map_owner(prior)['root'],self.ids['root'])
-        later,_=self.create_next_handoff(path,result,game,63)
+
+    def test_r63_replays_original_root_and_game_but_rejects_a_seventh_transition(self):
+        """An independently replayed R63 receipt grants no authority to replace it with R64."""
+        prior,folder,result,game=self.create_r63_successor()
+        receipt=owner.replacement(prior,folder)
+        path=folder/'map-owner-lineage.json'
+        write(path,receipt)
+        self.assertEqual(owner.load_map_owner(path),dict(root=self.ids['root'],child=owner.identity(result['child'])))
+        self.assertEqual(receipt['protectedGame'],game)
+        self.assertEqual(receipt['priorLineageSha256'],hashlib.sha256(prior.read_bytes()).hexdigest())
+        later,_=self.create_next_handoff(path,result,game,64)
         with self.assertRaisesRegex(ValueError,'bounded'):owner.replacement(path,later)
-        with self.assertRaisesRegex(ValueError,'Unsupported map release'):owner.target_package(63)
+        with self.assertRaisesRegex(ValueError,'Unsupported map release'):owner.target_package(64)
+
+    def test_r63_rejects_substituted_game_and_stale_or_busy_owners(self):
+        """Matching new evidence cannot substitute the protected game or reuse another controller owner."""
+        prior,folder,result,game=self.create_r63_successor()
+        preflight=json.loads((folder/'preflight.json').read_bytes())
+        before=json.loads((folder/'before.json').read_bytes())
+        for field,value in (('startedFileTime',1),('processId',888),('executable','YuanShen.exe')):
+            changed=dict(game,**{field:value})
+            write(folder/'game-before.json',changed)
+            write(folder/'preflight.json',dict(preflight,protectedGame=changed))
+            write(folder/'ensure-child.json',dict(result,protectedGame=changed))
+            with self.subTest(field=field),self.assertRaisesRegex(ValueError,'sealed R62 game lifetime'):
+                owner.replacement(prior,folder)
+        write(folder/'game-before.json',game)
+        write(folder/'preflight.json',preflight)
+        write(folder/'ensure-child.json',result)
+        for index,fields in ((0,dict(instanceNonce='e'*32)),(1,dict(processId=6000)),
+                             (1,dict(instanceNonce='f'*32)),(1,dict(serviceOwnsPilot=True))):
+            changed=deepcopy(before)
+            changed['instances'][index].update(fields)
+            write(folder/'before.json',changed)
+            with self.subTest(index=index,fields=fields),self.assertRaises(ValueError):owner.replacement(prior,folder)
+
+    def test_r63_rejects_circular_or_rewritten_predecessors(self):
+        """The extra supported depth remains finite and independently validates the complete original chain."""
+        prior,folder,_,_=self.create_r63_successor()
+        receipt=json.loads(prior.read_bytes())
+        parent=Path(receipt['prior'])
+        parent_receipt=json.loads(parent.read_bytes())
+        write(prior,dict(receipt,prior=str(prior)))
+        with self.assertRaisesRegex(ValueError,'bounded'):owner.replacement(prior,folder)
+        write(prior,receipt)
+        write(parent,dict(parent_receipt,buildSha256='f'*64))
+        with self.assertRaisesRegex(ValueError,'lineage receipt'):owner.replacement(prior,folder)
+
+    def test_r63_faulted_source_requires_explicit_release_of_every_owner(self):
+        """A retired script fault is compatible with replacement; any active or unknown owner still refuses."""
+        prior,folder,result,_=self.create_r63_successor()
+        before=json.loads((folder/'before.json').read_bytes())
+        for child in (before['instances'][1],result['child']):
+            child.update(pilotState='faulted',serviceOwnsPilot=False)
+        write(folder/'before.json',before)
+        write(folder/'ensure-child.json',result)
+        self.assertEqual(owner.replacement(prior,folder)['identity']['child'],owner.identity(result['child']))
+        missing=object()
+        for document,original in (('before.json',before),('ensure-child.json',result)):
+            for field in ('taskRunning','agentStreamRunning','serviceOwnsPilot'):
+                for value in (missing,True,None,0,'false'):
+                    changed=deepcopy(original)
+                    child=changed['instances'][1] if document=='before.json' else changed['child']
+                    if value is missing:child.pop(field)
+                    else:child[field]=value
+                    write(folder/document,changed)
+                    with self.subTest(document=document,field=field,value=value),self.assertRaises((ValueError,KeyError)):
+                        owner.replacement(prior,folder)
+            write(folder/document,original)
 
     def test_r62_stopped_source_and_target_require_explicit_release(self):
         """Both ends may report stopped only with exact false task, stream and service ownership."""
@@ -458,21 +532,20 @@ class MapOwnerTest(unittest.TestCase):
         write(path,owner.CLEAN_CAPTURE)
         owner.check_clean_target(self.build)
 
-    def test_r62_clean_target_retains_exact_fresh_english_defaults(self):
-        """The new release preserves both published English settings and hashes the original config bytes."""
-        target=owner.ARTIFACTS/'release-r62/BetterGI-English-win-x64'
-        path=target/'User/config.json'
-        build=dict(self.build,targetDirectory=str(target))
+    def test_r62_and_r63_clean_targets_retain_exact_fresh_english_defaults(self):
+        """Both releases preserve the published English settings and hash the original config bytes."""
         expected={**owner.CLEAN_CAPTURE,'otherConfig':{'uiCultureInfoName':'en','gameCultureInfoName':'en'}}
-        write(path,expected)
         self.assertEqual(owner.R62_CLEAN_CAPTURE,expected)
-        self.assertEqual(owner.check_clean_target(build),hashlib.sha256(path.read_bytes()).hexdigest())
+        for number in (62,63):
+            target=owner.ARTIFACTS/f'release-r{number}/BetterGI-English-win-x64'
+            path=target/'User/config.json'
+            build=dict(self.build,targetDirectory=str(target))
+            write(path,expected)
+            with self.subTest(release=number):
+                self.assertEqual(owner.check_clean_target(build),hashlib.sha256(path.read_bytes()).hexdigest())
 
-    def test_r62_rejects_missing_extra_or_substituted_language_settings(self):
+    def test_r62_and_r63_reject_missing_extra_or_substituted_language_settings(self):
         """Capture-only defaults would reintroduce Chinese game text; unrelated copied profile data also fails."""
-        target=owner.ARTIFACTS/'release-r62/BetterGI-English-win-x64'
-        path=target/'User/config.json'
-        build=dict(self.build,targetDirectory=str(target))
         cases=[owner.CLEAN_CAPTURE,dict(owner.R62_CLEAN_CAPTURE,unexpectedProfileData='refuse'),
                dict(owner.R62_CLEAN_CAPTURE,otherConfig=None)]
         for other in ({'uiCultureInfoName':'en'}, {'gameCultureInfoName':'en'},
@@ -480,10 +553,14 @@ class MapOwnerTest(unittest.TestCase):
                       {'uiCultureInfoName':'en','gameCultureInfoName':'zh-Hans'},
                       {'uiCultureInfoName':'en','gameCultureInfoName':'en','unrelated':True}):
             cases.append(dict(owner.CLEAN_CAPTURE,otherConfig=other))
-        for config in cases:
-            write(path,config)
-            with self.subTest(config=config),self.assertRaisesRegex(ValueError,'Unexpected target capture settings'):
-                owner.check_clean_target(build)
+        for number in (62,63):
+            target=owner.ARTIFACTS/f'release-r{number}/BetterGI-English-win-x64'
+            path=target/'User/config.json'
+            build=dict(self.build,targetDirectory=str(target))
+            for config in cases:
+                write(path,config)
+                with self.subTest(release=number,config=config),self.assertRaisesRegex(ValueError,'Unexpected target capture settings'):
+                    owner.check_clean_target(build)
 
     def test_older_clean_target_contract_does_not_gain_r62_settings(self):
         """Each previously supported release keeps its original four-field configuration contract."""

@@ -314,7 +314,7 @@ def verify_scout_goal_state(value, label, *, decision=False):
             and value.get('goalChanges',[])==[],'Cached scout has pending/applied goal changes: '+label)
 
 
-def verify_scout_review(request, owner, points, spec=None):
+def verify_scout_review(request, owner, points, spec=None, *, include_native_capability=False):
     """Independently replay original passive review hashes, source joins and stable start observations."""
     profile=spec.profile_id if spec is not None else required_profile(request['routeId'])
     require(profile in SCOUT_PROFILES and request.get('navigationProfile')==profile,'Reviewed scout profile changed')
@@ -404,10 +404,15 @@ def verify_scout_review(request, owner, points, spec=None):
         valid.append(frame)
     require(valid,'Reviewed PNG has no qualified fresh native observation')
     selected=min(valid,key=lambda frame:frame['sourceFrameAgeMs'])
+    from native_combat import scene_capability,validate_frame as validate_combat_frame
+    native_capability=scene_capability(result)
+    if native_capability['version']==2:
+        require(validate_combat_frame(selected,native_capability) is not None,
+                'Reviewed v2 image lacks its exact native evidence')
     require(selected['sourceFrame']['captureEpoch']==samples[0]['sourceFrame']['captureEpoch']
             and selected['frameWorldReadiness'].get('epoch')==samples[0]['frameWorldReadiness'].get('epoch'),
             'Reviewed PNG belongs to another source/world epoch')
-    return review
+    return (review,native_capability) if include_native_capability else review
 
 
 def has_scout_guard_evidence(value):
@@ -461,6 +466,9 @@ def verify_policy_reuse(run, run_path, proof_path):
             'Original scout manifest belongs to another policy session')
     require(('scoutEncounterGuardPolicy' in session)==('scoutEncounterGuardPolicy' in manifest),
             'Scout encounter guard declaration differs from the original session manifest')
+    require(('scoutEncounterGuardPolicies' in session)==('scoutEncounterGuardPolicies' in manifest)
+            and session.get('scoutEncounterGuardPolicies')==manifest.get('scoutEncounterGuardPolicies'),
+            'Scout encounter supported policies differ from the original session manifest')
     profile=manifest.get('navigationProfile',SCOUT_PROFILE)
     require(profile in SCOUT_PROFILES and session.get('navigationProfile',SCOUT_PROFILE)==profile,
             'Cached worker navigation profile differs from its original manifest')
@@ -528,11 +536,13 @@ def verify_policy_reuse(run, run_path, proof_path):
     else:
         require('routeSpecSha256' not in reuse and 'routeSpecSha256' not in request,'Geometry digest has no explicit specification')
         require(required_profile(request['routeId'])==profile,'Cached fixed route changed scout scope')
-    review=verify_scout_review(request,owner,spec.points if spec is not None else route_points(request['routeId']),spec)
+    review,native_capability=verify_scout_review(request,owner,
+        spec.points if spec is not None else route_points(request['routeId']),spec,include_native_capability=True)
     if 'scoutEncounterGuardPolicy' in session:
-        from scout_encounter_guard import binding_from_review,guard_policy,validate_binding
-        expected=binding_from_review(review,request['reviewSha256'])
-        require(session['scoutEncounterGuardPolicy']==guard_policy()==manifest.get('scoutEncounterGuardPolicy')
+        from scout_encounter_guard import binding_from_review,declared_guard_policies,validate_binding
+        expected=binding_from_review(review,request['reviewSha256'],native_capability)
+        policies=declared_guard_policies(manifest)
+        require(declared_guard_policies(session)==policies and expected['policy'] in policies
                 and manifest.get('stopTemperatureC')==78 and manifest.get('sourceFreshnessMs')==150
                 and manifest.get('actionHoldMs')==hold and manifest.get('legDeadlineSeconds')==35
                 and settings.get('native_combat_observation') is True,
@@ -570,6 +580,11 @@ def verify_scout_guard(run, parts, frames, entries, recordings, reuse):
     previous_ns=-1
     for entry,part in zip(entries,parts):
         require(validate_binding(part.get('scoutEncounterGuard'))==binding,'Segment scout guard binding changed')
+        # Old reports retain their original schema; every v2 lease must retain both sides of negotiation.
+        if guard.native_capability['version']==2 or 'nativeCombatObservation' in part:
+            from native_combat import validate_capability as validate_combat_capability
+            validate_combat_capability(part.get('nativeCombatObservation'),guard.native_capability)
+            validate_combat_capability((part.get('hello') or {}).get('combatObservation'),guard.native_capability)
         with (Path(recordings)/f"{entry['number']:05d}"/'events.jsonl').open(encoding='utf-8') as stream:
             for line in stream:
                 event=json.loads(line)

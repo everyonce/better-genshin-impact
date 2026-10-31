@@ -878,6 +878,67 @@ class CachedPolicyAuditTests(unittest.TestCase):
         cls.reseal_request(run,proof,reuse,request)
         return proof,reuse
 
+    @classmethod
+    def v2_guarded_proof(cls,path,run):
+        """Upgrade only explicit native scene/guard declarations, preserving the historical v1 default."""
+        from native_combat import CAPABILITY_V2
+        from scout_encounter_guard import binding_from_review,supported_guard_policies
+        from test_native_combat import native_frame
+        proof,reuse=cls.executed_proof(path,run)
+        source=Path(reuse['sessionProof']);session=json.loads(source.read_bytes())
+        manifest_path=source.parent/'manifest.json';manifest=json.loads(manifest_path.read_bytes())
+        request=json.loads(Path(reuse['requestFile']).read_bytes())
+        review=json.loads(Path(request['reviewFile']).read_bytes());endpoint=Path(review['nativeEndpoint'])
+        scene=json.loads((endpoint/'result.json').read_bytes())
+        scene['nativeCombatObservation']=copy.deepcopy(CAPABILITY_V2)
+        for frame in scene['observations']+scene['stableSamples']:
+            source_frame=frame['sourceFrame'];at=source_frame['freshnessAtMs']
+            source_frame.update(capturedAtMs=at,acquiredAtMs=at+1,freshnessClockKind='reported_compositor_qpc')
+            frame['frameWorldReadiness']['sourceFrame']=copy.deepcopy(source_frame)
+            evidence=native_frame(2)['combatEvidence']
+            evidence.update(frameId=frame['frameId'],sourceFrame=copy.deepcopy(source_frame),enemyBarCandidates=[])
+            frame.update(type='frame',sourceWidth=1920,sourceHeight=1080,combatEvidence=evidence)
+        request['nativeResultSha256']=cls.write(endpoint/'result.json',scene)
+        metadata_path=(endpoint/review['imageName']).with_suffix('.json')
+        metadata=json.loads(metadata_path.read_bytes());metadata['sourceFrame']=copy.deepcopy(scene['observations'][1]['sourceFrame'])
+        request['imageMetadataSha256']=cls.write(metadata_path,metadata)
+        binding=binding_from_review(review,request['reviewSha256'],CAPABILITY_V2)
+        for document in (manifest,session):document['scoutEncounterGuardPolicies']=supported_guard_policies()
+        for document in (request,reuse,run):document['scoutEncounterGuard']=copy.deepcopy(binding)
+        cls.write(manifest_path,manifest)
+        reuse['sessionProofSha256']=cls.write(source,session)
+        cls.reseal_request(run,proof,reuse,request)
+        return proof,reuse
+
+    def test_v2_guard_proof_rejects_resealed_scene_and_policy_downgrades(self):
+        """Known v1 records still replay, but cannot serve as stripped permission for v2 evidence."""
+        from scout_encounter_guard import binding_from_review
+        for change in ('none','proof-declaration','both-declarations','scene-declaration','mixed-frame','v1-binding'):
+            with self.subTest(change=change),tempfile.TemporaryDirectory() as directory:
+                run={};path=Path(directory).resolve()/'session'/'legs'/('e'*32)/'run.json'
+                proof,reuse=self.v2_guarded_proof(path,run)
+                source=Path(reuse['sessionProof']);session=json.loads(source.read_bytes())
+                manifest_path=source.parent/'manifest.json';manifest=json.loads(manifest_path.read_bytes())
+                request=json.loads(Path(reuse['requestFile']).read_bytes())
+                review=json.loads(Path(request['reviewFile']).read_bytes());scene_path=Path(review['nativeEndpoint'])/'result.json'
+                scene=json.loads(scene_path.read_bytes())
+                if change in ('proof-declaration','both-declarations'):session.pop('scoutEncounterGuardPolicies')
+                if change=='both-declarations':manifest.pop('scoutEncounterGuardPolicies')
+                if change=='scene-declaration':scene.pop('nativeCombatObservation')
+                if change=='mixed-frame':
+                    from native_combat import METHOD
+                    for frame in (scene['observations'][0],scene['stableSamples'][0]):
+                        frame['combatEvidence'].update(version=1,method=METHOD)
+                if change=='v1-binding':
+                    legacy=binding_from_review(review,request['reviewSha256'])
+                    for document in (request,reuse,run):document['scoutEncounterGuard']=copy.deepcopy(legacy)
+                request['nativeResultSha256']=self.write(scene_path,scene)
+                self.write(manifest_path,manifest);reuse['sessionProofSha256']=self.write(source,session)
+                self.reseal_request(run,proof,reuse,request)
+                if change=='none':self.assertEqual(verify_policy_reuse(run,path,proof)['scoutEncounterGuard']['policy']['version'],2)
+                else:
+                    with self.assertRaises(ValueError):verify_policy_reuse(run,path,proof)
+
     def test_executed_history_requires_original_source_bytes_and_exact_policy_descriptor(self):
         """A rehashed proof cannot omit a dependency, change the receipt policy or substitute an archive."""
         for mutation in ('changed-file','missing-file','missing-pin','descriptor','manifest-configuration'):

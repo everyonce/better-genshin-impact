@@ -89,9 +89,9 @@ def _read_root(control, root):
 def _idle(control, status):
     """Require explicit idle evidence; missing task/lifecycle fields are never idle."""
     _current_ui(control, status)
-    # A stopped pilot is released only when the current server explicitly disowns it.
-    # Older non-stopped statuses retain their existing missing-field compatibility.
-    stopped_released = (status.get('pilotState') == 'stopped'
+    # Stopped/faulted pilot reports are terminal only when the current server explicitly disowns them.
+    # Older idle statuses retain their existing missing-field compatibility.
+    terminal_released = (status.get('pilotState') in ('stopped','faulted')
                         and status.get('taskRunning') is False
                         and status.get('agentStreamRunning') is False
                         and status.get('serviceOwnsPilot') is False)
@@ -99,7 +99,7 @@ def _idle(control, status):
             or status.get('automationState') not in ('idle', 'game_ready', 'stopped', 'failed', 'cancelled')
             or status.get('agentStreamRunning', False) is not False
             or ('serviceOwnsPilot' in status and status['serviceOwnsPilot'] is not False)
-            or not (status.get('pilotState') in ('idle', 'completed', 'failed', 'cancelled') or stopped_released)):
+            or not (status.get('pilotState') in ('idle', 'completed', 'failed', 'cancelled') or terminal_released)):
         raise control.ControlError('The child is busy or its idle state is unknown; no task was stopped.')
     return status
 

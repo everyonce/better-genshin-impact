@@ -8,18 +8,19 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import Mock,patch
 
-from native_combat import CAPABILITY,METHOD,negotiate,validate_capability,validate_frame
+from native_combat import (CAPABILITY,CAPABILITY_V2,METHOD,capability_for_version,negotiate,
+                           scene_capability,validate_capability,validate_frame)
 from stream_client import recording_frame_metadata,validate_navigation_scope_options
 from types import SimpleNamespace
 from navigation_profiles import SCOUT_PROFILE
 from hybrid_routes import SCOUT_ENTRY_ROUTE
 
 
-def native_frame():
+def native_frame(version=1):
     """Use a complete immutable WGC clock and one native-size red bar candidate."""
     source=dict(captureEpoch='native-epoch',timestamp100ns=1000000,capturedAtMs=100,acquiredAtMs=101,
                 freshnessAtMs=100,freshnessClockKind='reported_compositor_qpc')
-    evidence=dict(version=1,method=METHOD,state='valid',reason='native_colors_analyzed',frameId=42,
+    evidence=dict(version=version,method=capability_for_version(version)['method'],state='valid',reason='native_colors_analyzed',frameId=42,
         sourceFrame=copy.deepcopy(source),sourceWidth=1920,sourceHeight=1080,playerHealthColor='green',
         playerHealthFractionEstimate=275/304,playerHealthMatchingPixels=200,
         enemyBarCandidates=[dict(x=800,y=400,width=120,height=6,pixels=720)],redMaskOverloaded=False,
@@ -28,6 +29,87 @@ def native_frame():
 
 
 class NativeCombatTests(unittest.TestCase):
+    def test_v1_roi_and_boundary_semantics_remain_unchanged(self):
+        frame=native_frame()
+        frame['combatEvidence']['enemyBarCandidates'][0].update(y=894)
+        self.assertIsNotNone(validate_frame(frame,CAPABILITY))
+        frame['combatEvidence']['enemyBarCandidates'][0].update(y=961)
+        with self.assertRaises(ValueError):validate_frame(frame,CAPABILITY)
+        self.assertEqual(CAPABILITY['enemyRegion'],dict(x=200,y=100,width=1400,height=800))
+
+    def test_v2_lower_roi_and_clipped_boundary_at_both_native_scales(self):
+        for width in (1280,1920):
+            scale=width/1920
+            for y,height,allowed in ((961,8,True),(981,8,True),(982,8,False),(984,12,False),(1008,5,False)):
+                with self.subTest(width=width,y=y):
+                    frame=native_frame(2)
+                    frame.update(sourceWidth=width,sourceHeight=width*9//16)
+                    evidence=frame['combatEvidence']
+                    evidence.update(sourceWidth=width,sourceHeight=width*9//16,playerHealthMatchingPixels=round(133*scale))
+                    w,h=round(120*scale),round(height*scale)
+                    evidence['enemyBarCandidates']=[dict(x=round(469*scale),y=round(y*scale),width=w,height=h,pixels=w*h)]
+                    if allowed:self.assertIsNotNone(validate_frame(frame,CAPABILITY_V2))
+                    else:
+                        with self.assertRaises(ValueError):validate_frame(frame,CAPABILITY_V2)
+
+    def test_negotiated_versions_cannot_mix_methods_replies_or_frames(self):
+        for version in (1,2):
+            capability=capability_for_version(version)
+            bridge=Mock(hello=dict(combatObservation=capability,inputEnabled=False))
+            bridge.request.return_value=(dict(type='combatObservation',enabled=True,capability=copy.deepcopy(capability)),b'')
+            self.assertEqual(negotiate(bridge),capability)
+            other=capability_for_version(3-version)
+            bridge.request.return_value=(dict(type='combatObservation',enabled=True,capability=other),b'')
+            with self.assertRaises(ValueError):negotiate(bridge)
+            with self.assertRaises(ValueError):validate_frame(native_frame(3-version),capability)
+            frame=native_frame(version);frame['combatEvidence']['method']=other['method']
+            with self.assertRaises(ValueError):validate_frame(frame)
+        for change in (dict(version=True),dict(version=3),dict(method=METHOD),
+                       dict(enemyRegion=CAPABILITY['enemyRegion']),dict(rejectsLowerBoundaryComponents=False)):
+            with self.subTest(change=change),self.assertRaises(ValueError):
+                validate_capability(dict(CAPABILITY_V2,**change))
+        missing=copy.deepcopy(CAPABILITY_V2);del missing['rejectsLowerBoundaryComponents']
+        with self.assertRaises(ValueError):validate_capability(missing)
+
+    def test_scene_contract_cannot_be_stripped_or_silently_upgraded(self):
+        self.assertEqual(scene_capability(dict(observations=[native_frame()])),CAPABILITY)
+        self.assertEqual(scene_capability(dict(nativeCombatObservation=CAPABILITY_V2,
+            observations=[native_frame(2)])),CAPABILITY_V2)
+        for scene in (dict(observations=[native_frame(2)]),dict(nativeCombatObservation=CAPABILITY_V2,observations=[]),
+                      dict(nativeCombatObservation=CAPABILITY_V2,observations=[native_frame()])):
+            with self.subTest(scene=scene),self.assertRaises(ValueError):scene_capability(scene)
+
+    def test_actual_read_only_stream_binds_v2_and_rejects_a_v1_frame(self):
+        import stream_client as client
+        from test_stream_segments import ContinuousBridge,Recorder
+        for frame_version in (2,1):
+            class NativeBridge(ContinuousBridge):
+                def request(self,command,**kwargs):
+                    if command=='enableCombatObservation':
+                        self.commands.append((command,kwargs))
+                        return dict(type='combatObservation',enabled=True,capability=copy.deepcopy(CAPABILITY_V2)),b''
+                    result,pixels=super().request(command,**kwargs)
+                    if command=='frame':
+                        now=result['capturedAtMs'];evidence=native_frame(frame_version)['combatEvidence']
+                        source=dict(captureEpoch='native-epoch',timestamp100ns=int((now+10000)*10000),
+                            capturedAtMs=now-1,acquiredAtMs=now,freshnessAtMs=now-1,freshnessClockKind='reported_compositor_qpc')
+                        evidence.update(frameId=result['frameId'],sourceFrame=copy.deepcopy(source))
+                        result.update(sourceWidth=1920,sourceHeight=1080,sourceFrame=source,combatEvidence=evidence)
+                    return result,pixels
+            with self.subTest(frame_version=frame_version),tempfile.TemporaryDirectory() as folder:
+                args=client.parse_arguments(['--model','observe','--seconds','.15','--fps','20',
+                    '--native-combat-observation','--record-dir',str(Path(folder)/'recording'),
+                    '--output',str(Path(folder)/'run.json')])
+                bridge=NativeBridge('inert');bridge.hello.update(inputEnabled=False,combatObservation=copy.deepcopy(CAPABILITY_V2))
+                with patch.object(client,'Bridge',return_value=bridge),patch.object(client,'AsyncVideoRecorder',Recorder),redirect_stdout(io.StringIO()):
+                    if frame_version==2:self.assertEqual(client.run_episode(args),0)
+                    else:
+                        with self.assertRaisesRegex(ValueError,'negotiation changed'):client.run_episode(args)
+                report=json.loads(Path(args.output).read_bytes())
+                self.assertEqual(report['nativeCombatObservation'],CAPABILITY_V2)
+                self.assertNotIn('action',[command for command,_ in bridge.commands])
+                self.assertEqual([command for command,_ in bridge.commands].count('stop'),1)
+
     def test_live_stream_negotiates_and_records_native_metadata_without_enabling_input(self):
         import stream_client as client
         from test_stream_segments import ContinuousBridge,Recorder

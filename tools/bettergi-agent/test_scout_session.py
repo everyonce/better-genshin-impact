@@ -167,8 +167,19 @@ class ScoutSessionTests(unittest.TestCase):
                 executionContext=dict(lastSequence=0)))
         write_json(folder/'plan.json',dict(owner=self.owner,enableInput=False,modelLoaded=False,
                                          navigationProfile=scout.SCOUT_PROFILE))
-        write_json(folder/'result.json',dict(status='completed',inputEnabled=False,modelLoaded=False,
-            ownerIdleMinimizedAfter=True,stableSamples=frames,observations=frames))
+        result=dict(status='completed',inputEnabled=False,modelLoaded=False,
+            ownerIdleMinimizedAfter=True,stableSamples=frames,observations=frames)
+        if getattr(self,'native_contract_version',1)==2:
+            from native_combat import CAPABILITY_V2
+            from test_native_combat import native_frame
+            result['nativeCombatObservation']=copy.deepcopy(CAPABILITY_V2)
+            for frame in frames:
+                source=frame['sourceFrame'];at=source['freshnessAtMs']
+                source.update(capturedAtMs=at,acquiredAtMs=at+1,freshnessClockKind='reported_compositor_qpc')
+                evidence=native_frame(2)['combatEvidence']
+                evidence.update(frameId=frame['frameId'],sourceFrame=copy.deepcopy(source),enemyBarCandidates=[])
+                frame.update(type='frame',sourceWidth=1920,sourceHeight=1080,combatEvidence=evidence)
+        write_json(folder/'result.json',result)
         write_json(image.with_suffix('.json'),dict(frames[0],imageSha256=image_sha))
         path=folder/'review.json'
         write_json(path,dict(routeId=route,points=[list(point) for point in points],
@@ -176,6 +187,28 @@ class ScoutSessionTests(unittest.TestCase):
             maximumLegs=1,inspectedHealth=2000,inspectedMaximumHealth=2700,visualReview='Synthetic clear ground',
             **(dict(routeSpec=spec.document(),routeSpecSha256=spec.sha256) if spec is not None else {})))
         return path
+
+    def test_v2_reviewed_legs_keep_legacy_default_and_bind_the_declared_native_version(self):
+        """The real inert worker/reuse path selects v2 from reviewed sources, with one model load."""
+        self.native_contract_version=2
+        self.test_two_reviewed_routes_load_once_reset_history_and_retire_each_lease()
+        manifest=json.loads((self.settings.directory/'manifest.json').read_bytes())
+        self.assertEqual(manifest['scoutEncounterGuardPolicy'],scout.guard_policy())
+        self.assertEqual(manifest['scoutEncounterGuardPolicies'],scout.supported_guard_policies())
+        self.assertTrue(all(report['policyReuse']['scoutEncounterGuard']['policy']['version']==2 for report in self.audits))
+
+    def test_v2_scene_cannot_upgrade_an_old_manifest_or_lose_its_declaration(self):
+        """A resealed scene still needs its original exact capability and explicit worker permission."""
+        self.native_contract_version=2
+        route=scout.SCOUT_GRASS_ROUTE;review=self.make_review(route)
+        manifest=dict(owner=self.owner,routes={route:[list(point) for point in scout.route_points(route)]},
+                      scoutEncounterGuardPolicy=scout.guard_policy())
+        with self.assertRaisesRegex(ValueError,'did not declare'):scout.review_evidence(review,manifest,0)
+        manifest['scoutEncounterGuardPolicies']=scout.supported_guard_policies()
+        self.assertEqual(scout.review_evidence(review,manifest,0)['scoutEncounterGuard']['policy']['version'],2)
+        result_path=review.parent/'result.json';result=json.loads(result_path.read_bytes())
+        result.pop('nativeCombatObservation');write_json(result_path,result)
+        with self.assertRaisesRegex(ValueError,'negotiation changed'):scout.review_evidence(review,manifest,0)
 
     def driver(self, watch):
         """Simulate separately supplied requests only after each prior leg has fully returned."""
@@ -213,7 +246,7 @@ class ScoutSessionTests(unittest.TestCase):
         self.episodes.append((args,policy.weights,policy.graph,control.run_id))
         if self.admit_guard:
             from test_scout_encounter_guard import sample
-            frame=sample(health=args.scout_encounter_guard['baselineHealthFraction'])
+            frame=sample(health=args.scout_encounter_guard['baselineHealthFraction'],version=args.scout_encounter_guard['policy']['version'])
             control.scout_encounter_guard.observe(frame,1)
             control.scout_encounter_guard.check_dispatch(frame,2)
         policy.history.append('prior-leg-history')

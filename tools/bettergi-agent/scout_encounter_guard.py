@@ -5,34 +5,56 @@ import json
 import re
 import threading
 
-from native_combat import METHOD, finite, validate_frame
+from native_combat import CAPABILITY, CAPABILITY_V2, finite, validate_capability, validate_frame
 
 
-def guard_policy():
+def guard_policy(capability=None):
     """Return a fresh fixed contract so no caller can mutate another run's limits."""
-    return dict(version=1, method=METHOD, maximumHealthFractionDrop=.08, sourceFreshnessMs=150,
+    contract=validate_capability(CAPABILITY if capability is None else capability)
+    return dict(version=contract['version'], method=contract['method'], maximumHealthFractionDrop=.08, sourceFreshnessMs=150,
                 stopOnEnemyBarCandidate=True, stopOnRedOrAmbiguousHealth=True,
                 stopOnUnavailableWhileArmed=True, acknowledgedReleaseDisarms=True,
                 requirePostReleaseHealthySource=True, attacksAllowed=False,
                 enemyIdentityVerified=False)
 
 
-def binding_from_review(review, review_sha):
+def supported_guard_policies():
+    """Declare both reviewed contracts without choosing a version before native negotiation."""
+    return [guard_policy(),guard_policy(CAPABILITY_V2)]
+
+
+def declared_guard_policies(document):
+    """Old worker proofs remain v1-only; new proofs must explicitly declare the fixed registry."""
+    canonical=lambda value:json.dumps(value,sort_keys=True,allow_nan=False)
+    if canonical(document.get('scoutEncounterGuardPolicy'))!=canonical(guard_policy()):
+        raise ValueError('Scout encounter guard default policy changed')
+    if 'scoutEncounterGuardPolicies' not in document:return [guard_policy()]
+    if canonical(document['scoutEncounterGuardPolicies'])!=canonical(supported_guard_policies()):
+        raise ValueError('Scout encounter guard supported policies changed')
+    return supported_guard_policies()
+
+
+def binding_from_review(review, review_sha, capability=None):
     """Bind the estimated-health threshold to the exact manually inspected review bytes."""
     health, maximum = review.get('inspectedHealth'), review.get('inspectedMaximumHealth')
     if (type(health) is not int or type(maximum) is not int or not 0 < health <= maximum
             or not isinstance(review_sha, str) or re.fullmatch('[a-f0-9]{64}', review_sha) is None):
         raise ValueError('Scout encounter guard requires the immutable reviewed health baseline')
-    return dict(policy=guard_policy(), reviewSha256=review_sha, inspectedHealth=health,
-                inspectedMaximumHealth=maximum, baselineHealthFraction=health/maximum)
+    contract=validate_capability(CAPABILITY if capability is None else capability)
+    binding=dict(policy=guard_policy(contract), reviewSha256=review_sha, inspectedHealth=health,
+                 inspectedMaximumHealth=maximum, baselineHealthFraction=health/maximum)
+    if contract['version']==2:binding['nativeCombatObservation']=contract
+    return binding
 
 
 def validate_binding(binding):
     """Reject changed settings, extra fields and a baseline detached from its reviewed integer health."""
-    if not isinstance(binding, dict) or binding != binding_from_review(binding, binding.get('reviewSha256')):
+    if not isinstance(binding, dict):
+        raise ValueError('Scout encounter guard binding or fixed settings changed')
+    expected=binding_from_review(binding,binding.get('reviewSha256'),binding.get('nativeCombatObservation'))
+    if binding!=expected:
         raise ValueError('Scout encounter guard binding or fixed settings changed')
     # Equality alone treats True as 1; canonical JSON also binds the numeric and boolean types.
-    expected = binding_from_review(binding, binding['reviewSha256'])
     if json.dumps(binding, sort_keys=True, allow_nan=False) != json.dumps(expected, sort_keys=True, allow_nan=False):
         raise ValueError('Scout encounter guard binding types changed')
     return copy.deepcopy(expected)
@@ -65,6 +87,7 @@ class ScoutEncounterGuard:
     def __init__(self, binding):
         """Start released with no admitted health evidence, preserving the original reviewed binding."""
         self.binding = validate_binding(binding)
+        self.native_capability=validate_capability(self.binding.get('nativeCombatObservation',CAPABILITY))
         self.sha256 = binding_sha(binding)
         self._lock = threading.RLock()
         self.intake_lock = self._lock
@@ -98,7 +121,7 @@ class ScoutEncounterGuard:
                          bindingSha256=self.sha256, clientReceivedNs=received_ns, frame=retained)
             reason, unavailable, evidence = None, False, None
             try:
-                evidence = validate_frame(frame) if frame.get('type') == 'frame' else None
+                evidence = validate_frame(frame,self.native_capability) if frame.get('type') == 'frame' else None
                 if evidence is None or evidence['state'] == 'unavailable':
                     reason, unavailable = 'nativeSensorUnavailable', True
                 elif not finite(frame.get('sourceFrameAgeMs')) or not 0 <= frame['sourceFrameAgeMs'] <= 150:
@@ -166,7 +189,7 @@ class ScoutEncounterGuard:
         with self._lock:
             if self.trip:
                 raise ScoutEncounterStop('Scout encounter guard: '+self.trip['reason'])
-            evidence = validate_frame(frame)
+            evidence = validate_frame(frame,self.native_capability)
             if (self.reason!='healthyNativeEvidence' or self.last is None
                     or evidence is None or evidence['state'] != 'valid'
                     or evidence['playerHealthColor'] != 'green' or evidence['redMaskOverloaded']

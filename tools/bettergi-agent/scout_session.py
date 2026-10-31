@@ -30,7 +30,8 @@ from map_owner import load_map_owner
 from navigation_profiles import SCOUT_PROFILE, SCOUT_PROFILES, allows_pose_scope, required_profile, scout_scope
 from run_patrol_series import SeriesGuard
 from reviewed_scout_route import ReviewedScoutRoute,reviewed_route_policy,require_navigation_review_scene
-from scout_encounter_guard import binding_from_review,guard_policy
+from scout_encounter_guard import binding_from_review,guard_policy,supported_guard_policies,declared_guard_policies
+from native_combat import scene_capability,validate_frame as validate_combat_frame
 from episode_split import reserve_split
 from audit_scout_obstacle import (OBSTACLE_ERROR, audit_failed_prefix, recovery_policy,
                                  source_contract, verify_recovery_request)
@@ -382,6 +383,11 @@ def review_evidence(path, manifest, after_ns):
     require(result.get('status')=='completed' and result.get('inputEnabled') is False
             and result.get('modelLoaded') is False and result.get('ownerIdleMinimizedAfter') is True
             and len(result.get('stableSamples',[]))==3 and not result.get('error'), 'The passive endpoint did not complete cleanly')
+    native_capability=scene_capability(result)
+    guard_binding=binding_from_review(review,review_sha,native_capability)
+    if native_capability['version']==2 or 'scoutEncounterGuardPolicy' in manifest:
+        require(guard_binding['policy'] in declared_guard_policies(manifest),
+                'This worker did not declare the reviewed native guard version')
     samples=result['stableSamples']
     for frame in samples:
         require(frame in result.get('observations',[]),'Stable scene sample is not an original native observation')
@@ -415,6 +421,9 @@ def review_evidence(path, manifest, after_ns):
         qualified.append(frame)
     require(qualified,'The reviewed image has no fresh qualified world-readiness observation')
     selected=min(qualified,key=lambda frame:frame['sourceFrameAgeMs'])
+    if native_capability['version']==2:
+        require(validate_combat_frame(selected,native_capability) is not None,
+                'Reviewed v2 image lacks its exact native evidence')
     require(selected['sourceFrame']['captureEpoch']==samples[0]['sourceFrame']['captureEpoch']
             and selected['frameWorldReadiness']['epoch']==samples[0]['frameWorldReadiness']['epoch'],
             'Reviewed image belongs to another source/world epoch')
@@ -422,7 +431,7 @@ def review_evidence(path, manifest, after_ns):
             'A fresh native scene is required after the previous leg or worker startup')
     evidence=dict(routeId=route,reviewSha256=review_sha,nativePlanSha256=plan_sha,nativeResultSha256=result_sha,
                   imageSha256=review['imageSha256'],imageMetadataSha256=metadata_sha,
-                  scoutEncounterGuard=binding_from_review(review,review_sha))
+                  scoutEncounterGuard=guard_binding)
     if spec is not None:evidence.update(routeSpec=spec.document(),routeSpecSha256=spec.sha256)
     return evidence
 
@@ -456,7 +465,7 @@ def submit(directory, review):
     """Publish one explicit immutable request; this function never generates another destination."""
     directory=live_path(directory)
     manifest,_=read_json(directory/'manifest.json')
-    require(manifest.get('scoutEncounterGuardPolicy')==guard_policy(),'This worker lacks the fixed scout encounter guard')
+    declared_guard_policies(manifest)
     state,_=read_json(directory/'session.json')
     require(state.get('sessionId')==manifest['sessionId'] and state.get('state')=='awaitingReview'
             and not (directory/'STOP').exists(),'The scout worker is not waiting for a reviewed request')
@@ -567,7 +576,7 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
             routes={route:[list(point) for point in route_points(route)] for route in routes},navigationProfile=profile,
             modelConfigurationSha256=canonical_sha(configuration),configuration=configuration,
             stopTemperatureC=78,sourceFreshnessMs=150,actionHoldMs=base.action_hold_ms,legDeadlineSeconds=35,sessionSeconds=settings.seconds,
-            scoutEncounterGuardPolicy=guard_policy())
+            scoutEncounterGuardPolicy=guard_policy(),scoutEncounterGuardPolicies=supported_guard_policies())
         manifest.update(history_declaration(base))
         if getattr(settings,'allow_reviewed_routes',False):manifest['reviewedScoutRoutePolicy']=reviewed_route_policy(profile)
         if getattr(settings,'allow_inspected_obstacle_recovery',False):
@@ -622,7 +631,7 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
         proof=dict(version=1,kind='scout-policy-session',sessionId=session_id,worker=manifest['worker'],owner=owner,navigationProfile=profile,
                    modelConfigurationSha256=manifest['modelConfigurationSha256'],configuration=configuration,
                    checkpointSha256=OPEN_P2P_SHA256,modelLoads=1,modelLoadSeconds=state['modelLoadSeconds'],
-                   scoutEncounterGuardPolicy=guard_policy())
+                   scoutEncounterGuardPolicy=guard_policy(),scoutEncounterGuardPolicies=copy.deepcopy(manifest['scoutEncounterGuardPolicies']))
         proof.update(history_declaration(base))
         if 'reviewedScoutRoutePolicy' in manifest:proof['reviewedScoutRoutePolicy']=manifest['reviewedScoutRoutePolicy']
         if 'inspectedObstacleRecoveryPolicy' in manifest:

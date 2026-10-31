@@ -188,18 +188,30 @@ class ChildReconciliationTests(unittest.TestCase):
         self.assertFalse(result['childStartDispatched'])
         self.assertEqual(result['root']['instanceNonce'],'root-epoch')
 
-    def test_stopped_pilot_with_active_missing_or_untyped_ownership_never_dispatches(self):
-        """Every stopped-state release flag must be present and the literal boolean false."""
+    def test_pinned_upgrade_accepts_faulted_pilot_only_after_explicit_release(self):
+        """A completed script fault must not strand an otherwise idle child or trigger another stop request."""
+        self.child = dict(self.previous,pilotState='faulted',taskRunning=False,
+                          agentStreamRunning=False,serviceOwnsPilot=False)
+        digest = hashlib.sha256((self.target/'User/config.json').read_bytes()).hexdigest()
+        result = self.pinned_upgrade(target_config_sha256=digest)
+        self.assertEqual(self.commands,['restartApp'])
+        self.assertTrue(result['childReplaced'])
+        self.assertFalse(result['childStartDispatched'])
+        self.assertEqual(result['root']['instanceNonce'],'root-epoch')
+
+    def test_terminal_pilot_with_active_missing_or_untyped_ownership_never_dispatches(self):
+        """Every stopped/faulted release flag must be present and the literal boolean false."""
         missing = object()
         released = dict(self.previous,pilotState='stopped',taskRunning=False,
                         agentStreamRunning=False,serviceOwnsPilot=False)
-        for field in ('taskRunning','agentStreamRunning','serviceOwnsPilot'):
-            for value in (missing,True,None,0,'false'):
-                self.child = released.copy()
-                if value is missing:self.child.pop(field)
-                else:self.child[field] = value
-                with self.subTest(field=field,value=value), self.assertRaisesRegex(control.ControlError,'busy|unknown'):
-                    self.pinned_upgrade()
+        for state in ('stopped','faulted'):
+            for field in ('taskRunning','agentStreamRunning','serviceOwnsPilot'):
+                for value in (missing,True,None,0,'false'):
+                    self.child = dict(released,pilotState=state)
+                    if value is missing:self.child.pop(field)
+                    else:self.child[field] = value
+                    with self.subTest(state=state,field=field,value=value), self.assertRaisesRegex(control.ControlError,'busy|unknown'):
+                        self.pinned_upgrade()
         self.assertEqual(self.commands,[])
         self.assertFalse((self.previous_path/'User/ExternalControl').exists())
 

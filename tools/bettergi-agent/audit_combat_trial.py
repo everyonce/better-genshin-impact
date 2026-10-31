@@ -8,7 +8,7 @@ from pathlib import Path
 
 from combat_trial_guard import CombatTrialGuard, bind_review, canonical, proposal_rejection, sensor_frame, trial_policy
 from episode_split import read_split
-from native_combat import validate_frame
+from native_combat import validate_capability,validate_frame
 from policy_rgb_archive import verify_policy_rgb
 
 
@@ -122,11 +122,14 @@ def verify_frozen_goal(episode):
 def audit_episode(episode, events, frames, recording_folder, binding):
     """Join replayed authority, actual proposal records, terminal receipts and exact retained RGB."""
     require(canonical(episode.get('combatTrialGuard')) == canonical(binding), 'Episode combat binding differs')
+    capability=validate_capability(episode['hello'].get('combatObservation'))
+    if capability['version']==2 or 'nativeCombatObservation' in episode:
+        validate_capability(episode.get('nativeCombatObservation'),capability)
     replay = replay_events(binding, episode['hello'], events)
     by_frame = {}
     for index, row in enumerate(frames):
         require(type(row.get('frameId')) is int and row['frameId'] not in by_frame, 'Repeated recorded RGB frame')
-        validate_frame(row)
+        validate_frame(row,capability)
         verify_policy_rgb(recording_folder, row.get('policyRgb'))
         require(row.get('videoFrameIndex') == index
                 and row['policyRgb']['file'] == f"policy-{index:08d}-frame-{row['frameId']:012d}.rgb",

@@ -1,4 +1,4 @@
-"""Verify the sealed SIREN owner through the explicitly bounded R57 → R58 → R59 → R60 → R61 → R62 chain."""
+"""Verify the sealed SIREN owner through the explicitly bounded R57 → R58 → R59 → R60 → R61 → R62 → R63 chain."""
 import argparse
 import hashlib
 import json
@@ -11,7 +11,7 @@ ROOT_DLL = '0bd78a568fe314a8d97312f0d5c7a2375e93e4325e288ac50d4953946b26ec62'
 OLD_DLL = '0c849ea73fc52ec236bb741044bc45919b9578856607379d8e588681bad2b1ff'
 CLEAN_CAPTURE = {'captureMode':'WindowsGraphicsCaptureV2','wgcV2ReadbackMode':'blocking',
                  'wgcV2SourceRetention':'hold-until-readback-v1','wgcV2UseCpuConvert':True}
-# R62 keeps only the freshly published English defaults alongside the public capture settings.
+# R62 and R63 keep only freshly published English defaults alongside the public capture settings.
 R62_CLEAN_CAPTURE = {**CLEAN_CAPTURE,'otherConfig':{'uiCultureInfoName':'en','gameCultureInfoName':'en'}}
 
 
@@ -61,7 +61,7 @@ def prior_owner(path):
 
 def target_package(number=58):
     """Independently check both selected binaries against the numbered managed build manifest."""
-    require(number in (58,59,60,61,62), 'Unsupported map release')
+    require(number in (58,59,60,61,62,63), 'Unsupported map release')
     original = ARTIFACTS.resolve() / f'release-r{number}'
     # Historical identity needs only the two binaries and manifest, not a retired runtime's assets.
     # A damaged or partially present live release never falls back to its witness.
@@ -103,21 +103,23 @@ def preserve_package_witness(number):
 
 
 def successor_release(receipt):
-    """Inspect the finite predecessor shape before recursion; no sixth handoff or self-reference is admitted."""
+    """Inspect the finite predecessor shape before recursion; no seventh handoff or self-reference is admitted."""
     if Path(receipt['prior']).name=='warm-launcher.json':return 59
     parent,_=evidence(Path(receipt['prior']),'map-owner-lineage.json')
     if Path(parent['prior']).name=='warm-launcher.json':return 60
     grandparent,_=evidence(Path(parent['prior']),'map-owner-lineage.json')
     if Path(grandparent['prior']).name=='warm-launcher.json':return 61
     great_grandparent,_=evidence(Path(grandparent['prior']),'map-owner-lineage.json')
-    require(Path(great_grandparent['prior']).name=='warm-launcher.json','Only the bounded R58/R59/R60/R61 predecessors are supported')
-    return 62
+    if Path(great_grandparent['prior']).name=='warm-launcher.json':return 62
+    oldest,_=evidence(Path(great_grandparent['prior']),'map-owner-lineage.json')
+    require(Path(oldest['prior']).name=='warm-launcher.json','Only the bounded R58/R59/R60/R61/R62 predecessors are supported')
+    return 63
 
 
 def checked_pair(root, child, package, child_sha):
     """Require an idle authenticated game child and the same connected minimized R56 host."""
-    # Historical idle receipts may omit the ownership field; newly admitted stopped pilots may not.
-    stopped_released = child.get('pilotState') == 'stopped' and child.get('serviceOwnsPilot') is False
+    # Historical idle receipts may omit ownership; stopped/faulted terminal states require explicit release.
+    terminal_released = child.get('pilotState') in ('stopped','faulted') and child.get('serviceOwnsPilot') is False
     require(root['instanceType'] == 'Primary' and root['automationEnabled'] is True and root['remoteDesktop'] is False
             and root['uiStatus'] == 'current' and root['childWindowMinimized'] is True and root['childConnectedState'] == 1
             and root['childSessionId'] == child['windowsSessionId'] and root['assemblySha256'].lower() == ROOT_DLL
@@ -125,7 +127,7 @@ def checked_pair(root, child, package, child_sha):
             'Original minimized R56 primary was not verified')
     require(child['instanceType'] == 'ChildSession' and child['automationEnabled'] is True and child['remoteDesktop'] is True
             and child['uiStatus'] == 'current' and child['automationState'] == 'game_ready' and child['runtimeRunning'] is True
-            and (child['pilotState'] in ('idle','completed','failed','cancelled') or stopped_released)
+            and (child['pilotState'] in ('idle','completed','failed','cancelled') or terminal_released)
             and ('serviceOwnsPilot' not in child or child['serviceOwnsPilot'] is False) and child['taskRunning'] is False
             and child['agentStreamRunning'] is False and child['rootProcessId'] == root['processId']
             and child['assemblySha256'].lower() == child_sha and Path(child['appDirectory']).resolve() == package,
@@ -154,7 +156,7 @@ def preflight(prior, before):
     require(checked_pair(roles['Primary'],roles['ChildSession'],package,source_sha) == old, 'Original child occupant changed')
     require(roles['ChildSession'].get('idleRestartVersion') == 2, 'Idle replacement capability unavailable')
     build, pins['buildSha256'] = target_package(number)
-    if number in (59,60,61,62):
+    if number in (59,60,61,62,63):
         game, pins['gameBeforeSha256'] = evidence(Path(before).with_name('game-before.json'),'game-before.json')
         require(set(game) == {'processId','windowsSessionId','startedFileTime','executable'}
                 and type(game['processId']) is int and game['processId'] > 0
@@ -164,18 +166,19 @@ def preflight(prior, before):
                 and isinstance(game['executable'],str) and game['executable'].casefold() in ('genshinimpact.exe','yuanshen.exe'),
                 'Missing protected game identity in the original RDP session')
         # Each newly supported handoff carries forward the exact game sealed by its immediate predecessor.
-        if number in (61,62):
+        if number in (61,62,63):
             require(game == receipt.get('protectedGame'), f'The sealed R{number-1} game lifetime changed before the R{number} handoff')
         pins['protectedGame'] = game
     return old, build, pins
 
 
 def check_clean_target(build):
-    """Require only public capture settings and, for R62, its fresh exact English language defaults."""
+    """Require only public capture settings and, for R62/R63, fresh exact English language defaults."""
     path = Path(build['targetDirectory']) / 'User/config.json'
     require(path.resolve(strict=True) == path and 0 < path.stat().st_size <= 1024, 'Missing clean target settings')
     raw = path.read_bytes()
-    expected = R62_CLEAN_CAPTURE if Path(build['targetDirectory']) == ARTIFACTS.resolve() / 'release-r62/BetterGI-English-win-x64' else CLEAN_CAPTURE
+    english_targets = {ARTIFACTS.resolve() / f'release-r{number}/BetterGI-English-win-x64' for number in (62,63)}
+    expected = R62_CLEAN_CAPTURE if Path(build['targetDirectory']) in english_targets else CLEAN_CAPTURE
     require(json.loads(raw.decode('utf-8-sig')) == expected, 'Unexpected target capture settings')
     return hashlib.sha256(raw).hexdigest()
 

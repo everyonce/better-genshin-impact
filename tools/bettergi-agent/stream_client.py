@@ -912,8 +912,17 @@ def validate_combat_trial_options(args, policy, control):
         if getattr(control, 'combat_trial_guard', None) is not None:
             raise ValueError('Combat trial authority cannot be removed or reused')
         return None
-    from combat_trial_guard import validate_binding, canonical
+    from combat_trial_guard import validate_binding, canonical, combat_scope, GROUP_SCOPE
     validate_binding(binding)
+    # The opt-in is frozen by preparation and stamped only after the worker reopens
+    # its exact armed review. A candidate count alone cannot widen input authority.
+    group = combat_scope(binding) == GROUP_SCOPE
+    for authority in (args, policy):
+        declared = getattr(authority, 'combat_trial_scope', None)
+        maximum = getattr(authority, 'combat_trial_maximum_enemy_candidates', None)
+        if (group and (declared != GROUP_SCOPE or type(maximum) is not int or maximum != 3)
+                or not group and (declared is not None or maximum is not None)):
+            raise ValueError('Combat trial scope or maximum differs from its frozen review')
     if (control is None or getattr(control, 'frozen_goal', False) is not True
             or getattr(control, 'combat_trial_guard', None) is not None
             or getattr(control, 'scout_encounter_guard', None) is not None

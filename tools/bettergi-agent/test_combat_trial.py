@@ -11,7 +11,7 @@ import unittest
 from unittest.mock import patch
 
 import combat_trial as trial
-from combat_trial_guard import canonical
+from combat_trial_guard import canonical, SINGLE_SCOPE, GROUP_SCOPE, scope_fields, trial_policy, combat_scope
 from episode_split import read_split
 from test_combat_trial_guard import OWNER, review_parts, proposal
 
@@ -246,9 +246,19 @@ class CombatTrialTests(unittest.TestCase):
         self.load_action = self.episode_action = None
         self.last_args = self.last_policy = None
 
-    def prepare(self):
+    def configure_group_review(self, *, candidates=3, visible=3):
+        """Opt in through the original review, never by changing only an observed candidate count."""
+        review=json.loads(self.evidence['review'].read_bytes())
+        review.update(scope_fields(GROUP_SCOPE),policy=trial_policy(GROUP_SCOPE),inspectedVisibleEnemyCount=visible)
+        self.evidence['review'].write_bytes(canonical(review))
+        scene=json.loads(self.evidence['scene'].read_bytes())
+        from test_combat_trial_guard import frame
+        scene['observations'][0]['combatEvidence']['enemyBarCandidates']=frame(candidates=candidates)['combatEvidence']['enemyBarCandidates']
+        self.evidence['scene'].write_bytes(canonical(scene))
+
+    def prepare(self, *, scope=SINGLE_SCOPE):
         """Prepare one immutable fixture plan through the real review/source admission path."""
-        self.plan = trial.prepare(self.folder, self.owner_file, self.evidence)
+        self.plan = trial.prepare(self.folder, self.owner_file, self.evidence, scope=scope)
         self.plan_path = self.folder / 'plan.json'
         return self.plan
 
@@ -336,6 +346,25 @@ class CombatTrialTests(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             self.worker()
         self.assertEqual((self.loads, self.lifecycle.starts), (1, 1))
+
+    def test_group_scope_is_explicit_through_plan_worker_and_request(self):
+        """The separate scope survives an actual inert worker lifecycle with every bound unchanged."""
+        self.configure_group_review()
+        self.prepare(scope=GROUP_SCOPE)
+        self.claim()
+        self.assertEqual(self.worker(),0)
+        self.assertEqual(combat_scope(self.report()),GROUP_SCOPE)
+        self.assertEqual(combat_scope(self.plan['binding']),GROUP_SCOPE)
+        self.assertEqual(self.last_args.combat_trial_scope,GROUP_SCOPE)
+        self.assertEqual(self.last_args.combat_trial_maximum_enemy_candidates,3)
+        self.assertEqual(self.last_policy.combat_trial_scope,GROUP_SCOPE)
+        self.assertEqual((self.loads,self.lifecycle.starts,self.episodes),(1,1,1))
+
+    def test_group_review_cannot_widen_an_ordinary_prepare(self):
+        """The named CLI/preparation choice is required in addition to a reviewed image."""
+        self.configure_group_review()
+        with self.assertRaisesRegex(ValueError,'explicitly selected combat scope'):self.prepare()
+        self.assertFalse(self.folder.exists())
 
     def test_host_launch_binds_worker_parent_and_cannot_replay_plan(self):
         """The host submits one ordinary command and requires its exact terminal identity."""
@@ -748,6 +777,7 @@ class CombatPreparedTrialTests(unittest.TestCase):
     identity = CombatTrialTests.identity
     episode = CombatTrialTests.episode
     report = CombatTrialTests.report
+    configure_group_review = CombatTrialTests.configure_group_review
 
     def setUp(self):
         """Reuse the isolated repository and advance only evidence clocks, never platform state."""
@@ -759,10 +789,10 @@ class CombatPreparedTrialTests(unittest.TestCase):
             active.start()
             self.addCleanup(active.stop)
 
-    def begin(self, *, claim=True):
+    def begin(self, *, claim=True, scope=SINGLE_SCOPE):
         """Freeze an actual-shaped positive pause without an encounter or attack plan."""
         self.pause_folder = ui_transition_fixture(self, 'pause')
-        self.preparation = trial.prepare_paused(self.folder, self.owner_file, self.pause_folder)
+        self.preparation = trial.prepare_paused(self.folder, self.owner_file, self.pause_folder, scope=scope)
         self.plan = self.preparation
         self.plan_path = self.folder / 'preparation.json'
         if claim:
@@ -837,6 +867,42 @@ class CombatPreparedTrialTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             trial.arm_prepared(self.plan_path, self.evidence)
         self.assertEqual((self.loads, self.lifecycle.starts), (1, 1))
+
+    def test_group_preparation_readiness_review_and_worker_match(self):
+        """A zero-input group preparation cannot become authority before its fresh matching arm."""
+        self.configure_group_review();self.begin(scope=GROUP_SCOPE)
+        self.assertFalse(self.preparation['attacksAllowed'])
+        self.assertEqual(self.worker(self.arm),0)
+        ready=json.loads((self.folder/'prepared.json').read_bytes())
+        for value in (self.preparation,ready,self.plan,self.plan['binding'],self.report()):
+            self.assertEqual(combat_scope(value),GROUP_SCOPE)
+        self.assertEqual(self.plan['binding']['inspectedVisibleEnemyCount'],3)
+        self.assertEqual((self.loads,self.lifecycle.starts,self.episodes),(1,1,1))
+
+    def test_default_preparation_rejects_later_group_review_before_lease(self):
+        """A fresh image cannot widen the scope fixed before model loading."""
+        self.begin();self.configure_group_review()
+        self.assertEqual(self.worker(self.arm),1)
+        self.assertEqual((self.loads,self.lifecycle.starts,self.episodes),(1,0,0))
+        self.assertIn('explicitly selected combat scope',self.report()['error'])
+
+    def test_group_preparation_rejects_omitted_review_scope_before_lease(self):
+        """A default single-enemy review cannot silently satisfy a prepared group scope."""
+        self.begin(scope=GROUP_SCOPE)
+        self.assertEqual(self.worker(self.arm),1)
+        self.assertEqual((self.loads,self.lifecycle.starts,self.episodes),(1,0,0))
+
+    def test_group_readiness_scope_removal_preserves_failure_without_arm(self):
+        """The ready worker's scope is part of the immutable handoff, not an inferred model setting."""
+        self.configure_group_review();self.begin(scope=GROUP_SCOPE)
+        def remove_scope(ready):
+            """Tamper only a retained readiness declaration before any resume or arm."""
+            path=self.folder/'prepared.json';value=json.loads(path.read_bytes())
+            value.pop('combatScope');value.pop('maximumEnemyBarCandidates')
+            path.write_bytes(canonical(value))
+            self.arm()
+        self.assertEqual(self.worker(remove_scope),1)
+        self.assertEqual((self.lifecycle.starts,self.episodes),(0,0))
 
     def test_ordinary_host_keeps_preparation_claim_and_final_plan_distinct(self):
         """The broker launches one waiting worker and retires against the final armed plan."""

@@ -7,15 +7,15 @@ import tempfile
 import unittest
 
 from audit_combat_trial import audit_episode, replay_events, verify_retirement, verify_temperatures, verify_preparation_chain
-from combat_trial_guard import CombatTrialGuard
+from combat_trial_guard import CombatTrialGuard, GROUP_SCOPE, scope_fields, trial_policy
 from policy_rgb_archive import write_policy_rgb
-from test_combat_trial_guard import HELLO, OWNER, binding, frame, proposal,review_parts
+from test_combat_trial_guard import HELLO, OWNER, binding, frame, proposal,review_parts,group_review_parts
 from native_combat import CAPABILITY,CAPABILITY_V2,capability_for_version
 
 
-def completed_trace(version=1):
+def completed_trace(version=1, *, group=False):
     """Produce three deterministic native pulses without a pipe, clock wait or GPU."""
-    parts=review_parts();capability=capability_for_version(version)
+    parts=group_review_parts() if group else review_parts();capability=capability_for_version(version)
     if version==2:
         parts[2]['nativeCombatObservation']=copy.deepcopy(capability)
         parts[2]['observations'][0]['combatEvidence'].update(version=2,method=capability['method'])
@@ -26,6 +26,7 @@ def completed_trace(version=1):
 
     def source_frame(*args,**kwargs):
         """Emit one version consistently through the source, native protocol and guard replay."""
+        kwargs.setdefault('candidates',3 if group else 1)
         value=frame(*args,**kwargs)
         value['combatEvidence'].update(version=version,method=capability['method'])
         return value
@@ -103,6 +104,24 @@ class CombatTrialAuditTests(unittest.TestCase):
         self.assertEqual(report['verifiedRgbFrames'], 5)
         self.assertFalse(report['combatSuccess'])
         self.assertFalse(report['damageVerified'])
+
+    def test_group_trace_replays_and_rejects_scope_or_visible_count_substitution(self):
+        """Independent replay binds the group authority and cannot downgrade it to the old contract."""
+        for change in ('none','scope','maximum','visible','policy'):
+            with self.subTest(change=change),tempfile.TemporaryDirectory() as folder:
+                episode,events,frames,authority=completed_trace(2,group=True)
+                for index,row in enumerate(frames):
+                    row.update(width=192,height=192,videoFrameIndex=index,
+                        clientReceivedNs=int(row['serverNowMs']*1e6),transportRoundTripMs=1)
+                    row['policyRgb']=write_policy_rgb(Path(folder),index,row,bytes([index])*(192*192*3))
+                if change=='scope':authority.pop('combatScope')
+                if change=='maximum':authority['maximumEnemyBarCandidates']=4
+                if change=='visible':authority['inspectedVisibleEnemyCount']=2
+                if change=='policy':authority['policy']=trial_policy()
+                invoke=lambda:audit_episode(episode,events,frames,Path(folder),authority)
+                if change=='none':self.assertTrue(invoke()['trialCompleteVerified'])
+                else:
+                    with self.assertRaises(ValueError):invoke()
 
     def test_v2_complete_trace_requires_bound_negotiation_and_native_frames(self):
         """Every v2 completion retains its chosen contract; fully valid v1 evidence cannot replace it."""
@@ -403,6 +422,46 @@ class CombatPreparedAuditTests(unittest.TestCase):
         verify_retirement(self.plan, self.wrapper, self.document('result.json'), self.document('broker.json'),
             self.document('CONSUMED.json'), self.document('WORKER-CONSUMED.json'),
             hashlib.sha256((self.folder / 'patrol.json').read_bytes()).hexdigest())
+
+    def test_partial_group_scope_cannot_replace_default_preparation_or_readiness(self):
+        """A changed scope/max declaration is independently rejected at every paused handoff phase."""
+        for name in ('preparation.json','prepared.json'):
+            with self.subTest(name=name):
+                original=self.document(name);changed=copy.deepcopy(original)
+                changed.update(scope_fields(GROUP_SCOPE))
+                def documents(current):
+                    """Substitute only one phase while keeping the original immutable archive on disk."""
+                    return changed if current==name else self.document(current)
+                with self.assertRaises(ValueError):
+                    verify_preparation_chain(self.folder,self.plan,self.wrapper,documents)
+
+    def test_group_preparation_replays_exact_scope_and_rejects_each_removed_declaration(self):
+        """Replay an actual inert group handoff, then independently remove one phase's opt-in."""
+        import combat_trial
+        from test_combat_trial import CombatPreparedTrialTests,FakeWatch
+        fixture=CombatPreparedTrialTests();fixture.setUp()
+        try:
+            fixture.configure_group_review();fixture.begin(claim=False,scope=GROUP_SCOPE)
+            fixture.lifecycle.runner=lambda:fixture.worker(fixture.arm)
+            self.assertEqual(combat_trial.launch(fixture.plan_path,lifecycle=fixture.lifecycle,
+                watch_factory=FakeWatch,paused_preparation=True),0)
+            def document(name):
+                """Use the original separately sealed phase documents produced by the worker."""
+                return json.loads((fixture.folder/name).read_bytes())
+            plan,wrapper=fixture.plan,fixture.report()
+            self.assertIsNotNone(verify_preparation_chain(fixture.folder,plan,wrapper,document))
+            for name in ('preparation.json','prepared.json','plan','wrapper'):
+                with self.subTest(name=name):
+                    changed=copy.deepcopy(plan if name=='plan' else wrapper if name=='wrapper' else document(name))
+                    changed.pop('combatScope');changed.pop('maximumEnemyBarCandidates')
+                    def substituted(current):
+                        """Leave original bytes/hash witnesses intact while exposing the contradictory phase."""
+                        return changed if current==name else document(current)
+                    with self.assertRaises(ValueError):
+                        verify_preparation_chain(fixture.folder,changed if name=='plan' else plan,
+                            changed if name=='wrapper' else wrapper,substituted)
+        finally:
+            fixture.doCleanups()
 
     def test_archive_replay_does_not_depend_on_current_native_files(self):
         """A later native run may remove originals; the exact retained UI proof still replays."""

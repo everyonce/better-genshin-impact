@@ -6,7 +6,8 @@ import json
 import math
 from pathlib import Path
 
-from combat_trial_guard import CombatTrialGuard, bind_review, canonical, proposal_rejection, sensor_frame, trial_policy
+from combat_trial_guard import (CombatTrialGuard, bind_review, canonical, proposal_rejection, sensor_frame, trial_policy,
+                               combat_scope)
 from episode_split import read_split
 from native_combat import validate_capability,validate_frame
 from policy_rgb_archive import (JOURNAL_NAMES, RECORDING_FORMAT, read_policy_rgb, read_recording_jsonl,
@@ -287,6 +288,7 @@ def verify_preparation_chain(folder, plan, wrapper, document):
             ('preparation.json', 'prepared.json', 'RESUMED.json', 'ARM.json', 'plan.json')}
     run_id, worker, owner = plan['runId'], wrapper.get('worker'), plan['binding']['owner']
     require(wrapper.get('kind') == 'combat-trial-prepared-wrapper-v1' and wrapper.get('inputEnabledBeforeArm') is False
+        and combat_scope(preparation) == combat_scope(ready) == combat_scope(plan) == combat_scope(wrapper)
         and preparation.get('version') == 1 and preparation.get('kind') == 'combat-trial-paused-preparation-v1'
         and preparation.get('runId') == run_id and preparation.get('directory') == str(folder)
         and preparation.get('inputEnabled') is False and preparation.get('attacksAllowed') is False
@@ -422,7 +424,7 @@ def audit_trial(folder):
             and finalization.get('manifestSha256') == artifacts['patrol.json'], 'Combat wrapper identities differ')
     require(plan.get('maximumHostSeconds') == 90 and plan.get('recordingMaximumBytes') == 160 * 1024 * 1024
             and type(plan.get('maximumReviewAgeSeconds')) is int and 0 < plan['maximumReviewAgeSeconds'] <= 120
-            and canonical(plan.get('policy')) == canonical(trial_policy()), 'Combat plan widened its fixed bounds')
+            and canonical(plan.get('policy')) == canonical(trial_policy(combat_scope(plan))), 'Combat plan widened its fixed bounds')
     blobs = []
     for name in ('review', 'plan', 'scene', 'sidecar', 'image', 'goal'):
         reference = plan['evidence'][name]
@@ -432,6 +434,7 @@ def audit_trial(folder):
         blobs.append(raw)
     binding = bind_review(*blobs)
     require(canonical(binding) == canonical(plan.get('binding'))
+            and combat_scope(binding) == combat_scope(plan) == combat_scope(wrapper)
             and canonical(binding['owner']) == canonical(wrapper.get('owner')), 'Frozen combat review does not reproduce its binding')
     prepared = verify_preparation_chain(folder, plan, wrapper, document)
     required_sources = ('combat_trial.py', 'combat_trial_guard.py', 'stream_client.py', 'native_combat.py',

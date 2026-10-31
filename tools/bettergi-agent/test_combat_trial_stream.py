@@ -13,9 +13,9 @@ import unittest
 from unittest.mock import Mock, patch
 
 import stream_client as client
-from combat_trial_guard import CombatTrialStop
+from combat_trial_guard import CombatTrialStop, GROUP_SCOPE
 from native_combat import CAPABILITY
-from test_combat_trial_guard import HELLO, OWNER, PROFILE, binding, frame, proposal, review_parts
+from test_combat_trial_guard import HELLO, OWNER, PROFILE, binding, frame, proposal, review_parts, group_review_parts
 from test_resident_goals import dormant_control
 from test_stream_client import CapturingRecorder
 
@@ -121,6 +121,38 @@ class TrialBridge:
 
 
 class CombatTrialStreamTests(unittest.TestCase):
+    def test_group_scope_three_candidates_uses_same_real_loop_and_exact_pure_attacks(self):
+        """Only a matching separately stamped opt-in reaches the ordinary three-pulse stream."""
+        def group_targets(row):
+            """Keep intentional post-release unavailable frames, changing only valid native counts."""
+            if 'combatEvidence' in row:
+                row['combatEvidence']['enemyBarCandidates']=frame(candidates=3)['combatEvidence']['enemyBarCandidates']
+            return row
+        with tempfile.TemporaryDirectory() as folder:
+            args=self.arguments(folder);args.combat_trial_binding=binding(group_review_parts())
+            policy=TrialPolicy()
+            for authority in (args,policy):
+                authority.combat_trial_scope=GROUP_SCOPE;authority.combat_trial_maximum_enemy_candidates=3
+            bridge=TrialBridge(transform=group_targets)
+            self.assertEqual(self.run_inert(folder,bridge,policy,CapturingRecorder(),args=args),0)
+            self.assertEqual(len(bridge.actions),3)
+            self.assertTrue(all(item['steps']==proposal()['steps'] for item in bridge.actions))
+
+    def test_group_scope_missing_or_changed_worker_request_stamp_refuses_before_bridge(self):
+        """The review alone cannot upgrade a default or differently prepared request/policy."""
+        for target,field,value in (('args','combat_trial_scope',None),('policy','combat_trial_scope',None),
+                ('args','combat_trial_maximum_enemy_candidates',4),('policy','combat_trial_maximum_enemy_candidates',True)):
+            with self.subTest(target=target,field=field),tempfile.TemporaryDirectory() as folder:
+                args=self.arguments(folder);args.combat_trial_binding=binding(group_review_parts())
+                policy=TrialPolicy()
+                for authority in (args,policy):
+                    authority.combat_trial_scope=GROUP_SCOPE;authority.combat_trial_maximum_enemy_candidates=3
+                setattr(args if target=='args' else policy,field,value)
+                bridge=TrialBridge()
+                with self.assertRaisesRegex(ValueError,'scope or maximum'):
+                    self.run_inert(folder,bridge,policy,CapturingRecorder(),args=args)
+                self.assertEqual(bridge.commands,[])
+
     def arguments(self, folder, *, seconds=1.5):
         """Build the same explicit single-lease scope as the worker without any live prerequisites."""
         goal = Path(folder) / 'goal.json'

@@ -23,7 +23,8 @@ import uuid
 import resident_runtime as runtime
 import run_rdp_patrol as patrol
 import stream_client as client
-from combat_trial_guard import bind_review, canonical, proposal_rejection, trial_policy
+from combat_trial_guard import (bind_review, canonical, proposal_rejection, trial_policy,
+                               SINGLE_SCOPE, GROUP_SCOPE, combat_scope, scope_fields)
 from episode_split import reserve_split, read_split
 from map_owner import load_map_owner
 from policy_rgb_archive import RGB192_BYTES
@@ -189,7 +190,8 @@ def installed_resources():
         checkpoint=str(CHECKPOINT.resolve()), modelSource=str(MODEL_SOURCE.resolve()), goal=str(GOAL.resolve()))
 
 
-def prepare(folder, owner_file, evidence, *, maximum_review_age=MAX_REVIEW_AGE_SECONDS, _prepared=None):
+def prepare(folder, owner_file, evidence, *, maximum_review_age=MAX_REVIEW_AGE_SECONDS, _prepared=None,
+            scope=SINGLE_SCOPE):
     """Freeze a separately authored visual review, its originals and the installed source."""
     folder = local_path(folder, root=LIVE, existing=False)
     require(not folder.exists() if _prepared is None else folder == Path(_prepared['preparation']['directory'])
@@ -202,6 +204,8 @@ def prepare(folder, owner_file, evidence, *, maximum_review_age=MAX_REVIEW_AGE_S
     blobs = {name: read_bytes(path) for name, path in paths.items()}
     require(digest(blobs['goal']) == GOAL_SHA256, 'The installed fixed combat goal differs')
     binding = bind_review(*(blobs[name] for name in EVIDENCE_NAMES))
+    require(combat_scope(binding) == scope and (_prepared is None
+            or combat_scope(_prepared['preparation']) == scope), 'Review differs from the explicitly selected combat scope')
     require(binding['owner'] == owner, 'Review differs from the original sealed owner')
     recent_review(binding, json.loads(blobs['review']), maximum_review_age)
     resources = installed_resources()
@@ -222,9 +226,10 @@ def prepare(folder, owner_file, evidence, *, maximum_review_age=MAX_REVIEW_AGE_S
     plan = dict(version=1, kind='combat-trial-plan-v1', runId=uuid.uuid4().hex if _prepared is None else _prepared['preparation']['runId'], directory=str(folder),
         createdAtUnixNs=time.time_ns(), owner=owner, ownerFile=str(owner_file), ownerSha256=digest(read_bytes(owner_file)),
         maximumReviewAgeSeconds=maximum_review_age, maximumHostSeconds=HOST_SECONDS,
-        recordingMaximumBytes=MAX_RECORD_BYTES, policy=trial_policy(), modelConfiguration=model_settings(), binding=binding,
+        recordingMaximumBytes=MAX_RECORD_BYTES, policy=trial_policy(scope), modelConfiguration=model_settings(), binding=binding,
         evidence=records, resources=resources, checkpointSha256=runtime.OPEN_P2P_SHA256,
         checkpointStamp=file_stamp(CHECKPOINT), sourceFiles=snapshot_sources(folder) if _prepared is None else copy.deepcopy(_prepared['preparation']['sourceFiles']))
+    plan.update(scope_fields(scope))
     if _prepared is not None:
         plan['preparedPolicy'] = prepared_link(_prepared)
     verify_sources(folder, plan['sourceFiles'])
@@ -269,9 +274,10 @@ def verify_ui_proof(record, owner, operation, folder, *, originals=True):
     return actual
 
 
-def prepare_paused(folder, owner_file, pause_from):
+def prepare_paused(folder, owner_file, pause_from, *, scope=SINGLE_SCOPE):
     """Freeze a positive inventory pause and model resources, granting no input authority."""
     from combat_pause_proof import inspect_transition
+    declared_scope = scope_fields(scope)
     folder = local_path(folder, root=LIVE, existing=False)
     require(not folder.exists(), 'Preparation requires a fresh directory')
     owner_file, pause_from = local_path(owner_file, root=LIVE), local_path(pause_from, root=LIVE)
@@ -295,6 +301,7 @@ def prepare_paused(folder, owner_file, pause_from):
         goalSha256=GOAL_SHA256, resources=resources, checkpointSha256=runtime.OPEN_P2P_SHA256,
         checkpointStamp=file_stamp(CHECKPOINT), sourceFiles=snapshot_sources(folder),
         pause=retain_ui_proof(folder, pause_from, owner, 'pause'))
+    preparation.update(declared_scope)
     verify_preparation(preparation, folder, recent_pause=True)
     exclusive_json(folder / 'preparation.json', preparation)
     return preparation
@@ -304,6 +311,7 @@ def load_preparation(path):
     """A paused preparation cannot be parsed as an armed combat plan."""
     path = local_path(path, root=LIVE)
     value, sha = document(path, 2 * 1024 * 1024)
+    combat_scope(value)
     require(path.name == 'preparation.json' and value.get('directory') == str(path.parent)
         and value.get('version') == 1 and value.get('kind') == PREPARATION_KIND
         and isinstance(value.get('runId'), str) and re.fullmatch('[a-f0-9]{32}', value['runId'])
@@ -317,6 +325,7 @@ def load_preparation(path):
 
 def verify_preparation(preparation, folder, *, recent_pause=False, originals=True):
     """Keep source, owner, goal and pause evidence immutable throughout preparation."""
+    combat_scope(preparation)
     require(preparation['owner'] == load_map_owner(preparation['ownerFile'])
         and digest(read_bytes(preparation['ownerFile'])) == preparation['ownerSha256'], 'Prepared owner evidence changed')
     expected = dict(gpuPython=GPU_PYTHON, checkpoint=CHECKPOINT, modelSource=MODEL_SOURCE, goal=GOAL)
@@ -340,6 +349,7 @@ def ready_preparation(path, *, require_waiting=True):
     claim, _ = document(folder / 'CONSUMED.json', 4096)
     worker, _ = document(folder / 'WORKER-CONSUMED.json', 4096)
     require(ready.get('version') == 1 and ready.get('kind') == 'combat-prepared-policy-v1'
+        and combat_scope(ready) == combat_scope(preparation)
         and ready.get('state') == 'preparedPaused' and ready.get('inputEnabled') is False
         and ready.get('runId') == preparation['runId'] and ready.get('preparationSha256') == sha
         and ready.get('owner') == preparation['owner'] and ready.get('goalSha256') == preparation['goalSha256']
@@ -409,6 +419,7 @@ def verify_prepared_plan(plan, folder, *, originals=True):
     resumed, resumed_sha = document(folder / 'RESUMED.json')
     bundle.update(resumedSha256=resumed_sha, armRequestId=link.get('armRequestId'))
     require(link == prepared_link(bundle) and re.fullmatch('[a-f0-9]{32}', link.get('armRequestId', ''))
+        and combat_scope(plan) == combat_scope(preparation) == combat_scope(ready) == combat_scope(plan['binding'])
         and plan['runId'] == preparation['runId'] and plan['owner'] == preparation['owner']
         and plan['ownerFile'] == preparation['ownerFile'] and plan['ownerSha256'] == preparation['ownerSha256']
         and plan['sourceFiles'] == preparation['sourceFiles'] and plan['resources'] == preparation['resources']
@@ -448,7 +459,8 @@ def arm_prepared(preparation_path, evidence, *, maximum_review_age=MAX_REVIEW_AG
     try:
         verify_preparation(preparation, folder)
         bundle.update(resumedSha256=resumed_sha, armRequestId=request_id)
-        plan = prepare(folder, preparation['ownerFile'], evidence, maximum_review_age=maximum_review_age, _prepared=bundle)
+        plan = prepare(folder, preparation['ownerFile'], evidence, maximum_review_age=maximum_review_age, _prepared=bundle,
+                       scope=combat_scope(preparation))
         verify_prepared_plan(plan, folder)
         require(ready_preparation(preparation_path)['readySha256'] == bundle['readySha256'], 'Worker left the prepared phase')
         arm = dict(version=1, kind='combat-preparation-arm-v1', runId=preparation['runId'], requestId=request_id,
@@ -470,7 +482,7 @@ def load_plan(path):
         and plan.get('version') == 1 and plan.get('kind') == 'combat-trial-plan-v1'
         and isinstance(plan.get('runId'), str) and re.fullmatch('[0-9a-f]{32}', plan['runId'])
         and plan.get('maximumHostSeconds') == HOST_SECONDS and plan.get('recordingMaximumBytes') == MAX_RECORD_BYTES
-        and canonical(plan.get('policy')) == canonical(trial_policy())
+        and canonical(plan.get('policy')) == canonical(trial_policy(combat_scope(plan)))
         and canonical(plan.get('modelConfiguration')) == canonical(model_settings()), 'Invalid fixed combat plan')
     require(('preparedPolicy' in plan) == any((path.parent / name).exists() for name in PREPARATION_MARKERS),
             'Combat plan stripped or invented its paused preparation declaration')
@@ -497,7 +509,8 @@ def verify_plan(plan, folder):
     require(plan['evidence']['goal']['path'] == str(GOAL.resolve()) and digest(blobs['goal']) == GOAL_SHA256,
             'Fixed combat goal changed')
     binding = bind_review(*(blobs[name] for name in EVIDENCE_NAMES))
-    require(canonical(binding) == canonical(plan['binding']) and binding['owner'] == plan['owner'], 'Combat review binding changed')
+    require(canonical(binding) == canonical(plan['binding']) and binding['owner'] == plan['owner']
+        and combat_scope(binding) == combat_scope(plan), 'Combat review binding changed')
     recent_review(binding, json.loads(blobs['review']), plan['maximumReviewAgeSeconds'])
     verify_sources(folder, plan['sourceFiles'])
     if 'preparedPolicy' in plan:
@@ -564,6 +577,9 @@ def episode_arguments(plan):
     if 'binding' in plan:
         args.combat_trial_binding = copy.deepcopy(plan['binding'])
         args.combat_trial_owner = copy.deepcopy(plan['owner'])
+        if combat_scope(plan) == GROUP_SCOPE:
+            args.combat_trial_scope = GROUP_SCOPE
+            args.combat_trial_maximum_enemy_candidates = 3
     else:
         require(plan.get('kind') == PREPARATION_KIND and plan.get('inputEnabled') is False,
                 'Only a zero-input preparation may load without combat authority')
@@ -585,6 +601,7 @@ def await_prepared_arm(preparation, preparation_sha, policy, identity, claim, co
         modelConfigurationSha256=digest(canonical(model_settings())), policyMetadata=copy.deepcopy(policy.metadata),
         modelPreparation=copy.deepcopy(model_preparation),
         preparedAtUnixNs=time.time_ns(), preparedAtClientNs=time.perf_counter_ns())
+    ready.update(scope_fields(combat_scope(preparation)))
     ready_sha = publish_once(folder / 'prepared.json', ready)
     control.publish(state='preparedPaused', inputEnabled=False, worker=identity, modelLoads=1,
                     preparationSha256=preparation_sha, preparedSha256=ready_sha)
@@ -729,6 +746,7 @@ def run_worker(plan_path, *, lifecycle=None, loader=None, episode=None, identity
     if paused_preparation:
         report.update(kind='combat-trial-prepared-wrapper-v1', preparationSha256=preparation_sha,
                       preparedPolicy=None, armSha256=None, inputEnabledBeforeArm=False)
+    report.update(scope_fields(combat_scope(plan)))
     control = watch = policy = None
     native_error = None
     try:
@@ -788,6 +806,9 @@ def run_worker(plan_path, *, lifecycle=None, loader=None, episode=None, identity
         # This stamp is minted only after the original goal survived both sides
         # of loading; the stream checks it again before opening its pipe.
         policy.combat_trial_goal_sha256 = plan['binding']['goalSha256']
+        if combat_scope(plan) == GROUP_SCOPE:
+            policy.combat_trial_scope = GROUP_SCOPE
+            policy.combat_trial_maximum_enemy_candidates = 3
         report['policyMetadata'] = copy.deepcopy(policy.metadata)
         control.set_initial_goal(copy.deepcopy(policy.metadata.get('goal')), 'stationary')
         client.validate_combat_trial_options(args, policy, control)
@@ -1010,10 +1031,12 @@ def main(argv=None):
         prepare_parser.add_argument('--' + ('native-plan' if name == 'plan' else 'native-scene' if name == 'scene' else name),
                                     dest=name, type=Path, required=True)
     prepare_parser.add_argument('--maximum-review-age-seconds', type=int, default=MAX_REVIEW_AGE_SECONDS)
+    prepare_parser.add_argument('--combat-scope', choices=(SINGLE_SCOPE, GROUP_SCOPE), default=SINGLE_SCOPE)
     paused_parser = commands.add_parser('prepare-paused')
     paused_parser.add_argument('--directory', type=Path, required=True)
     paused_parser.add_argument('--owner-from', type=Path, required=True)
     paused_parser.add_argument('--pause-from', type=Path, required=True)
+    paused_parser.add_argument('--combat-scope', choices=(SINGLE_SCOPE, GROUP_SCOPE), default=SINGLE_SCOPE)
     for name in ('launch-prepared', 'worker-prepared', 'stop-prepared', 'record-resume', 'arm'):
         command_parser = commands.add_parser(name)
         command_parser.add_argument('--preparation', type=Path, required=True)
@@ -1028,7 +1051,7 @@ def main(argv=None):
         commands.add_parser(name).add_argument('--plan', type=Path, required=True)
     args = parser.parse_args(argv)
     if args.command == 'prepare-paused':
-        preparation = prepare_paused(args.directory, args.owner_from, args.pause_from)
+        preparation = prepare_paused(args.directory, args.owner_from, args.pause_from, scope=args.combat_scope)
         print(json.dumps(dict(preparation=str(args.directory / 'preparation.json'), runId=preparation['runId'], inputEnabled=False)))
         return 0
     if args.command == 'record-resume':
@@ -1049,7 +1072,7 @@ def main(argv=None):
         return operation(args.preparation, paused_preparation=True)
     if args.command == 'prepare':
         plan = prepare(args.directory, args.owner_from, {name: getattr(args, name) for name in EVIDENCE_NAMES[:-1]},
-                       maximum_review_age=args.maximum_review_age_seconds)
+                       maximum_review_age=args.maximum_review_age_seconds, scope=args.combat_scope)
         print(json.dumps(dict(plan=str(args.directory / 'plan.json'), runId=plan['runId'])))
         return 0
     if args.command == 'stop':

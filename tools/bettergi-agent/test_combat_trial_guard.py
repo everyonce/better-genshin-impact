@@ -2,10 +2,12 @@
 import copy
 import hashlib
 import json
+from pathlib import Path
 import unittest
 
 from combat_trial_guard import (CombatTrialGuard, CombatTrialStop, PROFILE, REVIEW_KIND,
-                               bind_review, canonical, proposal_rejection, trial_policy)
+                               bind_review, canonical, proposal_rejection, trial_policy,
+                               SINGLE_SCOPE, GROUP_SCOPE, scope_fields, combat_scope)
 from native_combat import CAPABILITY, CAPABILITY_V2, METHOD
 
 
@@ -61,12 +63,96 @@ def binding(parts=None):
     return bind_review(*(canonical(value) if index < 4 else value for index, value in enumerate(parts)))
 
 
+def group_review_parts(candidates=3, visible=3):
+    """Author explicit visual group authority while retaining the same source/image joins."""
+    parts = review_parts()
+    parts[0].update(scope_fields(GROUP_SCOPE), policy=trial_policy(GROUP_SCOPE), inspectedVisibleEnemyCount=visible)
+    parts[2]['observations'][0]['combatEvidence']['enemyBarCandidates'] = frame(candidates=candidates)['combatEvidence']['enemyBarCandidates']
+    return parts
+
+
 def proposal(duration=100):
     """Represent one unchanged policy normal-attack proposal."""
     return dict(parseValid=True, steps=[dict(keys=['LBUTTON'], mouseDx=0, mouseDy=0, durationMs=duration)])
 
 
 class CombatTrialGuardTests(unittest.TestCase):
+    def test_legacy_policy_remains_exact_and_group_never_inferred(self):
+        """The default contract has no opt-in fields and still refuses multiple native candidates."""
+        self.assertEqual(trial_policy(), dict(version=1, maximumSeconds=5, maximumActions=3, maximumSourceAgeMs=150,
+            minimumHoldMs=33, maximumHoldMs=100, stopTemperatureC=78, healthFractionDrop=.08,
+            admissionSources=2, postActionDelayMs=60, allowedKeys=['LBUTTON'], maximumOutstandingActions=1,
+            requireSingleEnemyBarCandidate=True, retryAllowed=False, renewAllowed=False, goalFrozen=True,
+            enemyIdentityVerified=False, damageVerified=False, killVerified=False))
+        self.assertEqual(combat_scope(binding()), SINGLE_SCOPE)
+        parts = group_review_parts()
+        for key in ('combatScope', 'maximumEnemyBarCandidates', 'inspectedVisibleEnemyCount'):
+            parts[0].pop(key)
+        parts[0]['policy'] = trial_policy()
+        with self.assertRaises(ValueError):binding(parts)
+
+    def test_group_review_needs_explicit_matching_scope_count_and_candidate(self):
+        """Neither an observed count nor a partial declaration widens the fixed scope."""
+        for count in (1, 2, 3):
+            self.assertEqual(combat_scope(binding(group_review_parts(count))), GROUP_SCOPE)
+        mutations = [lambda p:p[0].pop('combatScope'), lambda p:p[0].pop('maximumEnemyBarCandidates'),
+            lambda p:p[0].pop('inspectedVisibleEnemyCount'), lambda p:p[0].update(maximumEnemyBarCandidates=4),
+            lambda p:p[0].update(maximumEnemyBarCandidates=True), lambda p:p[0].update(policy=trial_policy()),
+            lambda p:p[0].update(inspectedVisibleEnemyCount=True), lambda p:p[0].update(inspectedVisibleEnemyCount=4),
+            lambda p:p[0].update(inspectedVisibleEnemyCount=2),
+            lambda p:p[2]['observations'][0]['combatEvidence'].update(enemyBarCandidates=[]),
+            lambda p:p[2]['observations'][0]['combatEvidence'].update(enemyBarCandidates=frame(candidates=4)['combatEvidence']['enemyBarCandidates'])]
+        for change in mutations:
+            with self.subTest(change=change):
+                parts=group_review_parts();change(parts)
+                with self.assertRaises(ValueError):binding(parts)
+
+    def test_group_drains_exactly_three_unchanged_pulses_across_one_to_three_candidates(self):
+        """A bounded group changes only eligible candidate counts, not attack or drain semantics."""
+        self.guard=CombatTrialGuard(binding(group_review_parts()),OWNER,HELLO,0)
+        self.current=frame(2,150,candidates=3)
+        self.ready()
+        for _ in range(3):self.drain()
+        state=self.guard.snapshot()
+        self.assertTrue(state['trialComplete'])
+        self.assertEqual((state['acceptedActions'],state['completedActions']),(3,3))
+        self.assertTrue(all(row['arguments']['steps']==proposal()['steps'] for row in state['completed']))
+
+    def test_group_preserves_target_loss_ambiguity_health_and_pure_action_refusal(self):
+        """Wider reviewed count never relaxes unknown, health, absent-target or mixed-action stops."""
+        for fields,reason in ((dict(candidates=0),'targetLost'),(dict(candidates=4),'ambiguousTarget'),
+                              (dict(health=.8),'healthFractionDrop')):
+            with self.subTest(reason=reason):
+                self.guard=CombatTrialGuard(binding(group_review_parts()),OWNER,HELLO,0)
+                self.current=frame(2,150,candidates=3);self.ready()
+                self.assertEqual(self.observe(frame(3,200,**fields))['state']['trip']['reason'],reason)
+        self.guard=CombatTrialGuard(binding(group_review_parts()),OWNER,HELLO,0)
+        self.current=frame(2,150,candidates=3);self.ready()
+        for step in (dict(keys=['W','LBUTTON'],mouseDx=0,mouseDy=0,durationMs=100),
+                     dict(keys=['LBUTTON'],mouseDx=1,mouseDy=0,durationMs=100)):
+            self.assertEqual(self.dispatch(proposed=dict(parseValid=True,steps=[step]))['type'],'combatTrialLocalRefusal')
+        self.assertEqual(self.guard.snapshot()['acceptedActions'],0)
+
+    def test_retained_three_visible_enemy_camp_with_zero_native_candidates_is_inadmissible(self):
+        """The real inspected camp cannot qualify merely by opting into the three-enemy maximum."""
+        folder=Path(__file__).resolve().parents[2]/'artifacts/live/2026-10-30-endurance/mondstadt-gate-r64-ground-10'
+        if not (folder/'result.json').is_file():self.skipTest('Retained local camp fixture is unavailable')
+        plan=(folder/'plan.json').read_bytes();scene=(folder/'result.json').read_bytes()
+        selected=json.loads(scene);name=selected['selectedImageName']
+        image=(folder/name).read_bytes();sidecar=(folder/(Path(name).stem+'.json')).read_bytes()
+        frame_id=json.loads(sidecar)['frameId']
+        rows=[row for row in selected['observations'] if row.get('frameId')==frame_id]
+        self.assertTrue(rows)
+        self.assertEqual(rows[0]['combatEvidence']['enemyBarCandidates'],[])
+        goal=review_parts()[-1]
+        review=dict(kind=REVIEW_KIND,sceneLabel='enemy-visible',attacksAllowed=['LBUTTON'],
+            policy=trial_policy(GROUP_SCOPE),inspectionNote='Three visible level-one enemies were inspected in the retained camp image.',
+            inspectedHealth=4015,inspectedMaximumHealth=4015,inspectedVisibleEnemyCount=3,
+            owner=json.loads(plan)['owner'],imageName=name,imageSha256=hashlib.sha256(image).hexdigest(),
+            goalSha256=hashlib.sha256(goal).hexdigest(),**scope_fields(GROUP_SCOPE))
+        with self.assertRaisesRegex(ValueError,'native target evidence'):
+            bind_review(canonical(review),plan,scene,sidecar,image,goal)
+
     def test_v2_review_binds_lease_and_every_later_observation(self):
         """A lower-screen reviewed target cannot silently switch the detector contract."""
         parts=review_parts();parts[2]['nativeCombatObservation']=copy.deepcopy(CAPABILITY_V2)

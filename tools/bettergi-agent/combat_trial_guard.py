@@ -19,17 +19,49 @@ MODEL = 'open-p2p'
 KIND = 'reviewed-combat-trial-v1'
 REVIEW_KIND = 'combat-trial-review-v1'
 PROFILE = 'p2p-native-hamming-192-v1'
+SINGLE_SCOPE = 'single-enemy-v1'
+GROUP_SCOPE = 'reviewed-group-up-to-three-v1'
 
 
-def trial_policy():
-    """Return the fixed first-trial scope; this contract cannot be tuned by a review."""
-    return dict(version=1, maximumSeconds=5, maximumActions=3, maximumSourceAgeMs=150,
+def scope_fields(scope):
+    """Declare only the named opt-in; omitted fields preserve the original single-enemy bytes."""
+    require(scope in (SINGLE_SCOPE, GROUP_SCOPE), 'Unknown combat scope')
+    return {} if scope == SINGLE_SCOPE else dict(combatScope=GROUP_SCOPE, maximumEnemyBarCandidates=3)
+
+
+def combat_scope(value):
+    """Reject partial or tunable scope declarations instead of inferring authority from target counts."""
+    require(isinstance(value, dict), 'Missing combat scope document')
+    if not any(key in value for key in ('combatScope', 'maximumEnemyBarCandidates')):
+        return SINGLE_SCOPE
+    require(value.get('combatScope') == GROUP_SCOPE and type(value.get('maximumEnemyBarCandidates')) is int
+            and value['maximumEnemyBarCandidates'] == 3, 'Invalid explicit combat scope or maximum')
+    return GROUP_SCOPE
+
+
+def inspected_count(value, scope):
+    """Bind the separately inspected visible count; native candidate count never grants the opt-in."""
+    count = value.get('inspectedVisibleEnemyCount')
+    if scope == GROUP_SCOPE:
+        require(type(count) is int and 1 <= count <= 3, 'Group combat requires an inspected visible enemy count of 1..3')
+    else:
+        require(count is None or type(count) is int and count == 1, 'Single-enemy review cannot declare a visible group')
+    return count
+
+
+def trial_policy(scope=SINGLE_SCOPE):
+    """Return one of two fixed scopes; the legacy default remains byte-for-byte unchanged."""
+    result = dict(version=1, maximumSeconds=5, maximumActions=3, maximumSourceAgeMs=150,
                 minimumHoldMs=33, maximumHoldMs=100, stopTemperatureC=78,
                 healthFractionDrop=0.08, admissionSources=2, postActionDelayMs=60,
                 allowedKeys=['LBUTTON'], maximumOutstandingActions=1,
                 requireSingleEnemyBarCandidate=True, retryAllowed=False,
                 renewAllowed=False, goalFrozen=True, enemyIdentityVerified=False,
                 damageVerified=False, killVerified=False)
+    if scope_fields(scope):
+        result.update(version=2, requireSingleEnemyBarCandidate=False, minimumEnemyBarCandidates=1,
+                      **scope_fields(scope))
+    return result
 
 
 def canonical(value):
@@ -79,13 +111,13 @@ def validate_owner(owner):
             and owner['root']['windowsSessionId'] != owner['child']['windowsSessionId'], 'Combat owner is not an RDP child')
 
 
-def health_reason(evidence, baseline):
+def health_reason(evidence, baseline, maximum_candidates=1):
     """Classify valid hazards before readiness checks, including while explicitly released."""
     if evidence['playerHealthColor'] != 'green':
         return 'redOrAmbiguousHealth'
     if evidence['playerHealthFractionEstimate'] <= baseline - 0.08:
         return 'healthFractionDrop'
-    if evidence['redMaskOverloaded'] or len(evidence['enemyBarCandidates']) > 1:
+    if evidence['redMaskOverloaded'] or len(evidence['enemyBarCandidates']) > maximum_candidates:
         return 'ambiguousTarget'
     return None
 
@@ -102,9 +134,12 @@ def bind_review(review_bytes, plan_bytes, scene_bytes, sidecar_bytes, image_byte
     review, plan, scene, sidecar, goal = [json.loads(blob) for blob in
                                        (review_bytes, plan_bytes, scene_bytes, sidecar_bytes, goal_bytes)]
     require(all(isinstance(item, dict) for item in (review, plan, scene, sidecar, goal)), 'Invalid combat review objects')
+    scope = combat_scope(review)
+    maximum_candidates = 3 if scope == GROUP_SCOPE else 1
+    visible_count = inspected_count(review, scope)
     require(review.get('kind') == REVIEW_KIND and review.get('sceneLabel') == 'enemy-visible'
             and review.get('attacksAllowed') == ['LBUTTON']
-            and canonical(review.get('policy')) == canonical(trial_policy()), 'Missing separate bounded combat authority')
+            and canonical(review.get('policy')) == canonical(trial_policy(scope)), 'Missing separate bounded combat authority')
     note = review.get('inspectionNote')
     require(isinstance(note, str) and 20 <= len(note.strip()) <= 2000, 'Combat review needs an inspection note')
     hp, maximum = review.get('inspectedHealth'), review.get('inspectedMaximumHealth')
@@ -141,15 +176,18 @@ def bind_review(review_bytes, plan_bytes, scene_bytes, sidecar_bytes, image_byte
             and int.from_bytes(image_bytes[20:24], 'big') == frame['sourceHeight'], 'Combat PNG geometry differs')
     evidence = validate_frame(frame,scene_capability(scene))
     require(evidence is not None and evidence['state'] == 'valid'
-            and health_reason(evidence, hp / maximum) is None and len(evidence['enemyBarCandidates']) == 1,
+            and health_reason(evidence, hp / maximum, maximum_candidates) is None
+            and 1 <= len(evidence['enemyBarCandidates']) <= (visible_count or 1),
             'Reviewed combat scene lacks healthy, unambiguous native target evidence')
     require(frame.get('sourceTimestampKind') == 'wgc_reported_compositor_qpc'
             and finite(frame.get('sourceFrameAgeMs')) and 0 <= frame['sourceFrameAgeMs'] < 150
             and frame.get('inputAvailable') is True and frame.get('frameWorldReadiness', {}).get('ready') is True,
             'Reviewed combat image lacks fresh world evidence')
-    binding = dict(kind=KIND, policy=trial_policy(), owner=owner, inspectedHealth=hp,
+    binding = dict(kind=KIND, policy=trial_policy(scope), owner=owner, inspectedHealth=hp,
                    inspectedMaximumHealth=maximum, baselineHealthFraction=hp / maximum,
-                   reviewedFrame=sensor_frame(frame), imageName=review['imageName'])
+                   reviewedFrame=sensor_frame(frame), imageName=review['imageName'], **scope_fields(scope))
+    if visible_count is not None:
+        binding['inspectedVisibleEnemyCount'] = visible_count
     for name, blob in zip(('review', 'plan', 'scene', 'sidecar', 'image', 'goal'), blobs):
         binding[name + 'Sha256'] = digest(blob)
     return copy.deepcopy(binding)
@@ -157,8 +195,11 @@ def bind_review(review_bytes, plan_bytes, scene_bytes, sidecar_bytes, image_byte
 
 def validate_binding(binding):
     """Reject scout reuse, changed bounds and incomplete combat provenance at construction."""
-    require(isinstance(binding, dict) and binding.get('kind') == KIND
-            and canonical(binding.get('policy')) == canonical(trial_policy()), 'Invalid combat trial binding')
+    scope = combat_scope(binding)
+    visible_count = inspected_count(binding, scope)
+    maximum_candidates = 3 if scope == GROUP_SCOPE else 1
+    require(binding.get('kind') == KIND
+            and canonical(binding.get('policy')) == canonical(trial_policy(scope)), 'Invalid combat trial binding')
     validate_owner(binding.get('owner'))
     hp, maximum = binding.get('inspectedHealth'), binding.get('inspectedMaximumHealth')
     require(type(hp) is int and type(maximum) is int and 0 < hp <= maximum
@@ -170,8 +211,9 @@ def validate_binding(binding):
     frame = binding.get('reviewedFrame')
     require(isinstance(frame, dict), 'Missing reviewed combat frame')
     evidence = validate_frame(frame)
-    require(evidence is not None and evidence['state'] == 'valid' and health_reason(evidence, hp / maximum) is None
-            and len(evidence['enemyBarCandidates']) == 1, 'Invalid reviewed combat target or health')
+    require(evidence is not None and evidence['state'] == 'valid'
+            and health_reason(evidence, hp / maximum, maximum_candidates) is None
+            and 1 <= len(evidence['enemyBarCandidates']) <= (visible_count or 1), 'Invalid reviewed combat target or health')
 
 
 def proposal_rejection(proposal):
@@ -204,6 +246,7 @@ class CombatTrialGuard:
         require(type(started_ns) is int and started_ns >= 0, 'Invalid combat start clock')
         self.intake_lock = threading.RLock()
         self._binding = copy.deepcopy(binding)
+        self._maximum_candidates = 3 if combat_scope(binding) == GROUP_SCOPE else 1
         self._native_capability=validate_capability(hello.get('combatObservation') if isinstance(hello,dict) else None)
         validate_frame(self._binding['reviewedFrame'],self._native_capability)
         self._sha = digest(canonical(binding))
@@ -303,7 +346,7 @@ class CombatTrialGuard:
                 evidence = validate_frame(frame,self._native_capability)
                 require(finite(round_trip_ms) and round_trip_ms >= 0, 'Invalid combat transport measurement')
                 if evidence is not None and evidence['state'] == 'valid':
-                    reason = health_reason(evidence, self._binding['baselineHealthFraction'])
+                    reason = health_reason(evidence, self._binding['baselineHealthFraction'], self._maximum_candidates)
                     if reason:
                         self._stop(reason, received_ns, frame=raw)
                     elif not evidence['enemyBarCandidates'] and self._target_confirmed:
@@ -358,7 +401,7 @@ class CombatTrialGuard:
                     self._last = observation
                 if self._trip is not None:
                     return self._event('Observation', received_ns, frame=raw, roundTripMs=round_trip_ms)
-                target = len(evidence['enemyBarCandidates']) == 1
+                target = 1 <= len(evidence['enemyBarCandidates']) <= self._maximum_candidates
                 after_release = self._release is None or source['freshnessAtMs'] >= self._release['response']['serverNowMs'] + 60
                 self._eligible = target and after_release
                 if not target or not after_release:
@@ -406,8 +449,9 @@ class CombatTrialGuard:
                 self._stop('invalidDispatchSource', now_ns, frame=sensor_frame(frame), validationError=str(error))
                 self._live(now_ns)
             selected_evidence = record['frame']['combatEvidence']
-            if (selected_evidence['state'] != 'valid' or len(selected_evidence['enemyBarCandidates']) != 1
-                    or health_reason(selected_evidence, self._binding['baselineHealthFraction']) is not None):
+            if (selected_evidence['state'] != 'valid'
+                    or not 1 <= len(selected_evidence['enemyBarCandidates']) <= self._maximum_candidates
+                    or health_reason(selected_evidence, self._binding['baselineHealthFraction'], self._maximum_candidates) is not None):
                 return self._event('LocalRefusal', now_ns, reason='sourceTargetUnconfirmed', **refusal_proof)
             if any(not 0 <= self._age(item, now_ns) < 150 for item in (record, self._last)):
                 return self._event('LocalRefusal', now_ns, reason='staleCombatSource', **refusal_proof)

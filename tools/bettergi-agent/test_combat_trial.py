@@ -1,5 +1,6 @@
 """CPU-only lifecycle tests for immutable, single-use reviewed combat launch plans."""
 import copy
+import io
 import json
 import os
 from pathlib import Path
@@ -13,6 +14,99 @@ import combat_trial as trial
 from combat_trial_guard import canonical
 from episode_split import read_split
 from test_combat_trial_guard import OWNER, review_parts, proposal
+
+
+def ui_transition_fixture(test, operation, suffix=''):
+    """Retain a complete synthetic native UI run without calling its platform implementation."""
+    from PIL import Image
+    from combat_pause_proof import CORE_REVISIONS, revision
+    folder = test.live / (operation + '-native' + suffix)
+    folder.mkdir()
+    app = test.root / 'artifacts/release/BetterGI-English-win-x64'
+    pilot = app / 'User/JsScript/ActOnePilot'
+    pilot.mkdir(parents=True, exist_ok=True)
+    sources, revisions = {}, {}
+    for name in sorted(CORE_REVISIONS | {'world-inventory.js', 'manifest.json', 'settings.json'}):
+        raw = ('// exact inert native source ' + name).encode()
+        (pilot / name).write_bytes(raw)
+        target = folder / 'source-snapshot' / name
+        target.parent.mkdir(exist_ok=True)
+        target.write_bytes(raw)
+        sources[name], revisions[name] = trial.digest(raw), revision(raw)
+    group = dict(index=1, projects=[dict(folderName='ActOnePilot', type='Javascript', runNum=1,
+        jsScriptSettingsObject=dict(enableInput=True, autoEnterGame=False))],
+        config=dict(pathingConfig={key: False for key in ('enabled', 'autoPickEnabled', 'autoSkipEnabled',
+            'autoRunEnabled', 'autoFightEnabled', 'jsScriptUseEnabled', 'soloTaskUseFightEnabled')}))
+    (folder / 'group.json').write_bytes(canonical(group))
+    (folder / 'group-after-stop.json').write_bytes(canonical(dict(group, index=0)))
+    plan = dict(owner=copy.deepcopy(OWNER), sourceFiles=sources, groupSha256=trial.digest(canonical(group)),
+        modelLoaded=False, autoEnterGame=False, walkingAllowed=False, attacksAllowed=False)
+    if operation == 'resume':
+        plan.update(allowedPilotOperations=['observe', 'worldInventoryClose'], maximumInventoryCloseRequests=1)
+    (folder / 'plan.json').write_bytes(canonical(plan))
+    session, now = 'inert-' + operation + suffix, time.time_ns() // 1_000_000 - 300
+    rows = []
+    for frame_id, label, paused, stamp in ((1, 'before', operation == 'resume', now),
+            (3 if operation == 'pause' else 4, 'after', operation == 'pause', now + 150)):
+        image = io.BytesIO()
+        Image.new('RGB', (1920, 1080), (frame_id, 0, 0)).save(image, 'PNG')
+        raw_image = image.getvalue()
+        hud = {key: False for key in ('world', 'dialogueReady', 'choice', 'journal', 'bigMap', 'climbing', 'auto')}
+        hud['world'] = not paused
+        ocr = [dict(text='Weapons', x=144, y=32, width=115, height=37),
+            dict(text='Weapons 13/2000', x=1604, y=33, width=195, height=30),
+            dict(text="Traveler's Handy Sword", x=1338, y=133, width=405, height=35)] if paused else []
+        relative = Path('observations') / session / f'frame-{frame_id:04d}.png'
+        observation = dict(session=session, frameId=frame_id, timestamp=stamp, screenshotPath=relative.as_posix(),
+            hud=hud, ocr=ocr, map=None if paused else dict(x=-1217, y=2508))
+        native = pilot / relative
+        native.parent.mkdir(parents=True, exist_ok=True)
+        native.write_bytes(raw_image)
+        native.with_suffix('.json').write_bytes(canonical(observation))
+        (folder / (label + '.png')).write_bytes(raw_image)
+        (folder / (label + '.json')).write_bytes(canonical(observation))
+        rows.append(dict(label=label, frameId=frame_id, source=str(native), imageSha256=trial.digest(raw_image),
+                         jsonSha256=trial.digest(canonical(observation))))
+    if operation == 'resume':
+        # Match the retained live run: native frame two is captured for Escape,
+        # between the helper's retained request frame one and terminal frame four.
+        input_frame = json.loads((folder / 'before.json').read_bytes())
+        input_frame.update(frameId=2, timestamp=now + 15,
+            screenshotPath=(Path('observations') / session / 'frame-0002.png').as_posix())
+        native = pilot / input_frame['screenshotPath']
+        native.write_bytes((folder / 'before.png').read_bytes())
+        native.with_suffix('.json').write_bytes(canonical(input_frame))
+    step = 'worldInventory' if operation == 'pause' else 'worldInventoryClose'
+    request = dict(id='request-' + operation + suffix, session=session, expectedFrameId=1,
+        createdAt=now + 1, mission='questStep', step=step)
+    revision_names = CORE_REVISIONS | ({'world-inventory.js'} if operation == 'resume' else set())
+    events = [dict(type='controllerRevision', files={name: revisions[name] for name in revision_names}, startedAt=now + 2)]
+    key = dict(type='key', key='VK_B' if operation == 'pause' else 'VK_ESCAPE', durationMs=60,
+               startedAt=now + 20, finishedAt=now + 80)
+    if operation == 'resume':
+        events.append(dict(type='worldInventoryClose', frameId=2, startedAt=now + 18, finishedAt=now + 100))
+        key['frameId'] = 2
+    events.append(key)
+    result = dict(status='completed', step=step, frameId=2 if operation == 'pause' else 3)
+    result.update(pausedInventory=True) if operation == 'pause' else result.update(worldVisible=True)
+    receipt = dict(session=session, id=request['id'], mission='questStep', status='completed', timestamp=now + 151,
+        frameId=3 if operation == 'pause' else 4, details=dict(result=result, inputEvents=events))
+    for kind, value in (('request', request), ('receipt', receipt)):
+        (folder / (request['id'] + '.' + kind + '.json')).write_bytes(canonical(value))
+    flags = dict(taskRunning=False, agentStreamRunning=False, serviceOwnsPilot=False)
+    child = dict(OWNER['child'], **flags, rootProcessId=OWNER['root']['processId'], scriptSession=session,
+        runtimeRunning=True, automationState='game_ready', pilotState='faulted', appDirectory=str(app))
+    parent = dict(OWNER['root'], **flags, uiStatus='current', childWindowMinimized=True, childConnectedState=1,
+                  childSessionId=OWNER['child']['windowsSessionId'])
+    (folder / 'owner-after-stop.json').write_bytes(canonical(dict(root=parent, child=child)))
+    report = dict(status='completed', modelLoaded=False, scriptSession=session, ownerIdleMinimizedAfter=True,
+        temporaryGroupRemoved=True, ownTerminalRequestRemoved=True, observations=rows,
+        controls=[dict(command=name, receivedAtUnixNs=(now + offset) * 1_000_000, status=copy.deepcopy(child))
+            for name, offset in (('startPilot', -10), ('stopPilot', 200))], requests=[dict(request=request, receipt=receipt)])
+    if operation == 'pause':
+        report.update(pauseVerified=True, pauseFrameId=3)
+    (folder / 'result.json').write_bytes(canonical(report))
+    return folder
 
 
 class FakeLifecycle:
@@ -646,6 +740,376 @@ class CombatTrialTests(unittest.TestCase):
         path.write_bytes(original)
         trial.request_stop(self.folder, self.plan, 'operatorStop')
         self.assertEqual(path.read_bytes(), original)
+
+
+class CombatPreparedTrialTests(unittest.TestCase):
+    """Exercise the real preparation/arm lifecycle with native artifact fixtures and inert policy hooks."""
+    loader = CombatTrialTests.loader
+    identity = CombatTrialTests.identity
+    episode = CombatTrialTests.episode
+    report = CombatTrialTests.report
+
+    def setUp(self):
+        """Reuse the isolated repository and advance only evidence clocks, never platform state."""
+        CombatTrialTests.setUp(self)
+        self.wall_ns, self.qpc_ns, self.clock_offset = time.time_ns(), time.perf_counter_ns(), 0
+        for name, method in (('time_ns', lambda: self.wall_ns + self.clock_offset),
+                             ('perf_counter_ns', lambda: self.qpc_ns + self.clock_offset)):
+            active = patch.object(trial.time, name, method)
+            active.start()
+            self.addCleanup(active.stop)
+
+    def begin(self, *, claim=True):
+        """Freeze an actual-shaped positive pause without an encounter or attack plan."""
+        self.pause_folder = ui_transition_fixture(self, 'pause')
+        self.preparation = trial.prepare_paused(self.folder, self.owner_file, self.pause_folder)
+        self.plan = self.preparation
+        self.plan_path = self.folder / 'preparation.json'
+        if claim:
+            now = time.monotonic_ns()
+            trial.exclusive_json(self.folder / 'CONSUMED.json', dict(runId=self.preparation['runId'],
+                planSha256=trial.digest(self.plan_path.read_bytes()), startedMonotonicNs=now,
+                startedAtUnixNs=time.time_ns(), deadlineMonotonicNs=now + 90_000_000_000))
+
+    def worker(self, callback=None, **kwargs):
+        """Run the production waiting loop with no native, process or GPU implementation."""
+        return trial.run_worker(self.plan_path, lifecycle=self.lifecycle, loader=self.loader, episode=self.episode,
+            identity_reader=self.identity, watch_factory=kwargs.pop('watch_factory', FakeWatch),
+            paused_preparation=True, prepared_callback=callback, **kwargs)
+
+    def resume(self):
+        """Retain one post-readiness Escape proof and establish its independent QPC floor."""
+        self.clock_offset += 500_000_000
+        self.resume_folder = ui_transition_fixture(self, 'resume')
+        return trial.record_resume(self.plan_path, self.resume_folder)
+
+    def fresh_scene(self):
+        """Author a separate review whose exact compositor source follows the resume marker."""
+        self.clock_offset += 500_000_000
+        def advance(value):
+            """Update all repeated native source identities together."""
+            if isinstance(value, dict):
+                for name, item in value.items():
+                    if name == 'timestamp100ns':
+                        value[name] = time.perf_counter_ns() // 100 - 100_000
+                    else:
+                        advance(item)
+            elif isinstance(value, list):
+                for item in value:
+                    advance(item)
+        for name in ('review', 'plan', 'scene', 'sidecar'):
+            value = json.loads(self.evidence[name].read_bytes())
+            advance(value)
+            if name == 'review':
+                value['reviewedAtUnixNs'] = time.time_ns()
+            self.evidence[name].write_bytes(canonical(value))
+
+    def arm(self, ready=None):
+        """Simulate only host artifact publication after independently retained native UI evidence."""
+        self.assertEqual((self.loads, self.lifecycle.starts, self.episodes), (1, 0, 0))
+        self.assertFalse(self.last_args.enable_input)
+        self.assertEqual(self.last_args.max_input_actions, 0)
+        self.assertFalse(hasattr(self.last_args, 'combat_trial_binding'))
+        self.resume()
+        self.fresh_scene()
+        self.plan = trial.arm_prepared(self.plan_path, self.evidence)
+        return self.plan
+
+    def test_loads_once_while_paused_then_consumes_exact_arm_without_relabeling_history(self):
+        """Only the separately reviewed post-resume scene can create one unchanged attack lease."""
+        self.begin()
+        self.assertNotIn('binding', self.preparation)
+        self.assertNotIn('policy', self.preparation)
+        self.assertEqual(self.worker(self.arm), 0)
+        report = self.report()
+        self.assertEqual((self.loads, self.lifecycle.starts, self.episodes), (1, 1, 1))
+        self.assertEqual(report['kind'], 'combat-trial-prepared-wrapper-v1')
+        self.assertFalse(report['inputEnabledBeforeArm'])
+        self.assertEqual(report['preparedPolicy'], self.plan['preparedPolicy'])
+        self.assertEqual(report['policyMetadata']['historyCommit'], 'accepted-proposals-only')
+        resumed = json.loads((self.folder / 'RESUMED.json').read_bytes())['resume']['proof']
+        self.assertEqual((resumed['transition']['requestSourceFrameId'], resumed['transition']['inputSourceFrameId']), (1, 2))
+        self.assertTrue(any(name.endswith('frame-0002.png') for name in resumed['files']))
+        self.assertTrue(any(name.endswith('frame-0002.json') for name in resumed['files']))
+        self.assertEqual(json.loads((self.folder / 'ARM-CONSUMED.json').read_bytes())['armSha256'], report['armSha256'])
+        with self.assertRaises(FileExistsError):
+            self.worker()
+        with self.assertRaises(ValueError):
+            trial.arm_prepared(self.plan_path, self.evidence)
+        self.assertEqual((self.loads, self.lifecycle.starts), (1, 1))
+
+    def test_ordinary_host_keeps_preparation_claim_and_final_plan_distinct(self):
+        """The broker launches one waiting worker and retires against the final armed plan."""
+        self.begin(claim=False)
+        self.lifecycle.runner = lambda: self.worker(self.arm)
+        self.assertEqual(trial.launch(self.plan_path, lifecycle=self.lifecycle, watch_factory=FakeWatch,
+                                     paused_preparation=True), 0)
+        host = json.loads((self.folder / 'result.json').read_bytes())
+        self.assertIn('worker-prepared', self.lifecycle.command)
+        self.assertIn('--preparation', self.lifecycle.command)
+        self.assertNotEqual(host['preparationSha256'], host['planSha256'])
+        self.assertEqual(host['hostClaim']['planSha256'], host['preparationSha256'])
+        self.assertEqual(self.lifecycle.launches, 1)
+
+    def test_missing_or_altered_native_pause_proof_never_loads(self):
+        """Summary booleans cannot replace original pixels, receipts or released ownership."""
+        for index, name in enumerate(('after.png', 'request-pause.receipt.json', 'owner-after-stop.json')):
+            with self.subTest(name=name):
+                pause = ui_transition_fixture(self, 'pause', str(index))
+                target = pause / (name.replace('request-pause', 'request-pause' + str(index)))
+                target.write_bytes(b'changed')
+                with self.assertRaises((ValueError, OSError)):
+                    trial.prepare_paused(self.live / ('rejected-' + str(index)), self.owner_file, pause)
+        self.assertEqual((self.loads, self.lifecycle.starts), (0, 0))
+
+    def test_unretired_native_owner_refuses_pause_preparation(self):
+        """A terminal-looking pilot state with actual ownership remains inadmissible."""
+        pause = ui_transition_fixture(self, 'pause')
+        path = pause / 'owner-after-stop.json'
+        value = json.loads(path.read_bytes())
+        value['child']['serviceOwnsPilot'] = True
+        path.write_bytes(canonical(value))
+        with self.assertRaisesRegex(ValueError, 'ownership'):
+            trial.prepare_paused(self.folder, self.owner_file, pause)
+        self.assertEqual((self.loads, self.lifecycle.starts), (0, 0))
+
+    def test_arm_before_ready_or_precreated_handoff_has_no_input_authority(self):
+        """A host cannot declare its own ready worker or queue an arm before loading."""
+        self.begin()
+        with self.assertRaises(FileNotFoundError):
+            trial.arm_prepared(self.plan_path, self.evidence)
+        trial.exclusive_json(self.folder / 'ARM.json', dict(kind='premature'))
+        self.assertEqual(self.worker(), 1)
+        self.assertEqual((self.loads, self.lifecycle.starts), (0, 0))
+        self.assertIn('before worker admission', self.report()['error'])
+
+    def test_stop_while_awaiting_arm_retires_loaded_policy_without_listener(self):
+        """The preparation has the same STOP latch and cannot resume or renew it."""
+        self.begin()
+        self.assertEqual(self.worker(lambda ready: trial.request_stop(self.folder, self.preparation, 'testStop')), 1)
+        self.assertEqual((self.loads, self.lifecycle.starts, self.episodes), (1, 0, 0))
+        self.assertTrue(self.report()['cleanupVerified'])
+        self.assertIn('seriesOperatorStop', self.report()['error'])
+
+    def test_thermal_trip_while_waiting_never_starts_a_lease(self):
+        """Waiting preserves the unchanged temperature latch without reconnecting."""
+        self.begin()
+        class TerminalWatch(FakeWatch):
+            """Inject a latched supervision event only after real readiness publication."""
+            reason = None
+            def check(self):
+                """Preserve all ordinary STOP/deadline checks before the injected thermal event."""
+                super().check()
+                if self.reason:
+                    raise RuntimeError(self.reason)
+        def expire(ready):
+            """Model a temperature sample reaching the unchanged 78-degree limit."""
+            TerminalWatch.reason = 'gpuTemperatureLimit:78'
+        self.assertEqual(self.worker(expire, watch_factory=TerminalWatch), 1)
+        self.assertEqual((self.loads, self.lifecycle.starts), (1, 0))
+        self.assertIn('gpuTemperatureLimit:78', self.report()['error'])
+
+    def test_original_deadline_expires_while_waiting_without_renewal(self):
+        """The existing supervisor's deadline check also covers the input-disabled arm wait."""
+        self.begin()
+        watches = []
+        class ExpiringWatch(FakeWatch):
+            """Expose only the existing deadline to the inert timeout fixture."""
+            def __init__(self, *args):
+                """Keep the same claim object the real wrapper passed to supervision."""
+                super().__init__(*args)
+                watches.append(self)
+        def expire(ready):
+            """Move the inert supervisor across its original terminal boundary."""
+            watches[0].claim['deadlineMonotonicNs'] = time.monotonic_ns() - 1
+        self.assertEqual(self.worker(expire, watch_factory=ExpiringWatch), 1)
+        self.assertEqual((self.loads, self.lifecycle.starts), (1, 0))
+        self.assertIn('seriesTimeLimit', self.report()['error'])
+
+    def test_changed_arm_worker_is_consumed_and_rejected_before_input(self):
+        """An otherwise valid arm cannot be moved to another loaded process."""
+        self.begin()
+        def change(ready):
+            """Replace only the submitted worker PID after the valid arm was frozen."""
+            self.arm(ready)
+            path = self.folder / 'ARM.json'
+            value = json.loads(path.read_bytes())
+            value['worker']['processId'] += 1
+            path.write_bytes(canonical(value))
+        self.assertEqual(self.worker(change), 1)
+        self.assertEqual((self.loads, self.lifecycle.starts), (1, 0))
+        self.assertTrue((self.folder / 'ARM-CONSUMED.json').exists())
+
+    def test_changed_native_owner_after_arm_cannot_receive_the_lease(self):
+        """A replacement child cannot inherit an arm prepared for the original sealed pair."""
+        self.begin()
+        def replaced(ready):
+            """Change only the inert discovered child after a valid arm is retained."""
+            self.arm(ready)
+            self.lifecycle.child['processId'] += 1
+        self.assertEqual(self.worker(replaced), 1)
+        self.assertEqual((self.loads, self.lifecycle.starts, self.episodes), (1, 0, 0))
+        self.assertFalse(self.report()['cleanupVerified'])
+
+    def test_phase_publication_is_atomic_and_exclusive(self):
+        """A repeated publisher cannot overwrite a prior complete handoff document."""
+        path = self.live / 'atomic-phase.json'
+        trial.publish_once(path, dict(original=True))
+        with self.assertRaises(FileExistsError):
+            trial.publish_once(path, dict(replayed=True))
+        self.assertEqual(json.loads(path.read_bytes()), dict(original=True))
+        self.assertFalse(list(self.live.glob('.atomic-phase.json.*.tmp')))
+
+    def test_scene_from_before_resume_cannot_arm_the_loaded_model(self):
+        """The native QPC source and separate review must both follow the exact resume marker."""
+        self.begin()
+        def stale(ready):
+            """Retain a valid resume but deliberately reuse the older reviewed scene."""
+            self.resume()
+            trial.arm_prepared(self.plan_path, self.evidence)
+        self.assertEqual(self.worker(stale), 1)
+        self.assertEqual((self.loads, self.lifecycle.starts), (1, 0))
+        self.assertFalse((self.folder / 'ARM.json').exists())
+        self.assertIn('before the recorded resume', self.report()['error'])
+
+    def test_source_change_after_readiness_prevents_arm(self):
+        """The loaded bytes cannot be silently rebound during the inventory-to-world handoff."""
+        self.begin()
+        def changed(ready):
+            """Mutate source bytes while keeping every old authority document intact."""
+            self.code.write_bytes(b'changed worker source')
+            self.resume()
+        self.assertEqual(self.worker(changed), 1)
+        self.assertEqual((self.loads, self.lifecycle.starts), (1, 0))
+        self.assertIn('Source bytes changed', self.report()['error'])
+
+    def test_goal_change_after_readiness_prevents_arm(self):
+        """A new embedding cannot inherit the already loaded combat model's preparation."""
+        self.begin()
+        def changed(ready):
+            """Alter the pinned embedding before attempting the separate resume record."""
+            self.goal.write_bytes(self.goal.read_bytes() + b' ')
+            self.resume()
+        self.assertEqual(self.worker(changed), 1)
+        self.assertEqual((self.loads, self.lifecycle.starts), (1, 0))
+        self.assertIn('model or goal changed', self.report()['error'])
+
+    def test_owner_file_change_after_readiness_prevents_arm(self):
+        """A replacement lineage cannot reuse the original ordinary worker."""
+        self.begin()
+        def changed(ready):
+            """Keep the apparent child tuple but replace its sealed owner evidence bytes."""
+            self.owner_file.write_bytes(self.owner_file.read_bytes() + b' ')
+            self.resume()
+        self.assertEqual(self.worker(changed), 1)
+        self.assertEqual((self.loads, self.lifecycle.starts), (1, 0))
+        self.assertIn('owner evidence changed', self.report()['error'])
+
+    def test_resume_before_readiness_cannot_be_relabelled_as_fresh(self):
+        """Retaining a genuine Escape run from before prewarm does not authorize this phase."""
+        self.begin()
+        early_resume = ui_transition_fixture(self, 'resume')
+        self.assertEqual(self.worker(lambda ready: trial.record_resume(self.plan_path, early_resume)), 1)
+        self.assertEqual((self.loads, self.lifecycle.starts), (1, 0))
+        self.assertIn('Resume preceded preparation', self.report()['error'])
+
+    def test_review_age_is_not_renewed_by_the_arm(self):
+        """A post-resume marker cannot refresh an expired human review."""
+        self.begin()
+        def stale(ready):
+            """Use a new compositor source with an independently stale review timestamp."""
+            self.resume()
+            self.fresh_scene()
+            path = self.evidence['review']
+            value = json.loads(path.read_bytes())
+            value['reviewedAtUnixNs'] -= 121_000_000_000
+            path.write_bytes(canonical(value))
+            trial.arm_prepared(self.plan_path, self.evidence)
+        self.assertEqual(self.worker(stale), 1)
+        self.assertEqual((self.loads, self.lifecycle.starts), (1, 0))
+        self.assertIn('review is stale', self.report()['error'])
+
+    def test_pause_witness_must_still_be_recent_when_loading_starts(self):
+        """A delayed launch cannot start a cold load against a stale inventory snapshot."""
+        self.begin()
+        self.clock_offset += 31_000_000_000
+        self.assertEqual(self.worker(), 1)
+        self.assertEqual((self.loads, self.lifecycle.starts), (0, 0))
+        self.assertIn('no longer recent', self.report()['error'])
+
+    def test_checkpoint_validation_cannot_age_the_pause_past_model_admission(self):
+        """A slow read-only checkpoint hash does not extend the positive-pause loading gate."""
+        self.begin()
+        expected = trial.runtime.OPEN_P2P_SHA256
+        def slow_hash(path):
+            """Advance only the fixture clock while returning the exact pinned checkpoint digest."""
+            self.clock_offset += 31_000_000_000
+            return expected
+        with patch.object(trial, 'file_sha', slow_hash):
+            self.assertEqual(self.worker(), 1)
+        self.assertEqual((self.loads, self.lifecycle.starts, self.report()['modelLoadAttempts']), (0, 0, 0))
+        self.assertIn('expired before model loading', self.report()['error'])
+
+    def test_stop_during_final_source_validation_prevents_listener_creation(self):
+        """Long artifact verification cannot hide STOP between arm consumption and native start."""
+        self.begin()
+        original, checked = trial.verify_plan, []
+        def stopping(plan, folder):
+            """Latch STOP on the final independently reopened source/goal boundary."""
+            value = original(plan, folder)
+            checked.append(True)
+            if len(checked) == 2:
+                trial.request_stop(folder, plan, 'stopDuringFinalVerification')
+            return value
+        with patch.object(trial, 'verify_plan', stopping):
+            self.assertEqual(self.worker(self.arm), 1)
+        self.assertEqual((self.loads, self.lifecycle.starts), (1, 0))
+        self.assertIn('seriesOperatorStop', self.report()['error'])
+
+    def test_missing_actual_escape_input_image_prevents_resume_record(self):
+        """Host before/after PNGs cannot replace the native frame actually named by Escape."""
+        self.begin()
+        def missing(ready):
+            """Remove the exact intermediate native image while preserving both helper captures."""
+            self.clock_offset += 500_000_000
+            resume = ui_transition_fixture(self, 'resume')
+            report = json.loads((resume / 'result.json').read_bytes())
+            Path(report['observations'][0]['source']).with_name('frame-0002.png').unlink()
+            trial.record_resume(self.plan_path, resume)
+        self.assertEqual(self.worker(missing), 1)
+        self.assertEqual((self.loads, self.lifecycle.starts), (1, 0))
+        self.assertFalse((self.folder / 'RESUMED.json').exists())
+
+    def test_stale_actual_escape_input_frame_cannot_inherit_fresh_host_frame(self):
+        """The exact intermediate native frame keeps the existing 1000-ms UI freshness gate."""
+        self.begin()
+        def stale(ready):
+            """Make only the actual input observation stale while keeping the request source fresh."""
+            self.clock_offset += 500_000_000
+            resume = ui_transition_fixture(self, 'resume')
+            report = json.loads((resume / 'result.json').read_bytes())
+            path = Path(report['observations'][0]['source']).with_name('frame-0002.json')
+            value = json.loads(path.read_bytes())
+            value['timestamp'] = report['requests'][0]['receipt']['details']['inputEvents'][1]['startedAt'] - 1001
+            path.write_bytes(canonical(value))
+            trial.record_resume(self.plan_path, resume)
+        self.assertEqual(self.worker(stale), 1)
+        self.assertEqual((self.loads, self.lifecycle.starts), (1, 0))
+        self.assertIn('Inventory Escape source changed', self.report()['error'])
+
+    def test_stripped_preparation_declaration_cannot_use_the_legacy_worker(self):
+        """Historical admission remains available only for genuinely historical clean plans."""
+        self.begin()
+        def stripped(ready):
+            """Remove only the prepared authority after a valid arm was published."""
+            self.arm(ready)
+            path = self.folder / 'plan.json'
+            value = json.loads(path.read_bytes())
+            value.pop('preparedPolicy')
+            path.write_bytes(canonical(value))
+        self.assertEqual(self.worker(stripped), 1)
+        self.assertEqual((self.loads, self.lifecycle.starts), (1, 0))
+        self.assertIn('stripped or invented', self.report()['error'])
 
 
 if __name__ == '__main__':

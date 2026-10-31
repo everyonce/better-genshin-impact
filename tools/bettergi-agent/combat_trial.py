@@ -1,8 +1,10 @@
 """Prepare and consume one reviewed, five-second combat experiment in ordinary RDP.
 
 Preparation never creates a review or contacts the game. ``launch --plan PLAN``
-consumes that immutable plan once; its worker loads once and calls run_episode
-once. A failed or unknown start is never reconciled by another connection.
+preserves the original one-shot path. ``prepare-paused`` and ``launch-prepared``
+instead load without input while inventory is proved paused; ``record-resume``
+and ``arm`` bind a later host-captured scene to that same waiting worker. Both
+paths call run_episode once. Failed starts never reconnect or renew the deadline.
 """
 import argparse
 import copy
@@ -40,6 +42,10 @@ HOST_SECONDS = 90
 MAX_REVIEW_AGE_SECONDS = 120
 MAX_RECORD_BYTES = 160 * 1024 * 1024
 EVIDENCE_NAMES = ('review', 'plan', 'scene', 'sidecar', 'image', 'goal')
+PREPARATION_KIND = 'combat-trial-paused-preparation-v1'
+MAX_PAUSE_PROOF_AGE_SECONDS = 30
+PREPARATION_MARKERS = ('preparation.json', 'prepared.json', 'RESUME-REQUESTED.json', 'RESUMED.json',
+                       'ARM-REQUESTED.json', 'ARM.json', 'ARM-CONSUMED.json', 'pause-evidence', 'resume-evidence')
 
 
 def model_settings():
@@ -97,6 +103,23 @@ def exclusive_json(path, value):
         stream.flush()
         os.fsync(stream.fileno())
     return digest(raw)
+
+
+def publish_once(path, value):
+    """Publish a complete immutable handoff atomically, without overwriting a prior record."""
+    path = local_path(path, root=LIVE, existing=False)
+    temporary = path.with_name('.' + path.name + '.' + uuid.uuid4().hex + '.tmp')
+    try:
+        sha = exclusive_json(temporary, value)
+        # Windows rename is atomic and refuses an existing target. POSIX rename
+        # overwrites, so its equivalent exclusive publication uses a hard link.
+        if os.name == 'nt':
+            os.rename(temporary, path)
+        else:
+            os.link(temporary, path)
+        return sha
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def file_sha(path):
@@ -166,10 +189,11 @@ def installed_resources():
         checkpoint=str(CHECKPOINT.resolve()), modelSource=str(MODEL_SOURCE.resolve()), goal=str(GOAL.resolve()))
 
 
-def prepare(folder, owner_file, evidence, *, maximum_review_age=MAX_REVIEW_AGE_SECONDS):
+def prepare(folder, owner_file, evidence, *, maximum_review_age=MAX_REVIEW_AGE_SECONDS, _prepared=None):
     """Freeze a separately authored visual review, its originals and the installed source."""
     folder = local_path(folder, root=LIVE, existing=False)
-    require(not folder.exists(), 'A combat plan requires a fresh directory')
+    require(not folder.exists() if _prepared is None else folder == Path(_prepared['preparation']['directory'])
+        and folder.is_dir() and not (folder / 'plan.json').exists(), 'A combat plan requires a fresh namespace')
     owner_file = local_path(owner_file, root=LIVE)
     owner = load_map_owner(owner_file)
     require(set(evidence) == set(EVIDENCE_NAMES) - {'goal'}, 'Specify all five original review/native files')
@@ -185,7 +209,8 @@ def prepare(folder, owner_file, evidence, *, maximum_review_age=MAX_REVIEW_AGE_S
         path = local_path(value)
         require(path.is_dir() if name == 'modelSource' else path.is_file(), 'Missing installed resource: ' + name)
     require(file_sha(CHECKPOINT) == runtime.OPEN_P2P_SHA256, 'Installed Open P2P checkpoint differs')
-    folder.mkdir(parents=True, exist_ok=False)
+    if _prepared is None:
+        folder.mkdir(parents=True, exist_ok=False)
     retained = folder / 'review-evidence'
     retained.mkdir()
     records = {}
@@ -194,15 +219,247 @@ def prepare(folder, owner_file, evidence, *, maximum_review_age=MAX_REVIEW_AGE_S
         with target.open('xb') as stream:
             stream.write(raw)
         records[name] = dict(path=str(paths[name]), retained=str(target), sha256=digest(raw))
-    plan = dict(version=1, kind='combat-trial-plan-v1', runId=uuid.uuid4().hex, directory=str(folder),
+    plan = dict(version=1, kind='combat-trial-plan-v1', runId=uuid.uuid4().hex if _prepared is None else _prepared['preparation']['runId'], directory=str(folder),
         createdAtUnixNs=time.time_ns(), owner=owner, ownerFile=str(owner_file), ownerSha256=digest(read_bytes(owner_file)),
         maximumReviewAgeSeconds=maximum_review_age, maximumHostSeconds=HOST_SECONDS,
         recordingMaximumBytes=MAX_RECORD_BYTES, policy=trial_policy(), modelConfiguration=model_settings(), binding=binding,
         evidence=records, resources=resources, checkpointSha256=runtime.OPEN_P2P_SHA256,
-        checkpointStamp=file_stamp(CHECKPOINT), sourceFiles=snapshot_sources(folder))
+        checkpointStamp=file_stamp(CHECKPOINT), sourceFiles=snapshot_sources(folder) if _prepared is None else copy.deepcopy(_prepared['preparation']['sourceFiles']))
+    if _prepared is not None:
+        plan['preparedPolicy'] = prepared_link(_prepared)
     verify_sources(folder, plan['sourceFiles'])
     exclusive_json(folder / 'plan.json', plan)
     return plan
+
+
+def retain_ui_proof(folder, source, owner, operation):
+    """Archive every native UI dependency before publishing a preparation or resume record."""
+    from combat_pause_proof import inspect_transition
+    source = local_path(source, root=LIVE)
+    proof = inspect_transition(source, owner, operation, root=ROOT)
+    archive = folder / (operation + '-evidence')
+    archive.mkdir(exist_ok=False)
+    retained = {}
+    for index, (name, sha) in enumerate(sorted(proof['files'].items())):
+        raw = read_bytes(name)
+        require(digest(raw) == sha, 'UI proof changed before archival')
+        target = archive / (str(index).zfill(4) + '-' + Path(name).name)
+        with target.open('xb') as stream:
+            stream.write(raw)
+        retained[name] = str(target)
+    return dict(directory=str(source), proof=proof, retained=retained)
+
+
+def verify_ui_proof(record, owner, operation, folder, *, originals=True):
+    """Replay the original proof or its frozen archive without relying on summary booleans."""
+    from combat_pause_proof import inspect_transition
+    require(isinstance(record, dict) and set(record) == {'directory', 'proof', 'retained'}
+        and set(record['retained']) == set(record['proof']['files']), 'Incomplete retained UI proof')
+    def reader(path):
+        """Require exact archived bytes and, during live admission, the unchanged originals."""
+        name = str(path)
+        require(name in record['retained'], 'UI proof introduced another source')
+        archived = local_path(record['retained'][name], root=folder / (operation + '-evidence'))
+        raw = read_bytes(archived)
+        require(digest(raw) == record['proof']['files'][name]
+            and (not originals or read_bytes(local_path(name, root=ROOT / 'artifacts')) == raw), 'UI proof source changed')
+        return raw
+    actual = inspect_transition(record['directory'], owner, operation, root=ROOT, read_file=reader)
+    require(canonical(actual) == canonical(record['proof']), 'Retained UI proof no longer replays')
+    return actual
+
+
+def prepare_paused(folder, owner_file, pause_from):
+    """Freeze a positive inventory pause and model resources, granting no input authority."""
+    from combat_pause_proof import inspect_transition
+    folder = local_path(folder, root=LIVE, existing=False)
+    require(not folder.exists(), 'Preparation requires a fresh directory')
+    owner_file, pause_from = local_path(owner_file, root=LIVE), local_path(pause_from, root=LIVE)
+    owner = load_map_owner(owner_file)
+    witness = inspect_transition(pause_from, owner, 'pause', root=ROOT)
+    checked = time.time_ns()
+    require(0 <= checked - witness['terminalTimestampUnixMs'] * 1_000_000 <= MAX_PAUSE_PROOF_AGE_SECONDS * 1_000_000_000,
+            'Inventory pause witness is stale or future-dated')
+    require(witness['cleanupAcknowledgedAtUnixNs'] <= checked, 'Inventory pause cleanup is future-dated')
+    resources = installed_resources()
+    for name, value in resources.items():
+        path = local_path(value)
+        require(path.is_dir() if name == 'modelSource' else path.is_file(), 'Missing installed resource: ' + name)
+    require(digest(read_bytes(GOAL)) == GOAL_SHA256 and file_sha(CHECKPOINT) == runtime.OPEN_P2P_SHA256,
+            'Prepared model or combat goal differs')
+    folder.mkdir(parents=True, exist_ok=False)
+    preparation = dict(version=1, kind=PREPARATION_KIND, runId=uuid.uuid4().hex, directory=str(folder),
+        createdAtUnixNs=checked, owner=owner, ownerFile=str(owner_file), ownerSha256=digest(read_bytes(owner_file)),
+        inputEnabled=False, attacksAllowed=False, maximumHostSeconds=HOST_SECONDS,
+        maximumPauseProofAgeSeconds=MAX_PAUSE_PROOF_AGE_SECONDS, modelConfiguration=model_settings(),
+        goalSha256=GOAL_SHA256, resources=resources, checkpointSha256=runtime.OPEN_P2P_SHA256,
+        checkpointStamp=file_stamp(CHECKPOINT), sourceFiles=snapshot_sources(folder),
+        pause=retain_ui_proof(folder, pause_from, owner, 'pause'))
+    verify_preparation(preparation, folder, recent_pause=True)
+    exclusive_json(folder / 'preparation.json', preparation)
+    return preparation
+
+
+def load_preparation(path):
+    """A paused preparation cannot be parsed as an armed combat plan."""
+    path = local_path(path, root=LIVE)
+    value, sha = document(path, 2 * 1024 * 1024)
+    require(path.name == 'preparation.json' and value.get('directory') == str(path.parent)
+        and value.get('version') == 1 and value.get('kind') == PREPARATION_KIND
+        and isinstance(value.get('runId'), str) and re.fullmatch('[a-f0-9]{32}', value['runId'])
+        and value.get('inputEnabled') is False and value.get('attacksAllowed') is False
+        and value.get('maximumHostSeconds') == HOST_SECONDS
+        and value.get('maximumPauseProofAgeSeconds') == MAX_PAUSE_PROOF_AGE_SECONDS
+        and 'binding' not in value and 'policy' not in value
+        and canonical(value.get('modelConfiguration')) == canonical(model_settings()), 'Invalid zero-input preparation')
+    return value, sha
+
+
+def verify_preparation(preparation, folder, *, recent_pause=False, originals=True):
+    """Keep source, owner, goal and pause evidence immutable throughout preparation."""
+    require(preparation['owner'] == load_map_owner(preparation['ownerFile'])
+        and digest(read_bytes(preparation['ownerFile'])) == preparation['ownerSha256'], 'Prepared owner evidence changed')
+    expected = dict(gpuPython=GPU_PYTHON, checkpoint=CHECKPOINT, modelSource=MODEL_SOURCE, goal=GOAL)
+    require(all(preparation['resources'].get(key) == str(path.resolve()) for key, path in expected.items())
+        and preparation['checkpointSha256'] == runtime.OPEN_P2P_SHA256
+        and file_stamp(CHECKPOINT) == preparation['checkpointStamp']
+        and digest(read_bytes(GOAL)) == preparation['goalSha256'] == GOAL_SHA256, 'Prepared model or goal changed')
+    proof = verify_ui_proof(preparation['pause'], preparation['owner'], 'pause', folder, originals=originals)
+    if recent_pause:
+        require(0 <= time.time_ns() - proof['terminalTimestampUnixMs'] * 1_000_000 <= MAX_PAUSE_PROOF_AGE_SECONDS * 1_000_000_000,
+                'Inventory pause is no longer recent enough for loading')
+    verify_sources(folder, preparation['sourceFiles'])
+    return proof
+
+
+def ready_preparation(path, *, require_waiting=True):
+    """Read an actually published worker witness, never an operator-declared loaded model."""
+    preparation, sha = load_preparation(path)
+    folder = Path(preparation['directory'])
+    ready, ready_sha = document(folder / 'prepared.json')
+    claim, _ = document(folder / 'CONSUMED.json', 4096)
+    worker, _ = document(folder / 'WORKER-CONSUMED.json', 4096)
+    require(ready.get('version') == 1 and ready.get('kind') == 'combat-prepared-policy-v1'
+        and ready.get('state') == 'preparedPaused' and ready.get('inputEnabled') is False
+        and ready.get('runId') == preparation['runId'] and ready.get('preparationSha256') == sha
+        and ready.get('owner') == preparation['owner'] and ready.get('goalSha256') == preparation['goalSha256']
+        and ready.get('sourceFilesSha256') == digest(canonical(preparation['sourceFiles']))
+        and ready.get('modelConfigurationSha256') == digest(canonical(model_settings()))
+        and ready.get('hostClaim') == claim and claim.get('planSha256') == sha
+        and worker == dict(runId=preparation['runId'], planSha256=sha,
+            processId=ready.get('worker', {}).get('processId'), parentProcessId=ready.get('worker', {}).get('parentProcessId')),
+        'Prepared worker identity or authority changed')
+    require(type(ready.get('preparedAtUnixNs')) is int and type(ready.get('preparedAtClientNs')) is int
+        and ready['preparedAtUnixNs'] >= preparation['createdAtUnixNs'] and ready['preparedAtClientNs'] > 0
+        and ready.get('modelLoads') == 1, 'Prepared model timing or load witness changed')
+    if require_waiting:
+        status, _ = document(folder / 'patrol.json.status.json')
+        command, error = runtime.read_control_document(folder / 'patrol.json.control.json', preparation['runId'])
+        require(not (folder / 'STOP').exists() and not (folder / 'patrol.json').exists()
+            and not (folder / 'ARM-CONSUMED.json').exists()
+            and status.get('state') == 'preparedPaused' and status.get('runId') == preparation['runId']
+            and status.get('worker') == ready['worker'] and status.get('preparedSha256') == ready_sha
+            and not error and command == dict(version=1, runId=preparation['runId'], command='run')
+            and time.monotonic_ns() < claim['deadlineMonotonicNs'], 'Worker is not awaiting its one combat arm')
+    return dict(preparation=preparation, preparationSha256=sha, ready=ready, readySha256=ready_sha)
+
+
+def record_resume(preparation_path, resume_from):
+    """After one native inventory Escape, publish a QPC floor before host scene capture."""
+    bundle = ready_preparation(preparation_path)
+    preparation, ready = bundle['preparation'], bundle['ready']
+    folder = Path(preparation['directory'])
+    require(not (folder / 'RESUMED.json').exists() and not (folder / 'ARM-REQUESTED.json').exists(), 'Resume was already recorded')
+    exclusive_json(folder / 'RESUME-REQUESTED.json', dict(runId=preparation['runId'], preparedSha256=bundle['readySha256']))
+    try:
+        verify_preparation(preparation, folder)
+        record = retain_ui_proof(folder, resume_from, preparation['owner'], 'resume')
+        proof = record['proof']
+        require(proof['transition']['requestCreatedAtUnixMs'] * 1_000_000 >= ready['preparedAtUnixNs']
+            and proof['sourceFiles'] == preparation['pause']['proof']['sourceFiles']
+            and proof['cleanupAcknowledgedAtUnixNs'] <= time.time_ns()
+            and 0 <= time.time_ns() - proof['terminalTimestampUnixMs'] * 1_000_000 <= MAX_PAUSE_PROOF_AGE_SECONDS * 1_000_000_000,
+            'Resume preceded preparation or changed the native controller')
+        require(ready_preparation(preparation_path)['readySha256'] == bundle['readySha256'], 'Prepared worker changed during resume')
+        resumed = dict(version=1, kind='combat-preparation-resumed-v1', runId=preparation['runId'],
+            preparationSha256=bundle['preparationSha256'], preparedSha256=bundle['readySha256'],
+            worker=ready['worker'], owner=preparation['owner'], inputEnabled=False, resume=record,
+            resumedAtClientNs=time.perf_counter_ns(), resumedAtUnixNs=time.time_ns())
+        publish_once(folder / 'RESUMED.json', resumed)
+        return resumed
+    except BaseException:
+        request_stop(folder, preparation, 'resumeProofRejected')
+        raise
+
+
+def prepared_link(bundle):
+    """Identify the immutable preparation, actual worker and separately consumed resume."""
+    folder = Path(bundle['preparation']['directory'])
+    return dict(kind='paused-prepared-combat-authority-v1', preparationFile=str(folder / 'preparation.json'),
+        preparationSha256=bundle['preparationSha256'], preparedSha256=bundle['readySha256'],
+        resumedSha256=bundle['resumedSha256'], worker=bundle['ready']['worker'], armRequestId=bundle['armRequestId'])
+
+
+def verify_prepared_plan(plan, folder, *, originals=True):
+    """Bind fresh post-resume review/source evidence to exactly one prepared worker."""
+    link = plan.get('preparedPolicy')
+    require(isinstance(link, dict), 'Prepared combat authority missing')
+    bundle = ready_preparation(folder / 'preparation.json', require_waiting=False)
+    preparation, ready = bundle['preparation'], bundle['ready']
+    resumed, resumed_sha = document(folder / 'RESUMED.json')
+    bundle.update(resumedSha256=resumed_sha, armRequestId=link.get('armRequestId'))
+    require(link == prepared_link(bundle) and re.fullmatch('[a-f0-9]{32}', link.get('armRequestId', ''))
+        and plan['runId'] == preparation['runId'] and plan['owner'] == preparation['owner']
+        and plan['ownerFile'] == preparation['ownerFile'] and plan['ownerSha256'] == preparation['ownerSha256']
+        and plan['sourceFiles'] == preparation['sourceFiles'] and plan['resources'] == preparation['resources']
+        and plan['checkpointStamp'] == preparation['checkpointStamp']
+        and plan['checkpointSha256'] == preparation['checkpointSha256']
+        and plan['binding']['goalSha256'] == preparation['goalSha256']
+        and resumed.get('version') == 1 and resumed.get('kind') == 'combat-preparation-resumed-v1'
+        and resumed.get('runId') == plan['runId'] and resumed.get('worker') == ready['worker']
+        and resumed.get('owner') == preparation['owner'] and resumed.get('inputEnabled') is False
+        and resumed.get('preparationSha256') == bundle['preparationSha256']
+        and resumed.get('preparedSha256') == bundle['readySha256'], 'Prepared/resumed combat binding changed')
+    proof = verify_ui_proof(resumed['resume'], preparation['owner'], 'resume', folder, originals=originals)
+    require(proof['sourceFiles'] == preparation['pause']['proof']['sourceFiles']
+        and proof['transition']['requestCreatedAtUnixMs'] * 1_000_000 >= ready['preparedAtUnixNs']
+        and type(resumed.get('resumedAtClientNs')) is int and resumed['resumedAtClientNs'] > ready['preparedAtClientNs']
+        and type(resumed.get('resumedAtUnixNs')) is int
+        and resumed['resumedAtUnixNs'] >= proof['cleanupAcknowledgedAtUnixNs'], 'Resume phase or source clock changed')
+    review, _ = document(plan['evidence']['review']['retained'])
+    # The canonical passive collector does not declare a plan-creation clock.
+    # Its actual compositor timestamp proves post-resume capture directly.
+    require(type(review.get('reviewedAtUnixNs')) is int
+        and review['reviewedAtUnixNs'] >= resumed['resumedAtUnixNs']
+        and plan['binding']['reviewedFrame']['sourceFrame']['timestamp100ns'] * 100 > resumed['resumedAtClientNs'],
+        'Combat scene/review was captured before the recorded resume')
+    return bundle, resumed
+
+
+def arm_prepared(preparation_path, evidence, *, maximum_review_age=MAX_REVIEW_AGE_SECONDS):
+    """Publish one fresh combat authority after loading, resume and independent visual review."""
+    bundle = ready_preparation(preparation_path)
+    preparation = bundle['preparation']
+    folder = Path(preparation['directory'])
+    resumed, resumed_sha = document(folder / 'RESUMED.json')
+    request_id = uuid.uuid4().hex
+    exclusive_json(folder / 'ARM-REQUESTED.json', dict(runId=preparation['runId'], requestId=request_id,
+        preparationSha256=bundle['preparationSha256'], preparedSha256=bundle['readySha256']))
+    try:
+        verify_preparation(preparation, folder)
+        bundle.update(resumedSha256=resumed_sha, armRequestId=request_id)
+        plan = prepare(folder, preparation['ownerFile'], evidence, maximum_review_age=maximum_review_age, _prepared=bundle)
+        verify_prepared_plan(plan, folder)
+        require(ready_preparation(preparation_path)['readySha256'] == bundle['readySha256'], 'Worker left the prepared phase')
+        arm = dict(version=1, kind='combat-preparation-arm-v1', runId=preparation['runId'], requestId=request_id,
+            preparationSha256=bundle['preparationSha256'], preparedSha256=bundle['readySha256'],
+            resumedSha256=resumed_sha, worker=bundle['ready']['worker'], planSha256=digest(read_bytes(folder / 'plan.json')),
+            createdAtUnixNs=time.time_ns(), createdAtClientNs=time.perf_counter_ns())
+        publish_once(folder / 'ARM.json', arm)
+        return plan
+    except BaseException:
+        request_stop(folder, preparation, 'combatArmRejected')
+        raise
 
 
 def load_plan(path):
@@ -215,6 +472,8 @@ def load_plan(path):
         and plan.get('maximumHostSeconds') == HOST_SECONDS and plan.get('recordingMaximumBytes') == MAX_RECORD_BYTES
         and canonical(plan.get('policy')) == canonical(trial_policy())
         and canonical(plan.get('modelConfiguration')) == canonical(model_settings()), 'Invalid fixed combat plan')
+    require(('preparedPolicy' in plan) == any((path.parent / name).exists() for name in PREPARATION_MARKERS),
+            'Combat plan stripped or invented its paused preparation declaration')
     return plan, sha
 
 
@@ -241,6 +500,10 @@ def verify_plan(plan, folder):
     require(canonical(binding) == canonical(plan['binding']) and binding['owner'] == plan['owner'], 'Combat review binding changed')
     recent_review(binding, json.loads(blobs['review']), plan['maximumReviewAgeSeconds'])
     verify_sources(folder, plan['sourceFiles'])
+    if 'preparedPolicy' in plan:
+        preparation, _ = load_preparation(folder / 'preparation.json')
+        verify_preparation(preparation, folder)
+        verify_prepared_plan(plan, folder)
     return binding
 
 
@@ -298,11 +561,74 @@ def episode_arguments(plan):
         '--native-combat-observation', '--require-world-ready', '--observation-profile=p2p-native-hamming-192-v1',
         '--retain-policy-rgb', '--record-max-mib=160', '--record-dir', str(folder / 'recording'),
         '--ffmpeg', resources['ffmpeg'], '--output', str(folder / 'native-episode.json')])
-    args.combat_trial_binding = copy.deepcopy(plan['binding'])
-    args.combat_trial_owner = copy.deepcopy(plan['owner'])
+    if 'binding' in plan:
+        args.combat_trial_binding = copy.deepcopy(plan['binding'])
+        args.combat_trial_owner = copy.deepcopy(plan['owner'])
+    else:
+        require(plan.get('kind') == PREPARATION_KIND and plan.get('inputEnabled') is False,
+                'Only a zero-input preparation may load without combat authority')
+        args.enable_input, args.input_keys, args.max_input_actions = False, '', 0
     args.expected_process_id = plan['owner']['child']['processId']
     args.expected_session_id = plan['owner']['child']['windowsSessionId']
     return args
+
+
+def await_prepared_arm(preparation, preparation_sha, policy, identity, claim, control, watch, callback=None, *, model_preparation):
+    """Wait under the original deadline, without a listener, until one exact arm is consumed."""
+    folder = Path(preparation['directory'])
+    require(not any((folder / name).exists() for name in ('prepared.json', 'RESUMED.json', 'ARM.json',
+        'ARM-CONSUMED.json', 'ARM-REQUESTED.json', 'RESUME-REQUESTED.json')), 'A handoff appeared before model readiness')
+    ready = dict(version=1, kind='combat-prepared-policy-v1', runId=preparation['runId'],
+        preparationSha256=preparation_sha, state='preparedPaused', inputEnabled=False, owner=preparation['owner'],
+        worker=identity, hostClaim=claim, modelLoads=1, goalSha256=preparation['goalSha256'],
+        sourceFilesSha256=digest(canonical(preparation['sourceFiles'])),
+        modelConfigurationSha256=digest(canonical(model_settings())), policyMetadata=copy.deepcopy(policy.metadata),
+        modelPreparation=copy.deepcopy(model_preparation),
+        preparedAtUnixNs=time.time_ns(), preparedAtClientNs=time.perf_counter_ns())
+    ready_sha = publish_once(folder / 'prepared.json', ready)
+    control.publish(state='preparedPaused', inputEnabled=False, worker=identity, modelLoads=1,
+                    preparationSha256=preparation_sha, preparedSha256=ready_sha)
+    # ResidentControl writes asynchronously. Do not announce a handoff until its
+    # actual owner-bound status acknowledges this immutable readiness record.
+    while True:
+        watch.check()
+        exact_control(control, preparation['runId'])
+        try:
+            status, _ = document(folder / 'patrol.json.status.json')
+        except FileNotFoundError:
+            status = {}
+        if (status.get('state') == 'preparedPaused' and status.get('runId') == preparation['runId']
+                and status.get('preparedSha256') == ready_sha and status.get('worker') == identity):
+            break
+        time.sleep(patrol.CONTROL_POLL_SECONDS)
+    if callback is not None:
+        callback(copy.deepcopy(ready))
+    while True:
+        watch.check()
+        exact_control(control, preparation['runId'])
+        require(digest(read_bytes(folder / 'preparation.json')) == preparation_sha
+            and digest(read_bytes(folder / 'prepared.json')) == ready_sha, 'Prepared authority changed while waiting')
+        if (folder / 'ARM.json').exists():
+            arm, arm_sha = document(folder / 'ARM.json', 16384)
+            exclusive_json(folder / 'ARM-CONSUMED.json', dict(runId=preparation['runId'], armSha256=arm_sha,
+                preparationSha256=preparation_sha, preparedSha256=ready_sha, worker=identity))
+            plan, plan_sha = load_plan(folder / 'plan.json')
+            request, _ = document(folder / 'ARM-REQUESTED.json', 4096)
+            resumed, resumed_sha = document(folder / 'RESUMED.json')
+            require(arm == dict(version=1, kind='combat-preparation-arm-v1', runId=preparation['runId'],
+                requestId=plan.get('preparedPolicy', {}).get('armRequestId'), preparationSha256=preparation_sha,
+                preparedSha256=ready_sha, resumedSha256=resumed_sha, worker=identity, planSha256=plan_sha,
+                createdAtUnixNs=arm.get('createdAtUnixNs'), createdAtClientNs=arm.get('createdAtClientNs'))
+                and request == dict(runId=preparation['runId'], requestId=arm['requestId'],
+                    preparationSha256=preparation_sha, preparedSha256=ready_sha)
+                and type(arm.get('createdAtUnixNs')) is int and resumed['resumedAtUnixNs'] <= arm['createdAtUnixNs'] <= time.time_ns()
+                and type(arm.get('createdAtClientNs')) is int and resumed['resumedAtClientNs'] < arm['createdAtClientNs'] <= time.perf_counter_ns(),
+                'Combat arm changed worker, phase, source or plan identity')
+            verify_plan(plan, folder)
+            watch.check()
+            exact_control(control, preparation['runId'])
+            return plan, plan_sha, arm_sha
+        time.sleep(patrol.CONTROL_POLL_SECONDS)
 
 
 def validate_loaded_policy(policy):
@@ -383,9 +709,11 @@ def terminal_outcome(episode, binding):
     return 'failed'
 
 
-def run_worker(plan_path, *, lifecycle=None, loader=None, episode=None, identity_reader=None, watch_factory=None):
+def run_worker(plan_path, *, lifecycle=None, loader=None, episode=None, identity_reader=None, watch_factory=None,
+               paused_preparation=False, prepared_callback=None):
     """Own one prewarm/start/episode attempt and preserve every terminal failure without retry."""
-    plan, plan_sha = load_plan(plan_path)
+    plan, plan_sha = (load_preparation if paused_preparation else load_plan)(plan_path)
+    preparation, preparation_sha = (copy.deepcopy(plan), plan_sha) if paused_preparation else (None, None)
     folder = Path(plan['directory'])
     claim, _ = document(folder / 'CONSUMED.json', 4096)
     require(claim.get('runId') == plan['runId'] and claim.get('planSha256') == plan_sha, 'Missing exact host consumption claim')
@@ -398,6 +726,9 @@ def run_worker(plan_path, *, lifecycle=None, loader=None, episode=None, identity
         worker=dict(processId=os.getpid(), parentProcessId=os.getppid()), nativeEpisode=None,
         nativeEpisodeSha256=None, combatTrialGuardState=None, terminalGuardState=None,
         enemyIdentityVerified=False, damageVerified=False, killVerified=False)
+    if paused_preparation:
+        report.update(kind='combat-trial-prepared-wrapper-v1', preparationSha256=preparation_sha,
+                      preparedPolicy=None, armSha256=None, inputEnabledBeforeArm=False)
     control = watch = policy = None
     native_error = None
     try:
@@ -407,7 +738,12 @@ def run_worker(plan_path, *, lifecycle=None, loader=None, episode=None, identity
             and identity['remoteDesktop'] is True and identity['elevated'] is False and identity['integrityRid'] == 8192
             and identity['processId'] == os.getpid() and identity['parentProcessId'] == os.getppid(),
             'Worker is not the original ordinary RDP session')
-        verify_plan(plan, folder)
+        if paused_preparation:
+            require(not any((folder / name).exists() for name in ('prepared.json', 'RESUMED.json', 'ARM.json',
+                'ARM-CONSUMED.json', 'ARM-REQUESTED.json', 'RESUME-REQUESTED.json')), 'Preparation was armed before worker admission')
+            verify_preparation(plan, folder, recent_pause=True)
+        else:
+            verify_plan(plan, folder)
         lifecycle = lifecycle or runtime.control_module()
         require_idle(lifecycle, plan['owner'])
         control = runtime.ResidentControl(folder / 'patrol.json.control.json', folder / 'patrol.json.status.json',
@@ -420,6 +756,11 @@ def run_worker(plan_path, *, lifecycle=None, loader=None, episode=None, identity
         exact_control(control, plan['runId'])
         args = episode_arguments(plan)
         report['phase'] = 'loading'
+        if paused_preparation:
+            loading_started = time.time_ns()
+            require(0 <= loading_started - preparation['pause']['proof']['terminalTimestampUnixMs'] * 1_000_000
+                <= MAX_PAUSE_PROOF_AGE_SECONDS * 1_000_000_000, 'Inventory pause expired before model loading')
+            report['modelPreparation'] = dict(startedAtUnixNs=loading_started, inputEnabled=False)
         control.publish(state='loading', worker=identity, modelLoads=0, modelLoadAttempts=1)
         report['modelLoadAttempts'] = 1
         began = time.perf_counter_ns()
@@ -427,8 +768,21 @@ def run_worker(plan_path, *, lifecycle=None, loader=None, episode=None, identity
             policy = (loader or client.load_policy)(args)
         finally:
             report.update(modelLoads=int(policy is not None), modelLoadSeconds=(time.perf_counter_ns() - began) / 1e9)
+            if paused_preparation:
+                report['modelPreparation'].update(finishedAtUnixNs=time.time_ns(), modelLoadSeconds=report['modelLoadSeconds'])
         validate_loaded_policy(policy)
-        verify_plan(plan, folder)
+        if paused_preparation:
+            verify_preparation(plan, folder)
+            watch.check()
+            exact_control(control, plan['runId'])
+            report['policyMetadata'] = copy.deepcopy(policy.metadata)
+            report['phase'] = 'preparedPaused'
+            plan, plan_sha, arm_sha = await_prepared_arm(preparation, preparation_sha, policy, identity,
+                claim, control, watch, prepared_callback, model_preparation=report['modelPreparation'])
+            report.update(planSha256=plan_sha, preparedPolicy=copy.deepcopy(plan['preparedPolicy']), armSha256=arm_sha)
+            args = episode_arguments(plan)
+        else:
+            verify_plan(plan, folder)
         watch.check()
         exact_control(control, plan['runId'])
         # This stamp is minted only after the original goal survived both sides
@@ -441,12 +795,15 @@ def run_worker(plan_path, *, lifecycle=None, loader=None, episode=None, identity
         watch.check()
         exact_control(control, plan['runId'])
         verify_plan(plan, folder)
+        _, child = require_idle(lifecycle, plan['owner'])
+        watch.check()
+        exact_control(control, plan['runId'])
         # Include listener creation in the five-second lease budget, and never
         # extend the host's original loading/operation deadline.
         args.lease_deadline = min(claim['deadlineMonotonicNs'] / 1e9, time.monotonic() + 5)
         report['leaseDeadlineMonotonicNs'] = int(args.lease_deadline * 1e9)
         report.update(phase='starting', nativeStartAttempted=True, nativeStartOutcome='unresolved')
-        control.publish(state='starting', modelLoads=1)
+        control.publish(state='starting', modelLoads=1, inputEnabled=True)
         started = lifecycle.start_agent(child, 5, enable_input=True, observation_profile=args.observation_profile)
         require({key: started[key] for key in ('processId', 'windowsSessionId', 'instanceNonce')} == plan['owner']['child'],
                 'Created listener differs from the original child')
@@ -543,17 +900,22 @@ def request_stop(folder, plan, reason):
             patrol.stop_resident(folder, plan['runId'])
 
 
-def launch(plan_path, *, lifecycle=None, watch_factory=None):
+def launch(plan_path, *, lifecycle=None, watch_factory=None, paused_preparation=False):
     """Consume and supervise one ordinary RDP command; unknown broker outcomes stay unresolved."""
-    plan, plan_sha = load_plan(plan_path)
+    plan, plan_sha = (load_preparation if paused_preparation else load_plan)(plan_path)
     folder = Path(plan['directory'])
-    verify_plan(plan, folder)
+    if paused_preparation:
+        verify_preparation(plan, folder, recent_pause=True)
+    else:
+        verify_plan(plan, folder)
     require(not (folder / 'STOP').exists(), 'This combat plan was stopped')
     started = time.monotonic_ns()
     claim = dict(runId=plan['runId'], planSha256=plan_sha, hostProcessId=os.getpid(),
         startedAtUnixNs=time.time_ns(), startedMonotonicNs=started, deadlineMonotonicNs=started + HOST_SECONDS * 1_000_000_000)
     exclusive_json(folder / 'CONSUMED.json', claim)
     result = dict(status='unresolved', runId=plan['runId'], planSha256=plan_sha, hostClaim=claim, launchAttempts=0)
+    if paused_preparation:
+        result.update(kind='combat-preparation-launch-v1', preparationSha256=plan_sha)
     watch = None
     try:
         lifecycle = lifecycle or runtime.control_module()
@@ -562,10 +924,14 @@ def launch(plan_path, *, lifecycle=None, watch_factory=None):
         supervision.mkdir(exist_ok=False)
         watch = (watch_factory or make_watch)(supervision, plan, claim, lifecycle)
         watch.start()
-        verify_plan(plan, folder)
+        if paused_preparation:
+            verify_preparation(plan, folder, recent_pause=True)
+        else:
+            verify_plan(plan, folder)
         watch.check()
         command = [plan['resources']['gpuPython'], '-B', '-X', 'utf8', str(ROOT / 'tools/bettergi-agent/combat_trial.py'),
-                   'worker', '--plan', str(Path(plan_path).resolve())]
+                   'worker-prepared' if paused_preparation else 'worker',
+                   '--preparation' if paused_preparation else '--plan', str(Path(plan_path).resolve())]
         result.update(command=command, launchAttempts=1)
         exclusive_json(folder / 'launch.json', result)
         with ThreadPoolExecutor(max_workers=1) as pool:
@@ -598,7 +964,8 @@ def launch(plan_path, *, lifecycle=None, watch_factory=None):
         terminal, terminal_sha = document(folder / 'patrol.json')
         finish, _ = document(folder / 'finalization.json', 16384)
         worker_claim, _ = document(folder / 'WORKER-CONSUMED.json', 4096)
-        require(terminal.get('runId') == plan['runId'] and terminal.get('planSha256') == plan_sha
+        require(terminal.get('runId') == plan['runId']
+            and terminal.get('preparationSha256' if paused_preparation else 'planSha256') == plan_sha
             and terminal.get('worker', {}).get('parentProcessId') == broker.get('runnerProcessId')
             and worker_claim == dict(runId=plan['runId'], planSha256=plan_sha,
                 processId=terminal['worker']['processId'], parentProcessId=terminal['worker']['parentProcessId'])
@@ -607,6 +974,8 @@ def launch(plan_path, *, lifecycle=None, watch_factory=None):
         require_idle(lifecycle, plan['owner'])
         result.update(status=terminal['status'], terminalManifestSha256=terminal_sha,
                       worker=terminal['worker'], ownerIdleMinimizedAfter=True)
+        if paused_preparation:
+            result['planSha256'] = terminal.get('planSha256')
         if result.get('stopReason') and result['status'] != 'unresolved':
             result['status'] = 'stopped'
         if result['status'] == 'completed':
@@ -641,9 +1010,43 @@ def main(argv=None):
         prepare_parser.add_argument('--' + ('native-plan' if name == 'plan' else 'native-scene' if name == 'scene' else name),
                                     dest=name, type=Path, required=True)
     prepare_parser.add_argument('--maximum-review-age-seconds', type=int, default=MAX_REVIEW_AGE_SECONDS)
+    paused_parser = commands.add_parser('prepare-paused')
+    paused_parser.add_argument('--directory', type=Path, required=True)
+    paused_parser.add_argument('--owner-from', type=Path, required=True)
+    paused_parser.add_argument('--pause-from', type=Path, required=True)
+    for name in ('launch-prepared', 'worker-prepared', 'stop-prepared', 'record-resume', 'arm'):
+        command_parser = commands.add_parser(name)
+        command_parser.add_argument('--preparation', type=Path, required=True)
+        if name == 'record-resume':
+            command_parser.add_argument('--resume-from', type=Path, required=True)
+        if name == 'arm':
+            for evidence_name in EVIDENCE_NAMES[:-1]:
+                command_parser.add_argument('--' + ('native-plan' if evidence_name == 'plan' else
+                    'native-scene' if evidence_name == 'scene' else evidence_name), dest=evidence_name, type=Path, required=True)
+            command_parser.add_argument('--maximum-review-age-seconds', type=int, default=MAX_REVIEW_AGE_SECONDS)
     for name in ('launch', 'worker', 'stop'):
         commands.add_parser(name).add_argument('--plan', type=Path, required=True)
     args = parser.parse_args(argv)
+    if args.command == 'prepare-paused':
+        preparation = prepare_paused(args.directory, args.owner_from, args.pause_from)
+        print(json.dumps(dict(preparation=str(args.directory / 'preparation.json'), runId=preparation['runId'], inputEnabled=False)))
+        return 0
+    if args.command == 'record-resume':
+        resumed = record_resume(args.preparation, args.resume_from)
+        print(json.dumps(dict(resumed=str(args.preparation.parent / 'RESUMED.json'), resumedAtClientNs=resumed['resumedAtClientNs'])))
+        return 0
+    if args.command == 'arm':
+        plan = arm_prepared(args.preparation, {name: getattr(args, name) for name in EVIDENCE_NAMES[:-1]},
+                            maximum_review_age=args.maximum_review_age_seconds)
+        print(json.dumps(dict(plan=str(args.preparation.parent / 'plan.json'), runId=plan['runId'], armed=True)))
+        return 0
+    if args.command in ('launch-prepared', 'worker-prepared', 'stop-prepared'):
+        if args.command == 'stop-prepared':
+            preparation, _ = load_preparation(args.preparation)
+            request_stop(Path(preparation['directory']), preparation, 'operatorStop')
+            return 0
+        operation = launch if args.command == 'launch-prepared' else run_worker
+        return operation(args.preparation, paused_preparation=True)
     if args.command == 'prepare':
         plan = prepare(args.directory, args.owner_from, {name: getattr(args, name) for name in EVIDENCE_NAMES[:-1]},
                        maximum_review_age=args.maximum_review_age_seconds)

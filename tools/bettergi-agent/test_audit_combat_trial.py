@@ -6,7 +6,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from audit_combat_trial import audit_episode, replay_events, verify_retirement, verify_temperatures
+from audit_combat_trial import audit_episode, replay_events, verify_retirement, verify_temperatures, verify_preparation_chain
 from combat_trial_guard import CombatTrialGuard
 from policy_rgb_archive import write_policy_rgb
 from test_combat_trial_guard import HELLO, OWNER, binding, frame, proposal,review_parts
@@ -369,6 +369,90 @@ class CombatTrialRetirementAuditTests(unittest.TestCase):
                     altered[-1]['error'] = 'query failed'
                 with self.assertRaises(ValueError):
                     verify_temperatures(altered, finished)
+
+
+class CombatPreparedAuditTests(unittest.TestCase):
+    """Replay the real inert wrapper's staged proof without its mutable originals or a model."""
+    def setUp(self):
+        """Produce one complete one-shot handoff through the real artifact writer."""
+        from test_combat_trial import CombatPreparedTrialTests
+        self.fixture = CombatPreparedTrialTests()
+        self.fixture.setUp()
+        self.addCleanup(self.fixture.doCleanups)
+        self.fixture.begin(claim=False)
+        self.fixture.lifecycle.runner = lambda: self.fixture.worker(self.fixture.arm)
+        import combat_trial
+        from test_combat_trial import FakeWatch
+        self.assertEqual(combat_trial.launch(self.fixture.plan_path, lifecycle=self.fixture.lifecycle,
+            watch_factory=FakeWatch, paused_preparation=True), 0)
+        self.folder, self.plan, self.wrapper = self.fixture.folder, self.fixture.plan, self.fixture.report()
+
+    def document(self, name):
+        """Read the same immutable phase artifacts required by the full auditor."""
+        return json.loads((self.folder / name).read_bytes())
+
+    def audit(self):
+        """Reconstruct the independent paused preparation chain only."""
+        return verify_preparation_chain(self.folder, self.plan, self.wrapper, self.document)
+
+    def test_exact_preparation_and_broker_retirement_replay(self):
+        """The original preparation claim and final armed plan remain distinct and joined."""
+        result = self.audit()
+        self.assertFalse(result['inputEnabledBeforeArm'])
+        import hashlib
+        verify_retirement(self.plan, self.wrapper, self.document('result.json'), self.document('broker.json'),
+            self.document('CONSUMED.json'), self.document('WORKER-CONSUMED.json'),
+            hashlib.sha256((self.folder / 'patrol.json').read_bytes()).hexdigest())
+
+    def test_archive_replay_does_not_depend_on_current_native_files(self):
+        """A later native run may remove originals; the exact retained UI proof still replays."""
+        preparation = self.document('preparation.json')
+        original = next(Path(name) for name in preparation['pause']['proof']['files'] if name.endswith('after.png'))
+        original.unlink()
+        self.assertIsNotNone(self.audit())
+
+    def test_missing_retained_png_never_falls_back_to_original(self):
+        """A present mutable native PNG cannot repair an absent archived pause witness."""
+        preparation = self.document('preparation.json')
+        retained = next(Path(target) for name, target in preparation['pause']['retained'].items() if name.endswith('after.png'))
+        retained.unlink()
+        with self.assertRaises(ValueError):
+            self.audit()
+
+    def test_ready_worker_and_arm_claim_changes_are_rejected(self):
+        """Each phase is bound to the same actual ordinary process and one immutable claim."""
+        for name, field in (('prepared.json', 'worker'), ('ARM.json', 'worker'), ('ARM-CONSUMED.json', 'worker')):
+            with self.subTest(name=name):
+                path = self.folder / name
+                raw = path.read_bytes()
+                value = json.loads(raw)
+                value[field]['processId'] += 1
+                path.write_text(json.dumps(value), encoding='utf-8')
+                try:
+                    with self.assertRaises(ValueError):
+                        self.audit()
+                finally:
+                    path.write_bytes(raw)
+
+    def test_stripped_declaration_with_retained_evidence_is_not_historical(self):
+        """Removing preparation labels cannot downgrade a new run into archived v1 semantics."""
+        self.plan.pop('preparedPolicy')
+        self.wrapper['kind'] = 'combat-trial-wrapper-v1'
+        for name in ('preparationSha256', 'preparedPolicy', 'armSha256', 'inputEnabledBeforeArm', 'modelPreparation'):
+            self.wrapper.pop(name, None)
+        with self.assertRaisesRegex(ValueError, 'undeclared preparation'):
+            self.audit()
+
+    def test_post_resume_source_and_loading_phase_are_independent_checks(self):
+        """Consistent terminal counters cannot excuse a pre-resume image or input-enabled load."""
+        original = copy.deepcopy(self.plan['binding']['reviewedFrame']['sourceFrame'])
+        self.plan['binding']['reviewedFrame']['sourceFrame']['timestamp100ns'] = 1
+        with self.assertRaisesRegex(ValueError, 'before resume'):
+            self.audit()
+        self.plan['binding']['reviewedFrame']['sourceFrame'] = original
+        self.wrapper['modelPreparation']['inputEnabled'] = True
+        with self.assertRaisesRegex(ValueError, 'preparation phase'):
+            self.audit()
 
 
 if __name__ == '__main__':

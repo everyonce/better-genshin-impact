@@ -10,7 +10,8 @@ import unittest
 from hybrid_navigation import END,START,HybridNavigation
 from hybrid_routes import SCOUT_GRASS_ROUTE,route_heading
 from navigation_profiles import SCOUT_PROFILE
-from reviewed_scout_route import ReviewedScoutRoute,load_reviewed_route,validate_reviewed_options
+from reviewed_scout_route import (CURRENT_SCENE_INSPECTION,ReviewedScoutRoute,load_reviewed_route,
+                                  require_navigation_review_scene,validate_reviewed_options)
 from test_hybrid_navigation import frame,proposal
 from test_navigation_profiles import route_capability
 
@@ -20,6 +21,26 @@ class ReviewedScoutRouteTests(unittest.TestCase):
     def route(self):
         """Use an explicit short southeast candidate entirely within the existing scout scope."""
         return ReviewedScoutRoute(((-1135,2267),(-1142,2255)))
+
+    def test_current_scene_markers_cannot_be_reused_for_navigation(self):
+        """Either retained document rejects inspection authority, including a backfilled anchor."""
+        historical=dict(owner={},enableInput=False,modelLoaded=False)
+        require_navigation_review_scene(historical,{})
+        anchored=dict(historical,captureHelperSha256='a'*64,anchor=[-1135,2267])
+        require_navigation_review_scene(anchored,{})
+        for marker in (dict(inspectionMode=CURRENT_SCENE_INSPECTION),dict(navigationReviewAllowed=False),
+                       dict(inspectionMode=None),dict(navigationReviewAllowed=1)):
+            for document in ('plan','result'):
+                plan,result=copy.deepcopy(anchored),{}
+                (plan if document=='plan' else result).update(marker)
+                with self.subTest(document=document,marker=marker),self.assertRaisesRegex(ValueError,'cannot authorize'):
+                    require_navigation_review_scene(plan,result)
+
+    def test_stripped_inspection_markers_still_need_a_modern_capture_anchor(self):
+        """A current helper's remaining source-hash declaration cannot masquerade as an old anchorless plan."""
+        for anchor in (None,[],[0],[-1135,float('nan')],[True,2267],['-1135',2267]):
+            with self.subTest(anchor=anchor),self.assertRaisesRegex(ValueError,'fixed anchor'):
+                require_navigation_review_scene(dict(captureHelperSha256='a'*64,anchor=anchor),{})
 
     def observation(self,index,point=None):
         """Supply native headings to original anchors, as the real SCOUT capability requires."""

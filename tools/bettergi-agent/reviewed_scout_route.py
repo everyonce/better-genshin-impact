@@ -8,6 +8,26 @@ from pathlib import Path
 from navigation_profiles import SCOUT_PROFILE,SCOUT_PROFILES,scout_scope
 
 
+# This passive inspection scope never supplies navigation-review authority.
+CURRENT_SCENE_INSPECTION='current-scene-inspection-v1'
+
+
+def require_navigation_review_scene(plan, result):
+    """Keep inspection-only pixels separate from the original anchored navigation-review workflow."""
+    for document in (plan,result):
+        if (not isinstance(document,dict) or 'inspectionMode' in document
+                or document.get('navigationReviewAllowed',True) is not True):
+            raise ValueError('Current-scene inspection cannot authorize a reviewed navigation route')
+    # Modern helper captures must retain the explicit anchor even if purpose
+    # markers are removed. Clean historical plans without this declaration keep
+    # their existing same-source, route-start qualification in scout_session.
+    if 'captureHelperSha256' in plan:
+        anchor=plan.get('anchor')
+        if (not isinstance(anchor,list) or len(anchor)!=2
+                or any(type(value) not in (int,float) or not math.isfinite(value) for value in anchor)):
+            raise ValueError('A navigation capture requires its declared fixed anchor')
+
+
 def reviewed_route_policy(profile=SCOUT_PROFILE):
     """Return a fresh declaration of the bounded geometry authority granted at worker startup."""
     scout_scope(profile)

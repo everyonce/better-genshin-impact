@@ -12,6 +12,7 @@ from observation_profiles import P2P_NATIVE
 from navigation_profiles import SCOUT_PROFILE,SCOUT_PROFILES,validate_capability,allows_pose_scope
 from native_combat import negotiate,validate_frame
 from hybrid_navigation import yaw_error
+from reviewed_scout_route import CURRENT_SCENE_INSPECTION
 
 
 def require(value,message):
@@ -23,26 +24,38 @@ def main():
     """Open one passive lease and preserve native evidence even when qualification fails."""
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('output',type=Path)
-    parser.add_argument('--anchor',nargs=2,type=float,required=True)
+    location=parser.add_mutually_exclusive_group(required=True)
+    location.add_argument('--anchor',nargs=2,type=float)
+    location.add_argument('--inspect-current',action='store_true',
+        help='Inspect the current stable scene without granting navigation-review authority')
+    parser.add_argument('--require-single-enemy',action='store_true',
+        help='Require exactly one native bar candidate; this does not establish enemy identity')
     parser.add_argument('--owner-from',type=Path,required=True)
     parser.add_argument('--navigation-profile',choices=SCOUT_PROFILES,default=SCOUT_PROFILE)
     args=parser.parse_args()
     output=args.output.absolute()
     require(output==output.resolve() and output.is_relative_to((repo/'artifacts/live').resolve()),
         'Expected an unlinked local live-artifact destination')
-    require(all(math.isfinite(value) for value in args.anchor),'Invalid expected endpoint')
-    require(allows_pose_scope(dict(x=args.anchor[0],y=args.anchor[1],layerId='MapBack_2'),args.navigation_profile),
-        'Expected endpoint is outside the selected scout scope')
+    if args.anchor is not None:
+        require(all(math.isfinite(value) for value in args.anchor),'Invalid expected endpoint')
+        require(allows_pose_scope(dict(x=args.anchor[0],y=args.anchor[1],layerId='MapBack_2'),args.navigation_profile),
+            'Expected endpoint is outside the selected scout scope')
     output.mkdir(parents=True,exist_ok=False)
     helper=Path(__file__).read_bytes()
     (output/'capture-helper.py').write_bytes(helper)
     owner=load_map_owner(args.owner_from)
     lifecycle=control_module()
-    report=dict(status='failed',inputEnabled=False,modelLoaded=False,observations=[],stableSamples=[],gpu=[])
+    inspection=(dict(inspectionMode=CURRENT_SCENE_INSPECTION,navigationReviewAllowed=False,
+        enemyIdentityVerified=False) if args.inspect_current else {})
+    candidate_filter=(dict(requireSingleEnemyBarCandidate=True,enemyIdentityVerified=False)
+        if args.require_single_enemy else {})
+    report=dict(status='failed',inputEnabled=False,modelLoaded=False,observations=[],stableSamples=[],gpu=[],
+        **(inspection|candidate_filter))
     atomic_json(output/'plan.json',dict(owner=owner,enableInput=False,modelLoaded=False,
-        navigationProfile=args.navigation_profile,anchor=args.anchor,maximumObservationSeconds=30,
+        navigationProfile=args.navigation_profile,maximumObservationSeconds=30,
         sourceFreshnessMs=150,stopTemperatureC=78,captureHelperSha256=hashlib.sha256(helper).hexdigest(),
-        modelLoadScope='this-capture-helper-only'))
+        modelLoadScope='this-capture-helper-only',
+        **(inspection|candidate_filter|({'anchor':args.anchor} if args.anchor is not None else {}))))
 
     def check_owner():
         root,child=ready_session(lifecycle)
@@ -97,8 +110,11 @@ def main():
                     and world.get('sourceFrameId')==frame['frameId'] and frame['worldReadiness']['ready'] is True
                     and motion.get('status')=='normal' and motion.get('spaceKeyMatched') is False
                     and 0<=frame.get('sourceFrameAgeMs',999)<=150 and combat and combat['state']=='valid')
+                if valid and args.require_single_enemy:
+                    valid=not combat['redMaskOverloaded'] and len(combat['enemyBarCandidates'])==1
                 if valid:
-                    require(math.dist((pose['x'],pose['y']),args.anchor)<=2,'Current position differs from the expected endpoint')
+                    if args.anchor is not None:
+                        require(math.dist((pose['x'],pose['y']),args.anchor)<=2,'Current position differs from the expected endpoint')
                     qualified[frame['frameId']]=frame
                     if samples:
                         previous=samples[-1]

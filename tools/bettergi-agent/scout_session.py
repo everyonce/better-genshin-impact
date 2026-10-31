@@ -29,7 +29,7 @@ from resident_runtime import OPEN_P2P_SHA256
 from map_owner import load_map_owner
 from navigation_profiles import SCOUT_PROFILE, SCOUT_PROFILES, allows_pose_scope, required_profile, scout_scope
 from run_patrol_series import SeriesGuard
-from reviewed_scout_route import ReviewedScoutRoute,reviewed_route_policy
+from reviewed_scout_route import ReviewedScoutRoute,reviewed_route_policy,require_navigation_review_scene
 from scout_encounter_guard import binding_from_review,guard_policy
 from episode_split import reserve_split
 from audit_scout_obstacle import (OBSTACLE_ERROR, audit_failed_prefix, recovery_policy,
@@ -375,6 +375,7 @@ def review_evidence(path, manifest, after_ns):
     endpoint=live_path(review['nativeEndpoint'])
     plan,plan_sha=read_json(endpoint/'plan.json')
     result,result_sha=read_json(endpoint/'result.json',4*1024*1024)
+    require_navigation_review_scene(plan,result)
     require(plan.get('owner')==manifest['owner'] and plan.get('enableInput') is False
             and plan.get('modelLoaded') is False and plan.get('navigationProfile')==profile,
             'The native review belongs to another owner or input scope')

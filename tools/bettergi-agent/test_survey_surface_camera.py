@@ -42,6 +42,26 @@ class SurfaceCameraTests(unittest.TestCase):
         row['navigationPose']['x'] = -1100.01
         self.assertFalse(probe.qualified(row, SURFACE_PROFILE))
 
+    def test_vertical_survey_is_one_pulse_and_does_not_claim_a_measured_pitch(self):
+        survey.tilt_once(self.trial(), 80)
+        self.assertEqual(len(self.bridge.issued), 1)
+        self.assertEqual(self.bridge.issued[0]['steps'], [dict(keys=[], durationMs=100, mouseDx=0, mouseDy=80)])
+        self.assertFalse(self.report['pitchAngleMeasured'])
+        self.assertEqual(len(self.report['settledFrameIds']), 3)
+
+    def test_vertical_survey_rejects_a_heading_change_without_a_second_pulse(self):
+        trial = Mock()
+        trial.pulse.return_value = dict(beforeYawDegrees=355, afterYawDegrees=10)
+        with self.assertRaisesRegex(ValueError, 'unexpectedly changed compass heading'):
+            survey.tilt_once(trial, 40)
+        trial.pulse.assert_called_once_with(0, dy=40)
+
+    def test_invalid_vertical_shift_never_dispatches(self):
+        for delta in (0, 81, -81, True, 10.5):
+            with self.subTest(delta=delta), self.assertRaises(ValueError):
+                survey.tilt_once(self.trial(), delta)
+        self.assertEqual(self.bridge.issued, [])
+
     def test_scouting_pose_requires_its_separate_explicit_camera_scope(self):
         from navigation_profiles import SCOUT_PROFILE
         row,_=self.bridge.request('frame')

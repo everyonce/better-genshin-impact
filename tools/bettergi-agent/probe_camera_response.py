@@ -1,5 +1,6 @@
-"""Identify isolated horizontal-camera responses from live BetterGI poses in the existing RDP game."""
+"""Identify isolated camera responses from live BetterGI poses in the existing RDP game."""
 import argparse
+import copy
 import json
 import math
 from pathlib import Path
@@ -20,6 +21,8 @@ from stream_client import Bridge, action_response_accepted, rgb_frame_quality
 
 
 MODEL = 'camera-response-probe-v1'
+# A vertical survey is one small relative shift, not a measured absolute pitch.
+MAX_PITCH_MOUSE_UNITS = 80
 STATION = PATROL_STATIONS['stair-front']
 SEQUENCES = {
     'train': (75, -220, 30, -125, 220, -30, 125, -75, -125, 30, -75, 220, -30, 125, -220, 75),
@@ -75,6 +78,10 @@ class Experiment:
         """Keep original terminal receipts, including foreign or malformed receipts that fail this run."""
         receipts = reply.get('receipts', [])
         self.report['receipts'].extend(receipts)
+        # Receipts can arrive on a repeated source frame that observations deliberately deduplicate.
+        # Keep its complete metadata envelope before validation, including rejected or dropped evidence.
+        if receipts or reply.get('droppedReceipts', 0):
+            self.report.setdefault('receiptEnvelopes', []).append(copy.deepcopy(reply))
         require(reply.get('droppedReceipts', 0) == 0, 'The bridge lost input receipts')
         for r in receipts:
             a = self.pending
@@ -83,8 +90,8 @@ class Experiment:
                     'Unowned, repeated, or incomplete camera receipt')
             steps = r.get('appliedSteps') or []
             require(len(steps) == 1 and steps[0].get('index') == 0 and steps[0].get('keys') == []
-                    and steps[0].get('mouseDx') == a['mouseDx'] and steps[0].get('mouseDy') == 0,
-                    'Terminal receipt did not apply exactly the requested pure horizontal step')
+                    and steps[0].get('mouseDx') == a['mouseDx'] and steps[0].get('mouseDy') == a.get('mouseDy', 0),
+                    'Terminal receipt did not apply exactly the requested camera step')
             start, end = steps[0]['startedAtMs'], r['endedAtMs']
             require(r['acceptedAtMs'] == a['accepted']['acceptedAtMs']
                     and a['sourceAtMs'] <= r['acceptedAtMs'] <= start < a['sourceAtMs'] + 150
@@ -139,18 +146,21 @@ class Experiment:
             time.sleep(.006)
         raise TimeoutError('Camera experiment exceeded its wall-time bound')
 
-    def pulse(self, dx):
-        """Bracket one fixed 100-ms pure turn with a measured stable baseline and settled result."""
-        require(type(dx) is int and 0 < abs(dx) <= 250, 'Camera pulses must be nonzero integers bounded to 250')
+    def pulse(self, dx, *, dy=0):
+        """Bracket one fixed 100-ms single-axis shift with a stable baseline and exact terminal receipt."""
+        require(type(dx) is int and type(dy) is int
+                and ((0 < abs(dx) <= 250 and dy == 0)
+                     or (dx == 0 and 0 < abs(dy) <= MAX_PITCH_MOUSE_UNITS)),
+                'Camera pulses require one integer axis: horizontal at most 250 or vertical at most 80')
         pre = [self.next()]
         while pre[-1]['sourceAtMs'] - pre[0]['sourceAtMs'] < 500:
             pre.append(self.next())
         require(stable(pre), 'Camera moved in the pre-pulse baseline')
         frame = pre[-1]
-        step = dict(keys=[], durationMs=100, mouseDx=dx, mouseDy=0)
+        step = dict(keys=[], durationMs=100, mouseDx=dx, mouseDy=dy)
         rid = uuid.uuid4().hex
         at = frame['sourceAtMs']
-        a = dict(requestId=rid, frameId=frame['frameId'], sourceAtMs=at, modelId=MODEL, mouseDx=dx, step=step,
+        a = dict(requestId=rid, frameId=frame['frameId'], sourceAtMs=at, modelId=MODEL, mouseDx=dx, mouseDy=dy, step=step,
                  preFrameIds=[f['frameId'] for f in pre], postFrameIds=[], settledFrameIds=[])
         self.report['actions'].append(a)
         if self.stop_check:
@@ -178,7 +188,7 @@ class Experiment:
                     a['settledFrameIds'] = [v['frameId'] for v in three]
                     self.pending = None
                     return dict(beforeYawDegrees=pre[-1]['navigationPose']['yawDegrees'],
-                                afterYawDegrees=f['navigationPose']['yawDegrees'], mouseDx=dx,
+                                afterYawDegrees=f['navigationPose']['yawDegrees'], mouseDx=dx, mouseDy=dy,
                                 beforeFrameId=pre[-1]['frameId'], afterFrameId=f['frameId'])
                 if not stable(end_samples):
                     end_samples = [f]

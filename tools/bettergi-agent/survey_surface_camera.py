@@ -1,4 +1,4 @@
-"""Inspect one compass heading without walking or attacking in the existing minimized RDP session."""
+"""Inspect one heading or a bounded vertical camera shift in the existing minimized RDP session."""
 import argparse
 import hashlib
 import json
@@ -13,7 +13,7 @@ from hybrid_routes import camera_correction
 from map_owner import load_map_owner
 from navigation_profiles import SURFACE_PROFILE, SCOUT_PROFILE, allows_pose_scope, validate_capability
 from observation_profiles import P2P_NATIVE
-from probe_camera_response import Experiment, require, stable
+from probe_camera_response import Experiment, MAX_PITCH_MOUSE_UNITS, require, stable
 from resident_runtime import atomic_json, control_module, verify_bridge_identity
 from run_patrol_series import SeriesGuard
 from run_rdp_patrol import MAX_GPU_SAMPLE_AGE_SECONDS, ROOT, STOP_C, ready_session, sample_gpu
@@ -55,6 +55,18 @@ def turn_to(trial, heading):
             trial.report.setdefault('cameraResponseUpdates', []).append(response)
             corrections += 1
     raise RuntimeError('Camera did not settle within twelve bounded corrections')
+
+
+def tilt_once(trial, delta):
+    """Clear a camera obstruction with one relative vertical pulse; retain that absolute pitch is unmeasured."""
+    require(type(delta) is int and 0 < abs(delta) <= MAX_PITCH_MOUSE_UNITS,
+            'Vertical camera shift must be a nonzero integer bounded to 80')
+    response = trial.pulse(0, dy=delta)
+    yaw_change = (response['afterYawDegrees'] - response['beforeYawDegrees'] + 180) % 360 - 180
+    require(abs(yaw_change) <= 3, 'Vertical camera shift unexpectedly changed compass heading')
+    trial.report.update(verticalPulseResult=response, pitchAngleMeasured=False,
+                        finalYawDegrees=response['afterYawDegrees'],
+                        settledFrameIds=trial.report['actions'][-1]['settledFrameIds'])
 
 
 class SurveyGuard:
@@ -119,13 +131,14 @@ def scene_anchor(scene, owner, profile=SURFACE_PROFILE):
 
 
 def run(args, folder, report):
-    """Use one authenticated child lease, one heading, pure horizontal pulses and an unconditional owned stop."""
+    """Use one authenticated camera-only lease and an unconditional stop on its original owner."""
     owner = load_map_owner(args.owner_lineage)
     profile = getattr(args,'navigation_profile',SURFACE_PROFILE)
     anchor = scene_anchor(args.anchor_scene, owner, profile)
     lifecycle = control_module()
     root, child = ready_session(lifecycle)
-    report.update(owner=owner, anchorPosition=anchor, requestedHeading=args.heading,
+    pitch_delta = getattr(args, 'pitch_delta', None)
+    report.update(owner=owner, anchorPosition=anchor, requestedHeading=args.heading, requestedPitchDelta=pitch_delta,
                   sceneResultSha256=hashlib.sha256((args.anchor_scene/'result.json').read_bytes()).hexdigest())
     guard = SurveyGuard(folder, owner, lifecycle, root, child, report)
     listener = bridge = trial = None
@@ -148,7 +161,10 @@ def run(args, folder, report):
         validate_capability(config['capability'], profile)
         trial = Experiment(bridge, report, station=anchor, profile=profile, seconds=35, stop_check=guard.check)
         trial.collect(config)
-        turn_to(trial, args.heading)
+        if pitch_delta is None:
+            turn_to(trial, args.heading)
+        else:
+            tilt_once(trial, pitch_delta)
         guard.check()
     finally:
         try:
@@ -180,7 +196,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--owner-lineage', type=Path, required=True)
     parser.add_argument('--anchor-scene', type=Path, required=True)
-    parser.add_argument('--heading', type=float, required=True)
+    direction = parser.add_mutually_exclusive_group(required=True)
+    direction.add_argument('--heading', type=float)
+    direction.add_argument('--pitch-delta', type=int,
+                           help='One relative vertical mouse shift in [-80, 80], excluding zero; no pitch angle is inferred')
     parser.add_argument('--navigation-profile', choices=(SURFACE_PROFILE,SCOUT_PROFILE),default=SURFACE_PROFILE)
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
@@ -190,8 +209,10 @@ def main():
         if not path.is_relative_to(live):
             parser.error('Owner, native scene and evidence paths must be inside this workspace artifacts/live')
         setattr(args, name, path)
-    if not math.isfinite(args.heading) or not 0 <= args.heading < 360:
+    if args.heading is not None and (not math.isfinite(args.heading) or not 0 <= args.heading < 360):
         parser.error('Use a finite compass heading in [0, 360).')
+    if args.pitch_delta is not None and not 0 < abs(args.pitch_delta) <= MAX_PITCH_MOUSE_UNITS:
+        parser.error('Use a nonzero integer vertical shift bounded to 80.')
     folder = args.output
     folder.mkdir(parents=True, exist_ok=False)
     archive = folder/'source-snapshot'
@@ -201,7 +222,8 @@ def main():
         raw = source.read_bytes()
         (archive/source.name).write_bytes(raw)
         sources[source.name] = hashlib.sha256(raw).hexdigest()
-    report = dict(status='running', kind='surface-camera-survey-v1', observations=[], actions=[], receipts=[],
+    kind = 'surface-camera-survey-v1' if args.pitch_delta is None else 'surface-camera-pitch-survey-v1'
+    report = dict(status='running', kind=kind, observations=[], actions=[], receipts=[],
                   gpuSamples=[], sourceFiles=sources, movementAllowed=False, attacksAllowed=False,
                   physicalInputDeliveryVerified=False, split='diagnostic', fitPerformed=False,
                   stopTemperatureC=STOP_C, maximumSeconds=35, actionHoldMs=100, sourceFreshnessMs=150,

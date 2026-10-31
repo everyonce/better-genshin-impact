@@ -1,5 +1,6 @@
 """Offline camera-response trials with source timing, pose and action receipts on one simulated lease."""
 from collections import Counter
+import copy
 from unittest.mock import Mock, patch
 import unittest
 
@@ -37,10 +38,11 @@ class CameraBridge:
         if self.action:
             fields, ack = self.action
             dx = fields['steps'][0]['mouseDx']
+            dy = fields['steps'][0]['mouseDy']
             if at >= ack+101:
                 receipts = [dict(requestId=fields['requestId'], modelId=probe.MODEL, frameId=fields['frameId'],
                                  status='completed', reason='horizon_complete', acceptedAtMs=ack, endedAtMs=ack+101,
-                                 appliedSteps=[dict(index=0, keys=[], mouseDx=dx, mouseDy=0, startedAtMs=ack+1)])]
+                                 appliedSteps=[dict(index=0, keys=[], mouseDx=dx, mouseDy=dy, startedAtMs=ack+1)])]
                 self.yaw = (self.yaw + dx*self.sensitivity) % 360
                 self.action = None
         pose = dict(state='valid', frameId=i, x=probe.STATION[0], y=probe.STATION[1], layerId='City_102',
@@ -105,6 +107,55 @@ class CameraProbeTests(unittest.TestCase):
     def test_exact_balanced_disjoint_sequence_budgets(self):
         self.assertEqual(Counter(probe.SEQUENCES['train']), {v*s: 2 for v in (30, 75, 125, 220) for s in (-1, 1)})
         self.assertEqual(Counter(probe.SEQUENCES['holdout']), {v*s: 1 for v in (45, 95, 170) for s in (-1, 1)})
+
+    def test_vertical_pulse_retains_the_exact_axis_and_receipt_without_movement(self):
+        result = self.trial.pulse(0, dy=80)
+        self.assertEqual(self.bridge.issued[0]['steps'], [dict(keys=[], durationMs=100, mouseDx=0, mouseDy=80)])
+        self.assertEqual(result['beforeYawDegrees'], result['afterYawDegrees'])
+        self.assertEqual(self.report['receipts'][0]['appliedSteps'][0]['mouseDy'], 80)
+
+    def test_receipt_on_a_repeated_source_retains_its_original_reply_envelope(self):
+        original_request = self.bridge.request
+        previous = None
+
+        def request(method, **fields):
+            """Deliver the terminal receipt with cached pixels before the next independently captured frame."""
+            nonlocal previous
+            reply, pixels = original_request(method, **fields)
+            if method == 'frame':
+                if reply['receipts']:
+                    cached = copy.deepcopy(previous)
+                    cached.update(receipts=reply['receipts'], serverNowMs=reply['serverNowMs'])
+                    reply = cached
+                else:
+                    previous = copy.deepcopy(reply)
+            return reply, pixels
+
+        self.bridge.request = request
+        self.trial.pulse(0, dy=40)
+        envelope, = self.report['receiptEnvelopes']
+        observation = next(row for row in self.report['observations'] if row['frameId'] == envelope['frameId'])
+        self.assertEqual(observation['receipts'], [])
+        self.assertEqual(envelope['sourceFrame'], observation['sourceFrame'])
+        self.assertEqual(envelope['receipts'], self.report['receipts'])
+        self.report['receipts'][0]['reason'] = 'changed_after_capture'
+        self.assertEqual(envelope['receipts'][0]['reason'], 'horizon_complete')
+
+    def test_vertical_receipt_cannot_change_axis_sign_or_add_a_key(self):
+        for alter in (lambda step: step.update(mouseDx=1), lambda step: step.update(mouseDy=-40),
+                      lambda step: step.update(keys=['W'])):
+            with self.subTest(alter=alter):
+                self.setUp()
+                self.bridge.alter = lambda f: alter(f['receipts'][0]['appliedSteps'][0]) if f['receipts'] else None
+                with self.assertRaisesRegex(ValueError, 'exactly the requested camera step'):
+                    self.trial.pulse(0, dy=40)
+                self.assertEqual(len(self.bridge.issued), 1)
+
+    def test_mixed_axes_and_out_of_scope_vertical_pulses_never_dispatch(self):
+        for dx, dy in ((0, 0), (1, 1), (0, 81), (0, -81), (0, True), (False, 40), (0, 10.5)):
+            with self.subTest(dx=dx, dy=dy), self.assertRaises(ValueError):
+                self.trial.pulse(dx, dy=dy)
+        self.assertEqual(self.bridge.issued, [])
 
     def test_failure_closes_owned_bridge_without_stopping_an_unrelated_task(self):
         api, bridge = Mock(), Mock()

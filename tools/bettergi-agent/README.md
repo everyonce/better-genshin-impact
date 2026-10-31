@@ -512,7 +512,9 @@ python tools/bettergi-agent/survey_surface_camera.py `
   --heading 330 --output $newEvidenceDirectory
 ```
 
-The hook retains original source/receipt evidence and allows only horizontal mouse pulses with empty key lists. It measures each settled response, stops within three degrees of the requested heading, and refuses absent, reversed or excessive responses. The whole survey is bounded to 35 seconds and twelve corrections, with the established 150 ms freshness, 100 ms holds, 78°C stop, telemetry-loss stop and exact minimized RDP identity. Creating `STOP` in its evidence directory cancels it. It does not restart on failure. Capture a fresh input-disabled native scene afterward before declaring another movement leg. Camera surveys are diagnostic and do not load or train a policy model.
+For foliage at the camera, replace `--heading` with `--pitch-delta 80` (or a negative value). This issues exactly one vertical pulse, bounded to 80 relative mouse units; these units are not degrees and absolute pitch is not measured. The two options are mutually exclusive. A vertical survey rejects a compass-heading change greater than three degrees. Inspect a fresh native image afterward: a completed pulse does not establish that the view is clear.
+
+The hook retains original source/receipt evidence and uses empty key lists. Heading surveys allow horizontal pulses only, measure each settled response, stop within three degrees of the requested heading, and refuse absent, reversed or excessive responses. Vertical surveys bind the exact requested vertical delta and require zero horizontal input. The whole survey is bounded to 35 seconds; heading surveys permit at most twelve corrections. Both modes retain the established 150 ms freshness, 100 ms holds, 78°C stop, telemetry-loss stop and exact minimized RDP identity. Creating `STOP` in its evidence directory cancels it. It does not restart on failure. Capture a fresh input-disabled native scene afterward before declaring another movement leg. Camera surveys are diagnostic and do not load or train a policy model.
 
 ## Keep a scout policy loaded between reviewed legs
 

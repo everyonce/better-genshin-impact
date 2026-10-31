@@ -35,6 +35,32 @@ def proposal(keys=(), dx=0, dy=0):
 
 
 class HybridNavigationTests(unittest.TestCase):
+    def test_unavailable_unqualified_and_non_normal_poses_cannot_suspend_the_leg_deadline(self):
+        """A lost recognition result must not turn a bounded walking leg into an indefinite wait."""
+        for changes in (dict(navigationPose=dict(state='unavailable')),dict(navigationPose={}),
+                        dict(motionEvidence=dict(status='climbing',spaceKeyMatched=True))):
+            with self.subTest(changes=changes),patch('hybrid_navigation.time.perf_counter_ns',return_value=0):
+                nav=self.ready()
+            with patch('hybrid_navigation.time.perf_counter_ns',return_value=35_000_000_001):
+                with self.assertRaisesRegex(RuntimeError,'leg_progress_deadline'):
+                    nav.prepare(frame(4,400,**changes))
+
+    def test_no_frame_wait_and_interrupt_do_not_renew_the_client_deadline(self):
+        """The runtime can enforce the same deadline without calling prepare() at all."""
+        with patch('hybrid_navigation.time.perf_counter_ns',return_value=0):nav=self.ready()
+        with patch('hybrid_navigation.time.perf_counter_ns',return_value=20_000_000_000):
+            nav.interrupt('hybridNoFrame')
+            nav.check_leg_deadline()
+        with patch('hybrid_navigation.time.perf_counter_ns',return_value=35_000_000_001):
+            with self.assertRaisesRegex(RuntimeError,'leg_progress_deadline'):nav.check_leg_deadline()
+
+    def test_admission_without_a_qualified_pose_is_bounded_too(self):
+        """Input remains unavailable while admission expires after thirty-five seconds."""
+        with patch('hybrid_navigation.time.perf_counter_ns',return_value=0):nav=HybridNavigation(capability())
+        with patch('hybrid_navigation.time.perf_counter_ns',return_value=35_000_000_001):
+            with self.assertRaisesRegex(RuntimeError,'admission_pose_deadline'):nav.prepare(frame(1,100,navigationPose={}))
+        self.assertEqual(nav.legs,0)
+
     def ready(self):
         nav = HybridNavigation(capability())
         for i in range(3):

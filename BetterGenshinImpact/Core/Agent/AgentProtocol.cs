@@ -21,6 +21,9 @@ public sealed record AgentRequest
     public string RequestId { get; init; } = string.Empty;
     /// <summary>Recovery-only SHA-256 of the external original-visit failure and passive full-map proof.</summary>
     public string? PriorEvidenceSha256 { get; init; }
+    /// <summary>Optional named read-only localization scope, latched when guidance is first enabled.</summary>
+    [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+    public string? NavigationProfile { get; init; }
     /// <summary>Frame that the model actually consumed.</summary>
     public long FrameId { get; init; }
     /// <summary>Unmodified server monotonic capture timestamp from that frame.</summary>

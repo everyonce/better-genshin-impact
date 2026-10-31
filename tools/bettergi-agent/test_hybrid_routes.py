@@ -3,15 +3,41 @@ import copy
 from contextlib import redirect_stderr
 import io
 import unittest
+from unittest.mock import Mock,patch
 
 from hybrid_navigation import HybridNavigation
-from hybrid_routes import (COURTYARD_ROUTE, LAMPPOST_ROUTE, PATROL_STATIONS, STREET_PATROL_ROUTE,
+from hybrid_routes import (COURTYARD_ROUTE, LAMPPOST_ROUTE, PATROL_STATIONS, STREET_PATROL_ROUTE, SURVEY_ROUTES,
                            camera_correction, route_heading, route_points)
 from stream_client import parse_arguments
 from test_hybrid_navigation import capability, frame, proposal
 
 
 class HybridRouteTests(unittest.TestCase):
+    def test_observation_mode_refuses_input_and_an_input_enabled_native_bridge(self):
+        """A full-loop qualification cannot accidentally inherit an input-capable native lease."""
+        import stream_client as client
+        base=['--resident','--rdp-session-id','3','--model','open-p2p','--source','unused',
+              '--checkpoint','unused','--p2p-fast-start','--cuda-graph','--hybrid-navigation','--hybrid-observe',
+              '--goal-intent','ground-navigation','--output','unused.json']
+        args=parse_arguments(base)
+        self.assertTrue(client.validate_hybrid_observe_options(args))
+        bridge=Mock(hello={'inputEnabled':True})
+        with patch.object(client,'Bridge',return_value=bridge),self.assertRaisesRegex(ValueError,'native bridge'):
+            client.run_episode(args)
+        bridge.handle.close.assert_called_once()
+        for extra in (['--enable-input'],['--model','observe']):
+            with redirect_stderr(io.StringIO()),self.assertRaises(SystemExit):parse_arguments(base+extra)
+
+    def test_unsurveyed_extension_stops_before_retreat_or_sidestep_for_both_obstacle_triggers(self):
+        for route in SURVEY_ROUTES:
+            for trigger in ('stationaryForward','climbDrop'):
+                with self.subTest(route=route,trigger=trigger):
+                    nav=HybridNavigation(capability(),route)
+                    with self.assertRaisesRegex(RuntimeError,'survey_obstacle_requires_inspection'):
+                        nav._begin_recovery(trigger)
+                    self.assertEqual(nav.phase,'failed')
+                    self.assertEqual(nav.recovery_attempts,0)
+
     def lamp_frame(self, index, point, yaw):
         """Supply the original two native anchors alongside the surveyed route geometry."""
         item = frame(index, 100 * index, point, yaw=yaw)

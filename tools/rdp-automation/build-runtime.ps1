@@ -112,6 +112,20 @@ try {
     $json = $manifest | ConvertTo-Json -Depth 4
     [IO.File]::WriteAllText((Join-Path $releaseRoot 'build-manifest.json'), $json, [Text.UTF8Encoding]::new($false))
     if ($managedArtifacts) {
+        # Preserve only the exact package identity bytes needed to replay historical handoffs.
+        # Runtime assets remain eligible for normal cleanup; witnesses never become launch targets.
+        $witness = Join-Path $artifactRoot "release-retention\package-witnesses\release-r$Release"
+        if (Test-Path -LiteralPath $witness) { throw "Package identity witness already exists: $witness" }
+        $witnessTarget = Join-Path $witness 'BetterGI-English-win-x64'
+        New-Item -ItemType Directory -Path $witnessTarget | Out-Null
+        Copy-Item -LiteralPath (Join-Path $releaseRoot 'build-manifest.json') -Destination $witness
+        foreach ($extension in @('exe','dll')) {
+            $witnessFile = Join-Path $witnessTarget "BetterGI.$extension"
+            Copy-Item -LiteralPath (Join-Path $target "BetterGI.$extension") -Destination $witnessFile
+            if ((Get-BuildFileSha256 -Path $witnessFile) -ne $manifest[($extension+'Sha256')]) {
+                throw 'Published package identity witness differs.'
+            }
+        }
         & $retentionScript -Repository $repoRoot -Action Register -PublishDirectory $target
         & $retentionScript -Repository $repoRoot -Action Apply -PublishDirectory $target
     }

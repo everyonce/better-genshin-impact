@@ -34,6 +34,25 @@ class PatrolLauncherTests(unittest.TestCase):
         patrol.atomic_json(self.folder/'patrol.json.status.json', {'version': 1, 'runId': run_id})
         patrol.atomic_json(self.folder/'patrol.json.control.json', {'version': 1, 'runId': run_id, 'command': 'run'})
 
+    def test_a_single_declared_extension_leg_keeps_the_original_timing_and_input_guards(self):
+        args=patrol.options(['--route','mondstadt-stair-post-v1','--legs','1','--remember-hybrid-bypass'])
+        command=patrol.patrol_argv(args,7,self.folder)
+        import time
+        binding=f"--patrol-series-binding=101:{'a'*32}:202:{'b'*32}:{time.monotonic_ns()+120_000_000_000}"
+        parsed=parse_arguments(command[5:]+[binding])
+        self.assertEqual((parsed.hybrid_route,parsed.hybrid_legs),('mondstadt-stair-post-v1',1))
+        self.assertTrue(parsed.remember_hybrid_bypass)
+        self.assertEqual((parsed.max_observation_age_ms,parsed.action_hold_ms,parsed.decision_hz),(150,100,10))
+        self.assertEqual(parsed.record_max_mib,160)
+        for extra in (['--hybrid-legs','5'],['--max-observation-age-ms','151'],['--action-hold-ms','101']):
+            with self.subTest(extra=extra),self.assertRaises(SystemExit):parse_arguments(command[5:]+[binding]+extra)
+
+    def test_route_extensions_require_explicit_bounds_and_keep_existing_photo_permissions(self):
+        for arguments in (['--route','mondstadt-stair-post-v1'],['--legs','5'],
+                          ['--route','mondstadt-street-extension-12-v1','--legs','1'],
+                          ['--remember-hybrid-bypass'],['--route','mondstadt-stair-post-v1','--legs','1','--camera-calibration','unused']):
+            with self.subTest(arguments=arguments),self.assertRaises(SystemExit):patrol.options(arguments)
+
     def test_discover_requires_one_current_minimized_and_idle_authenticated_pair(self):
         self.assertEqual(patrol.ready_session(self.api), (self.root, self.child))
         for record, key, bad in [

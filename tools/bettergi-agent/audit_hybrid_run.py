@@ -11,6 +11,8 @@ from hybrid_routes import (COURTYARD_ROUTE, PATROL_STATIONS, STAIR_POST_ROUTE, S
                            camera_correction, route_heading, route_points)
 from observation_timing import observation_timestamp
 from destination_queue_limits import ENDURANCE, STANDARD, queue_limits
+from hybrid_routes import SURFACE_ROUTES
+from navigation_profiles import COURTYARD_PROFILE,SURFACE_PROFILE,validate_capability,allows_pose_scope
 
 
 def require(condition, message):
@@ -822,6 +824,19 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
     require(len(starts) == 1, 'Expected one independently admitted starting endpoint')
     require(len(endpoints) >= minimum_legs, 'Insufficient verified route legs')
     route_id = starts[0].get('routeId', COURTYARD_ROUTE)
+    navigation_profile=parts[0]['hybridNavigation'].get('profileId',COURTYARD_PROFILE)
+    require(all(part['hybridNavigation'].get('profileId',COURTYARD_PROFILE)==navigation_profile for part in parts),
+            'Navigation scope changed within the run')
+    require((route_id in SURFACE_ROUTES)==(navigation_profile==SURFACE_PROFILE),
+            'Surface route and explicit localization scope differ')
+    if navigation_profile==SURFACE_PROFILE:
+        for part in parts:validate_capability(part.get('navigationGuidance') or {},navigation_profile)
+        for frame in frames.values():
+            pose=frame.get('navigationPose') or {}
+            if pose.get('state')=='valid':
+                require(allows_pose_scope(pose,navigation_profile) and pose.get('frameId')==frame['frameId']
+                        and .99<=pose.get('positionConfidence',0)<=1 and .2<=pose.get('yawConfidence',0)<=1,
+                        'Surface pose left its explicit scope or confidence bounds')
     require(all(p['hybridNavigation'].get('routeId', COURTYARD_ROUTE) == route_id for p in parts),
             'Fixed route changed within the run')
     start, end = route_points(route_id)
@@ -844,7 +859,7 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
     source_epoch = (origin.get('sourceFrame') or {}).get('captureEpoch')
     require(source_epoch and origin.get('frameWorldReadiness', {}).get('ready') is True
             and pose.get('state') == 'valid' and pose.get('frameId') == prior_frame
-            and observation_timestamp(origin) == prior_at and pose.get('layerId') == 'City_102'
+            and observation_timestamp(origin) == prior_at and allows_pose_scope(pose,navigation_profile)
             and .99 <= pose['positionConfidence'] <= 1 and .2 <= pose['yawConfidence'] <= 1
             and math.dist((pose['x'], pose['y']), end if not patrol and target == 'start' else start) <= 2,
             'Admission frame does not match the reviewed starting endpoint')
@@ -875,7 +890,7 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
             require(frame['sourceFrame']['captureEpoch'] == source_epoch and
                     observation_timestamp(frame) == sample['atMs'], 'Endpoint source clock differs')
             require(math.dist((pose['x'], pose['y']), target_point) <= 2, 'Endpoint is outside its acceptance radius')
-            require(pose['layerId'] == 'City_102' and .99 <= pose['positionConfidence'] <= 1
+            require(allows_pose_scope(pose,navigation_profile) and .99 <= pose['positionConfidence'] <= 1
                     and .2 <= pose['yawConfidence'] <= 1, 'Unqualified native match')
             require(frame.get('frameWorldReadiness', {}).get('ready') is True, 'Endpoint is not a world frame')
             prior_frame, prior_at = sample['frameId'], sample['atMs']

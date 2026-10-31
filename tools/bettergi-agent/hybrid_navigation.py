@@ -10,12 +10,13 @@ import time
 
 from observation_timing import observation_timestamp
 from hybrid_bypass import HybridBypass
-from hybrid_routes import (COURTYARD_ROUTE, PATROL_SEGMENTS, PATROL_STATIONS, STREET_PATROL_ROUTE,
+from hybrid_routes import (COURTYARD_ROUTE, PATROL_SEGMENTS, PATROL_STATIONS, STREET_PATROL_ROUTE, SURVEY_ROUTES,
                            camera_correction, itinerary_legs, patrol_leg, route_heading, route_points, station_path)
 
 
 PROFILE = COURTYARD_ROUTE
 START, END = route_points(COURTYARD_ROUTE)
+from navigation_profiles import validate_capability,allows_pose_scope
 
 
 def yaw_error(a, b):
@@ -35,13 +36,10 @@ class HybridNavigation:
     """Serial planner; the existing bridge remains the sole input/freshness owner."""
 
     def __init__(self, capability, route_id=COURTYARD_ROUTE, remember_bypass=False, *,
-                 itinerary_destinations=None, itinerary_start='stair-front', stationary_photo_retries=False):
-        expected = dict(version=1, profileId=PROFILE, sameFrame=True, readOnly=True)
-        if any(capability.get(k) != v for k, v in expected.items()):
-            raise ValueError('The bridge does not advertise same-frame hybrid navigation')
-        if tuple(capability.get('start', {}).get(k) for k in ('x', 'y')) != START or tuple(
-                capability.get('end', {}).get(k) for k in ('x', 'y')) != END:
-            raise ValueError('The fixed courtyard geometry differs')
+                 itinerary_destinations=None, itinerary_start='stair-front', stationary_photo_retries=False,
+                 navigation_profile=PROFILE):
+        validate_capability(capability,navigation_profile)
+        self.navigation_profile=navigation_profile
         self.route_id = route_id
         self.start, self.end = route_points(route_id)
         self.bypass = HybridBypass(route_id) if remember_bypass else None
@@ -69,6 +67,8 @@ class HybridNavigation:
         self.last_at = None
         self.pending_climb_exit = None
         self.leg_started = None
+        # Bound admission and every walking leg even when source observations stop qualifying.
+        self.leg_deadline_ns = time.perf_counter_ns() + 35_000_000_000
         self.failure = None
         self.segment = {}
         self.arrival_frame = self.arrival_epoch = self.release_epoch = None
@@ -106,7 +106,7 @@ class HybridNavigation:
 
     def snapshot(self):
         """Return scalar progress without exposing mutable internal collections."""
-        result = dict(profileId=PROFILE, routeId=self.route_id, rememberBypass=self.bypass is not None,
+        result = dict(profileId=self.navigation_profile, routeId=self.route_id, rememberBypass=self.bypass is not None,
                     phase=self.phase, target=self.target_name,
                     completedLegs=self.legs, selections=dict(self.selections),
                     recoveryAttempts=self.total_recoveries, failure=self.failure,
@@ -303,6 +303,8 @@ class HybridNavigation:
 
     def _begin_recovery(self, trigger_kind):
         """Share the finite retreat and sidestep budget across distinct obstacle triggers."""
+        if self.route_id in SURVEY_ROUTES:
+            self._fail('survey_obstacle_requires_inspection')
         if self.recovery_attempts >= 2:
             self._fail('obstacle_recovery_exhausted')
         self.recovery_attempts += 1
@@ -404,6 +406,20 @@ class HybridNavigation:
                 and (gate.get('sourceFrame') or {}).get('captureEpoch') == self.source_epoch
                 and gate.get('reason') in ('world_observation_invalidated','world_confirming','world_ready'))
 
+    def check_leg_deadline(self):
+        """Expire on the client clock even in no-frame, pose-loss, paused and recovery wait paths."""
+        now = time.perf_counter_ns()
+        if self.phase != 'complete' and now > self.leg_deadline_ns:
+            self.events.append(dict(type='hybridDeadlineExceeded', phase=self.phase, atClientNs=now,
+                deadlineClientNs=self.leg_deadline_ns, deadlineSeconds=35,
+                elapsedSeconds=(now-self.leg_deadline_ns)/1e9+35))
+            self._fail('admission_pose_deadline' if self.leg_started is None else 'leg_progress_deadline')
+
+    def _start_leg_clock(self, at):
+        """Start both clocks at admission or a verified endpoint; interruptions never renew either."""
+        self.leg_started = at
+        self.leg_deadline_ns = time.perf_counter_ns() + 35_000_000_000
+
     def check_release_retry_time(self):
         """No missing capture or blocked poll may prolong the reacknowledgement window."""
         if self.phase == 'awaitingEndpointReleaseRetry' and time.perf_counter_ns() > self.release_retry['deadlineNs']:
@@ -465,6 +481,7 @@ class HybridNavigation:
             self._fail(self.failure)
         if self.phase == 'complete':
             return 'itineraryComplete'
+        self.check_leg_deadline()
         self.check_release_retry_time()
         if self.photo_hold is not None:
             if self.phase == 'awaitingDestinationBatch':
@@ -481,7 +498,7 @@ class HybridNavigation:
                   'headingToStartDegrees', 'headingToEndDegrees', 'mouseToStart', 'mouseToEnd')
         if any(type(pose.get(k)) not in (int, float) or not math.isfinite(pose[k]) for k in fields):
             self._fail('invalid_pose_numbers')
-        if (pose.get('layerId') != 'City_102' or not .99 <= pose['positionConfidence'] <= 1
+        if (not allows_pose_scope(pose,self.navigation_profile) or not .99 <= pose['positionConfidence'] <= 1
                 or not .2 <= pose['yawConfidence'] <= 1 or not 0 <= pose['yawDegrees'] < 360):
             if self.photo_hold is not None:
                 self._fail('destination_photo_pose_unqualified')
@@ -537,15 +554,14 @@ class HybridNavigation:
                 self._fail('verified_endpoint_start_required')
             if not self._sample(pose, at):
                 return 'confirmingStart'
-            admission = {}
+            admission = dict(sourceEpoch=epoch, samples=copy.deepcopy(self.samples))
             if self.segment:
-                admission = dict(sourceEpoch=epoch, station=self.segment['fromStation'],
-                                 samples=copy.deepcopy(self.samples), **self.segment)
+                admission.update(station=self.segment['fromStation'], **self.segment)
             else:
                 self.target_name = 'end' if math.hypot(x - self.start[0], y - self.start[1]) <= 2 else 'start'
                 self.target = self.end if self.target_name == 'end' else self.start
             self.phase = 'walking'
-            self.leg_started = at
+            self._start_leg_clock(at)
             self.samples.clear()
             self.events.append(dict(type='hybridStartVerified', routeId=self.route_id,
                                     frameId=pose['frameId'], atMs=at, target=self.target_name, **admission))
@@ -617,7 +633,8 @@ class HybridNavigation:
             else:
                 self.target_name = 'start' if self.target_name == 'end' else 'end'
                 self.target = self.start if self.target_name == 'start' else self.end
-            self.phase, self.leg_started = ('complete' if finished else 'walking'), at
+            self.phase = 'complete' if finished else 'walking'
+            self._start_leg_clock(at)
             if self.photo_hold is not None:
                 self.phase = 'destinationPhotoDecision'
             self.samples.clear()

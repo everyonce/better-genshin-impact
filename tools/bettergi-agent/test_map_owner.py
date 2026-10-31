@@ -142,7 +142,7 @@ class MapOwnerTest(unittest.TestCase):
             targetConfigSha256=res['replacementEvidence']['existingTargetConfigSha256'],**selected))
         return first,second,res,game
 
-    def test_only_one_additional_handoff_replays_original_and_protected_game(self):
+    def test_r59_handoff_replays_original_and_protected_game(self):
         first,second,res,game = self.create_successor()
         # No R57 payload exists in this fixture; source identity is reconstructed from the original audit.
         lineage = owner.replacement(first,second)
@@ -151,8 +151,60 @@ class MapOwnerTest(unittest.TestCase):
         write(receipt,lineage)
         self.assertEqual(owner.load_map_owner(receipt)['child'],owner.identity(res['child']))
         self.assertEqual(owner.load_map_owner(first),self.new_owner)
-        with self.assertRaisesRegex(ValueError,'direct R57 to R58'):
+        # A stale R58 discovery cannot authorize a subsequent R59 replacement.
+        with self.assertRaises(ValueError):
             owner.preflight(receipt,second/'before.json')
+
+    def test_r60_handoff_keeps_the_same_game_and_rejects_a_fourth_transition(self):
+        first,second,previous,game=self.create_successor()
+        prior=second/'map-owner-lineage.json'
+        write(prior,owner.replacement(first,second))
+        folder=second.parent/'r60'
+        write(folder/'before.json',dict(instances=[previous['root'],previous['child']],unavailable=[]))
+        write(folder/'game-before.json',game)
+        target=owner.ARTIFACTS/'release-r60/BetterGI-English-win-x64'
+        target.mkdir(parents=True)
+        selected=dict(targetDirectory=str(target))
+        for ext in ('exe','dll'):
+            data=(ext+' R60').encode()
+            (target/f'BetterGI.{ext}').write_bytes(data)
+            selected[ext+'Sha256']=hashlib.sha256(data).hexdigest()
+        write(target.parent/'build-manifest.json',dict(self.build,**selected))
+        result=deepcopy(previous)
+        old=previous['child']
+        result['child'].update(processId=1000,instanceNonce='a'*32,appDirectory=str(target),assemblySha256=selected['dllSha256'])
+        result.update(selectedPackage=selected,previousProcessId=old['processId'])
+        result['replacementEvidence'].update(previousProcessId=old['processId'],previousNonce=old['instanceNonce'],
+            replacementProcessId=1000,replacementNonce='a'*32,targetDirectory=str(target))
+        write(folder/'ensure-child.json',result)
+        write(folder/'preflight.json',dict(source=owner.load_map_owner(prior),protectedGame=game,
+            targetConfigSha256=result['replacementEvidence']['existingTargetConfigSha256'],**selected))
+        receipt=owner.replacement(prior,folder)
+        path=folder/'map-owner-lineage.json'
+        write(path,receipt)
+        self.assertEqual(owner.load_map_owner(path)['child'],owner.identity(result['child']))
+        with self.assertRaisesRegex(ValueError,'bounded'):owner.preflight(path,folder/'before.json')
+        result['protectedGame']=dict(game,startedFileTime=1)
+        write(folder/'ensure-child.json',result)
+        with self.assertRaisesRegex(ValueError,'game lifetime'):owner.load_map_owner(path)
+
+    def test_small_identity_witness_survives_retirement_but_never_hides_changed_live_bytes(self):
+        witness=Path(owner.preserve_package_witness(58)['witnessDirectory'])
+        original=owner.ARTIFACTS/'release-r58'
+        retired=owner.ARTIFACTS/'retired-fixture-r58'
+        # Both paths belong to this test's private temporary artifact root.
+        self.assertEqual(original.parent.resolve(),owner.ARTIFACTS.resolve())
+        self.assertEqual(retired.parent.resolve(),owner.ARTIFACTS.resolve())
+        dll=self.target/'BetterGI.dll'
+        prior=dll.read_bytes()
+        dll.write_bytes(b'changed-live-file')
+        with self.assertRaises(ValueError):owner.target_package(58)
+        dll.write_bytes(prior)
+        original.rename(retired)
+        self.assertEqual(owner.target_package(58)[0],self.build)
+        self.assertEqual(owner.replacement(self.prior,self.folder)['identity'],self.new_owner)
+        (witness/'BetterGI-English-win-x64/BetterGI.dll').write_bytes(b'changed-witness')
+        with self.assertRaises(ValueError):owner.target_package(58)
 
     def test_r59_rejects_missing_or_substituted_game_lifetime(self):
         first,second,res,game = self.create_successor()

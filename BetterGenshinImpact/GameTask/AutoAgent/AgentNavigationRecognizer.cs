@@ -16,11 +16,13 @@ using System.Threading;
 
 namespace BetterGenshinImpact.GameTask.AutoAgent;
 
-/// <summary>Opt-in, capture-thread-owned localization using BetterGI's existing fixed courtyard map and yaw recognizers.</summary>
+/// <summary>Opt-in, capture-thread-owned localization using the existing local map and same-image yaw recognizer.</summary>
 internal sealed class AgentNavigationRecognizer : IDisposable
 {
     /// <summary>Explicit capability name; callers cannot supply route coordinates or arbitrary assets.</summary>
-    internal const string ProfileId = "mondstadt-courtyard-hybrid-v1";
+    internal const string ProfileId = AgentNavigationProfile.Courtyard;
+    /// <summary>Immutable per-stream selection; ordinary callers retain the original city-only contract.</summary>
+    private readonly string _profileId;
     /// <summary>The shared map is accessed only while the agent owns the existing TaskRunner scope.</summary>
     private readonly SceneBaseMapByTemplateMatch _map;
     /// <summary>Owned yaw preprocessing state, never shared with another capture worker.</summary>
@@ -33,8 +35,11 @@ internal sealed class AgentNavigationRecognizer : IDisposable
     private readonly double _dpi;
 
     /// <summary>Warm native assets before acquiring a frame; no input or model work occurs here.</summary>
-    internal AgentNavigationRecognizer(double dpi)
+    internal AgentNavigationRecognizer(double dpi, string profileId = ProfileId)
     {
+        if (!AgentNavigationProfile.IsSupported(profileId))
+            throw new ArgumentException("unsupported_navigation_profile", nameof(profileId));
+        _profileId = profileId;
         _dpi = dpi;
         NativeNavigationBaselineOperations.ValidateRoute(File.ReadAllBytes(
             Global.Absolute(@"GameTask\Common\Element\Assets\Json\合成台_蒙德.json")), false);
@@ -58,6 +63,24 @@ internal sealed class AgentNavigationRecognizer : IDisposable
         end = new { x = NavigationBaselineTask.EndX, y = NavigationBaselineTask.EndY },
         layerId = "City_102", minimumPositionConfidence = .99, minimumYawConfidence = .2,
         maxWidth = 1920, maxHeight = 1080, normalIsGroundedProof = false
+    };
+
+    /// <summary>Advertise the exact bounded surface scope without widening the default city capability.</summary>
+    internal static object GetCapability(string profileId) => profileId switch
+    {
+        ProfileId => Capability,
+        AgentNavigationProfile.MondstadtSurface => new
+        {
+            version = 1, profileId, sameFrame = true, readOnly = true,
+            start = new { x = NavigationBaselineTask.StartX, y = NavigationBaselineTask.StartY },
+            end = new { x = NavigationBaselineTask.EndX, y = NavigationBaselineTask.EndY },
+            allowedLayerIds = new[] { "City_102", "MapBack_2" },
+            bounds = new { minX = AgentNavigationProfile.MinimumX, maxX = AgentNavigationProfile.MaximumX,
+                minY = AgentNavigationProfile.MinimumY, maxY = AgentNavigationProfile.MaximumY },
+            minimumPositionConfidence = .99, minimumYawConfidence = .2,
+            maxWidth = 1920, maxHeight = 1080, normalIsGroundedProof = false
+        },
+        _ => throw new ArgumentException("unsupported_navigation_profile", nameof(profileId))
     };
 
     /// <summary>Read only the supplied native image and publish no stale pose after any failed gate or match.</summary>
@@ -88,7 +111,7 @@ internal sealed class AgentNavigationRecognizer : IDisposable
             var match = _map.PrevSuccessResult;
             var world = _map.ConvertImageCoordinatesToGenshinMapCoordinates(position);
             if (world is null || !AgentNavigationPose.IsQualified(world.Value.X, world.Value.Y,
-                prepared.YawDegrees, match.Confidence, prepared.YawConfidence, match.Layer?.LayerId))
+                prepared.YawDegrees, match.Confidence, prepared.YawConfidence, match.Layer?.LayerId, _profileId))
                 return Missing("pose_not_qualified");
             var startHeading = Navigation.GetTargetOrientation(_start, position);
             var endHeading = Navigation.GetTargetOrientation(_end, position);

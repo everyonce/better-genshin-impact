@@ -83,6 +83,8 @@ public sealed class AgentStreamSession
     private bool _queuedEnableAttempted;
     /// <summary>Explicit same-owner opt-in to read-only native pose metadata; ordinary streams keep their existing capture cost.</summary>
     private bool _navigationGuidanceEnabled;
+    /// <summary>Published before the enable flag and immutable once the capture thread may construct its recognizer.</summary>
+    private string _navigationProfileId = AgentNavigationProfile.Courtyard;
     /// <summary>Explicit one-shot UI authority; ordinary actions always use the original world guard.</summary>
     private AgentMapInspection? _mapInspection;
 
@@ -178,7 +180,7 @@ public sealed class AgentStreamSession
             if (!_runtime.Window.IsAlive || _runtime.IsStopping) return;
             // Warm the opt-in local map before capturing, so warmup cannot renew an old image's timestamp.
             if (Volatile.Read(ref _navigationGuidanceEnabled) && navigation is null)
-                navigation = new AgentNavigationRecognizer(_runtime.SystemInfo.DpiScale);
+                navigation = new AgentNavigationRecognizer(_runtime.SystemInfo.DpiScale, Volatile.Read(ref _navigationProfileId));
             var capturedAt = NowMs;
             // Expected GPU readback may finish before the next cadence. Real failures still skip/invalidate immediately.
             // Preserve this original request time across polls; neither retry nor delay renews source authority.
@@ -412,9 +414,17 @@ public sealed class AgentStreamSession
                     break;
                 case "enableNavigationGuidance":
                     // This command only enables evidence. Input still requires both original explicit opt-ins.
+                    var navigationProfile = request.NavigationProfile ?? AgentNavigationProfile.Courtyard;
+                    if (!AgentNavigationProfile.IsSupported(navigationProfile)
+                        || Volatile.Read(ref _navigationGuidanceEnabled) && navigationProfile != Volatile.Read(ref _navigationProfileId))
+                    {
+                        await WriteAsync(pipe, new { type = "rejected", reason = "unsupported_or_locked_navigation_profile" }, null, ct);
+                        break;
+                    }
+                    Volatile.Write(ref _navigationProfileId, navigationProfile);
                     Volatile.Write(ref _navigationGuidanceEnabled, true);
                     await WriteAsync(pipe, new { type = "navigationGuidance", enabled = true,
-                        capability = AgentNavigationRecognizer.Capability }, null, ct);
+                        capability = AgentNavigationRecognizer.GetCapability(navigationProfile) }, null, ct);
                     break;
                 case "enableStepApplications":
                     JObject confirmation;
@@ -575,6 +585,7 @@ public sealed class AgentStreamSession
             freshnessClockKinds = new[] { "reported_compositor_qpc", "first_acquisition_qpc" }, measuresGameRenderAge = false },
         supportsReadinessSnapshots = true, diagnostics = _snapshots.Snapshot(),
         navigationGuidance = AgentNavigationRecognizer.Capability,
+        navigationProfiles = new[] { AgentNavigationProfile.Courtyard, AgentNavigationProfile.MondstadtSurface },
         worldReadiness = new
         {
             version = 1, requiredForInput = true, method = "paimon_hud_and_modal_templates",

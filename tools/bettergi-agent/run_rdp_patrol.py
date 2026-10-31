@@ -15,7 +15,8 @@ from threading import Event
 import time
 import uuid
 
-from hybrid_routes import PATROL_STATIONS, STREET_PATROL_ROUTE, itinerary_legs
+from hybrid_routes import EXECUTABLE_ROUTE_IDS, PATROL_STATIONS, STAIR_POST_ROUTE, STREET_PATROL_ROUTE, SURFACE_ROUTES, itinerary_legs
+from navigation_profiles import COURTYARD_PROFILE,SURFACE_PROFILE,NAVIGATION_PROFILES
 from resident_runtime import atomic_json, control_module, read_control_document, select_child
 from destination_queue_limits import ENDURANCE, STANDARD
 
@@ -33,7 +34,14 @@ def options(argv=None, parser=None, *, warm=False):
     """All model assets and executables must already be installed on this host."""
     p = parser if parser is not None else argparse.ArgumentParser(description=__doc__)
     if not warm:
+        p.add_argument('--navigation-profile',choices=NAVIGATION_PROFILES,default=COURTYARD_PROFILE)
         p.add_argument('--circuits', type=int, default=1, help='Number of A-B-C-B-A circuits (1 to 32)')
+        p.add_argument('--route',dest='route_id',choices=EXECUTABLE_ROUTE_IDS,default=STREET_PATROL_ROUTE,
+                       help='Select one already declared local route for a bounded extension trial')
+        p.add_argument('--legs',dest='route_legs',type=int,
+                       help='Stop after one to four verified legs instead of requesting complete street circuits')
+        p.add_argument('--remember-hybrid-bypass',action='store_true',
+                       help='Use the existing surveyed bypass on the stair-post route only')
     p.add_argument('--seconds', type=int, default=180, help='Wall time limit including model loading (15 to 600)')
     p.add_argument('--evidence-root', type=Path, default=ROOT/'artifacts/live/patrol')
     p.add_argument('--gpu-python', type=Path, default=AGENT/'envs/gamescaling/Scripts/python.exe')
@@ -60,6 +68,17 @@ def options(argv=None, parser=None, *, warm=False):
     p.add_argument('--retain-policy-rgb', action='store_true',
                    help='Retain exact policy pixels inside the standard 160 MiB recording budget')
     args = p.parse_args(argv)
+    if not warm:
+        if (args.route_id in SURFACE_ROUTES)!=(args.navigation_profile==SURFACE_PROFILE):
+            p.error('Surface routes require their explicit bounded surface navigation profile')
+        if args.route_legs is not None and not 1<=args.route_legs<=4:
+            p.error('--legs must be between one and four')
+        if args.route_id!=STREET_PATROL_ROUTE and args.route_legs is None:
+            p.error('A different local route requires an explicit --legs bound')
+        if args.remember_hybrid_bypass and args.route_id!=STAIR_POST_ROUTE:
+            p.error('The surveyed bypass belongs only to the stair-post route')
+        if args.route_id!=STREET_PATROL_ROUTE and (args.photo_station or args.photo_qualification or args.camera_calibration):
+            p.error('Photo and calibrated-camera permissions remain bound to their existing street route')
     if args.retain_policy_rgb and getattr(args, 'endurance', False):
         p.error('Exact policy capture requires the standard bounded collection profile')
     if getattr(args,'retain_station_rgb',False) and (not args.landmark_shadow or args.photo_station):
@@ -103,12 +122,14 @@ def ready_session(lifecycle):
 
 def patrol_argv(args, session, folder):
     """Use the same resident, observation profile and input owner as the audited street patrol."""
+    requested_legs = getattr(args,'route_legs',None)
+    if requested_legs is None:requested_legs=getattr(args,'destination_legs',args.circuits*4)
     command = [str(args.gpu_python.resolve()), '-B', '-X', 'utf8', str(Path(__file__).with_name('stream_client.py').resolve()),
                '--model=open-p2p', '--source', str(args.source.resolve()), '--checkpoint', str(args.checkpoint.resolve()),
                '--history=41', '--cuda-graph', '--p2p-fast-start', '--p2p-prewarm',
                '--goal-embedding', str(args.goal_embedding.resolve()), '--goal-intent=ground-navigation',
-               '--hybrid-navigation', '--navigation-climb-recovery', '--hybrid-route', STREET_PATROL_ROUTE,
-               '--hybrid-legs', str(getattr(args, 'destination_legs', args.circuits*4)), '--fps=20', '--decision-hz=10',
+               '--hybrid-navigation', '--navigation-climb-recovery', '--hybrid-route', getattr(args,'route_id',STREET_PATROL_ROUTE),
+               '--hybrid-legs', str(requested_legs), '--fps=20', '--decision-hz=10',
                '--max-observation-age-ms=150', '--action-hold-ms=100', '--enable-input', '--resident',
                '--rdp-session-id', str(session), '--observation-profile=p2p-native-hamming-192-v1',
                '--seconds', str(args.seconds), '--segment-seconds', str(min(30, args.seconds)),
@@ -116,12 +137,16 @@ def patrol_argv(args, session, folder):
                '--ffmpeg', str(args.ffmpeg.resolve()), '--output', str(folder/'patrol.json')]
     if args.steering_shadow:
         command.append('--steering-shadow=' + str(args.steering_shadow.resolve()))
+    if getattr(args,'navigation_profile',COURTYARD_PROFILE)!=COURTYARD_PROFILE:
+        command.extend(['--navigation-profile',args.navigation_profile])
     if args.landmark_shadow:
         command.append('--landmark-shadow=' + str(args.landmark_shadow.resolve()))
     if getattr(args,'retain_station_rgb',False):
         command.append('--retain-station-rgb')
     if getattr(args, 'retain_policy_rgb', False):
         command.append('--retain-policy-rgb')
+    if getattr(args,'remember_hybrid_bypass',False):
+        command.append('--remember-hybrid-bypass')
     if args.photo_station:
         command.extend(['--photo-directory', str(folder/'station-photos'),
                         '--photo-qualification', str(args.photo_qualification.resolve())])
@@ -323,7 +348,9 @@ def run(args, folder, *, series=None):
     root, child = ready_session(lifecycle)
     session = child['windowsSessionId']
     state = dict(windowsSessionId=session, rootPid=root['processId'], childPid=child['processId'],
-                 circuits=args.circuits, wallTimeLimitSeconds=args.seconds, stopAtC=STOP_C,
+                 circuits=0 if getattr(args,'route_legs',None) is not None else args.circuits,
+                 routeId=getattr(args,'route_id',STREET_PATROL_ROUTE),requestedLegs=getattr(args,'route_legs',None),
+                 wallTimeLimitSeconds=args.seconds, stopAtC=STOP_C,
                  runId=None, stopReason=None, stopRequested=False, verified=False)
     if getattr(args,'endurance',False):
         state['queueLimitsProfile'] = ENDURANCE.profile
@@ -369,7 +396,8 @@ def run(args, folder, *, series=None):
             checkpoints.update(landmark_checkpoint=args.landmark_shadow.resolve(), ffmpeg=str(args.ffmpeg.resolve()))
         if getattr(args, 'destination_legs', None):
             checkpoints['destination_plan'] = args.plan
-        minimum_legs = getattr(args, 'destination_legs', 4*args.circuits)
+        minimum_legs = getattr(args,'route_legs',None)
+        if minimum_legs is None:minimum_legs=getattr(args, 'destination_legs', 4*args.circuits)
         if getattr(args, 'warm_photo_plan', None) and getattr(args, 'batches', None):
             from destination_batch_sender import admitted_plans
             plans = admitted_plans(folder)
@@ -378,7 +406,7 @@ def run(args, folder, *, series=None):
             checkpoints['destination_batches'] = plans
             minimum_legs = sum(len(itinerary_legs(p['start'],[r['destination'] for r in p['requests']])) for p in plans)
         evidence = audit(output, folder/'patrol-recording', repository=ROOT, minimum_legs=minimum_legs,
-                         minimum_circuits=args.circuits, **checkpoints)
+                         minimum_circuits=0 if getattr(args,'route_legs',None) is not None else args.circuits, **checkpoints)
         atomic_json(folder/'audit.json', evidence)
         if getattr(args,'retain_station_rgb',False):
             from landmark_shadow_sources import verify_archive
@@ -410,7 +438,8 @@ def main():
         atomic_json(folder/'error.json', {'error': str(exc)})
         print(str(exc), file=sys.stderr)
         return 1
-    print(f'Verified {args.circuits} circuit(s).')
+    print(f'Verified {args.route_legs} leg(s) on {args.route_id}.' if args.route_legs is not None
+          else f'Verified {args.circuits} circuit(s).')
     return 0
 
 

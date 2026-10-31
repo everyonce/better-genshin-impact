@@ -491,3 +491,11 @@ P2P evaluates the original FP32 rotary-position formula directly on the GPU. Thi
 The model tests compare the original causal mask and decode offsets against explicit masked-softmax attention, and check per-mille conversion, complete-action validation and key naming. Successful inference does not prove visual understanding or Genshin task completion. Preserve the initial eager and optimized JSON reports for comparison.
 
 Official upstreams: [GameScaling](https://github.com/THUSI-Lab/GameScaling), [Open P2P](https://github.com/elefant-ai/open-p2p). The generated Open P2P source copy includes its upstream MIT license. Models are stored under ignored workspace artifacts; no `BetterGenshinImpact/Assets` directory is introduced.
+
+## Bounded navigation qualification
+
+`--hybrid-observe` runs the full resident navigation loop with both client and native input disabled. It rejects an input-enabled native lease. Admission and each walking leg have a 35-second wall-clock deadline checked before wait paths, including missing frames, unqualified poses and pauses. A terminal timeout remains a failed gameplay run even when it is the expected outcome of a stop qualification.
+
+`--navigation-profile mondstadt-surface-hybrid-v1` requires R60's explicitly advertised capability. It permits only `City_102` and `MapBack_2`, within world X [-1100, -820] and Y [2100, 2350], retaining the 0.99 position and 0.2 yaw thresholds. The city-only profile remains the default. Surface routes require this profile; old patrols cannot silently inherit it. The coordinator must qualify fresh live coordinates and route consistency before enabling movement, and retain its original owner binding and stop/thermal limits.
+
+`--combat-shadow` records same-frame vision candidates alongside P2P predictions with input disabled. Candidates do not verify enemy identity, authorize attacks, or prove a kill. Exact policy RGB capture is required. Survey extensions stop on obstacles for inspection; failed geometry remains available for evidence replay while being excluded from launch choices.

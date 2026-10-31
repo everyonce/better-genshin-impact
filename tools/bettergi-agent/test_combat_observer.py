@@ -1,7 +1,8 @@
 """Synthetic refusal and timing cases; these fixtures do not establish real enemy recognition accuracy."""
 import unittest
+from unittest.mock import Mock,patch
 import numpy as np
-from combat_observer import CombatObserver,inspect_pixels
+from combat_observer import CombatObserver,inspect_pixels,validate_shadow_options
 
 
 def pixels(bars=((90,70,12,2),),health=True):
@@ -18,6 +19,20 @@ def frame(index,stamp,epoch='capture-one'):
 
 
 class CombatObserverTests(unittest.TestCase):
+    def test_shadow_refuses_either_client_or_native_input_authority(self):
+        import stream_client as client
+        arguments=['--combat-shadow','--model','open-p2p','--checkpoint','unused','--source','unused',
+                   '--goal-embedding','unused','--retain-policy-rgb','--record-dir','unused','--record-max-mib','160',
+                   '--observation-profile','p2p-native-hamming-192-v1','--output','unused.json']
+        args=client.parse_arguments(arguments)
+        self.assertTrue(validate_shadow_options(args))
+        bridge=Mock(hello={'inputEnabled':True})
+        with patch.object(client,'Bridge',return_value=bridge),self.assertRaisesRegex(ValueError,'native bridge'):
+            client.run_episode(args)
+        bridge.handle.close.assert_called_once()
+        args.enable_input=True
+        with self.assertRaisesRegex(ValueError,'input-disabled'):validate_shadow_options(args)
+
     def test_candidate_never_claims_input_authority_or_a_kill(self):
         result=inspect_pixels(pixels())
         self.assertEqual(result['enemyBarCandidates'][0]['width'],12)

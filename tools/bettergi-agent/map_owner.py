@@ -1,4 +1,4 @@
-"""Verify a sealed SIREN gameplay owner and at most the R57 → R58 → R59 idle replacement chain."""
+"""Verify the sealed SIREN owner through the explicitly bounded R57 → R58 → R59 → R60 chain."""
 import argparse
 import hashlib
 import json
@@ -59,8 +59,11 @@ def prior_owner(path):
 
 def target_package(number=58):
     """Independently check both selected binaries against the numbered managed build manifest."""
-    require(number in (58,59), 'Unsupported map release')
-    release = ARTIFACTS.resolve() / f'release-r{number}'
+    require(number in (58,59,60), 'Unsupported map release')
+    original = ARTIFACTS.resolve() / f'release-r{number}'
+    # Historical identity needs only the two binaries and manifest, not a retired runtime's assets.
+    # A damaged or partially present live release never falls back to its witness.
+    release = original if original.exists() else ARTIFACTS.resolve()/'release-retention/package-witnesses'/original.name
     target = release / 'BetterGI-English-win-x64'
     manifest = release / 'build-manifest.json'
     require(manifest.resolve(strict=True) == manifest and manifest.stat().st_size <= 65536, 'Invalid build manifest')
@@ -68,13 +71,41 @@ def target_package(number=58):
     build = json.loads(raw.decode('utf-8-sig'))
     require(build['version'] == 1 and build['selfContained'] is True and build['publishConfiguration'] == 'Release'
             and build['validationConfiguration'] == 'Debug' and build['runtimeIdentifier'] == 'win-x64'
-            and Path(build['targetDirectory']).resolve(strict=True) == target, f'Unexpected R{number} build identity')
+            and Path(build['targetDirectory']).resolve() == original/'BetterGI-English-win-x64', f'Unexpected R{number} build identity')
     for name in ('exe','dll'):
         file = target / ('BetterGI.' + name)
         require(file.resolve(strict=True) == file and file.stat().st_size > 0, 'Unsafe package binary')
         with file.open('rb') as stream:
             require(hashlib.file_digest(stream,'sha256').hexdigest() == build[name+'Sha256'], f'Changed R{number} binary')
     return build, hashlib.sha256(raw).hexdigest()
+
+
+def preserve_package_witness(number):
+    """Retain exact historical identity bytes before automatic cleanup removes an obsolete runtime."""
+    build,digest=target_package(number)
+    original=ARTIFACTS.resolve()/f'release-r{number}'
+    witness=ARTIFACTS.resolve()/'release-retention/package-witnesses'/original.name
+    source=original if original.exists() else witness
+    for relative in ('build-manifest.json','BetterGI-English-win-x64/BetterGI.exe','BetterGI-English-win-x64/BetterGI.dll'):
+        before=source/relative
+        after=witness/relative
+        require(before.resolve(strict=True)==before,'Unexpected identity witness source link')
+        raw=before.read_bytes()
+        after.parent.mkdir(parents=True,exist_ok=True)
+        if after.exists():require(after.resolve(strict=True)==after and after.read_bytes()==raw,'Changed historical identity witness')
+        else:
+            with after.open('xb') as stream:stream.write(raw)
+        expected=digest if relative=='build-manifest.json' else build['exeSha256' if relative.endswith('.exe') else 'dllSha256']
+        require(hashlib.sha256(after.read_bytes()).hexdigest()==expected,'Identity witness bytes differ')
+    return dict(release=number,witnessDirectory=str(witness),manifestSha256=digest)
+
+
+def successor_release(receipt):
+    """Inspect the finite predecessor shape before recursion; no fourth handoff or self-reference is admitted."""
+    if Path(receipt['prior']).name=='warm-launcher.json':return 59
+    parent,_=evidence(Path(receipt['prior']),'map-owner-lineage.json')
+    require(Path(parent['prior']).name=='warm-launcher.json','Only the bounded R58/R59 predecessors are supported')
+    return 60
 
 
 def checked_pair(root, child, package, child_sha):
@@ -99,14 +130,14 @@ def preflight(prior, before):
         old, pins = prior_owner(prior)
         number, source_sha = 58, OLD_DLL
     else:
-        # Require exactly one original rail. An R59 predecessor, self-reference or longer chain is rejected before recursion.
+        # Inspect the bounded original rail before recursion; additional or circular chains remain rejected.
         receipt, prior_sha = evidence(prior,'map-owner-lineage.json')
-        require(Path(receipt['prior']).name == 'warm-launcher.json', 'R59 requires the direct R57 to R58 receipt')
+        number=successor_release(receipt)
         old = load_map_owner(prior)
-        previous, build_sha = target_package(58)
-        require(build_sha == receipt['buildSha256'], 'Original R58 build manifest changed')
+        previous, build_sha = target_package(number-1)
+        require(build_sha == receipt['buildSha256'], 'Original predecessor build manifest changed')
         pins = {'priorLineageSha256':prior_sha,'priorBuildSha256':build_sha}
-        number, source_sha = 59, previous['dllSha256']
+        source_sha = previous['dllSha256']
     discovery, pins['beforeSha256'] = evidence(before, 'before.json')
     require(discovery.get('unavailable') == [] and len(discovery['instances']) == 2, 'Ambiguous RDP discovery')
     roles = {s['instanceType']:s for s in discovery['instances']}
@@ -114,7 +145,7 @@ def preflight(prior, before):
     require(checked_pair(roles['Primary'],roles['ChildSession'],package,source_sha) == old, 'Original child occupant changed')
     require(roles['ChildSession'].get('idleRestartVersion') == 2, 'Idle replacement capability unavailable')
     build, pins['buildSha256'] = target_package(number)
-    if number == 59:
+    if number in (59,60):
         game, pins['gameBeforeSha256'] = evidence(Path(before).with_name('game-before.json'),'game-before.json')
         require(set(game) == {'processId','windowsSessionId','startedFileTime','executable'}
                 and type(game['processId']) is int and game['processId'] > 0
@@ -155,7 +186,7 @@ def replacement(prior, folder):
     if 'protectedGame' in pins:
         game = pins['protectedGame']
         require(pre.get('protectedGame') == raw.get('protectedGame') == game and game['processId'] != pair['child']['processId'],
-                'The original game lifetime was not retained through the R59 replacement')
+                'The original game lifetime was not retained through the child replacement')
     a,b,r = old['child'],pair['child'],raw['replacementEvidence']
     require(pair['root'] == old['root'] and a['windowsSessionId'] == b['windowsSessionId']
             and a['processId'] != b['processId'] and a['instanceNonce'] != b['instanceNonce']
@@ -191,7 +222,7 @@ if __name__ == '__main__':
     elif args.operation == 'game-before':
         require(args.game_process_id is not None and args.game_process_id > 0, 'Specify the exact observed game PID')
         receipt, _ = evidence(args.path,'map-owner-lineage.json')
-        require(Path(receipt['prior']).name == 'warm-launcher.json', 'A direct R58 predecessor is required')
+        successor_release(receipt)
         old = load_map_owner(args.path)
         require(args.game_process_id not in (old['root']['processId'],old['child']['processId']), 'A control process cannot be the game')
         import sys

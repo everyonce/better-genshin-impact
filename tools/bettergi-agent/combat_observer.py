@@ -3,6 +3,16 @@ import math
 import numpy as np
 
 
+def validate_shadow_options(args):
+    """The first combat integration is a retained, input-disabled P2P observation session only."""
+    if not getattr(args,'combat_shadow',False):return False
+    if (getattr(args,'enable_input',False) or args.model!='open-p2p'
+            or not getattr(args,'retain_policy_rgb',False)
+            or args.observation_profile!='p2p-native-hamming-192-v1'):
+        raise ValueError('Combat shadow requires input-disabled Open P2P and retained native RGB192')
+    return True
+
+
 def inspect_pixels(pixels):
     """Find compact red horizontal candidates outside the HUD and retain explicit health-color uncertainty."""
     if type(pixels) is not bytes or len(pixels) != 192*192*3:

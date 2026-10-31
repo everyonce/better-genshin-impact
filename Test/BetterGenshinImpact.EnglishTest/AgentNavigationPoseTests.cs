@@ -10,6 +10,37 @@ namespace BetterGenshinImpact.EnglishTest;
 /// <summary>Native guidance cannot promote weak matches or reuse pose fields on an unavailable frame.</summary>
 public sealed class AgentNavigationPoseTests
 {
+    /// <summary>Outdoor localization requires an explicit scope; low confidence and unrelated layers remain rejected.</summary>
+    [Theory]
+    [InlineData(-947.53906, 2222.0996, .992757, .751167, "MapBack_2", true)]
+    [InlineData(-947.53906, 2222.0996, .989, .751167, "MapBack_2", false)]
+    [InlineData(-947.53906, 2222.0996, .992757, .199, "MapBack_2", false)]
+    [InlineData(-947.53906, 2222.0996, .992757, .751167, "MapBack_1", false)]
+    [InlineData(-1100.01, 2222, .999, .8, "MapBack_2", false)]
+    [InlineData(-819.99, 2222, .999, .8, "MapBack_2", false)]
+    [InlineData(-947, 2099.99, .999, .8, "MapBack_2", false)]
+    [InlineData(-947, 2350.01, .999, .8, "MapBack_2", false)]
+    public void SurfaceScopePreservesThresholdsAndBounds(double x, double y, double confidence,
+        double yawConfidence, string layer, bool accepted)
+    {
+        Assert.False(AgentNavigationPose.IsQualified(x, y, 15, confidence, yawConfidence, layer));
+        Assert.Equal(accepted, AgentNavigationPose.IsQualified(x, y, 15, confidence, yawConfidence, layer,
+            AgentNavigationProfile.MondstadtSurface));
+    }
+
+    /// <summary>Scope negotiation remains explicit and publishes finite, inspectable bounds.</summary>
+    [Fact]
+    public void SurfaceCapabilityIsSeparateFromTheUnchangedDefault()
+    {
+        var wire = JObject.FromObject(AgentNavigationRecognizer.GetCapability(AgentNavigationProfile.MondstadtSurface));
+        Assert.Equal("mondstadt-surface-hybrid-v1", wire["profileId"]!.Value<string>());
+        Assert.Equal(new[] { "City_102", "MapBack_2" }, wire["allowedLayerIds"]!.Values<string>());
+        Assert.Equal(-1100, wire["bounds"]!["minX"]!.Value<double>());
+        Assert.True(wire["readOnly"]!.Value<bool>());
+        Assert.False(AgentNavigationProfile.IsSupported("unbounded"));
+        Assert.False(AgentNavigationPose.IsQualified(-947, 2222, 15, .999, .8, "City_102", "unbounded"));
+    }
+
     /// <summary>Only the existing native route's finite rank-zero City_102 confidence contract is accepted.</summary>
     [Theory]
     [InlineData(.99, .2, "City_102", 0, true)]

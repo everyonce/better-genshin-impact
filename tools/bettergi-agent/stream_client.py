@@ -23,7 +23,8 @@ import uuid
 
 from observation_timing import frame_timing, observation_timestamp
 from host_observation import HostObservationContract
-from hybrid_routes import COURTYARD_ROUTE, PATROL_STATIONS, ROUTE_IDS, STAIR_POST_ROUTE, STREET_PATROL_ROUTE
+from hybrid_routes import COURTYARD_ROUTE, EXECUTABLE_ROUTE_IDS, PATROL_STATIONS, ROUTE_IDS, STAIR_POST_ROUTE, STREET_PATROL_ROUTE, SURFACE_ROUTES
+from navigation_profiles import COURTYARD_PROFILE,SURFACE_PROFILE,NAVIGATION_PROFILES,validate_capability
 from navigation_idle_recovery import (GOAL_INTENTS, NavigationIdleRecovery, RecoverySuperseded,
                                       capture_context, eligible_frame, fresh_frame)
 from observation_profiles import (LEGACY, P2P_NATIVE, PROFILES, FrameProfileError,
@@ -792,6 +793,28 @@ class AsyncVideoRecorder:
         return result
 
 
+def validate_hybrid_observe_options(args):
+    """Keep the full navigation decision loop available for diagnostics without an input lease."""
+    if not getattr(args,'hybrid_observe',False):
+        return False
+    if (not args.hybrid_navigation or not args.resident or args.model != 'open-p2p'
+            or args.enable_input or args.goal_intent != 'ground-navigation'):
+        raise ValueError('hybrid-observe requires resident Open P2P hybrid navigation with input disabled')
+    return True
+
+
+def validate_navigation_scope_options(args):
+    """Keep the new outdoor scope explicit and confined to its declared route family."""
+    profile=getattr(args,'navigation_profile',COURTYARD_PROFILE)
+    if profile not in NAVIGATION_PROFILES:raise ValueError('Unsupported navigation profile')
+    surface_route=getattr(args,'hybrid_route',None) in SURFACE_ROUTES
+    if getattr(args,'hybrid_navigation',False) and surface_route!=(profile==SURFACE_PROFILE):
+        raise ValueError('Surface routes require their explicit bounded surface navigation profile')
+    if profile==SURFACE_PROFILE and not (getattr(args,'navigation_guidance',False) or getattr(args,'hybrid_navigation',False)):
+        raise ValueError('The surface profile requires explicit native navigation guidance')
+    return profile
+
+
 def validate_execution_context_options(args):
     """Reject incompatible conditioning before loading weights or opening a pipe."""
     mode = getattr(args, 'execution_context', 'off')
@@ -1091,6 +1114,8 @@ def parse_arguments(argv=None):
     parser.add_argument('--record-dir')
     parser.add_argument('--retain-policy-rgb', action='store_true',
                         help='Retain exact RGB192 files on the recording worker, inside the existing byte budget')
+    parser.add_argument('--combat-shadow', action='store_true',
+                        help='Record read-only combat candidates beside GPU P2P predictions; input must remain disabled')
     parser.add_argument('--preview', action='store_true',
                         help='Save latest.jpg once per second on the recording worker; requires record-dir')
     parser.add_argument('--ffmpeg', default='ffmpeg')
@@ -1111,9 +1136,13 @@ def parse_arguments(argv=None):
                         help='Record minimap stall evidence against actual applied movement receipts')
     parser.add_argument('--navigation-guidance', action='store_true',
                         help='Opt in to same-frame, read-only native courtyard pose metadata')
+    parser.add_argument('--navigation-profile',choices=NAVIGATION_PROFILES,default=COURTYARD_PROFILE,
+                        help='Select an explicit localization scope; the original city profile remains the default')
     parser.add_argument('--hybrid-navigation', action='store_true',
                         help='Combine Open P2P with same-frame BetterGI guidance on a fixed route')
-    parser.add_argument('--hybrid-route', choices=ROUTE_IDS,
+    parser.add_argument('--hybrid-observe', action='store_true',
+                        help='Run the full hybrid loop with native input disabled for bounded qualification')
+    parser.add_argument('--hybrid-route', choices=EXECUTABLE_ROUTE_IDS,
                         help='Choose a surveyed fixed route; defaults to the original courtyard segment')
     parser.add_argument('--steering-shadow', metavar='CHECKPOINT',
                         help='Record a trained steering prediction after each hybrid decision has settled')
@@ -1204,9 +1233,14 @@ def parse_arguments(argv=None):
             args.p2p_execution_feedback = True
     if args.patrol_series_binding is not None:
         from resident_runtime import parse_series_binding
-        passive_pose = args.model == 'observe' and args.navigation_guidance and not args.enable_input
-        if not (args.resident and (passive_pose or args.hybrid_navigation and args.hybrid_route == STREET_PATROL_ROUTE)):
-            parser.error('A series binding requires a resident street patrol or an input-disabled pose observation')
+        passive_pose = not args.enable_input and ((args.model == 'observe' and args.navigation_guidance)
+                                                  or args.combat_shadow)
+        bounded_extension = (args.hybrid_navigation and args.hybrid_route in ROUTE_IDS and 1 <= args.hybrid_legs <= 4
+                             and args.max_observation_age_ms <= 150 and args.action_hold_ms is not None
+                             and args.action_hold_ms <= 100)
+        if not (args.resident and (passive_pose or bounded_extension
+                                  or args.hybrid_navigation and args.hybrid_route == STREET_PATROL_ROUTE)):
+            parser.error('A series binding requires a resident street patrol, bounded declared route, or input-disabled pose observation')
         try:
             args.patrol_series_binding = parse_series_binding(args.patrol_series_binding)
         except ValueError as error:
@@ -1270,14 +1304,22 @@ def parse_arguments(argv=None):
     if args.remember_hybrid_bypass and args.hybrid_route != STAIR_POST_ROUTE:
         parser.error('remember-hybrid-bypass requires the surveyed stair-post hybrid route')
     if args.hybrid_navigation:
-        if (not args.resident or args.model != 'open-p2p' or not args.enable_input
+        if (not args.resident or args.model != 'open-p2p' or not (args.enable_input or args.hybrid_observe)
                 or args.goal_intent != 'ground-navigation' or args.navigation_idle_reset_seconds is not None):
-            parser.error('hybrid-navigation requires resident Open P2P input, ground-navigation intent, and no separate idle reset')
+            parser.error('hybrid-navigation requires resident Open P2P input or hybrid-observe, ground-navigation intent, and no separate idle reset')
         args.navigation_guidance = True
         if args.input_keys is None:
             args.input_keys = 'W,A,S,D'
+    try:validate_hybrid_observe_options(args)
+    except ValueError as error:parser.error(str(error))
+    try:validate_navigation_scope_options(args)
+    except ValueError as error:parser.error(str(error))
     if args.retain_policy_rgb and (not args.record_dir or args.observation_profile != P2P_NATIVE or args.record_max_mib > 160):
         parser.error('Exact policy RGB requires a recording directory, native Hamming192, and at most 160 MiB')
+    if args.combat_shadow:
+        from combat_observer import validate_shadow_options
+        try:validate_shadow_options(args)
+        except ValueError as error:parser.error(str(error))
     return args
 
 
@@ -1356,7 +1398,12 @@ def record_open_queue_boundary_error(warm, error, native_failure, report, record
 
 def load_policy(args):
     """Load a real checkpoint once; a resident caller reuses this object for every episode."""
+    validate_hybrid_observe_options(args)
+    validate_navigation_scope_options(args)
     validate_execution_context_options(args)
+    if getattr(args,'combat_shadow',False):
+        from combat_observer import validate_shadow_options
+        validate_shadow_options(args)
     prewarm = validate_startup_options(args)
     p2p_temperature = validate_p2p_temperature_options(args)
     warm_goal_sha = hashlib.sha256(Path(args.goal_embedding).read_bytes()).hexdigest() if getattr(args, 'warm_photo_plan', None) else None
@@ -1425,12 +1472,23 @@ def action_response_accepted(response, request_id, payload=b''):
 
 def run_episode(args, policy=None, control=None):
     """Run one owned bridge lease with an optional already-loaded model and live controls."""
+    hybrid_observe = validate_hybrid_observe_options(args)
+    navigation_profile = validate_navigation_scope_options(args)
+    combat_observer = None
+    if getattr(args,'combat_shadow',False):
+        from combat_observer import CombatObserver,validate_shadow_options
+        validate_shadow_options(args)
+        combat_observer = CombatObserver()
     execution_mode = validate_execution_context_options(args)
     validate_navigation_climb_options(args)
     if policy is not None:
         from PIL import Image
     bridge = Bridge(args.pipe)
     try:
+        if hybrid_observe and bridge.hello.get('inputEnabled') is not False:
+            raise ValueError('Hybrid observation requires input disabled at the native bridge as well')
+        if combat_observer is not None and bridge.hello.get('inputEnabled') is not False:
+            raise ValueError('Combat shadow requires input disabled at the native bridge as well')
         host_contract = HostObservationContract(bridge.hello, args.enable_input)
         profile_contract = verify_hello(bridge.hello, getattr(args, 'observation_profile', LEGACY), args.model)
         if (policy is not None and args.model == 'open-p2p'
@@ -1458,6 +1516,7 @@ def run_episode(args, policy=None, control=None):
                                   if getattr(policy, 'execution_feedback', False) else 'not-applicable'},
               'observationProfile': profile_contract['profile'], 'preprocessingContract': profile_contract,
               'inputRequested': args.enable_input, 'model': args.model, 'decisions': [], 'receipts': [], 'framesReceived': 0,
+              'nativeInputEnabled': bridge.hello.get('inputEnabled'), 'hybridObservationOnly': hybrid_observe,
               'recordedExecutionContext': execution_mode != 'off',
               'maxInputActions': args.max_input_actions, 'acceptedInputActions': 0,
               'softCadence': args.soft_cadence, 'actionHoldMs': args.action_hold_ms,
@@ -1473,6 +1532,9 @@ def run_episode(args, policy=None, control=None):
     if getattr(args,'warm_endurance',False):
         from destination_queue_limits import ENDURANCE
         report['queueLimitsProfile'] = ENDURANCE.profile
+    if combat_observer is not None:
+        report['combatShadow'] = dict(inputAuthority=False,enemyRecognitionQualified=False,
+                                    observer='coarse-red-bar-and-health-color-v1',goalEmbedding=args.goal_embedding)
     if execution_mode != 'off':
         report['executionContext'] = {'mode': execution_mode, 'schema': 'execution-context-v1',
                                       'knowledgeClock': 'client_perf_counter_ns',
@@ -1540,12 +1602,16 @@ def run_episode(args, policy=None, control=None):
             from hybrid_navigation import HybridNavigation
             # Validate the advertised fixed geometry before enabling native recognition.
             route_id = getattr(args, 'hybrid_route', None) or COURTYARD_ROUTE
-            candidate = HybridNavigation(bridge.hello.get('navigationGuidance') or {}, route_id,
-                                         remember_bypass=getattr(args, 'remember_hybrid_bypass', False), **itinerary)
-            configured = bridge.request('enableNavigationGuidance')[0]
+            HybridNavigation(bridge.hello.get('navigationGuidance') or {},route_id)
+            if navigation_profile!=COURTYARD_PROFILE and navigation_profile not in bridge.hello.get('navigationProfiles',[]):
+                raise RuntimeError('The bridge does not support the requested outdoor localization scope')
+            profile_request={} if navigation_profile==COURTYARD_PROFILE else dict(navigationProfile=navigation_profile)
+            configured = bridge.request('enableNavigationGuidance',**profile_request)[0]
             if configured.get('type') != 'navigationGuidance' or configured.get('enabled') is not True:
                 raise RuntimeError('The bridge did not acknowledge native navigation guidance')
-            HybridNavigation(configured.get('capability') or {})
+            candidate = HybridNavigation(configured.get('capability') or {}, route_id,
+                                         remember_bypass=getattr(args, 'remember_hybrid_bypass', False),
+                                         navigation_profile=navigation_profile, **itinerary)
             report['navigationGuidance'] = configured['capability']
             if getattr(args, 'hybrid_navigation', False):
                 hybrid = candidate
@@ -1987,6 +2053,9 @@ def run_episode(args, policy=None, control=None):
             if command == 'stop':
                 report['endReason'] = 'userStop'
                 break
+            # This must precede every early continue, including waits without a usable source frame.
+            if hybrid:
+                hybrid.check_leg_deadline()
             if warm and warm.open_queue:
                 interrupted = open_queue_interruption(control,queue_control_token)
                 if interrupted:
@@ -2160,6 +2229,14 @@ def run_episode(args, policy=None, control=None):
             if control_token[3] != 'run':
                 cadence.advance(time.perf_counter())
                 continue
+            combat_result = None
+            if combat_observer is not None:
+                combat_started = time.perf_counter_ns()
+                combat_result = combat_observer.observe(frame,pixels)
+                combat_result.update(frameId=frame['frameId'],sourceFrame=copy.deepcopy(frame.get('sourceFrame')),
+                    sourceRgbSha256=hashlib.sha256(pixels).hexdigest(),observerMs=(time.perf_counter_ns()-combat_started)/1e6,
+                    frameWorldReady=(frame.get('frameWorldReadiness') or {}).get('ready') is True,
+                    currentWorldReady=(frame.get('worldReadiness') or {}).get('ready') is True)
             predict_started = time.perf_counter_ns()
             profile_argument = {'observation_profile': P2P_NATIVE} if profile_contract['profile'] == P2P_NATIVE else {}
             execution_snapshot = None
@@ -2168,6 +2245,7 @@ def run_episode(args, policy=None, control=None):
                 if execution_mode == 'model':
                     profile_argument['execution_context'] = execution_snapshot
             result = policy.predict(image, (frame['sourceWidth'], frame['sourceHeight']), **profile_argument)
+            if combat_result is not None:result['combatObservation'] = combat_result
             if execution_snapshot is not None:
                 result['executionContext'] = execution_snapshot.to_dict()
                 result['executionContextMode'] = execution_mode

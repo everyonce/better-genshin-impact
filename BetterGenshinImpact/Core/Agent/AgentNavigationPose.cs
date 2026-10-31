@@ -26,10 +26,11 @@ public sealed record AgentNavigationPose(string State, string? Reason, long Fram
     public static AgentNavigationPose Unavailable(long frameId, string reason, double recognitionMs = 0) =>
         new("unavailable", reason, frameId, null, null, null, null, null, null, null, null, null, null, recognitionMs);
 
-    /// <summary>Match the strict native route's confidence/layer rules before publishing a usable pose.</summary>
+    /// <summary>Keep the strict confidence rules and apply only the explicitly selected localization scope.</summary>
     internal static bool IsQualified(double x, double y, double yaw, double positionConfidence,
-        double yawConfidence, string? layerId) => double.IsFinite(x) && double.IsFinite(y)
+        double yawConfidence, string? layerId, string? profileId = null) => double.IsFinite(x) && double.IsFinite(y)
         && double.IsFinite(yaw) && yaw is >= 0 and < 360
         && double.IsFinite(positionConfidence) && positionConfidence is >= .99 and <= 1
-        && double.IsFinite(yawConfidence) && yawConfidence is >= .2 and <= 1 && layerId == "City_102";
+        && double.IsFinite(yawConfidence) && yawConfidence is >= .2 and <= 1
+        && AgentNavigationProfile.AllowsPosition(profileId, x, y, layerId);
 }

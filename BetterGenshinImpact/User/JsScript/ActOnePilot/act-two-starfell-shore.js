@@ -36,6 +36,43 @@
   }catch(error){const failure=error instanceof Error?error:new Error(String(error&&error.message||error));failure.fieldResult=result;throw failure;}finally{api.release();}
  }
  function distance(o,t){return Math.hypot(o.map.x-t.x,o.map.y-t.y);}
+ const shoreExit={x:-1313.8046875,y:2547.23046875};
+ // This exit is limited to the old southern lane and six units around the historical grounded landmark.
+ function exitScope(o,now,session){return base(o,now,session)&&Number.isInteger(o.frameId)&&o.frameId>0&&Number.isFinite(o.map.x)&&Number.isFinite(o.map.y)&&continuationPosition(o.map)&&distance(o,shoreExit)<=6;}
+ // The separate exit admits a measured 35-pixel reserve, retaining the 25-pixel movement floor.
+ function exitReady(o,now,session,continuing){const h=o&&o.hud,s=h&&h.swimStamina;return exitScope(o,now,session)&&h.groundControls===false&&h.starfellSwim&&h.starfellSwim.source==='same-frame-swim-control'&&h.starfellSwim.confirmed===true&&s&&s.source==='same-frame-swim-stamina'&&Number.isFinite(s.height)&&s.height>=(continuing===true?25:35);}
+ // A fresh explicit exit request gets at most six holds; no stamina reread or pitch is authorized.
+ async function runExit(o,api){
+  let current=o,stalls=0;const result={status:'stopped',actions:0,inputMs:0,turns:0,pitchAdjustments:0,positions:[],sourceFrameId:o&&o.frameId,target:{x:shoreExit.x,y:shoreExit.y},swimmingObserved:false};
+  // Retain the last observation even when it makes the exit inadmissible.
+  function retain(){result.fieldFrameId=current&&current.frameId;result.health=current&&current.hud&&current.hud.health;result.staminaEvidence=current&&current.hud&&current.hud.swimStamina;}
+  function stop(reason){result.reason=reason;return result;}
+  function landed(){result.status='completed';return stop('Ground controls regained after verified swim');}
+  // Each turn or hold must produce a newer source before another action can be considered.
+  async function next(){const previous=current;current=await api.observe();retain();if(!current||!Number.isInteger(current.frameId)||current.frameId<=previous.frameId||!Number.isFinite(current.timestamp)||current.timestamp<=previous.timestamp)throw Error('Near-shore exit requires a newer field observation');}
+  try{
+   retain();if(!exitReady(current,api.now(),api.session,false))return stop('Fresh near-shore swimming with at least 35 measured stamina required');
+   result.swimmingObserved=true;
+   for(let n=0;n<6;n++){
+    for(let turn=0;turn<=3;turn++){
+     if(!exitScope(current,api.now(),api.session))return stop('Near-shore identity, health, threat, lane or distance changed');
+     if(current.hud.groundControls)return landed();
+     if(!exitReady(current,api.now(),api.session,true))return stop('Near-shore swimming or measured stamina floor unavailable');
+     const heading=(Math.atan2(current.map.y-shoreExit.y,current.map.x-shoreExit.x)*180/Math.PI+360)%360,diff=(heading-current.map.cameraAngle+540)%360-180;
+     if(Math.abs(diff)<=15)break;if(turn===3)return stop('Near-shore heading did not settle');
+     await api.look(Math.max(-600,Math.min(600,Math.round(diff*8))),current);result.turns++;await api.sleep(180);await next();
+    }
+    if(!exitReady(current,api.now(),api.session,true))return stop('Fresh near-shore movement permission expired');
+    const before=distance(current,shoreExit);await api.key('VK_W',600,current);result.actions++;result.inputMs+=600;await api.sleep(180);await next();
+    if(!exitScope(current,api.now(),api.session))return stop('Post-step near-shore identity, health, threat, lane or distance changed');
+    const after=distance(current,shoreExit);result.positions.push({frameId:current.frameId,x:current.map.x,y:current.map.y,distance:after,swimming:!!current.hud.starfellSwim.confirmed});
+    if(current.hud.groundControls)return landed();
+    if(!exitReady(current,api.now(),api.session,true))return stop('Near-shore swimming or measured stamina floor unavailable');
+    if(after>before+1)return stop('Near-shore distance increased');stalls=before-after<.25?stalls+1:0;if(stalls>=2)return stop('Two near-shore steps made no progress');
+   }
+   return stop('Bounded near-shore exit ended; inspect ground before continuing');
+  }catch(error){const failure=error instanceof Error?error:new Error(String(error&&error.message||error));failure.fieldResult=result;throw failure;}finally{api.release();}
+ }
  async function run(o,api){const destination=api.north?{x:-1300,y:2585}:target;let current=o,swam=api.continuation===true,stalls=0;const result={status:'stopped',actions:0,inputMs:0,turns:0,positions:[]};try{
   if(api.continuation&&base(current,api.now(),api.session,api.north)&&current.hud.starfellSwim.confirmed&&(api.north?northLane(current.map):continuationPosition(current.map))&&unknownStamina(current)){await api.sleep(800);current=await api.observe();result.staminaRereads=1;}
   if(!start(current,api.now(),api.session,api.continuation,api.north)){result.reason='Fresh Starfell spawn or measured continuation required';result.staminaEvidence=current.hud&&current.hud.swimStamina||null;result.fieldFrameId=current.frameId;return result;}
@@ -64,5 +101,5 @@
   }
   result.fieldFrameId=current.frameId;result.swimmingObserved=swam;if(!result.reason)result.reason='Bounded crossing ended; inspect ground before continuing';return result;
  }finally{api.release();}}
- const api={region,read,stamina,staminaHeight,base,start,cameraReady,inspectCamera,run};root.ActTwoStarfellShore=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
+ const api={region,read,stamina,staminaHeight,base,start,cameraReady,inspectCamera,exitReady,runExit,run};root.ActTwoStarfellShore=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

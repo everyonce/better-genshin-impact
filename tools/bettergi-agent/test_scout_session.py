@@ -23,6 +23,26 @@ def write_json(path, value):
     Path(path).write_text(json.dumps(value),encoding='utf-8')
 
 
+class IdleChildTests(unittest.TestCase):
+    """A stopped menu pilot is idle only after its service has released ownership."""
+    def test_terminal_pilot_states_require_explicitly_released_ownership(self):
+        """Cover the live stopped-pilot handoff and refuse ambiguous or still-owned states."""
+        for state in ('idle','completed','failed','cancelled','stopped'):
+            child=dict(taskRunning=False,agentStreamRunning=False,pilotState=state,serviceOwnsPilot=False)
+            self.assertTrue(scout.idle_child(child),state)
+            for ownership in (True,None,0):
+                self.assertFalse(scout.idle_child(dict(child,serviceOwnsPilot=ownership)),(state,ownership))
+            del child['serviceOwnsPilot']
+            self.assertFalse(scout.idle_child(child),state)
+
+    def test_busy_or_unknown_child_cannot_start_another_lease(self):
+        """The new stopped state does not bypass active tasks, streams, or a stopping pilot."""
+        child=dict(taskRunning=False,agentStreamRunning=False,pilotState='stopped',serviceOwnsPilot=False)
+        for patch_value in (dict(taskRunning=True),dict(agentStreamRunning=True),
+                            dict(pilotState='stopping'),dict(pilotState='running'),dict(pilotState=None)):
+            self.assertFalse(scout.idle_child(dict(child,**patch_value)),patch_value)
+
+
 class FakePolicy:
     """Keep a visible immutable weights/graph identity and resettable action history."""
     def __init__(self):
@@ -93,7 +113,7 @@ class ScoutSessionTests(unittest.TestCase):
         self.primary=dict(self.owner['root'],instanceType='Primary',uiStatus='current',childWindowMinimized=True)
         self.child=dict(self.owner['child'],instanceType='ChildSession',remoteDesktop=True,automationEnabled=True,
             runtimeRunning=True,automationState='game_ready',taskRunning=False,agentStreamRunning=False,
-            pilotState='idle',agentPipeName='BetterGI.Agent.synthetic')
+            pilotState='idle',serviceOwnsPilot=False,agentPipeName='BetterGI.Agent.synthetic')
         self.starts=[]
         self.lifecycle=SimpleNamespace(discover=lambda:dict(instances=[self.primary,self.child],unavailable=[]),
             require_role=lambda *args:None,_require_connected_root=lambda *args:None,

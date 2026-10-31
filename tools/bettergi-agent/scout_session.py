@@ -119,9 +119,10 @@ def owner_pair(lifecycle, owner):
 
 
 def idle_child(child):
-    """A busy passive observer is not an owner replacement, but cannot share a new input lease."""
+    """Require released script ownership, including after an explicitly stopped UI pilot."""
     return (child.get('taskRunning') is False and child.get('agentStreamRunning') is False
-            and child.get('pilotState') in ('idle','completed','failed','cancelled'))
+            and child.get('serviceOwnsPilot') is False
+            and child.get('pilotState') in ('idle','completed','failed','cancelled','stopped'))
 
 
 def require_ordinary(session):

@@ -22,7 +22,7 @@ class FakeLifecycle:
         self.root = dict(OWNER['root'], instanceType='Primary', uiStatus='current', childWindowMinimized=True)
         self.child = dict(OWNER['child'], instanceType='ChildSession', runtimeRunning=True,
             automationState='game_ready', taskRunning=False, agentStreamRunning=False,
-            pilotState='idle', agentPipeName='inert-pipe')
+            pilotState='idle', serviceOwnsPilot=False, agentPipeName='inert-pipe')
         self.starts = 0
         self.launches = 0
         self.start_error = None
@@ -310,6 +310,26 @@ class CombatTrialTests(unittest.TestCase):
         self.code.write_bytes(original)
         (self.code.parent / 'new_module.py').write_text('changed inventory')
         with self.assertRaisesRegex(ValueError, 'inventory changed'):
+            trial.verify_plan(self.plan, self.folder)
+
+    def test_empty_package_source_is_pinned_but_empty_evidence_is_rejected(self):
+        """An empty __init__ remains part of the immutable source inventory, not missing evidence."""
+        package = self.model_source / '__init__.py'
+        package.write_bytes(b'')
+        self.prepare()
+        relative = package.relative_to(self.root).as_posix()
+        archived = self.folder / 'source-snapshot' / relative
+        self.assertEqual(self.plan['sourceFiles'][relative], trial.digest(b''))
+        self.assertEqual(archived.read_bytes(), b'')
+        trial.verify_plan(self.plan, self.folder)
+        with self.assertRaises(ValueError):
+            trial.read_bytes(package)
+        package.write_bytes(b'x = 1\n')
+        with self.assertRaisesRegex(ValueError, 'Source bytes changed'):
+            trial.verify_plan(self.plan, self.folder)
+        package.write_bytes(b'')
+        archived.write_bytes(b'# changed\n')
+        with self.assertRaisesRegex(ValueError, 'Source bytes changed'):
             trial.verify_plan(self.plan, self.folder)
 
     def test_source_edit_during_prewarm_prevents_the_only_start(self):

@@ -72,12 +72,12 @@ def local_path(value, *, root=None, existing=True):
     return resolved
 
 
-def read_bytes(path, maximum=16 * 1024 * 1024):
-    """Bound a single explicitly named evidence or source read."""
+def read_bytes(path, maximum=16 * 1024 * 1024, *, allow_empty=False):
+    """Bound one read; only source manifests may retain an empty Python package file."""
     path = local_path(path)
     with path.open('rb') as stream:
         raw = stream.read(maximum + 1)
-    require(0 < len(raw) <= maximum, 'Evidence exceeds its bounded size')
+    require((allow_empty or len(raw) > 0) and len(raw) <= maximum, 'Evidence exceeds its bounded size')
     return raw
 
 
@@ -124,7 +124,7 @@ def snapshot_sources(folder):
     result = {}
     for path in source_paths():
         relative = path.relative_to(ROOT).as_posix()
-        raw = read_bytes(path)
+        raw = read_bytes(path, allow_empty=True)
         target = folder / 'source-snapshot' / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         with target.open('xb') as stream:
@@ -141,7 +141,8 @@ def verify_sources(folder, sources):
     for name, expected in sources.items():
         current = local_path(ROOT / name, root=ROOT)
         archived = local_path(folder / 'source-snapshot' / name, root=folder)
-        require(digest(read_bytes(current)) == expected == digest(read_bytes(archived)), 'Source bytes changed: ' + name)
+        require(digest(read_bytes(current, allow_empty=True)) == expected
+                == digest(read_bytes(archived, allow_empty=True)), 'Source bytes changed: ' + name)
 
 
 def recent_review(binding, review, maximum, *, now_ns=None, qpc_ns=None):

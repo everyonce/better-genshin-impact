@@ -3,6 +3,23 @@
  function target(o,now,context,inspectNext){
   if(!o||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>1000||o.map!==null||!o.hud||o.hud.world||o.hud.dialogueReady)return null;
   const rows=o.ocr||[],has=(t,x0,x1,y0,y1)=>rows.filter(r=>String(r.text||'').trim()===t&&r.x>=x0&&r.x<=x1&&r.y>=y0&&r.y<=y1).length===1;
+  // The Easy filter is a two-step menu operation; neither step can fall through to a reward claim.
+  if(inspectNext==='easyCategory'||inspectNext==='easySelect'){
+   const h=o.hud;
+   if(!Number.isFinite(now)||h.world!==false||h.journal!==false||h.bigMap!==false||h.choice!==false||h.auto!==false||h.dialogueReady!==false||h.climbing===true||h.groundControls===true)return null;
+   if(!has('Experience',220,300,220,260)||!has('Domains',220,300,320,370)||!has('Enemies',220,300,410,470)||!has('Guide',220,300,510,570)||!has('X',1630,1670,195,230))return null;
+   // The captured category header is OCR'd as "AlL"; case folding preserves the exact word and position.
+   const allHeaders=rows.filter(r=>String(r.text||'').trim().toLowerCase()==='all'&&r.x>=390&&r.x<=440&&r.y>=180&&r.y<=220);
+   if(allHeaders.length!==1)return null;
+   const easy=rows.filter(r=>String(r.text||'').trim()==='Easy'&&r.x>=390&&r.x<=440&&r.y>=285&&r.y<=325);
+   const popup=easy.length===1&&has('Elite Enemies',390,440,345,385)&&has('Boss Enemies',390,440,400,450);
+   if(inspectNext==='easySelect'&&popup){
+    const r=easy[0];if(!Number.isFinite(r.width)||r.width<=0||r.width>200||!Number.isFinite(r.height)||r.height<=0||r.height>60)return null;
+    return {action:'selectEasyEnemies',x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)};
+   }
+   if(inspectNext==='easyCategory'&&!popup&&easy.length===0&&has('Navigate',1370,1450,810,855))return {action:'openEasyEnemyCategory',x:695,y:204};
+   return null;
+  }
   if(context&&context.chapterReward===true&&context.session===o.session&&context.frameId<o.frameId&&now>=context.createdAt&&now-context.createdAt<=120000&&has('Obtained',800,950,250,320)&&has('Primogem',650,800,580,640)&&has('50',700,800,540,590)&&has('10000',800,950,540,590)&&has('Mora',800,950,580,640)&&has("Hero's Wit",950,1100,580,640)&&has("Lucky Dog's",1100,1250,580,640)&&has('Clover',1100,1250,610,660)&&has('Click anywhere in the blank area to continue',600,800,700,790))return {action:'continue',x:960,y:800};
   if(context&&context.rewardExp===200&&context.session===o.session&&context.frameId<o.frameId&&now>=context.createdAt&&now-context.createdAt<=120000&&
     has('Obtained',800,950,250,320)&&has('Adventure',800,950,570,630)&&has('EXP',800,950,610,660)&&has('200',800,950,530,590)&&has('Click anywhere in the blank area to continue',600,800,700,790))return {action:'continue',x:960,y:800};

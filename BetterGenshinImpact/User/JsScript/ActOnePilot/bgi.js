@@ -3101,6 +3101,7 @@ function createActOneAdapter(sessionId) {
             wolfWitnessState={continued:false,acted:false,paused:false,lastInputFrame:-1,permit:null,baseline:null};
             wolfSpikeState={continued:false,selectedKaeya:false,cast:false,selectedAmber:false,moves:0,paused:false,lastInputFrame:-1,pauseFrame:null,readyAt:null,amberBaseline:null,kaeyaBaseline:null,iceVerified:false,bankVerified:false,reuseSource:null,usingExistingIce:false,jumpAttempted:false,crossingCharacter:'amber'};
             var revision = {}, names = ['main.js','engine.js','bgi.js','mission.js','combat.js','recovery.js'];
+            if(value.mission==='questStep'&&['handbookCatalogueScroll','handbookCatalogueSelect','handbookCatalogueTrack'].includes(value.step))names.push('handbook-catalogue.js');
             if(value.mission==='navigation'&&value.objective==='Explore for Adventure Rank')names.push('navigation-safety.js');
             if(value.mission==='questStep'&&value.step==='actTwoShieldPyro')names.push('act-two-shield-pyro.js','shield-response.js','shield-vision.js');
             if(value.mission==='questStep'&&['actTwoShieldPyro','actTwoMagePrep','actTwoMageBurst','actTwoMageFinish','actTwoMageNative','actTwoMageRetreat'].includes(value.step))names.push('act-two-mage.js','world-inventory.js','local-pause.js');
@@ -6199,6 +6200,10 @@ function createActOneAdapter(sessionId) {
             try{if(target.key)await boundedKey(target.key,60,lastObservation.frameId);else for(var menuClick=0;menuClick<(target.action==='addFineOre'?15:target.action==='topUpFineOre'?6:target.action==='luminaReserve'?4:1);menuClick++){checkStop();ready();await actOneAccountUiClick({checkStop:checkStop,ready:ready,move:moveMouseTo,down:leftButtonDown,up:leftButtonUp,sleep:sleep},target);event.clicks=(event.clicks||0)+1;if(target.clicks)await sleep(100);}}
             finally{event.finishedAt=Date.now();}return target.action;
         },
+        // Permit one ordinary Escape only from this session's recognized handbook, without starting a recovery routine.
+        handbookCloseReady:function(o){return !!(request&&o&&o.session===request.session&&o.hud&&o.hud.world===false&&
+            o.hud.journal===false&&o.hud.bigMap===false&&o.hud.choice===false&&o.hud.auto===false&&
+            eval(file.readTextSync('act-two-handbook.js')+'\nActTwoHandbook;').target(o,Date.now(),null,'closeRecovery'));},
         actTwoHandbookRecoveryReady:function(o){return eval(file.readTextSync('act-two-wind-seal.js')+'\nActTwoWindSeal;').recoveryPanel(o,Date.now(),request.session)||!!eval(file.readTextSync('act-two-handbook.js')+'\nActTwoHandbook;').target(o,Date.now(),null,'closeRecovery');},
         runActTwoHandbookRecovery:async function(initial,observe){
             if(request.step!=='actTwoRecover'||!this.actTwoHandbookRecoveryReady(initial))throw new Error('Fresh exact Handbook required');
@@ -6209,6 +6214,92 @@ function createActOneAdapter(sessionId) {
             }
             checkStop();ready();await boundedKey('VK_ESCAPE',60,initial.frameId);await sleep(650);
             return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,{status:'completed',handbookClosed:true,questComplete:false},null);
+        },
+        // One consumed catalogue request owns only its bounded scroll or single click.
+        handbookCatalogue: async function(command, observation) {
+            var gate = eval(file.readTextSync('handbook-catalogue.js')+'\nHandbookCatalogue;');
+            if (!request || request.step !== command || gate.requestError(request) ||
+                events.some(function(value) { return value.type === 'handbookCatalogueCommand'; }))
+                throw new Error('Unused explicit handbook catalogue request required');
+            // Join the engine projection to the adapter's actual captured observation.
+            function identity(value) {
+                return value && JSON.stringify({session:value.session,frameId:value.frameId,timestamp:value.timestamp,
+                    screenshotPath:value.screenshotPath,ocr:value.ocr,map:value.map || null,hud:value.hud});
+            }
+            if (!observation || !lastObservation || identity(observation) !== identity(lastObservation))
+                throw new Error('Catalogue observation does not match the latest adapter frame');
+            var source = JSON.parse(JSON.stringify(observation));
+            source.capturedAt = lastObservation.capturedAt;
+            var originalRequest = JSON.stringify(request), originalSource = identity(source),
+                target = gate.target(source, Date.now(), request), targetJson = JSON.stringify(target);
+            if (!target) throw new Error('Fresh same-session Easy catalogue and exact requested target required');
+            var event = {type:'handbookCatalogueCommand',command:command,requestId:request.id,session:request.session,
+                action:target.action,target:JSON.parse(targetJson),frameId:source.frameId,
+                sourceFrame:{session:source.session,frameId:source.frameId,screenshotPath:source.screenshotPath,
+                    timestamp:source.timestamp,capturedAt:source.capturedAt},
+                // Wall-clock legacy UI ages do not claim native QPC freshness or physical input delivery.
+                sourceClock:{kind:'Date.now',timestampMeaning:'OCR and observation completion',
+                    capturedAtMeaning:'legacy capture begin',maximumObservationAgeMs:1000,maximumCaptureAgeMs:2000},
+                startedAt:Date.now(),finishedAt:null,status:'running',sourcePinned:false,inputs:[],moves:0,clickAttempts:0,clicks:0,
+                buttonDowns:0,buttonUpAttempts:0,buttonUps:0,scrollAttempts:0,scrollTicks:0,claimAttempted:false};
+            events.push(event);
+            // Recheck the unchanged request, exact source, STOP, RDP identity and focus for every event.
+            function checked() {
+                checkStop(); ready();
+                if (JSON.stringify(request) !== originalRequest || identity(lastObservation) !== originalSource ||
+                    lastObservation.capturedAt !== source.capturedAt ||
+                    JSON.stringify(gate.target(source,Date.now(),request)) !== targetJson)
+                    throw new Error('Catalogue request, source or freshness changed before input');
+            }
+            // A button-up after an attempted down is cleanup even if focus/STOP changes during the hold.
+            function physical(kind, operation, cleanup) {
+                var row = {kind:kind,startedAt:Date.now(),sourceFrameId:source.frameId,dispatched:false,
+                    readinessPassed:false,cleanup:cleanup === true,arguments:kind === 'moveMouseTo' ? {x:target.x,y:target.y} :
+                        kind === 'verticalScroll' ? {delta:-1} : {button:'LBUTTON'}};
+                event.inputs.push(row);
+                var guardError = null;
+                try {
+                    try { checked(); } catch(error) {
+                        row.readinessError = String(error); guardError = error;
+                        if (!cleanup) throw error;
+                    }
+                    row.readinessPassed = guardError === null;
+                    row.observationAgeMs = Date.now()-source.timestamp;
+                    row.captureAgeMs = Date.now()-source.capturedAt;
+                    row.dispatched = true;
+                    operation(); row.returned = true;
+                    if (guardError) throw guardError;
+                } catch(error) { row.error = String(error); throw error; }
+                finally { row.finishedAt = Date.now(); }
+            }
+            var downAttempted = false, failure = null;
+            try {
+                // Retain this exact PNG/metadata frame before any catalogue input can be dispatched.
+                this.pinObservation(source.session,source.frameId); event.sourcePinned=true;
+                physical('moveMouseTo',function() { moveMouseTo(target.x,target.y); event.moves++; });
+                if (command === 'handbookCatalogueScroll') {
+                    for (var tick=0; tick<8; tick++) {
+                        physical('verticalScroll',function() { event.scrollAttempts++; verticalScroll(-1); event.scrollTicks++; });
+                        await sleep(100);
+                    }
+                } else {
+                    await sleep(120);
+                    physical('leftButtonDown',function() { downAttempted=true; event.clickAttempts++; leftButtonDown(); event.buttonDowns++; });
+                    await sleep(100);
+                }
+            } catch(error) { failure = error; }
+            finally {
+                if (downAttempted) {
+                    try { physical('leftButtonUp',function() { event.buttonUpAttempts++; leftButtonUp(); event.buttonUps++; },true); }
+                    catch(error) { if (!failure) failure=error; else event.cleanupError=String(error); }
+                }
+                event.clicks = event.buttonDowns === 1 && event.buttonUps === 1 ? 1 : 0;
+                event.status = failure ? 'failed' : 'completed';
+                if (failure) event.error = String(failure);
+                event.finishedAt = Date.now();
+            }
+            if (failure) throw failure;
+            return target;
         },
         actTwoHandbookClaim: async function(inspectNext){
             checkStop();ready();var gate=eval(file.readTextSync('act-two-handbook.js')+'\nActTwoHandbook;');

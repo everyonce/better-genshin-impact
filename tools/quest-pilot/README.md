@@ -1,5 +1,7 @@
 # BetterGI quest pilot helpers
 
+See [bounded enemy catalogue controls](handbook-catalogue-validation-20261031.md) for the R61 Handbook shortcuts, exact-name tracking commands and their live validation.
+
 See [r15 recovery validation](r15-recovery-validation.md) for the native focus/restart fixes, portable runtime preflight and the latest bounded second-pit evidence. Act I completion remains unverified there.
 
 ## Reconnecting a closed desktop host

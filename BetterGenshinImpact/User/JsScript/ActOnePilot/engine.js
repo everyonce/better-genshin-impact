@@ -1,7 +1,18 @@
 var ActOnePilot = (function () {
-    var keys = ['VK_J', 'VK_ESCAPE', 'VK_F', 'VK_SPACE', 'VK_M'];
+    var keys = ['VK_J', 'VK_ESCAPE', 'VK_F', 'VK_SPACE', 'VK_M', 'VK_F1'];
     function combatObjective(value) { return ['Defeat the nearby hilichurls','Clear out the nearby hilichurl camp'].indexOf(value)>=0; }
     function integer(n, lo, hi) { return typeof n === 'number' && Number.isInteger(n) && n >= lo && n <= hi; }
+    // Opening the handbook is limited to a fresh, healthy ground scene without visible enemy bars.
+    function handbookOpenReady(o, now, session) {
+        var h=o&&o.hud, hp=h&&h.health;
+        return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&Number.isFinite(now)&&
+            now>=o.timestamp&&now-o.timestamp<=1000&&o.map!==null&&h&&h.world===true&&
+            h.groundControls===true&&h.journal===false&&h.bigMap===false&&h.choice===false&&
+            h.dialogueReady===false&&h.climbing===false&&h.auto===false&&h.lowHealth===false&&
+            Array.isArray(h.enemyBars)&&h.enemyBars.length===0&&hp&&
+            Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.max>0&&
+            hp.current<=hp.max&&hp.current/hp.max>=0.6);
+    }
     function wolfContinueSeed(o,now) {
         var h=o&&o.hud,rows=o&&o.ocr||[];
         if(!o||!Number.isFinite(o.timestamp)||!Number.isFinite(now)||now<o.timestamp||now-o.timestamp>1000||o.map!==null||!h||h.world!==false||
@@ -24,6 +35,16 @@ var ActOnePilot = (function () {
         if (r.mission === 'questStep') {
             allowed.push('step');
             if (typeof r.step !== 'string' || !/^[a-z][A-Za-z0-9]{0,39}$/.test(r.step)) return 'Invalid quest step';
+            // Catalogue coordinates and enemy names belong only to their explicit bounded commands.
+            if (r.step === 'handbookCatalogueSelect') {
+                allowed.push('x', 'y');
+                if (!integer(r.x, 421, 939) || !integer(r.y, 266, 869)) return 'Invalid catalogue icon coordinates';
+            }
+            if (r.step === 'handbookCatalogueTrack') {
+                allowed.push('enemyName');
+                if (typeof r.enemyName !== 'string' || !/^[A-Za-z][A-Za-z0-9 '():-]{1,95}$/.test(r.enemyName) ||
+                    r.enemyName !== r.enemyName.trim() || / {2}/.test(r.enemyName)) return 'Invalid catalogue enemy name';
+            }
             if (Object.prototype.hasOwnProperty.call(r,'lookAmount')) {
                 if (['wolfLookRight','wolfLookLeft','wolfLookDown','wolfLookUp'].indexOf(r.step)<0) return 'lookAmount is allowed only for Wolf look steps';
                 allowed.push('lookAmount');
@@ -56,7 +77,15 @@ var ActOnePilot = (function () {
         function state() { return {state:stopped?'stopped':busy?'running':'idle',frameId:frame,activeRequestId:activeRequestId}; }
         function pulse(force) { if(typeof api.heartbeat==='function')api.heartbeat(state(),force===true); }
         function report(req, state, details) {
-            if(state==='failed' && frame>0 && typeof api.pinObservation==='function') api.pinObservation(session,frame);
+            if(state==='failed' && frame>0 && typeof api.pinObservation==='function') {
+                try { api.pinObservation(session,frame); }
+                catch(error) {
+                    // A failed catalogue evidence pin must not leave its consumed request marked started.
+                    if(!req || req.mission!=='questStep' ||
+                        ['handbookCatalogueScroll','handbookCatalogueSelect','handbookCatalogueTrack'].indexOf(req.step)<0) throw error;
+                    details=Object.assign({},details,{capturePinError:String(error && error.message || error)});
+                }
+            }
             var row = { session: session, id: req && req.id || null, mission: req && req.mission || null, status: state, timestamp: api.now(), frameId: frame, details: details || null };
             if(typeof api.append==='function')api.append('reports/'+session+'.jsonl',JSON.stringify(row)+'\n');
             reports.push(row);if(reports.length>200)reports.shift();
@@ -125,8 +154,11 @@ var ActOnePilot = (function () {
                     if (!enabled) throw new Error('Input is disabled');
                     var before = await observe();
                     var h = before.hud;
-                    var permitted = (req.key === 'VK_ESCAPE' && (h.journal || h.bigMap)) ||
+                    var handbookClose = req.key === 'VK_ESCAPE' && typeof api.handbookCloseReady === 'function' &&
+                        api.handbookCloseReady(before) === true;
+                    var permitted = (req.key === 'VK_ESCAPE' && (h.journal || h.bigMap || handbookClose)) ||
                         ((req.key === 'VK_J' || req.key === 'VK_M') && h.world) ||
+                        (req.key === 'VK_F1' && handbookOpenReady(before, api.now(), session)) ||
                         (req.key === 'VK_SPACE' && h.dialogueReady) || (req.key === 'VK_F' && h.world && h.interact);
                     if (!permitted) throw new Error('Key not valid in the recognized screen');
                     api.requireInputReady(); inputStarted = api.now(); await api.keyPress(req.key);

@@ -4,6 +4,8 @@ Run with ``run --directory NEW_DIRECTORY --owner-from SEALED_LINEAGE``. While it
 session.json says awaitingReview, use ``submit --session DIRECTORY --review JSON``.
 The review must use a fresh passive capture made after the advertised reviewAfterUnixNs.
 ``stop --session DIRECTORY`` is terminal, including while no input lease is open.
+``--allow-inspected-obstacle-recovery`` retains only model weights after one audited
+stationary-forward obstacle stop; a new consumed review must select another destination.
 """
 import argparse
 import copy
@@ -30,6 +32,8 @@ from run_patrol_series import SeriesGuard
 from reviewed_scout_route import ReviewedScoutRoute,reviewed_route_policy
 from scout_encounter_guard import binding_from_review,guard_policy
 from episode_split import reserve_split
+from audit_scout_obstacle import (OBSTACLE_ERROR, audit_failed_prefix, recovery_policy,
+                                 source_contract, verify_recovery_request)
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -338,6 +342,10 @@ def validate_request(path, manifest, after_id, after_ns):
     """Consume only a single fresh request for this session, configuration and prior completed leg."""
     request,digest=read_json(path,16384)
     fields=REQUEST_FIELDS|{'routeSpec','routeSpecSha256'} if 'routeSpec' in request else REQUEST_FIELDS
+    if 'obstacleRecovery' in request:
+        fields=fields|{'obstacleRecovery'}
+        require(manifest.get('inspectedObstacleRecoveryPolicy')==recovery_policy(),
+                'This worker did not authorize inspected obstacle recovery')
     require(set(request)==fields and request['version']==1 and request['sessionId']==manifest['sessionId'],
             'Unexpected scout request schema or session')
     require(isinstance(request['requestId'],str) and re.fullmatch('[a-f0-9]{32}',request['requestId'])
@@ -363,6 +371,9 @@ def submit(directory, review):
         afterRequestId=state['afterRequestId'],navigationProfile=SCOUT_PROFILE,maximumLegs=1,
         modelConfigurationSha256=manifest['modelConfigurationSha256'],reviewFile=str(live_path(review)),
         **review_evidence(review,manifest,state['reviewAfterUnixNs']))
+    if state.get('pendingObstacleRecovery') is not None:
+        request['obstacleRecovery']=copy.deepcopy(state['pendingObstacleRecovery'])
+        verify_recovery_request(request,request['obstacleRecovery'],manifest['owner'])
     require(not any(path.stem not in state['seenRequestIds'] for path in (directory/'requests').glob('*.json')),
             'A scout request is already pending')
     path=directory/'requests'/(request['requestId']+'.json')
@@ -379,6 +390,10 @@ def audit_leg(folder, request):
     require(report.get('passed') is True and report.get('verifiedLegs')==1
             and report.get('routeId')==request['routeId'] and report.get('controllerLeases')==1,
             'The reviewed scout leg failed its independent audit')
+    if 'obstacleRecovery' in request:
+        require(report['policyReuse'].get('obstacleRecovery')==request['obstacleRecovery'],
+                'Completed successor lost its inspected failed-prefix binding')
+        report['inspectedObstacleRecovery']=verify_recovery_request(request,request['obstacleRecovery'],report['policyReuse']['owner'])
     runtime.atomic_json(folder/'audit.json',report)
     return report
 
@@ -386,7 +401,7 @@ def audit_leg(folder, request):
 def account_leg(row, terminal_state=None, reason=None):
     """Retain the actual resident outcome even when execution or subsequent verification raises."""
     if terminal_state is not None and row['state']=='running':row['state']=terminal_state
-    if reason is not None and row['state']!='verified':row['reason']=str(reason)
+    if reason is not None and row['state']!='verified' and not row.get('reason'):row['reason']=str(reason)
     try:
         report,digest=read_json(Path(row['directory'])/'patrol.json',4*1024*1024)
         require(isinstance(report,dict) and re.fullmatch('[a-f0-9]{32}',str(report.get('runId',''))),
@@ -419,7 +434,8 @@ def account_session(state):
     state['recordedBytesComplete']=all(type(row.get('recordedBytes')) is int and not row.get('accountingError') for row in state['legs'])
 
 
-def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_factory=SessionWatch, auditor=audit_leg):
+def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_factory=SessionWatch, auditor=audit_leg,
+                prefix_auditor=audit_failed_prefix):
     """Load once, run only reviewed one-leg requests, and remain bridge-free between successful runs."""
     owner=load_map_owner(settings.owner_from)
     require_ordinary(owner['child']['windowsSessionId'])
@@ -442,9 +458,13 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
         stopTemperatureC=78,sourceFreshnessMs=150,actionHoldMs=100,legDeadlineSeconds=35,sessionSeconds=settings.seconds,
         scoutEncounterGuardPolicy=guard_policy())
     if getattr(settings,'allow_reviewed_routes',False):manifest['reviewedScoutRoutePolicy']=reviewed_route_policy()
+    if getattr(settings,'allow_inspected_obstacle_recovery',False):
+        manifest.update(inspectedObstacleRecoveryPolicy=recovery_policy(),recoverySourceSha256=source_contract())
     runtime.atomic_json(directory/'manifest.json',manifest)
     state=dict(version=1,sessionId=session_id,state='loading',modelLoads=0,modelLoadSeconds=0.0,
         afterRequestId=None,reviewAfterUnixNs=started_ns,seenRequestIds=[],legs=[],recordedBytes=0,recordedBytesComplete=True)
+    if 'inspectedObstacleRecoveryPolicy' in manifest:
+        state.update(inspectedObstacleRecoveriesUsed=0,pendingObstacleRecovery=None)
     watch=None
     policy=None
 
@@ -462,6 +482,8 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
                 'Cached scout scope or leg deadline changed')
         require(file_stamp(args.checkpoint)==checkpoint_stamp and file_sha(args.goal_embedding)==configuration['goalSha256'],
                 'Cached checkpoint or instruction bytes changed')
+        if 'recoverySourceSha256' in manifest:
+            require(source_contract()==manifest['recoverySourceSha256'],'Inspected recovery runtime source changed')
 
     try:
         publish()
@@ -479,6 +501,9 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
                    checkpointSha256=OPEN_P2P_SHA256,modelLoads=1,modelLoadSeconds=state['modelLoadSeconds'],
                    scoutEncounterGuardPolicy=guard_policy())
         if 'reviewedScoutRoutePolicy' in manifest:proof['reviewedScoutRoutePolicy']=manifest['reviewedScoutRoutePolicy']
+        if 'inspectedObstacleRecoveryPolicy' in manifest:
+            proof.update(inspectedObstacleRecoveryPolicy=manifest['inspectedObstacleRecoveryPolicy'],
+                         recoverySourceSha256=manifest['recoverySourceSha256'])
         runtime.atomic_json(directory/'policy-proof.json',proof)
         proof_sha=file_sha(directory/'policy-proof.json')
         state['state']='awaitingReview'
@@ -493,6 +518,11 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
             path=pending[0]
             request,request_sha=validate_request(path,manifest,state['afterRequestId'],state['reviewAfterUnixNs'])
             state['seenRequestIds'].append(request['requestId'])
+            pending_recovery=state.get('pendingObstacleRecovery')
+            require(('obstacleRecovery' in request)==(pending_recovery is not None),
+                    'Inspected recovery request is missing or unsolicited')
+            if pending_recovery is not None:
+                verify_recovery_request(request,pending_recovery,owner)
             _,child=owner_pair(lifecycle,owner)
             if not idle_child(child):
                 # Passive inspection is allowed; a refused request is never retried automatically when it ends.
@@ -520,6 +550,7 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
                 routeId=request['routeId'],navigationProfile=SCOUT_PROFILE,
                 scoutEncounterGuard=copy.deepcopy(request['scoutEncounterGuard']))
             if spec is not None:reuse.update(routeSpec=spec.document(),routeSpecSha256=spec.sha256)
+            if pending_recovery is not None:reuse['obstacleRecovery']=copy.deepcopy(pending_recovery)
 
             def cached(current):
                 """Keep the existing injected-loader seam while checking authority immediately before lease creation."""
@@ -530,12 +561,67 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
                 watch.check()
                 return policy
 
+            # Retain no live control, guard, bridge or capture thread across the failure boundary.
+            previous_threads=set(threading.enumerate())
+            controls=[]
+            def episode(current, loaded, control):
+                """Witness the single fresh control lifetime without changing the stream implementation."""
+                controls.append(control)
+                return client.run_episode(current,loaded,control)
+            failure=None
             watch.activate(folder)
             try:
-                code=(runner or runtime.run_resident)(args,cached,client.run_episode,policy_reuse=reuse)
+                code=(runner or runtime.run_resident)(args,cached,episode,policy_reuse=reuse)
+            except Exception as error:
+                failure=error
+                code=None
             finally:
                 watch.deactivate()
             watch.check()
+            if failure is not None:
+                if ('inspectedObstacleRecoveryPolicy' not in manifest or str(failure)!=OBSTACLE_ERROR
+                        or state['inspectedObstacleRecoveriesUsed']>=1):
+                    raise failure
+                account_leg(row,'failed',OBSTACLE_ERROR)
+                account_session(state)
+                require(not row.get('accountingError') and state['recordedBytesComplete'],
+                        'Failed obstacle recording has unresolved accounting')
+                require(settings.record_max_mib-math.ceil(state['recordedBytes']/(2**20))>=1,
+                        'Scout session recording budget exhausted after obstacle')
+                require(len(controls)==1 and controls[0].run_id==row['runId']
+                        and not controls[0].worker.is_alive()
+                        and not any(thread not in previous_threads and thread.is_alive() for thread in threading.enumerate()),
+                        'Failed obstacle control/capture/recording threads did not retire')
+                verify_configuration(args)
+                prefix=prefix_auditor(folder,request)
+                require(prefix.get('prefixVerified') is True and prefix.get('passed') is False
+                        and prefix.get('routeCompleted') is False and prefix.get('runId')==row['runId']
+                        and prefix.get('residentManifestSha256')==row['residentManifestSha256'],
+                        'Failed obstacle prefix was not independently verified')
+                _,child=owner_pair(lifecycle,owner)
+                require(idle_child(child),'Failed obstacle cleanup did not release the original child')
+                watch.check()
+                require(not (directory/'STOP').exists(),'Operator stop forbids retaining the failed policy')
+                policy.reset()
+                require(not getattr(policy,'_pending_feedback',False),'Failed obstacle policy feedback did not reset')
+                cleanup_ns,cleanup_monotonic_ns=time.time_ns(),time.perf_counter_ns()
+                audit_path=folder/'failed-prefix-audit.json'
+                runtime.atomic_json(audit_path,prefix)
+                witness=dict(failedRequestId=request['requestId'],failedRunId=row['runId'],failedRouteId=request['routeId'],
+                    failedReviewSha256=request['reviewSha256'],failedManifestSha256=row['residentManifestSha256'],
+                    prefixAuditFile=str(audit_path),prefixAuditSha256=file_sha(audit_path),
+                    cleanupAtUnixNs=cleanup_ns,cleanupAtMonotonicNs=cleanup_monotonic_ns,
+                    failedRoutePoints=[list(point) for point in (spec.points if spec is not None else route_points(request['routeId']))],
+                    owner=copy.deepcopy(owner),originalOwnerIdleMinimizedAfter=True,residentControlRetired=True,
+                    newPythonThreadsAlive=[],retainedState='policy-weights-and-immutable-configuration-only')
+                row.update(policyRetainedForInspection=True,inspectedObstacleRecovery=copy.deepcopy(witness))
+                state.update(state='awaitingReview',afterRequestId=request['requestId'],reviewAfterUnixNs=cleanup_ns,
+                    inspectedObstacleRecoveriesUsed=1,pendingObstacleRecovery=witness)
+                # Break traceback references to the old armed guard. Only weights/configuration survive.
+                controls.clear()
+                failure=None
+                publish()
+                continue
             report,_=read_json(folder/'patrol.json',4*1024*1024)
             require(code==0 and report.get('status')=='completed' and report.get('endReason')=='hybridLegLimit'
                     and report.get('evidenceComplete') is True and report.get('failedLeases')==0
@@ -554,6 +640,8 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
             require(not row.get('accountingError'),'The verified scout leg has unresolved resident accounting')
             account_session(state)
             state.update(state='awaitingReview',afterRequestId=request['requestId'],reviewAfterUnixNs=time.time_ns())
+            if pending_recovery is not None:state['pendingObstacleRecovery']=None
+            controls.clear()
             publish()
     except Exception as error:
         state.update(state='stopped' if watch and watch.reason else 'failed',reason=str(error))
@@ -580,6 +668,8 @@ def options(argv=None):
     run.add_argument('--seconds',type=int,default=600)
     run.add_argument('--route',dest='routes',action='append',choices=SCOUT_ROUTES)
     run.add_argument('--allow-reviewed-routes',action='store_true',help='Allow fresh explicit two-point scout reviews within the existing scope')
+    run.add_argument('--allow-inspected-obstacle-recovery',action='store_true',
+                     help='Retain only the loaded policy after at most one fully audited geometric stop; require a new reviewed route')
     agent=ROOT/'artifacts/agent'
     run.add_argument('--checkpoint',type=Path,default=agent/'models/open-p2p-150M/150M/checkpoint-step=00500000.ckpt')
     run.add_argument('--source',type=Path,default=agent/'sources/open-p2p')

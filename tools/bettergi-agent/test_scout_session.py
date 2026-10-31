@@ -35,6 +35,7 @@ class FakePolicy:
     def reset(self):
         """Reset history without replacing either expensive resource."""
         self.history.clear()
+        self._pending_feedback=False
 
     def set_goal(self, path):
         """Mirror the adapter's existing goal/history reset seam."""
@@ -136,7 +137,8 @@ class ScoutSessionTests(unittest.TestCase):
         points=spec.points if spec is not None else scout.route_points(route)
         frames=[]
         for number in (1,2,3):
-            source=dict(captureEpoch='synthetic',timestamp100ns=number*1_000_000,freshnessAtMs=number*100)
+            stamp=(time.perf_counter_ns()//100 if getattr(self.settings,'allow_inspected_obstacle_recovery',False) else 0)
+            source=dict(captureEpoch='synthetic',timestamp100ns=stamp+number*1_000_000,freshnessAtMs=number*100)
             pose=dict(state='valid',frameId=number,x=points[0][0],y=points[0][1],
                       layerId='MapBack_2',positionConfidence=.999,yawConfidence=.8,yawDegrees=270)
             frames.append(dict(frameId=number,sourceFrame=source,navigationPose=pose,sourceFrameAgeMs=40,
@@ -404,6 +406,171 @@ class ScoutSessionTests(unittest.TestCase):
         self.assertEqual((Path(self.episodes[0][0].record_dir)/'synthetic-recording.bin').read_bytes(),self.recording_payload)
         self.assertEqual(row['datasetSplit'],'diagnostic')
         self.assertEqual(read_split(Path(row['directory']),row['runId'])['split'],'diagnostic')
+
+    def obstacle_driver(self, watch):
+        """Supply each recovery request explicitly only after observing the retained failed boundary."""
+        state=json.loads((watch.folder/'session.json').read_bytes())
+        if state['state']!='awaitingReview':return
+        if len(state['legs'])>=self.target:
+            watch.reason='operatorStop'
+            return
+        if any(path.stem not in state['seenRequestIds'] for path in (watch.folder/'requests').glob('*.json')):return
+        number=len(state['legs'])
+        self.episode_error=scout.OBSTACLE_ERROR if number in self.obstacle_failures else None
+        self.before_submit(number)
+        route=(scout.SCOUT_GRASS_ROUTE,scout.SCOUT_GROVE_ROUTE)[number%2]
+        review=self.make_review(route)
+        self.recovery_review_mutation(number,review,state)
+        scout.submit(watch.folder,review)
+
+    def synthetic_prefix_audit(self, folder, request):
+        """Isolate worker lifecycle tests; the separate prefix suite replays complete native/RGB evidence."""
+        report,digest=scout.read_json(Path(folder)/'patrol.json')
+        self.assertEqual(report['status'],'failed')
+        return dict(prefixVerified=True,passed=False,routeCompleted=False,runId=report['runId'],
+            requestId=request['requestId'],residentManifestSha256=digest)
+
+    def prepare_obstacle_worker(self):
+        """Keep the actual resident control/guard lifetimes while substituting only the inert prefix fixture."""
+        import audit_scout_obstacle
+        self.settings.allow_inspected_obstacle_recovery=True
+        self.obstacle_failures={0}
+        self.recording_payload=b'closed failed-or-successful diagnostic recording'
+        self.recovery_review_mutation=lambda *args:None
+        self.driver=self.obstacle_driver
+        self.stack.enter_context(patch.object(audit_scout_obstacle,'audit_failed_prefix',self.synthetic_prefix_audit))
+
+    def test_opt_in_one_failed_prefix_retains_only_policy_and_uses_a_new_guard(self):
+        """The real resident creates a different guard/run while the original failed evidence stays failed."""
+        self.prepare_obstacle_worker()
+        guards=[]
+        self.after_episode=lambda number,control:guards.append(control.scout_encounter_guard)
+        result=self.run_worker(prefix_auditor=self.synthetic_prefix_audit)
+        self.assertEqual([row['state'] for row in result['legs']],['failed','verified'])
+        self.assertEqual((len(self.loads),len(self.starts),result['inspectedObstacleRecoveriesUsed']),(1,2,1))
+        self.assertIsNot(guards[0],guards[1])
+        self.assertTrue(guards[0].snapshot()['armed'])
+        self.assertEqual([guard.snapshot()['observations'] for guard in guards],[1,1])
+        self.assertEqual(result['legs'][0]['reason'],scout.OBSTACLE_ERROR)
+        self.assertFalse(result['legs'][0]['evidenceComplete'])
+        self.assertEqual(result['legs'][0]['failedLeases'],1)
+        self.assertEqual(result['recordedBytes'],2*len(self.recording_payload))
+        self.assertEqual([row['datasetSplit'] for row in result['legs']],['diagnostic','diagnostic'])
+        self.assertIsNone(result['pendingObstacleRecovery'])
+        requests=[json.loads(path.read_bytes()) for path in (self.settings.directory/'requests').glob('*.json')]
+        successor=next(row for row in requests if 'obstacleRecovery' in row)
+        self.assertEqual(successor['afterRequestId'],result['legs'][0]['requestId'])
+        self.assertEqual(self.audits[0]['policyReuse']['obstacleRecovery'],successor['obstacleRecovery'])
+
+    def test_second_obstacle_exhausts_allowance_without_a_third_lease(self):
+        """One reviewed successor cannot make the recovery option an unlimited restart loop."""
+        self.prepare_obstacle_worker();self.obstacle_failures={0,1};self.target=3
+        result=self.run_worker(prefix_auditor=self.synthetic_prefix_audit)
+        self.assertEqual((result['state'],len(self.starts),len(result['legs'])),('failed',2,2))
+        self.assertEqual([row['state'] for row in result['legs']],['failed','failed'])
+        self.assertEqual(result['inspectedObstacleRecoveriesUsed'],1)
+
+    def test_proven_unsubmitted_obstacle_prediction_is_discarded_without_weight_reload(self):
+        """The known choose() exception follows predict(), leaving a non-transmitted history transaction."""
+        self.prepare_obstacle_worker()
+        self.after_episode=lambda number,control:setattr(self.policy,'_pending_feedback',number==1)
+        result=self.run_worker(prefix_auditor=self.synthetic_prefix_audit)
+        self.assertEqual([row['state'] for row in result['legs']],['failed','verified'])
+        self.assertEqual(len(self.loads),1)
+        self.assertFalse(self.policy._pending_feedback)
+
+    def test_stale_or_same_route_recovery_review_is_refused_before_second_lease(self):
+        """Fresh bytes alone cannot recycle old native source timestamps or the blocked destination."""
+        self.prepare_obstacle_worker()
+        def stale(number, review, state):
+            """Rewrite the new native source as an old capture while preserving matching file joins."""
+            if number!=1:return
+            value=json.loads(review.read_bytes());endpoint=Path(value['nativeEndpoint'])
+            native=json.loads((endpoint/'result.json').read_bytes())
+            for frame in native['observations']+native['stableSamples']:
+                frame['sourceFrame']['timestamp100ns']=frame['frameId']*1_000_000
+                frame['frameWorldReadiness']['sourceFrame']['timestamp100ns']=frame['frameId']*1_000_000
+            write_json(endpoint/'result.json',native)
+            metadata_path=endpoint/Path(value['imageName']).with_suffix('.json')
+            metadata=json.loads(metadata_path.read_bytes());metadata['sourceFrame']['timestamp100ns']=1_000_000
+            write_json(metadata_path,metadata)
+        self.recovery_review_mutation=stale
+        result=self.run_worker(prefix_auditor=self.synthetic_prefix_audit)
+        self.assertEqual(len(self.starts),1)
+        self.assertIn('predates completed cleanup',result['reason'])
+
+    def test_same_blocked_geometry_is_not_reissued_after_inspection(self):
+        """A newly captured review cannot silently retry the original blocked route."""
+        self.prepare_obstacle_worker()
+        def same_route(number, review, state):
+            """Replace only the synthetic review with a freshly captured original geometry."""
+            if number==1:
+                replacement=self.make_review(scout.SCOUT_GRASS_ROUTE)
+                review.write_bytes(replacement.read_bytes())
+        self.recovery_review_mutation=same_route
+        result=self.run_worker(prefix_auditor=self.synthetic_prefix_audit)
+        self.assertEqual(len(self.starts),1)
+        self.assertIn('different route',result['reason'])
+
+    def test_operator_stop_after_failure_never_retains_policy_for_a_successor(self):
+        """A simultaneous STOP takes precedence over an otherwise eligible geometric failure."""
+        self.prepare_obstacle_worker()
+        self.after_episode=lambda number,control:(self.settings.directory/'STOP').write_text('stop')
+        result=self.run_worker(prefix_auditor=self.synthetic_prefix_audit)
+        self.assertEqual(len(self.starts),1)
+        self.assertEqual(result['inspectedObstacleRecoveriesUsed'],0)
+        self.assertNotIn('policyRetainedForInspection',result['legs'][0])
+
+    def test_changed_owner_or_goal_after_inspected_stop_cannot_open_the_new_lease(self):
+        """Holding weights during inspection never relaxes original native owner or goal identity."""
+        self.prepare_obstacle_worker()
+        self.before_submit=lambda number:self.child.update(instanceNonce='c'*32) if number==1 else None
+        result=self.run_worker(prefix_auditor=self.synthetic_prefix_audit)
+        self.assertEqual(len(self.starts),1)
+        self.assertIn('owner changed',result['reason'])
+
+    def test_changed_goal_after_inspected_stop_cannot_reuse_loaded_policy(self):
+        """Fresh review authority cannot substitute instruction bytes in a retained model."""
+        self.prepare_obstacle_worker()
+        self.before_submit=lambda number:write_json(self.goal,dict(goal='changed')) if number==1 else None
+        result=self.run_worker(prefix_auditor=self.synthetic_prefix_audit)
+        self.assertEqual(len(self.starts),1)
+        self.assertIn('instruction bytes changed',result['reason'])
+
+    def test_source_changes_and_thermal_stop_remain_terminal_at_the_recovery_boundary(self):
+        """Keeping weights does not waive source pinning or the existing thermal supervisor."""
+        self.prepare_obstacle_worker()
+        original=scout.source_contract();changed=[False]
+        self.stack.enter_context(patch.object(scout,'source_contract',lambda:dict(original,changed='yes') if changed[0] else original))
+        self.before_submit=lambda number:changed.__setitem__(0,True) if number==1 else None
+        result=self.run_worker(prefix_auditor=self.synthetic_prefix_audit)
+        self.assertEqual(len(self.starts),1)
+        self.assertIn('runtime source changed',result['reason'])
+
+    def test_thermal_stop_during_failed_prefix_cleanup_has_no_recovery_allowance(self):
+        """Supervision wins before any policy retention publication or successor submission."""
+        self.prepare_obstacle_worker()
+        self.after_episode=lambda number,control:setattr(self.watch,'reason','seriesTemperatureStop')
+        result=self.run_worker(prefix_auditor=self.synthetic_prefix_audit)
+        self.assertEqual((result['state'],result['reason']),('stopped','seriesTemperatureStop'))
+        self.assertEqual((len(self.starts),result['inspectedObstacleRecoveriesUsed']),(1,0))
+
+    def test_live_capture_thread_prevents_policy_retention(self):
+        """A published failed manifest cannot hide a still-running reader or recorder worker."""
+        self.prepare_obstacle_worker()
+        finish=threading.Event();threads=[]
+        def leak(number, control):
+            """Start only an inert local thread whose lifecycle is independently checked."""
+            worker=threading.Thread(target=finish.wait,name='synthetic-capture-reader',daemon=True)
+            worker.start();threads.append(worker)
+        self.after_episode=leak
+        try:
+            result=self.run_worker(prefix_auditor=self.synthetic_prefix_audit)
+            self.assertEqual(len(self.starts),1)
+            self.assertIn('threads did not retire',result['reason'])
+        finally:
+            finish.set()
+            for worker in threads:worker.join(2)
 
     def test_terminal_accounting_preserves_a_conflicting_existing_split(self):
         """A prior reservation cannot be silently overwritten to make a scout result admissible."""

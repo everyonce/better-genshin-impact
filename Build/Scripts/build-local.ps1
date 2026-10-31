@@ -1,7 +1,8 @@
 param(
     [string]$DotNet,
     [string]$OutputDirectory,
-    [switch]$RebuildWeb
+    [switch]$RebuildWeb,
+    [switch]$VerifyOnly
 )
 $ErrorActionPreference = 'Stop'
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
@@ -26,6 +27,19 @@ $env:npm_config_cache = Join-Path $toolchain 'npm-cache'
 $sdkVersion = & $DotNet --version
 if ($LASTEXITCODE -or [version]($sdkVersion -replace '-.*$', '') -lt [version]'10.0.100') {
     throw 'Install the .NET 10 SDK, or provide its dotnet.exe with -DotNet.'
+}
+# Compile with the same installed SDK and package cache without publishing or launching BetterGI.
+if ($VerifyOnly) {
+    if ($OutputDirectory -or $RebuildWeb) {
+        throw '-VerifyOnly cannot be combined with -OutputDirectory or -RebuildWeb.'
+    }
+    Push-Location $repo
+    try {
+        & $DotNet msbuild BetterGenshinImpact.sln -restore -p:Configuration=Debug -p:UseSharedCompilation=false -m:1 -nr:false -nologo -tl:off -clp:ErrorsOnly
+        if ($LASTEXITCODE) { throw "Solution verification failed (exit $LASTEXITCODE)." }
+    }
+    finally { Pop-Location }
+    return
 }
 if ($RebuildWeb -or !(Test-Path -LiteralPath (Join-Path $repo 'Build\EnglishWeb\dist\Map\Editor\index.html')) -or !(Test-Path -LiteralPath (Join-Path $repo 'Build\EnglishWeb\dist\Web\ScriptRepo\index.html'))) {
     & (Join-Path $repo 'Build\EnglishWeb\build.ps1')

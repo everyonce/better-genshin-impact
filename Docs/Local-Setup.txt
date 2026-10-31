@@ -21,6 +21,9 @@ helpers now use explicit runtime instances and per-run cancellation tokens.
 Rebuild in PowerShell 7 with Git, Node.js/npm and the .NET 10 SDK:
   .\Build\Scripts\build-local.ps1
 This machine's downloaded toolchain and package caches are inside the workspace.
+To compile without publishing or launching BetterGI, use:
+  .\Build\Scripts\build-local.ps1 -VerifyOnly
+This also selects the workspace .NET 10 SDK and existing NuGet package cache.
 Existing portable directories are never overwritten. For another build, choose
 an empty output directory explicitly:
   .\Build\Scripts\build-local.ps1 -OutputDirectory .\artifacts\release-r57\BetterGI-English-win-x64

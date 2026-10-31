@@ -26,6 +26,7 @@ from typing import List
 ROOT = Path(__file__).resolve().parents[3]
 TOOLS = ROOT / 'tools/bettergi-agent'
 sys.path.insert(0, str(TOOLS))
+from policy_rgb_archive import open_recording_jsonl
 SOURCE = ROOT / 'artifacts/agent/sources/open-p2p'
 CHECKPOINT = ROOT / 'artifacts/agent/models/open-p2p-150M/150M/checkpoint-step=00500000.ckpt'
 RTOL, ATOL = 1e-3, 1e-3
@@ -175,7 +176,8 @@ def load_case(plan_path, probe_id, include_grid=False):
     for name, entry in expected.items():
         require(digest(entry['path']) == entry, 'changed prepared input: ' + name)
         if name.endswith('.jsonl'):
-            payload[name] = [json.loads(x) for x in Path(entry['path']).read_text(encoding='utf-8').splitlines() if x.strip()]
+            with open_recording_jsonl(Path(entry['path'])) as rows:
+                payload[name] = [json.loads(x) for x in rows if x.strip()]
         elif name != 'frames.mp4':
             payload[name] = json.loads(Path(entry['path']).read_text(encoding='utf-8'))
     reproduced = prepare(payload['report'], payload['observations.jsonl'], payload['frames.jsonl'], payload['events.jsonl'],

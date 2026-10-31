@@ -3,6 +3,7 @@ import argparse
 from collections import Counter, defaultdict
 import hashlib
 import json
+from policy_rgb_archive import JOURNAL_NAMES, read_recording_jsonl, recording_metadata
 import math
 from pathlib import Path
 import statistics
@@ -41,6 +42,10 @@ def read_json(path):
 
 def read_lines(path):
     """Read existing recorder sidecars and reject truncated or malformed records."""
+    if path.name in JOURNAL_NAMES:
+        seal=recording_metadata(path.parent)
+        if path.is_file() or seal.get('recordingFormat'):
+            return read_recording_jsonl(path.parent,path.name)[0]
     if not path.is_file():
         return []
     with path.open(encoding='utf-8-sig') as stream:

@@ -4,12 +4,37 @@ import hashlib
 import json
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
+from unittest.mock import mock_open,patch
 
 from audit_hybrid_run import (EXECUTED_HISTORY_MODE,EXECUTED_HISTORY_SOURCE_NAMES,audit,audit_bypasses,audit_rebind,
-                              verify_executed_history,verify_policy_reuse)
+                              evidence_bytes,verify_executed_history,verify_policy_reuse)
 from hybrid_navigation import START, END
 from hybrid_routes import LAMPPOST_ROUTE, PATROL_STATIONS, STAIR_POST_ROUTE, STREET_PATROL_ROUTE, route_heading, route_points
+
+
+class EvidenceReadTests(unittest.TestCase):
+    """Bound transient allocation to the actual artifact while preserving size-race refusals."""
+    def test_small_artifact_reads_its_size_instead_of_the_full_safety_ceiling(self):
+        """A 160 MiB admission ceiling must not allocate 160 MiB for every tiny retained image."""
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory).resolve()/'small.rgb';payload=b'bounded exact pixels';path.write_bytes(payload)
+            info=path.stat();opened=mock_open(read_data=payload)
+            with patch.object(Path,'open',opened),patch('audit_hybrid_run.os.fstat',return_value=info):
+                self.assertEqual(evidence_bytes(path,160*1024*1024),payload)
+            opened().read.assert_called_once_with(len(payload)+1)
+
+    def test_growth_and_truncation_after_fstat_remain_refused(self):
+        """Reading one extra byte still rejects either direction of a concurrent size change."""
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory).resolve()/'changing.rgb';payload=b'bounded exact pixels';path.write_bytes(payload)
+            actual=path.stat()
+            for before in (len(payload)-1,len(payload)+1):
+                info=SimpleNamespace(st_mode=actual.st_mode,st_nlink=1,st_size=before)
+                with self.subTest(before=before),patch.object(Path,'open',mock_open(read_data=payload)),\
+                     patch('audit_hybrid_run.os.fstat',return_value=info),self.assertRaisesRegex(ValueError,'changed size'):
+                    evidence_bytes(path,160*1024*1024)
 
 
 class HybridAuditTests(unittest.TestCase):

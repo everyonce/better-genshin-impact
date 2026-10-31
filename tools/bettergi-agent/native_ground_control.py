@@ -1,6 +1,7 @@
 """Exact native ground-control layout negotiation and retained tiny-pixel replay; never physical footing."""
 import base64
 import copy
+from functools import lru_cache
 import hashlib
 import json
 from pathlib import Path
@@ -71,26 +72,35 @@ def negotiate(bridge):
     return contract,copy.deepcopy(reply)
 
 
+@lru_cache(maxsize=4)
+def _pattern_masks(pattern,width):
+    """Precompute the two immutable glyph masks in the crop's original pixel-stride coordinates."""
+    dark=sum(1<<(y*width+x) for y,row in enumerate(pattern) for x,value in enumerate(row) if value=='#')
+    light=sum(1<<(y*width+x) for y,row in enumerate(pattern) for x,value in enumerate(row) if value=='.')
+    return dark,light,dark.bit_count(),light.bit_count()
+
+
 def match_crop(data,crop,pattern,expected_x):
     """Replay the bounded glyph/rectangle search offline; runtime admission validates native counts and hashes."""
-    dark_points=[(x,y) for y,row in enumerate(pattern) for x,c in enumerate(row) if c=='#']
-    light_points=[(x,y) for y,row in enumerate(pattern) for x,c in enumerate(row) if c=='.']
+    dark_pattern,light_pattern,dark_count,light_count=_pattern_masks(tuple(pattern),crop['width'])
     # Cache threshold masks once; no image library or model is needed for replay.
-    pixels=[data[i:i+3] for i in range(0,len(data),3)]
-    dark=[max(p)<150 for p in pixels]
-    light=[min(p)>=205 and max(p)-min(p)<=40 for p in pixels]
+    dark=light=0
+    for index,(r,g,b) in enumerate(zip(data[::3],data[1::3],data[2::3])):
+        if r<150 and g<150 and b<150:dark|=1<<index
+        if r>=205 and g>=205 and b>=205 and max(r,g,b)-min(r,g,b)<=40:light|=1<<index
     best,score=None,-1
     for y in range(1024,1031):
         for x in range(expected_x-3,expected_x+4):
             start=(y-crop['y'])*crop['width']+x-crop['x']
-            d=sum(dark[start+dy*crop['width']+dx] for dx,dy in dark_points)
-            l=sum(light[start+dy*crop['width']+dx] for dx,dy in light_points)
-            value=min(d/len(dark_points)/.90,l/len(light_points)/.97)
+            # Intersection counts exactly the same pixels as the original point sums.
+            d=((dark>>start)&dark_pattern).bit_count()
+            l=((light>>start)&light_pattern).bit_count()
+            value=min(d/dark_count/.90,l/light_count/.97)
             if value>score:
                 score=value
-                best=dict(matched=d*100>=90*len(dark_points) and l*100>=97*len(light_points),
-                    x=x,y=y,width=30,height=25,darkMatches=d,darkExpected=len(dark_points),
-                    lightMatches=l,lightExpected=len(light_points))
+                best=dict(matched=d*100>=90*dark_count and l*100>=97*light_count,
+                    x=x,y=y,width=30,height=25,darkMatches=d,darkExpected=dark_count,
+                    lightMatches=l,lightExpected=light_count)
     return best
 
 

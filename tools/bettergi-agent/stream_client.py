@@ -460,6 +460,7 @@ class AsyncVideoRecorder:
     """Bound image, observation and event queues; only the worker performs recording IO."""
     def __init__(self, directory, ffmpeg, fps, max_bytes, frame_capacity=8, event_capacity=256, preview=False,
                  metadata_capacity=256, shared_budget=None, retain_policy_rgb=False):
+        from policy_rgb_archive import RECORDING_FORMAT
         if not math.isfinite(fps) or fps <= 0 or max_bytes <= 0 or min(frame_capacity, event_capacity, metadata_capacity) < 1:
             raise ValueError('Recording rate, budget, and queue capacities must be positive')
         self.directory = Path(directory)
@@ -469,7 +470,10 @@ class AsyncVideoRecorder:
         self.ffmpeg, self.fps, self.max_bytes = ffmpeg, fps, max_bytes
         self.shared_budget = shared_budget
         self.retain_policy_rgb = retain_policy_rgb
+        self.recording_format = RECORDING_FORMAT
+        self.journal_files = {}
         self.policy_rgb_bytes = 0
+        self.policy_rgb_stored_bytes = 0
         self.policy_rgb_frames = 0
         self.recorded_bytes = 0
         self.dropped = 0
@@ -504,7 +508,13 @@ class AsyncVideoRecorder:
             if self.closing.is_set():
                 return False
             try:
-                self.event_queue.put_nowait(dict(item))
+                row = dict(item)
+                if row.get('type') == 'episodeStart':
+                    if row.get('recordingFormat', self.recording_format) != self.recording_format:
+                        self.fail('Episode recording format declaration differs')
+                        return False
+                    row['recordingFormat'] = self.recording_format
+                self.event_queue.put_nowait(row)
             except queue.Full:
                 # Losing actual execution labels makes the dataset incomplete. Stop
                 # recording explicitly instead of silently treating proposals as labels.
@@ -519,7 +529,8 @@ class AsyncVideoRecorder:
             if self.closing.is_set():
                 return False
             # Headers retain source clocks/readiness even when image admission fails.
-            # They contain no pixels or receipts, and never claim a video index.
+            # They retain bounded native guard crops, omit policy pixels/receipts,
+            # and never claim a video index.
             frame_metadata = dict(metadata)
             for key in ('receipts', 'videoFrameIndex', 'videoPtsSeconds', 'videoQueueAccepted', 'policyRgb'):
                 frame_metadata.pop(key, None)
@@ -551,7 +562,9 @@ class AsyncVideoRecorder:
                     'recordedObservations': self.recorded_observations,
                     'droppedObservations': self.dropped_observations,
                     'recordedBytes': self.recorded_bytes,
+                    'recordingFormat': self.recording_format, 'journalFiles': dict(self.journal_files),
                     'policyRgbEnabled': self.retain_policy_rgb, 'policyRgbBytes': self.policy_rgb_bytes,
+                    'policyRgbStoredBytes': self.policy_rgb_stored_bytes,
                     'policyRgbFrames': self.policy_rgb_frames,
                     'error': self.error, 'closed': self.closed,
                     'previewFrameId': self.preview_frame_id, 'previewError': self.preview_error,
@@ -599,17 +612,33 @@ class AsyncVideoRecorder:
                 pass
 
     def _write(self):
+        from policy_rgb_archive import RecordingJournal, JOURNAL_FOOTER_RESERVE, PNG_ENCODING, write_policy_rgb
         process = None
         index = 0
         shape = None
         in_flight = False
         video = self.directory / 'frames.mp4'
+        journals = {}
+
+        def reserve(additional=0):
+            """Charge actual encoded bytes and pending gzip footers across active/retiring segments."""
+            other = sum(path.stat().st_size for path in
+                        (video, self.directory / 'ffmpeg.log', self.directory / 'latest.jpg') if path.is_file())
+            projected = (other + self.policy_rgb_stored_bytes + additional
+                         + sum(journal.tell() + (0 if journal.closed else JOURNAL_FOOTER_RESERVE)
+                               for journal in journals.values()))
+            total = self.shared_budget.update(str(self.directory), projected) if self.shared_budget else projected
+            if total >= self.max_bytes:
+                raise RuntimeError('Recording byte budget reached before lossless evidence write')
+            self.recorded_bytes = projected
+
         try:
             self.directory.mkdir(parents=True, exist_ok=False)
-            with (open(self.directory / 'frames.jsonl', 'w', encoding='utf-8') as frames,
-                  open(self.directory / 'observations.jsonl', 'w', encoding='utf-8') as observations,
-                  open(self.directory / 'events.jsonl', 'w', encoding='utf-8') as events,
+            with (RecordingJournal(self.directory, 'frames.jsonl', reserve) as frames,
+                  RecordingJournal(self.directory, 'observations.jsonl', reserve) as observations,
+                  RecordingJournal(self.directory, 'events.jsonl', reserve) as events,
                   open(self.directory / 'ffmpeg.log', 'wb') as diagnostic):
+                journals.update({'frames.jsonl': frames, 'observations.jsonl': observations, 'events.jsonl': events})
                 while True:
                     self.wake.clear()
                     # Service receipt metadata even when no new frame arrives.
@@ -640,11 +669,7 @@ class AsyncVideoRecorder:
                     observations.flush()
                     if self.error:
                         break
-                    size = video.stat().st_size if video.exists() else 0
-                    self.recorded_bytes = size + frames.tell() + observations.tell() + events.tell() + self.policy_rgb_bytes
-                    total = self.shared_budget.update(str(self.directory), self.recorded_bytes) if self.shared_budget else self.recorded_bytes
-                    if total >= self.max_bytes:
-                        raise RuntimeError('Recording byte budget reached; inference continues without recording')
+                    reserve()
                     try:
                         metadata, pixels = self.queue.get_nowait()
                     except queue.Empty:
@@ -664,16 +689,12 @@ class AsyncVideoRecorder:
                     if shape is not None and shape != (width, height):
                         raise ValueError('Recording dimensions changed; start a new episode')
                     if self.retain_policy_rgb:
-                        # Reserve raw bytes before any write. A retiring segment shares this same finite budget.
-                        from policy_rgb_archive import write_policy_rgb
-                        projected = self.recorded_bytes + len(pixels)
-                        total = self.shared_budget.update(str(self.directory), projected) if self.shared_budget else projected
-                        if total >= self.max_bytes:
-                            raise RuntimeError('Recording byte budget reached before exact policy RGB retention')
-                        metadata['policyRgb'] = write_policy_rgb(self.directory, index, metadata, pixels)
+                        # Encode on this worker, then reserve the exact stored size before writing.
+                        metadata['policyRgb'] = write_policy_rgb(self.directory, index, metadata, pixels,
+                                                                 encoding=PNG_ENCODING, reserve=reserve)
                         self.policy_rgb_bytes += len(pixels)
+                        self.policy_rgb_stored_bytes += metadata['policyRgb']['storedBytes']
                         self.policy_rgb_frames += 1
-                        self.recorded_bytes = projected
                     if process is None:
                         shape = (width, height)
                         command = [self.ffmpeg, '-hide_banner', '-loglevel', 'error', '-f', 'rawvideo',
@@ -704,6 +725,7 @@ class AsyncVideoRecorder:
         except Exception as exc:
             self.fail(exc)
         finally:
+            self.journal_files = {name: journal.reference() for name, journal in journals.items() if journal.closed}
             if process:
                 try:
                     process.stdin.close()
@@ -753,8 +775,9 @@ class AsyncVideoRecorder:
                 self.closed = True
             summary = self.status()
             summary['observationSchemaVersion'] = 1
-            summary['alignment'] = ('Use observations.jsonl for received frame timing, including dropped video images; '
-                                    'join frameId to frames.jsonl for an actual videoFrameIndex. '
+            summary['alignment'] = ('Resolve logical observations.jsonl and frames.jsonl through journalFiles; '
+                                    'retain received timing even for dropped video images. '
+                                    'Join frameId to frames.jsonl for an actual videoFrameIndex. '
                                     'videoQueueAccepted is queue admission, not encoding success. '
                                     'Use sourceFrame.capturedAtMs for reported compositor time, '
                                     'sourceFrame.freshnessAtMs for the declared freshness anchor, '
@@ -762,8 +785,9 @@ class AsyncVideoRecorder:
                                     'Explicit host snapshots retain raw QPC and use hostSnapshot.startedAtMs; '
                                     'they do not measure compositor or game-render time. '
                                     'videoPtsSeconds indexes encoded frames, not wall time; exclude capture gaps.')
-            summary['budgetNote'] = ('Video plus sidecars checked between frames across active/retiring segments; '
-                                     'at most two FFmpeg muxer buffers/footers can overshoot.')
+            summary['budgetNote'] = ('Charge stored RGB/journal bytes and gzip footer reserves across active/retiring segments; '
+                                     'decoded policyRgbBytes are logical evidence size. '
+                                     'At most two existing FFmpeg muxer buffers/footers can overshoot.')
             try:
                 (self.directory / 'recording.json').write_text(json.dumps(summary, indent=2), encoding='utf-8')
             except Exception as exc:

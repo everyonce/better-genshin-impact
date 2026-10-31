@@ -2,6 +2,7 @@
 from datetime import datetime
 import hashlib
 import json
+from policy_rgb_archive import read_recording_jsonl
 import math
 from pathlib import Path
 
@@ -182,7 +183,7 @@ def verify_failed_map_origin(failure_folder, passive_folder, owner_receipt, repo
     require(summary['matched'] is True and summary['sessionId']==pc['sessionId'] and summary['sha256']==source['imageSha256']
             and all(abs(scores[k]-summary['scores'][k])<1e-5 for k in scores),
             'Passive map result disagrees with the independent original pixel replay')
-    frames=[json.loads(line) for line in (p/'recording/00001/frames.jsonl').read_bytes().splitlines()]
+    frames=read_recording_jsonl(p/'recording/00001','frames.jsonl')[0]
     # GraphicsCapture.Start generates this epoch for its single HWND-specific capture item and regenerates it on restart.
     require(src['captureEpoch']==last['captureEpoch'] and known_map(scores)
             and source['evidence']=='HudMissing' and not source['worldReadiness']['ready']

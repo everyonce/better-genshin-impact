@@ -3,6 +3,7 @@ import argparse
 import base64
 from datetime import datetime, timezone
 import json
+from policy_rgb_archive import open_recording_jsonl
 from pathlib import Path
 
 from freeze_landmark_candidate import encoded, sha
@@ -80,7 +81,7 @@ def training_sources():
     pixels = {}
     for entry in run['segments']:
         segment = entry['number']
-        with (recording/f'{segment:05d}'/'events.jsonl').open(encoding='utf-8') as events:
+        with open_recording_jsonl(recording/f'{segment:05d}'/'events.jsonl') as events:
             for event in map(json.loads,events):
                 if event.get('type')=='landmarkShadowSource':
                     key = (segment,event['frameId'])

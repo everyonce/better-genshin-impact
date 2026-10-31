@@ -1,6 +1,7 @@
 """Independent camera-selection joins and like-for-like comparisons of verified patrol legs."""
 from collections import Counter
 import json
+from policy_rgb_archive import open_recording_jsonl
 import math
 from pathlib import Path
 import statistics
@@ -50,7 +51,7 @@ def audit_camera(parts, entries, recordings, frames, route, checkpoint):
     require(len(receipts) == len(by_id), 'Duplicate camera-trial terminal receipt')
     journal_terminals, journal_proposals, journal_accepted = {}, {}, {}
     for entry in entries:
-        with (Path(recordings)/f"{entry['number']:05d}"/'events.jsonl').open(encoding='utf-8') as stream:
+        with open_recording_jsonl(Path(recordings)/f"{entry['number']:05d}"/'events.jsonl') as stream:
             for line in stream:
                 e = json.loads(line)
                 if e.get('type') == 'proposal' and (e.get('acceptance') or {}).get('type') == 'accepted':

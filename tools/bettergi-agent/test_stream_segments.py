@@ -13,6 +13,7 @@ import unittest
 from unittest.mock import patch
 
 import stream_client as client
+from policy_rgb_archive import read_recording_jsonl
 from stream_segments import EvidencePublicationError, RecordingBudget, StreamSegments
 
 
@@ -361,16 +362,16 @@ class SegmentTests(unittest.TestCase):
             self.assertGreater(manifest['recordedBytes'], 0)
             for number in (1, 2):
                 directory = Path(args.record_dir).parent / f'{number:05d}'
-                frames = [json.loads(row) for row in (directory/'frames.jsonl').read_text().splitlines()]
+                frames = read_recording_jsonl(directory,'frames.jsonl')[0]
                 self.assertEqual([(item['frameId'], item['videoFrameIndex']) for item in frames], [(number, 0)])
                 self.assertTrue((directory/'frames.mp4').is_file())
             directory = Path(args.record_dir).parent/'00002'
-            observations = [json.loads(row) for row in (directory/'observations.jsonl').read_text().splitlines()]
+            observations = read_recording_jsonl(directory,'observations.jsonl')[0]
             carried = next(item for item in observations if item.get('continuityContext'))
             self.assertEqual(carried['frameId'], 1)
             self.assertIsNone(carried['videoQueueAccepted'])
             self.assertNotIn('videoFrameIndex', carried)
-            events = [json.loads(row) for row in (directory/'events.jsonl').read_text().splitlines()]
+            events = read_recording_jsonl(directory,'events.jsonl')[0]
             self.assertIn(receipt, events)
             self.assertEqual(events[0]['continuity']['pendingProposals'][0]['acceptance']['requestId'], 'across-file')
 

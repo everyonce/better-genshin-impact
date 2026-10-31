@@ -4,6 +4,7 @@ from bisect import bisect_left
 from datetime import datetime
 import hashlib
 import json
+from policy_rgb_archive import open_recording_jsonl
 import math
 from pathlib import Path
 import re
@@ -66,7 +67,7 @@ def authority_parts(run, recordings, repository, directed=False, batch_queue=Fal
         directory = Path(recordings)/f"{entry['number']:05d}"
         parts.append(part)
         journal = []
-        with (directory/'events.jsonl').open(encoding='utf-8') as stream:
+        with open_recording_jsonl(directory/'events.jsonl') as stream:
             for line in stream:
                 row = json.loads(line)
                 if not row.get('continuityContext'):
@@ -125,7 +126,7 @@ def authority_parts(run, recordings, repository, directed=False, batch_queue=Fal
         originals.extend(part.get('navigationClimbActions', []))
         require([r for r in journal if r.get('type') == 'navigationClimbAction'] == part.get('navigationClimbActions', []),
                 'Recovery action ownership differs from original journal')
-        with (directory/'observations.jsonl').open(encoding='utf-8') as stream:
+        with open_recording_jsonl(directory/'observations.jsonl') as stream:
             for line in stream:
                 frame = json.loads(line)
                 if not frame.get('continuityContext'):

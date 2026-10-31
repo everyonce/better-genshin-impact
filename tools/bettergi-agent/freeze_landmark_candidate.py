@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import hashlib
 import io
 import json
+from policy_rgb_archive import read_recording_jsonl, recording_journal_path
 import math
 from pathlib import Path
 
@@ -63,10 +64,10 @@ def source_views(path, head, diagnostic):
         for fid,f in index.items():
             require(fid not in frames, 'Repeated source frame')
             frames[fid], indexes[fid] = f,(num,f['videoFrameIndex'])
-        parts.append(dict(segment=num,reportSha256=sha(part_bytes),eventsSha256=sha((directory/'events.jsonl').read_bytes()),
-                          observationsSha256=sha((directory/'observations.jsonl').read_bytes())))
+        parts.append(dict(segment=num,reportSha256=sha(part_bytes),eventsSha256=sha(recording_journal_path(directory,'events.jsonl').read_bytes()),
+                          observationsSha256=sha(recording_journal_path(directory,'observations.jsonl').read_bytes())))
         events.extend(part['hybridNavigationEvents'])
-        journal.extend(map(json.loads,(directory/'events.jsonl').read_bytes().splitlines()))
+        journal.extend(read_recording_jsonl(directory,'events.jsonl')[0])
         leases.add((part['hello']['sessionId'],part['hello']['ownerEpoch']))
     require(len(leases)==1 and len({f['sourceFrame']['captureEpoch'] for f in frames.values()}) == 1,
             'One capture and owner required per training lease')

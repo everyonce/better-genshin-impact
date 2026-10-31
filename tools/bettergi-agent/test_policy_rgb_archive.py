@@ -2,13 +2,14 @@
 import hashlib
 import json
 from pathlib import Path
+import random
 import tempfile
 import unittest
 from unittest.mock import patch
 
 import stream_client as client
 from observation_profiles import P2P_NATIVE
-from policy_rgb_archive import RGB192_BYTES, verify_policy_rgb, write_policy_rgb
+from policy_rgb_archive import RGB192_BYTES, read_policy_rgb, read_recording_jsonl, verify_policy_rgb, write_policy_rgb
 from stream_segments import RecordingBudget
 from test_recorder_metadata import MemoryEncoder, observed_frame
 from test_stream_client import HeldRecorder
@@ -16,11 +17,11 @@ from test_stream_client import HeldRecorder
 
 class PolicyRgbTests(unittest.TestCase):
     """Exercise the actual asynchronous writer and original-source checks."""
-    def record(self, root, *, budget=1024*1024, shared=None, count=2):
+    def record(self, root, *, budget=1024*1024, shared=None, count=2, random_pixels=False):
         """Admit immutable wire frames while the writer is held, then drain through the real recorder."""
         recorder = HeldRecorder(Path(root)/'episode','synthetic-encoder',20,budget,
                                 retain_policy_rgb=True,shared_budget=shared)
-        pixels = bytes(range(256))*(RGB192_BYTES//256)
+        pixels = random.Random(731).randbytes(RGB192_BYTES) if random_pixels else bytes(range(256))*(RGB192_BYTES//256)
         try:
             with patch.object(client.json,'dumps',side_effect=AssertionError('Producer performed serialization')):
                 for index in range(1,count+1):
@@ -37,33 +38,35 @@ class PolicyRgbTests(unittest.TestCase):
             recorder,result,pixels=self.record(root)
             self.assertTrue(result['complete'] and result['lossless'],result)
             self.assertEqual((result['encodedFrames'],result['policyRgbFrames'],result['policyRgbBytes']),(2,2,2*len(pixels)))
-            rows=[json.loads(line) for line in (recorder.directory/'frames.jsonl').read_text().splitlines()]
+            rows=read_recording_jsonl(recorder.directory,'frames.jsonl')[0]
             for index,row in enumerate(rows):
-                raw=verify_policy_rgb(recorder.directory,row['policyRgb'])
-                self.assertEqual(raw.read_bytes(),pixels)
+                raw=read_policy_rgb(recorder.directory,row['policyRgb'],index=index,frame_id=row['frameId'],recording=result)
+                self.assertEqual(raw,pixels)
                 self.assertEqual(row['policyRgb']['sha256'],hashlib.sha256(pixels).hexdigest())
                 self.assertEqual((row['frameId'],row['videoFrameIndex']),(index+1,index))
-            observations=[json.loads(line) for line in (recorder.directory/'observations.jsonl').read_text().splitlines()]
+            observations=read_recording_jsonl(recorder.directory,'observations.jsonl')[0]
             self.assertTrue(all('policyRgb' not in row for row in observations))
-            self.assertGreaterEqual(result['recordedBytes'],2*len(pixels))
+            self.assertLess(result['policyRgbStoredBytes'],result['policyRgbBytes'])
+            self.assertEqual(result['recordedBytes'],sum(path.stat().st_size for path in recorder.directory.iterdir()
+                if path.name!='recording.json'))
 
     def test_budget_stops_before_a_second_raw_file_is_written(self):
         with tempfile.TemporaryDirectory() as root, patch.object(client.subprocess,'Popen',return_value=MemoryEncoder()):
-            recorder,result,_=self.record(root,budget=200*1024)
+            recorder,result,_=self.record(root,budget=200*1024,random_pixels=True)
             self.assertFalse(result['complete'])
             self.assertIn('byte budget',result['error'])
             self.assertEqual(result['policyRgbFrames'],1)
-            self.assertEqual(len(list(recorder.directory.glob('*.rgb'))),1)
+            self.assertEqual(len(list(recorder.directory.glob('*.rgb.png'))),1)
             self.assertLess(result['recordedBytes'],200*1024)
 
     def test_retiring_segment_usage_is_reserved_before_any_raw_write(self):
         with tempfile.TemporaryDirectory() as root, patch.object(client.subprocess,'Popen',return_value=MemoryEncoder()):
             shared=RecordingBudget(150*1024)
             shared.update('retiring',60*1024)
-            recorder,result,_=self.record(root,budget=shared.maximum,shared=shared,count=1)
+            recorder,result,_=self.record(root,budget=shared.maximum,shared=shared,count=1,random_pixels=True)
             self.assertFalse(result['complete'])
             self.assertEqual(result['policyRgbFrames'],0)
-            self.assertEqual(list(recorder.directory.glob('*.rgb')),[])
+            self.assertEqual(list(recorder.directory.glob('*.rgb.png')),[])
 
     def test_changed_truncated_or_redirected_pixels_are_rejected(self):
         with tempfile.TemporaryDirectory() as root:

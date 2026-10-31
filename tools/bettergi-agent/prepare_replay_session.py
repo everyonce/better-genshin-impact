@@ -7,6 +7,8 @@ import argparse
 import copy
 from dataclasses import dataclass
 import json
+from policy_rgb_archive import (JOURNAL_NAMES, open_recording_jsonl, recording_journal_path,
+                                recording_journal_decoded_size)
 import os
 from pathlib import Path
 import tempfile
@@ -243,7 +245,7 @@ def _read_json(path, lines=False):
     """Decode strict saved metadata; no live runtime or model imports are needed."""
     def invalid(value):
         raise base.EvidenceError('nonfinite_json:' + value)
-    with path.open(encoding='utf-8') as handle:
+    with (open_recording_jsonl(path) if lines else path.open(encoding='utf-8')) as handle:
         if lines:
             return [json.loads(line, object_pairs_hook=_unique_object, parse_constant=invalid)
                     for line in handle if line.strip()]
@@ -281,9 +283,10 @@ def main(argv=None):
             directory = args.recordings_dir / report_path.stem
             files = {'report': report_path, **{name: directory / name for name in (
                 'recording.json', 'observations.jsonl', 'frames.jsonl', 'events.jsonl', 'frames.mp4')}}
+            files={name:recording_journal_path(directory,name) if name in JOURNAL_NAMES else path for name,path in files.items()}
             for name, path in files.items():
                 if name != 'frames.mp4':
-                    json_bytes += path.stat().st_size
+                    json_bytes += recording_journal_decoded_size(directory,name) if name in JOURNAL_NAMES else path.stat().st_size
                     base.require(json_bytes <= MAX_JSON_BYTES, 'metadata_memory_bound_exceeded')
                 evidence[f'{report_path.stem}/{name}'] = base._file_evidence(path)
             base.require(evidence[f'{report_path.stem}/frames.mp4']['bytes'] > 0, 'empty_video')

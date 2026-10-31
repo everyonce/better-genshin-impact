@@ -18,6 +18,7 @@ from destination_queue_limits import ENDURANCE, STANDARD, queue_limits
 from hybrid_routes import SURFACE_ROUTES
 from navigation_profiles import COURTYARD_PROFILE,SURFACE_PROFILE,SCOUT_PROFILE,SCOUT_PROFILES,validate_capability,allows_pose_scope,required_profile
 from reviewed_scout_route import ReviewedScoutRoute,load_reviewed_route,reviewed_route_policy
+from policy_rgb_archive import open_recording_jsonl, read_recording_jsonl, recording_metadata
 
 
 # Keep this independent verifier's expected contract explicit; do not delegate it to the runtime ledger.
@@ -47,7 +48,9 @@ def evidence_bytes(path, maximum):
         info=os.fstat(stream.fileno())
         require(stat.S_ISREG(info.st_mode) and info.st_nlink==1 and 0<info.st_size<=maximum,
                 'Cached-policy evidence is linked, nonregular or exceeds its bounded size')
-        raw=stream.read(maximum+1)
+        # Read one extra byte beyond the observed size to detect growth without
+        # allocating the entire safety ceiling for every small image or source file.
+        raw=stream.read(info.st_size+1)
     require(len(raw)==info.st_size and len(raw)<=maximum,'Cached-policy evidence changed size while reading')
     return raw
 
@@ -120,8 +123,7 @@ def verify_executed_history(run, parts, frames, entries, recordings, reuse):
     for entry in entries:
         path=Path(recordings)/f"{entry['number']:05d}"/'events.jsonl'
         # Early historical fixtures did not retain an event journal; new-mode evidence must have one.
-        raw=evidence_bytes(path,32*1024*1024) if path.is_file() and path.stat().st_size else b''
-        rows=[json.loads(line) for line in raw.splitlines()]
+        rows=read_recording_jsonl(path.parent,path.name)[0] if path.is_file() or path.with_suffix('.jsonl.gz').is_file() else []
         require(all(isinstance(row,dict) for row in rows),'Invalid original executed-history journal row')
         journals.append(rows)
     if not reuse or reuse.get('historyCommitMode')!=EXECUTED_HISTORY_MODE:
@@ -552,6 +554,29 @@ def verify_policy_reuse(run, run_path, proof_path):
                 and all('actionHoldMs' not in value for value in (session,request,reuse))
                 and all(key not in configuration for key in ('executedHistoryPolicy','executedHistorySourceSha256')),
                 'Historical cached policy retains an undeclared executed-history mode or hold')
+    if 'inspectedSourceGapRecoveryPolicy' in manifest:
+        from audit_scout_source_gap import recovery_policy,verify_recovery_request,SOURCE_NAMES
+        require(executed_history and ground_required
+                and manifest['inspectedSourceGapRecoveryPolicy']==session.get('inspectedSourceGapRecoveryPolicy')==recovery_policy(),
+                'Inspected source-gap recovery differs from its explicit original session policy')
+        hashes=manifest.get('sourceGapRecoverySourceSha256')
+        require(isinstance(hashes,dict) and set(hashes)==set(SOURCE_NAMES)
+                and session.get('sourceGapRecoverySourceSha256')==hashes,
+                'Inspected source-gap runtime source binding is missing')
+        for name,digest in hashes.items():
+            require(hashlib.sha256(evidence_bytes(source.parent.parent/'source-snapshot'/name,2*1024*1024)).hexdigest()==digest,
+                    'Archived inspected source-gap runtime bytes changed')
+        require(('sourceGapRecovery' in request)==('sourceGapRecovery' in reuse),
+                'Inspected source-gap successor lost its original request binding')
+        if 'sourceGapRecovery' in request:
+            require(request['sourceGapRecovery']==reuse['sourceGapRecovery'],
+                    'Inspected source-gap request and reuse witness differ')
+            verify_recovery_request(request,request['sourceGapRecovery'],owner)
+    else:
+        require(all(not any(key in value for key in ('inspectedSourceGapRecoveryPolicy','sourceGapRecoverySourceSha256',
+                                                     'sourceGapRecovery','inspectedSourceGapRecovery'))
+                    for value in declarations),
+                'Historical scout retains undeclared source-gap recovery authority')
     spec=None
     if 'routeSpec' in reuse or 'routeSpec' in request:
         spec=ReviewedScoutRoute.from_document(request.get('routeSpec'))
@@ -583,8 +608,9 @@ def verify_policy_reuse(run, run_path, proof_path):
     return reuse
 
 
-def verify_scout_guard(run, parts, frames, entries, recordings, reuse):
+def verify_scout_guard(run, parts, frames, entries, recordings, reuse, *, allow_stale_stop=False):
     """Replay guarded sensor intake independently and join every accepted dispatch to its latest safe poll."""
+    require(type(allow_stale_stop) is bool,'Invalid failed-source replay mode')
     binding=reuse.get('scoutEncounterGuard') if reuse else None
     if binding is None:
         require(not any(has_scout_guard_evidence(value) for value in (run,reuse,parts,list(frames.values()))),
@@ -593,8 +619,8 @@ def verify_scout_guard(run, parts, frames, entries, recordings, reuse):
             journal=Path(recordings)/f"{entry['number']:05d}"/'events.jsonl'
             # Early clean recordings did not require this journal. When retained, its
             # guard namespace cannot disappear merely by stripping report declarations.
-            if journal.is_file():
-                with journal.open(encoding='utf-8') as stream:
+            if journal.is_file() or journal.with_suffix('.jsonl.gz').is_file():
+                with open_recording_jsonl(journal) as stream:
                     for line in stream:
                         require(not has_scout_guard_evidence(json.loads(line)),
                                 'Historical scout journal retains an undeclared encounter guard')
@@ -622,7 +648,7 @@ def verify_scout_guard(run, parts, frames, entries, recordings, reuse):
             validate_ground_capability(acknowledgement.get('capability'))
             require((part.get('hybridNavigation') or {}).get('requireGroundControls') is True,
                     'Hybrid endpoint verifier omitted positive ground-control evidence')
-        with (Path(recordings)/f"{entry['number']:05d}"/'events.jsonl').open(encoding='utf-8') as stream:
+        with open_recording_jsonl(Path(recordings)/f"{entry['number']:05d}"/'events.jsonl') as stream:
             for line in stream:
                 event=json.loads(line)
                 if event.get('type')=='scoutEncounterGuardRelease':
@@ -650,7 +676,10 @@ def verify_scout_guard(run, parts, frames, entries, recordings, reuse):
                 require(type(at) is int and at>previous_ns,'Scout guard intake clock did not advance')
                 replay=guard.observe(event.get('frame') or {},at)
                 require(replay==event,'Scout guard journal changed its source, evidence, or decision')
-                require(guard.trip is None,'Scout encounter/health stop cannot prove a completed route')
+                # Only the separate failed-prefix auditor may replay this exact failure.
+                # The normal route audit still rejects every guard trip, including stale sources.
+                require(guard.trip is None or (allow_stale_stop and guard.trip.get('reason')=='nativeSensorStale'),
+                        'Scout encounter/health stop cannot prove a completed route')
                 observations.append(event)
                 previous_ns=at
                 frame=event['frame']
@@ -682,8 +711,10 @@ def verify_scout_guard(run, parts, frames, entries, recordings, reuse):
                 and type(at) is int and event['clientReceivedNs']<=at
                 and (index==len(observations) or at<observations[index]['clientReceivedNs']),
                 'Scout dispatch crossed a newer sensor intake or changed its guard binding')
-    return dict(bindingSha256=guard.sha256,observations=len(observations),distinctSources=guard.distinct_sources,
+    result=dict(bindingSha256=guard.sha256,observations=len(observations),distinctSources=guard.distinct_sources,
                 releases=guard.releases)
+    if allow_stale_stop:result['terminalReason']=(guard.trip or {}).get('reason')
+    return result
 
 
 # Derive the expected sequence independently of the planner's leg-advance logic.
@@ -747,7 +778,7 @@ def audit_shadow(decisions, frames, receipts, entries, recordings, route, checkp
     head = SteeringHead.load(checkpoint)
     journal = {}
     for e in entries:
-        with (Path(recordings)/f"{e['number']:05d}"/'events.jsonl').open(encoding='utf-8') as stream:
+        with open_recording_jsonl(Path(recordings)/f"{e['number']:05d}"/'events.jsonl') as stream:
             for line in stream:
                 row = json.loads(line)
                 if row.get('type') == 'proposal':
@@ -1474,12 +1505,13 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
             for decision in part.get('decisions',[]):verify_scout_goal_state(decision,'decision',decision=True)
         parts.append(part)
         recording = part.get('recording') or {}
+        recording_metadata(Path(recordings)/f"{entry['number']:05d}",recording)
         require(recording.get('complete') is True and recording.get('workerRetired') is True,
                 'Recording is incomplete or its writer has not retired')
         require(not any(recording.get(k, 0) for k in
                 ('droppedFrames', 'droppedEvents', 'abandonedFrames', 'droppedObservations')), 'Recording loss')
         path = Path(recordings)/f"{entry['number']:05d}"/'observations.jsonl'
-        with path.open(encoding='utf-8') as stream:
+        with open_recording_jsonl(path) as stream:
             for line in stream:
                 row = json.loads(line)
                 if row.get('continuityContext'):

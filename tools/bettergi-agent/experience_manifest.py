@@ -6,7 +6,8 @@ import hashlib
 import json
 from pathlib import Path
 import subprocess
-from policy_rgb_archive import verify_policy_rgb
+from policy_rgb_archive import (JOURNAL_NAMES, RECORDING_FORMAT, open_recording_jsonl, recording_journal_path,
+                                recording_metadata, verify_policy_rgb_file)
 
 ROOT = Path(__file__).resolve().parents[2]
 LOSS_FIELDS = ('droppedFrames','droppedEvents','abandonedFrames','droppedObservations')
@@ -25,7 +26,7 @@ def digest_file(path):
 
 def rows(path):
     """Keep the original line number beside each metadata row."""
-    with path.open(encoding='utf-8') as source:
+    with open_recording_jsonl(path,max_decoded_bytes=160*1024*1024) as source:
         for number,line in enumerate(source,1):
             yield number,json.loads(line)
 
@@ -176,7 +177,9 @@ def build_manifest(folder, output, *, split='diagnostic', repo=ROOT):
         directory=folder/'patrol-recording'/number
         record_path=directory/'recording.json'
         recording=json.loads(record_path.read_bytes())
-        referenced.update((report,record_path,directory/'frames.jsonl',directory/'observations.jsonl',directory/'events.jsonl',directory/'frames.mp4'))
+        recording_metadata(directory,part.get('recording') or recording)
+        journal_paths={name:recording_journal_path(directory,name) for name in JOURNAL_NAMES}
+        referenced.update((report,record_path,*journal_paths.values(),directory/'frames.mp4'))
         leases.add((part['hello']['sessionId'],part['hello']['ownerEpoch']))
         for field in LOSS_FIELDS:
             losses[field]+=recording[field]
@@ -197,7 +200,7 @@ def build_manifest(folder, output, *, split='diagnostic', repo=ROOT):
             if frame.get('continuityContext'): continue
             fid=frame['frameId']
             if fid in observations: raise ValueError('Duplicate original observation')
-            observations[fid]=dict(frame=frame,reference=dict(path=str((directory/'observations.jsonl').relative_to(repo)),line=line))
+            observations[fid]=dict(frame=frame,reference=dict(path=str(journal_paths['observations.jsonl'].relative_to(repo)),line=line))
             source=frame.get('sourceFrame') or {}
             if source.get('captureEpoch') and source.get('timestamp100ns') is not None:
                 captures.setdefault(source['captureEpoch'],[]).append(source['timestamp100ns'])
@@ -209,14 +212,15 @@ def build_manifest(folder, output, *, split='diagnostic', repo=ROOT):
             video_index.append(frame)
             fid=frame['frameId']
             image=dict(frameId=fid,path=str((directory/'frames.mp4').relative_to(repo)),videoFrameIndex=frame['videoFrameIndex'],
-                       metadataPath=str((directory/'frames.jsonl').relative_to(repo)),metadataLine=line,
+                       metadataPath=str(journal_paths['frames.jsonl'].relative_to(repo)),metadataLine=line,
                        sourceFrame=frame.get('sourceFrame'),width=frame['width'],height=frame['height'])
             if bool(frame.get('policyRgb')) != recording.get('policyRgbEnabled', False):
                 raise ValueError('Exact policy RGB coverage differs from its recording seal')
             if frame.get('policyRgb'):
-                raw_path = verify_policy_rgb(directory, frame['policyRgb'])
+                raw_path = verify_policy_rgb_file(directory,frame['policyRgb'],index=frame['videoFrameIndex'],
+                                                  frame_id=fid,recording=recording)
                 referenced.add(raw_path)
-                policy_rgb_digests[raw_path] = frame['policyRgb']['sha256']
+                policy_rgb_digests[raw_path] = frame['policyRgb'].get('storedSha256',frame['policyRgb']['sha256'])
                 image['policyRgb'] = dict(frame['policyRgb'], path=str(raw_path.relative_to(repo)))
             if fid not in images: images[fid]=image
             elif images[fid]['sourceFrame']!=image['sourceFrame']: raise ValueError('Conflicting encoded source identity')
@@ -224,6 +228,9 @@ def build_manifest(folder, output, *, split='diagnostic', repo=ROOT):
         if recording.get('policyRgbEnabled') and (recording.get('policyRgbFrames') != encoded
                 or recording.get('policyRgbBytes') != encoded*192*192*3):
             raise ValueError('Exact policy RGB count differs from encoded source coverage')
+        if recording.get('recordingFormat')==RECORDING_FORMAT and recording.get('policyRgbEnabled'):
+            if sum(frame['policyRgb']['storedBytes'] for frame in video_index)!=recording['policyRgbStoredBytes']:
+                raise ValueError('Stored policy RGB bytes differ from encoded source coverage')
         video_proof=verify_video(directory/'frames.mp4',video_index)
         segment_rows.append(dict(number=entry['number'],complete=recording['complete'],lossless=recording['lossless'],
                                  encodedFrames=encoded,recordedBytes=recording['recordedBytes'],videoDecode=video_proof))

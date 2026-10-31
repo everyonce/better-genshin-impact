@@ -17,6 +17,7 @@ import traceback
 import p2p_replay_sensitivity as base
 import p2p_replay_sequential_sensitivity as sequential
 import prepare_replay_forward as forward
+from policy_rgb_archive import open_recording_jsonl
 
 
 METHOD = 'sequential-online-forward-acquisition-three-arm-v1'
@@ -112,7 +113,8 @@ def load_case(plan_path, probe_id):
         base.require(base.digest(entry['path']) == entry, 'changed prepared input: ' + name)
         path = Path(entry['path'])
         if name.endswith('.jsonl'):
-            payload[name] = [json.loads(line) for line in path.read_text(encoding='utf-8').splitlines() if line.strip()]
+            with open_recording_jsonl(path) as rows:
+                payload[name] = [json.loads(line) for line in rows if line.strip()]
         elif name != 'frames.mp4':
             payload[name] = json.loads(path.read_text(encoding='utf-8'))
     reconstructed = forward.prepare_forward(payload['report'], payload['observations.jsonl'], payload['frames.jsonl'],

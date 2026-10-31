@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+from policy_rgb_archive import JOURNAL_NAMES, open_recording_jsonl, recording_journal_path
 from pathlib import Path
 
 import numpy as np
@@ -60,7 +61,7 @@ def leases_for_pin(repository, contract):
             files = {path}
             for e,_ in parts:
                 directory = folder/'patrol-recording'/f"{e['number']:05d}"
-                files.update([repository/e['report'],*[directory/k for k in
+                files.update([repository/e['report'],*[recording_journal_path(directory,k) if k in JOURNAL_NAMES else directory/k for k in
                              ('events.jsonl','frames.jsonl','observations.jsonl','recording.json','frames.mp4')]])
             files.update(p for p in (folder/'station-photos').rglob('*') if p.is_file())
             hello = parts[0][1]['hello']
@@ -86,7 +87,7 @@ def score_lease(repository, lease, heads):
         require([hello['sessionId'],hello['ownerEpoch']]==lease['lease'],'Changed lease')
         frames,count=indexed_frames(directory,part)
         ticks.extend(f['sourceFrame']['timestamp100ns'] for f in frames.values())
-        with (directory/'events.jsonl').open(encoding='utf-8') as stream:
+        with open_recording_jsonl(directory/'events.jsonl') as stream:
             marks=[r for line in stream if (r:=json.loads(line)).get('type') in
                    ('hybridStartVerified','hybridEndpointVerified','hybridDestinationPhotoRetry')]
         require(marks==[r for r in part['hybridNavigationEvents'] if r['type'] in

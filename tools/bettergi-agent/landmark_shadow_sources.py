@@ -2,6 +2,7 @@
 import base64
 import hashlib
 import json
+from policy_rgb_archive import open_recording_jsonl, recording_journal_path
 from pathlib import Path
 import re
 
@@ -90,7 +91,7 @@ def verify_archive(run_path,recordings,checkpoint,route_audit,repository):
         folder = Path(recordings)/f'{segment:05d}'
         markers = [e for e in part.get('hybridNavigationEvents',[]) if e['type'] in KINDS]
         records,journal_markers = [],[]
-        with (folder/'events.jsonl').open(encoding='utf-8') as stream:
+        with open_recording_jsonl(folder/'events.jsonl') as stream:
             for row in map(json.loads,stream):
                 kind = row.get('type')
                 require(kind!='landmarkShadowSourceRejected', 'Station source was rejected at capture')
@@ -101,7 +102,7 @@ def verify_archive(run_path,recordings,checkpoint,route_audit,repository):
         require(journal_markers==markers,'Native station journal differs from resident report')
         require(len(records)==len(markers), 'Missing or extra original station RGB')
         wanted = {r['frameId'] for r in records}
-        with (folder/'observations.jsonl').open(encoding='utf-8') as stream:
+        with open_recording_jsonl(folder/'observations.jsonl') as stream:
             frames = {f['frameId']:f for f in map(json.loads,stream) if f['frameId'] in wanted and not f.get('continuityContext')}
         for row,native in zip(records,markers):
             ref = visits[len(results)]
@@ -111,7 +112,7 @@ def verify_archive(run_path,recordings,checkpoint,route_audit,repository):
                     'Native audit and retained source clock differ')
             result = replay(row,native,frames[row['frameId']],head,run['runId'],part['hello'],
                             entry['processId'],run['windowsSessionId'])
-            results.append(dict(result,segment=segment,eventsFile=str(folder/'events.jsonl'),prediction=native['visualStation']['prediction']))
+            results.append(dict(result,segment=segment,eventsFile=str(recording_journal_path(folder,'events.jsonl')),prediction=native['visualStation']['prediction']))
     require(len(results)==len(visits)==len({r['frameId'] for r in results}), 'Incomplete or duplicated station sources')
     return dict(format='bettergi-native-station-rgb-v1',passed=True,runId=run['runId'],checkpointId=head.checkpoint_id,
                 routeId=STREET_PATROL_ROUTE,encoding='base64-rgb24-192x192',sourceCount=len(results),sources=results)

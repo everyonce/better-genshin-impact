@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import stream_client as client
 from test_stream_client import HeldRecorder, frame
+from policy_rgb_archive import read_recording_jsonl
 
 
 class MemoryEncoder:
@@ -38,7 +39,7 @@ def observed_frame(index):
 
 
 def read_rows(path):
-    return [json.loads(line) for line in path.read_text(encoding='utf-8').splitlines()]
+    return read_recording_jsonl(path.parent,path.name)[0]
 
 
 class RecorderMetadataTests(unittest.TestCase):
@@ -201,7 +202,8 @@ class RecorderMetadataTests(unittest.TestCase):
             launch.assert_not_called()
             self.assertFalse(result['complete'])
             self.assertIn('byte budget', result['error'])
-            self.assertEqual(result['recordedObservations'], 1)
+            self.assertEqual(result['recordedObservations'], 0)
+            self.assertEqual(result['droppedObservations'], 1)
             self.assertEqual(result['abandonedFrames'], 1)
 
 

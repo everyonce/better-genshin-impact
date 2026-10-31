@@ -9,7 +9,8 @@ from pathlib import Path
 from combat_trial_guard import CombatTrialGuard, bind_review, canonical, proposal_rejection, sensor_frame, trial_policy
 from episode_split import read_split
 from native_combat import validate_capability,validate_frame
-from policy_rgb_archive import verify_policy_rgb
+from policy_rgb_archive import (JOURNAL_NAMES, RECORDING_FORMAT, read_policy_rgb, read_recording_jsonl,
+                                recording_journal_path, recording_metadata)
 
 
 def require(condition, message):
@@ -44,6 +45,9 @@ def local_artifact(folder, name):
 
 def json_lines(path):
     """Read bounded original journal rows, keeping their recorded order."""
+    path = Path(path)
+    if path.name in JOURNAL_NAMES:
+        return read_recording_jsonl(path.parent,path.name,max_decoded_bytes=160*1024*1024,max_rows=10000)
     raw = bounded_file(path, 160 * 1024 * 1024)
     rows = [json.loads(line) for line in raw.splitlines() if line.strip()]
     require(len(rows) <= 10000 and all(isinstance(row, dict) for row in rows), 'Invalid combat journal')
@@ -121,6 +125,11 @@ def verify_frozen_goal(episode):
 
 def audit_episode(episode, events, frames, recording_folder, binding):
     """Join replayed authority, actual proposal records, terminal receipts and exact retained RGB."""
+    recording = episode.get('recording', {})
+    seal = recording_metadata(recording_folder,recording)
+    if seal.get('recordingFormat') == RECORDING_FORMAT:
+        require(all(row.get('recordingFormat') == RECORDING_FORMAT for row in events if row.get('type') == 'episodeStart'),
+                'Combat episode recording format declaration differs')
     require(canonical(episode.get('combatTrialGuard')) == canonical(binding), 'Episode combat binding differs')
     capability=validate_capability(episode['hello'].get('combatObservation'))
     if capability['version']==2 or 'nativeCombatObservation' in episode:
@@ -130,12 +139,14 @@ def audit_episode(episode, events, frames, recording_folder, binding):
     for index, row in enumerate(frames):
         require(type(row.get('frameId')) is int and row['frameId'] not in by_frame, 'Repeated recorded RGB frame')
         validate_frame(row,capability)
-        verify_policy_rgb(recording_folder, row.get('policyRgb'))
-        require(row.get('videoFrameIndex') == index
-                and row['policyRgb']['file'] == f"policy-{index:08d}-frame-{row['frameId']:012d}.rgb",
+        read_policy_rgb(recording_folder,row.get('policyRgb'),index=index,frame_id=row['frameId'],recording=recording)
+        require(row.get('videoFrameIndex') == index,
                 'Policy RGB reference belongs to another video or native frame')
         by_frame[row['frameId']] = row
     require(bool(by_frame), 'No retained combat policy pixels')
+    if seal.get('recordingFormat') == RECORDING_FORMAT:
+        require(sum(row['policyRgb']['storedBytes'] for row in frames) == recording['policyRgbStoredBytes'],
+                'Stored combat policy RGB byte count differs')
     observed = [row for row in events if row.get('type') == 'combatTrialObservation'
                 and row.get('frame', {}).get('type') == 'frame']
     for row in frames:
@@ -443,9 +454,14 @@ def audit_trial(folder):
     episode = document('native-episode.json')
     require(artifacts['native-episode.json'] == wrapper.get('nativeEpisodeSha256')
             and canonical(episode) == canonical(wrapper.get('nativeEpisode')), 'Wrapper substituted its native episode')
-    events, artifacts['recording/events.jsonl'] = json_lines(folder / 'recording/events.jsonl')
-    frames, artifacts['recording/frames.jsonl'] = json_lines(folder / 'recording/frames.jsonl')
+    events, events_sha = json_lines(folder / 'recording/events.jsonl')
+    frames, frames_sha = json_lines(folder / 'recording/frames.jsonl')
+    for name in ('events.jsonl','frames.jsonl'):
+        path = recording_journal_path(folder/'recording',name)
+        artifacts[str(path.relative_to(folder)).replace('\\','/')] = digest(bounded_file(path,160*1024*1024))
     report = audit_episode(episode, events, frames, folder / 'recording', binding)
+    if episode.get('recording',{}).get('recordingFormat') == RECORDING_FORMAT:
+        report['decodedJournalSha256'] = {'events.jsonl':events_sha,'frames.jsonl':frames_sha}
     if prepared is not None:
         arm = document('ARM.json')
         require(episode['combatTrialGuardState']['startedNs'] > arm['createdAtClientNs'],
@@ -499,7 +515,11 @@ def audit_trial(folder):
             samples, artifacts[name] = json_lines(folder / name)
             temperatures.append(verify_temperatures(samples, wrapper['finishedAtUnixNs']))
         report['peakGpuTemperatureC'] = max(temperatures)
-        observations, artifacts['recording/observations.jsonl'] = json_lines(folder / 'recording/observations.jsonl')
+        observations, observations_sha = json_lines(folder / 'recording/observations.jsonl')
+        path = recording_journal_path(folder/'recording','observations.jsonl')
+        artifacts[str(path.relative_to(folder)).replace('\\','/')] = digest(bounded_file(path,160*1024*1024))
+        if 'decodedJournalSha256' in report:
+            report['decodedJournalSha256']['observations.jsonl'] = observations_sha
         require(len(observations) == len(frames), 'Original observation journal count differs from retained pixels')
     require(all(wrapper.get(key) is False for key in ('combatSuccess', 'enemyIdentityVerified', 'damageVerified', 'killVerified')),
             'Transport evidence was promoted into a combat outcome')

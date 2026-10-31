@@ -6,6 +6,8 @@ The review must use a fresh passive capture made after the advertised reviewAfte
 ``stop --session DIRECTORY`` is terminal, including while no input lease is open.
 ``--allow-inspected-obstacle-recovery`` retains only model weights after one audited
 stationary-forward obstacle stop; a new consumed review must select another destination.
+``--allow-inspected-source-gap-recovery`` retains reset model weights after one fully
+audited stale native frame stop; a fresh reviewed scene must authorize a new lease.
 """
 import argparse
 import copy
@@ -37,6 +39,7 @@ from native_ground_control import (policy as ground_policy,scene_capability as g
 from episode_split import reserve_split
 from audit_scout_obstacle import (OBSTACLE_ERROR, audit_failed_prefix, recovery_policy,
                                  source_contract, verify_recovery_request)
+import audit_scout_source_gap as source_gap
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -463,6 +466,10 @@ def validate_request(path, manifest, after_id, after_ns):
         fields=fields|{'obstacleRecovery'}
         require(manifest.get('inspectedObstacleRecoveryPolicy')==recovery_policy(),
                 'This worker did not authorize inspected obstacle recovery')
+    if 'sourceGapRecovery' in request:
+        fields=fields|{'sourceGapRecovery'}
+        require(manifest.get('inspectedSourceGapRecoveryPolicy')==source_gap.recovery_policy(),
+                'This worker did not authorize inspected source-gap recovery')
     require(set(request)==fields and request['version']==1 and request['sessionId']==manifest['sessionId'],
             'Unexpected scout request schema or session')
     require(isinstance(request['requestId'],str) and re.fullmatch('[a-f0-9]{32}',request['requestId'])
@@ -491,6 +498,9 @@ def submit(directory, review):
     if state.get('pendingObstacleRecovery') is not None:
         request['obstacleRecovery']=copy.deepcopy(state['pendingObstacleRecovery'])
         verify_recovery_request(request,request['obstacleRecovery'],manifest['owner'])
+    if state.get('pendingSourceGapRecovery') is not None:
+        request['sourceGapRecovery']=copy.deepcopy(state['pendingSourceGapRecovery'])
+        source_gap.verify_recovery_request(request,request['sourceGapRecovery'],manifest['owner'])
     require(not any(path.stem not in state['seenRequestIds'] for path in (directory/'requests').glob('*.json')),
             'A scout request is already pending')
     path=directory/'requests'/(request['requestId']+'.json')
@@ -511,6 +521,15 @@ def audit_leg(folder, request):
         require(report['policyReuse'].get('obstacleRecovery')==request['obstacleRecovery'],
                 'Completed successor lost its inspected failed-prefix binding')
         report['inspectedObstacleRecovery']=verify_recovery_request(request,request['obstacleRecovery'],report['policyReuse']['owner'])
+    if 'sourceGapRecovery' in request:
+        require(report['policyReuse'].get('sourceGapRecovery')==request['sourceGapRecovery'],
+                'Completed successor lost its inspected source-gap binding')
+        # The independent audit already replayed this prefix in verify_policy_reuse.
+        # Copy its verified join rather than replaying the same images a second time.
+        witness=request['sourceGapRecovery']
+        report['inspectedSourceGapRecovery']=dict(failedRequestId=witness['failedRequestId'],
+            failedRunId=witness['failedRunId'],prefixAuditSha256=witness['prefixAuditSha256'],
+            freshReviewSha256=request['reviewSha256'])
     runtime.atomic_json(folder/'audit.json',report)
     return report
 
@@ -552,9 +571,14 @@ def account_session(state):
 
 
 def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_factory=SessionWatch, auditor=audit_leg,
-                prefix_auditor=audit_failed_prefix):
+                prefix_auditor=audit_failed_prefix, source_gap_auditor=None):
     """Load once, run only reviewed one-leg requests, and remain bridge-free between successful runs."""
     owner=load_map_owner(settings.owner_from)
+    if getattr(settings,'allow_inspected_source_gap_recovery',False):
+        require(getattr(settings,'p2p_executed_history',False) is True
+                and getattr(settings,'allow_reviewed_routes',False) is True
+                and not getattr(settings,'allow_inspected_obstacle_recovery',False),
+                'Source-gap recovery requires reviewed executed-history legs and excludes obstacle recovery')
     require_ordinary(owner['child']['windowsSessionId'])
     lifecycle=lifecycle or runtime.control_module()
     owner_pair(lifecycle,owner)
@@ -599,11 +623,17 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
         if getattr(settings,'allow_reviewed_routes',False):manifest['reviewedScoutRoutePolicy']=reviewed_route_policy(profile)
         if getattr(settings,'allow_inspected_obstacle_recovery',False):
             manifest.update(inspectedObstacleRecoveryPolicy=recovery_policy(),recoverySourceSha256=source_contract())
+        if getattr(settings,'allow_inspected_source_gap_recovery',False):
+            manifest.update(inspectedSourceGapRecoveryPolicy=source_gap.recovery_policy(),
+                            sourceGapRecoverySourceSha256=source_gap.source_contract())
+            archive_executed_history_sources(directory,manifest['sourceGapRecoverySourceSha256'])
         runtime.atomic_json(directory/'manifest.json',manifest)
         state=dict(version=1,sessionId=session_id,state='loading',modelLoads=0,modelLoadSeconds=0.0,
             afterRequestId=None,reviewAfterUnixNs=started_ns,seenRequestIds=[],legs=[],recordedBytes=0,recordedBytesComplete=True)
         if 'inspectedObstacleRecoveryPolicy' in manifest:
             state.update(inspectedObstacleRecoveriesUsed=0,pendingObstacleRecovery=None)
+        if 'inspectedSourceGapRecoveryPolicy' in manifest:
+            state.update(inspectedSourceGapRecoveriesUsed=0,pendingSourceGapRecovery=None)
         policy=None
 
     except BaseException:
@@ -630,6 +660,9 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
                 'Ground-control policy or runtime source changed')
         if 'recoverySourceSha256' in manifest:
             require(source_contract()==manifest['recoverySourceSha256'],'Inspected recovery runtime source changed')
+        if 'sourceGapRecoverySourceSha256' in manifest:
+            require(source_gap.source_contract()==manifest['sourceGapRecoverySourceSha256'],
+                    'Inspected source-gap recovery runtime source changed')
         if 'executedHistorySourceSha256' in configuration:
             from p2p_executed_history import executed_history_policy
             require(executed_history_sources()==configuration['executedHistorySourceSha256']
@@ -659,6 +692,9 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
         if 'inspectedObstacleRecoveryPolicy' in manifest:
             proof.update(inspectedObstacleRecoveryPolicy=manifest['inspectedObstacleRecoveryPolicy'],
                          recoverySourceSha256=manifest['recoverySourceSha256'])
+        if 'inspectedSourceGapRecoveryPolicy' in manifest:
+            proof.update(inspectedSourceGapRecoveryPolicy=manifest['inspectedSourceGapRecoveryPolicy'],
+                         sourceGapRecoverySourceSha256=manifest['sourceGapRecoverySourceSha256'])
         runtime.atomic_json(directory/'policy-proof.json',proof)
         proof_sha=file_sha(directory/'policy-proof.json')
         state['state']='awaitingReview'
@@ -678,6 +714,11 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
                     'Inspected recovery request is missing or unsolicited')
             if pending_recovery is not None:
                 verify_recovery_request(request,pending_recovery,owner)
+            pending_source_recovery=state.get('pendingSourceGapRecovery')
+            require(('sourceGapRecovery' in request)==(pending_source_recovery is not None),
+                    'Inspected source-gap request is missing or unsolicited')
+            if pending_source_recovery is not None:
+                source_gap.verify_recovery_request(request,pending_source_recovery,owner)
             _,child=owner_pair(lifecycle,owner)
             if not idle_child(child):
                 # Passive inspection is allowed; a refused request is never retried automatically when it ends.
@@ -707,6 +748,7 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
             reuse.update(history_declaration(args))
             if spec is not None:reuse.update(routeSpec=spec.document(),routeSpecSha256=spec.sha256)
             if pending_recovery is not None:reuse['obstacleRecovery']=copy.deepcopy(pending_recovery)
+            if pending_source_recovery is not None:reuse['sourceGapRecovery']=copy.deepcopy(pending_source_recovery)
 
             def cached(current):
                 """Keep the existing injected-loader seam while checking authority immediately before lease creation."""
@@ -735,33 +777,53 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
                 watch.deactivate()
             watch.check()
             if failure is not None:
-                if ('inspectedObstacleRecoveryPolicy' not in manifest or str(failure)!=OBSTACLE_ERROR
-                        or state['inspectedObstacleRecoveriesUsed']>=1):
+                if str(failure)==source_gap.STALE_ERROR and 'inspectedSourceGapRecoveryPolicy' in manifest:
+                    recovery_kind='SourceGap'
+                    failed_auditor=source_gap_auditor or source_gap.audit_failed_prefix
+                    audit_name='failed-source-gap-audit.json'
+                elif str(failure)==OBSTACLE_ERROR and 'inspectedObstacleRecoveryPolicy' in manifest:
+                    recovery_kind='Obstacle'
+                    failed_auditor=prefix_auditor
+                    audit_name='failed-prefix-audit.json'
+                else:
                     raise failure
-                account_leg(row,'failed',OBSTACLE_ERROR)
+                counter_key=f'inspected{recovery_kind}RecoveriesUsed'
+                if state[counter_key]>=1:raise failure
+                account_leg(row,'failed',str(failure))
                 account_session(state)
                 require(not row.get('accountingError') and state['recordedBytesComplete'],
-                        'Failed obstacle recording has unresolved accounting')
+                        'Failed scout recording has unresolved accounting')
                 require(settings.record_max_mib-math.ceil(state['recordedBytes']/(2**20))>=1,
-                        'Scout session recording budget exhausted after obstacle')
+                        'Scout session recording budget exhausted after failure')
                 require(len(controls)==1 and controls[0].run_id==row['runId']
                         and not controls[0].worker.is_alive()
                         and not any(thread not in previous_threads and thread.is_alive() for thread in threading.enumerate()),
-                        'Failed obstacle control/capture/recording threads did not retire')
+                        'Failed scout control/capture/recording threads did not retire')
                 verify_configuration(args)
-                prefix=prefix_auditor(folder,request)
+                prefix=failed_auditor(folder,request)
                 require(prefix.get('prefixVerified') is True and prefix.get('passed') is False
                         and prefix.get('routeCompleted') is False and prefix.get('runId')==row['runId']
                         and prefix.get('residentManifestSha256')==row['residentManifestSha256'],
-                        'Failed obstacle prefix was not independently verified')
+                        'Failed scout prefix was not independently verified')
+                if recovery_kind=='SourceGap':
+                    require(prefix.get('failureReason')==source_gap.STALE_ERROR,
+                            'Failed source-gap prefix changed its terminal cause')
                 _,child=owner_pair(lifecycle,owner)
-                require(idle_child(child),'Failed obstacle cleanup did not release the original child')
+                require(idle_child(child),'Failed scout cleanup did not release the original child')
                 watch.check()
                 require(not (directory/'STOP').exists(),'Operator stop forbids retaining the failed policy')
+                if recovery_kind=='SourceGap':
+                    require(not getattr(policy,'_pending_feedback',False)
+                            and getattr(policy,'_executed_candidate',None) is None,
+                            'Failed source-gap policy retains unresolved executed history')
                 policy.reset()
-                require(not getattr(policy,'_pending_feedback',False),'Failed obstacle policy feedback did not reset')
+                require(not getattr(policy,'_pending_feedback',False),'Failed scout policy feedback did not reset')
+                if recovery_kind=='SourceGap':
+                    require(getattr(policy,'_executed_candidate',None) is None
+                            and getattr(policy,'steps_seen',None)==0,
+                            'Failed source-gap policy history did not reset')
                 cleanup_ns,cleanup_monotonic_ns=time.time_ns(),time.perf_counter_ns()
-                audit_path=folder/'failed-prefix-audit.json'
+                audit_path=folder/audit_name
                 runtime.atomic_json(audit_path,prefix)
                 witness=dict(failedRequestId=request['requestId'],failedRunId=row['runId'],failedRouteId=request['routeId'],
                     failedReviewSha256=request['reviewSha256'],failedManifestSha256=row['residentManifestSha256'],
@@ -770,9 +832,12 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
                     failedRoutePoints=[list(point) for point in (spec.points if spec is not None else route_points(request['routeId']))],
                     owner=copy.deepcopy(owner),originalOwnerIdleMinimizedAfter=True,residentControlRetired=True,
                     newPythonThreadsAlive=[],retainedState='policy-weights-and-immutable-configuration-only')
-                row.update(policyRetainedForInspection=True,inspectedObstacleRecovery=copy.deepcopy(witness))
-                state.update(state='awaitingReview',afterRequestId=request['requestId'],reviewAfterUnixNs=cleanup_ns,
-                    inspectedObstacleRecoveriesUsed=1,pendingObstacleRecovery=witness)
+                if recovery_kind=='SourceGap':witness.update(failureReason=source_gap.STALE_ERROR,historyReset=True)
+                row.update(policyRetainedForInspection=True)
+                row[f'inspected{recovery_kind}Recovery']=copy.deepcopy(witness)
+                state.update(state='awaitingReview',afterRequestId=request['requestId'],reviewAfterUnixNs=cleanup_ns)
+                state[counter_key]=1
+                state[f'pending{recovery_kind}Recovery']=witness
                 # Break traceback references to the old armed guard. Only weights/configuration survive.
                 controls.clear()
                 failure=None
@@ -797,6 +862,7 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
             account_session(state)
             state.update(state='awaitingReview',afterRequestId=request['requestId'],reviewAfterUnixNs=time.time_ns())
             if pending_recovery is not None:state['pendingObstacleRecovery']=None
+            if pending_source_recovery is not None:state['pendingSourceGapRecovery']=None
             controls.clear()
             publish()
     except Exception as error:
@@ -827,6 +893,8 @@ def options(argv=None):
     run.add_argument('--allow-reviewed-routes',action='store_true',help='Allow fresh explicit two-point scout reviews within the existing scope')
     run.add_argument('--allow-inspected-obstacle-recovery',action='store_true',
                      help='Retain only the loaded policy after at most one fully audited geometric stop; require a new reviewed route')
+    run.add_argument('--allow-inspected-source-gap-recovery',action='store_true',
+                     help='Retain reset policy weights after one audited stale native frame stop; require a fresh reviewed scene')
     run.add_argument('--p2p-executed-history',action='store_true',
                      help='Commit only verified completed actions and fresh subsequent observations to model history')
     run.add_argument('--action-hold-ms',type=int,choices=(50,60,100),
@@ -854,6 +922,8 @@ def options(argv=None):
             parser.error('Executed history requires 50 or 60 ms holds; existing scouts retain 100 ms')
         if args.p2p_executed_history and args.allow_inspected_obstacle_recovery:
             parser.error('Executed history excludes inspected-obstacle recovery')
+        if args.allow_inspected_source_gap_recovery and not args.p2p_executed_history:
+            parser.error('Source-gap recovery requires --p2p-executed-history')
         if args.p2p_executed_history and (args.routes or not args.allow_reviewed_routes):
             parser.error('Executed history requires --allow-reviewed-routes and no fixed --route')
     if args.command=='run' and not (30<=args.seconds<=1800 and 1<=args.record_max_mib<=160):

@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+from policy_rgb_archive import open_recording_jsonl, recording_metadata
 from pathlib import Path
 
 import numpy as np
@@ -31,11 +32,12 @@ def circuit_visits(summary, admission, circuit):
 def indexed_frames(directory, part):
     """Join the sealed MP4 index to original observations and check the native pose on both sidecars."""
     def rows(name):
-        with (directory/name).open(encoding='utf-8') as stream:
+        with open_recording_jsonl(directory/name) as stream:
             return [json.loads(line) for line in stream]
     originals = [f for f in rows('observations.jsonl') if not f.get('continuityContext')]
     encoded = rows('frames.jsonl')
     seal = json.loads((directory/'recording.json').read_text(encoding='utf-8'))
+    recording_metadata(directory,part.get('recording') or seal)
     require(seal.get('closed') and seal.get('complete') and not seal.get('error') and
             seal['encodedFrames'] == part['recording']['encodedFrames'] == len(encoded), 'Unsealed or missing encoded frames')
     joined = _frames(originals, encoded, part['observationProfile'], part['capturePollHz'])

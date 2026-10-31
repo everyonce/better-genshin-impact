@@ -14,6 +14,7 @@ import unittest
 from unittest.mock import patch
 
 import stream_client as client
+from policy_rgb_archive import read_recording_jsonl
 
 
 def packet(message, payload=b''):
@@ -661,7 +662,7 @@ class RecorderTests(unittest.TestCase):
                 recorder.close()
             self.assertTrue(result['complete'])
             self.assertEqual(result['droppedEvents'], 0)
-            events = [json.loads(line) for line in (recorder.directory / 'events.jsonl').read_text().splitlines()]
+            events = read_recording_jsonl(recorder.directory,'events.jsonl')[0]
             self.assertEqual(events, [{'type': 'finalReceipt'}, {'type': 'episodeEnd'}])
 
     def test_overflow_is_bounded_and_enqueue_never_serializes_or_flushes(self):
@@ -685,7 +686,7 @@ class RecorderTests(unittest.TestCase):
             self.assertEqual(result['droppedFrames'], 1)
             self.assertEqual(result['droppedEvents'], 1)
             self.assertEqual(result['abandonedFrames'], 1)
-            events = [json.loads(line) for line in (recorder.directory / 'events.jsonl').read_text().splitlines()]
+            events = read_recording_jsonl(recorder.directory,'events.jsonl')[0]
             self.assertEqual(events[0]['type'], 'recordingDrop')
             self.assertEqual(events[0]['frameId'], 2)
             self.assertEqual(events[1]['requestId'], 'a')
@@ -747,11 +748,11 @@ class RecorderTests(unittest.TestCase):
             with Image.open(recorder.directory / 'latest.jpg') as preview:
                 self.assertEqual(preview.size, (64, 48))
                 self.assertEqual(preview.format, 'JPEG')
-            rows = [json.loads(line) for line in (recorder.directory / 'frames.jsonl').read_text().splitlines()]
+            rows = read_recording_jsonl(recorder.directory,'frames.jsonl')[0]
             self.assertEqual([row['capturedAtMs'] for row in rows], times)
             self.assertEqual([row['videoFrameIndex'] for row in rows], list(range(6)))
             self.assertEqual([row['videoPtsSeconds'] for row in rows], [i / 20 for i in range(6)])
-            self.assertEqual(json.loads((recorder.directory / 'events.jsonl').read_text()), receipt)
+            self.assertEqual(read_recording_jsonl(recorder.directory,'events.jsonl')[0], [receipt])
             probe = subprocess.run([ffprobe, '-v', 'error', '-select_streams', 'v:0', '-count_frames',
                                     '-show_entries', 'stream=nb_read_frames,width,height', '-of', 'json',
                                     str(recorder.directory / 'frames.mp4')], capture_output=True, check=True, timeout=15)

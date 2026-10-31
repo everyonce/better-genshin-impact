@@ -11,6 +11,7 @@ from bisect import bisect_right
 from collections import Counter
 import hashlib
 import json
+from policy_rgb_archive import JOURNAL_NAMES, open_recording_jsonl, recording_journal_path
 import math
 import os
 from pathlib import Path
@@ -497,15 +498,17 @@ def main(argv=None):
     args = parser.parse_args(argv)
     paths = {'report': args.report, **{name: args.recording_dir/name for name in
              ('observations.jsonl', 'frames.jsonl', 'events.jsonl', 'recording.json', 'frames.mp4')}}
-    require(args.output.resolve() not in {p.resolve() for p in paths.values()}, 'output_would_overwrite_evidence')
+    require(args.output.resolve() not in {p.resolve() for p in paths.values()}
+            | {(args.recording_dir/(name+'.gz')).resolve() for name in JOURNAL_NAMES}, 'output_would_overwrite_evidence')
     evidence = {}
     try:
+        paths = {name:recording_journal_path(path.parent,name) if name in JOURNAL_NAMES else path for name,path in paths.items()}
         evidence = {name: _file_evidence(path) for name, path in paths.items()}
         require(evidence['frames.mp4']['bytes'] > 0, 'empty_video')
         payload = {}
         for name, path in paths.items():
             if name.endswith('.jsonl'):
-                with path.open(encoding='utf-8') as handle:
+                with open_recording_jsonl(path) as handle:
                     payload[name] = [json.loads(line) for line in handle if line.strip()]
             elif name != 'frames.mp4':
                 payload[name] = json.loads(path.read_text(encoding='utf-8'))

@@ -16,7 +16,7 @@ from model_adapters import OpenP2PAdapter
 from observation_profiles import P2P_NATIVE
 from p2p_executed_history import KEYBOARD, encode_controller_step
 from p2p_startup import prepare_startup_graph
-from policy_rgb_archive import verify_policy_rgb
+from policy_rgb_archive import read_policy_rgb, read_recording_jsonl, recording_journal_path, recording_metadata
 from run_rdp_patrol import sample_gpu
 
 
@@ -113,12 +113,14 @@ def main():
             raise RuntimeError('Offline validation exceeded its thermal or wall-time bound')
     try:
         thermal()
-        rows=[json.loads(line) for line in (args.recording/'frames.jsonl').read_text(encoding='utf-8').splitlines() if line]
+        rows,decoded_journal_sha=read_recording_jsonl(args.recording,'frames.jsonl',max_decoded_bytes=160*1024*1024)
         rows=[row for row in rows if row.get('observationProfile')==P2P_NATIVE and row.get('policyRgb')
               and (row.get('frameWorldReadiness') or {}).get('ready') is True]
         if len(rows)<args.steps:raise ValueError('Retained recording has too few independently identified source frames')
         rows=rows[:args.steps]
-        images=[Image.frombytes('RGB',(192,192),verify_policy_rgb(args.recording,row['policyRgb']).read_bytes()) for row in rows]
+        seal=recording_metadata(args.recording)
+        images=[Image.frombytes('RGB',(192,192),read_policy_rgb(args.recording,row['policyRgb'],
+                    index=row['videoFrameIndex'],frame_id=row['frameId'],recording=seal)) for row in rows]
         archive=args.output.with_suffix('.sources')
         archive.mkdir(exist_ok=False)
         code_hashes={}
@@ -126,7 +128,8 @@ def main():
             raw=source.read_bytes()
             (archive/source.name).write_bytes(raw)
             code_hashes[source.name]=hashlib.sha256(raw).hexdigest()
-        report.update(recording=str(args.recording.resolve()),framesJournalSha256=file_hash(args.recording/'frames.jsonl'),
+        report.update(recording=str(args.recording.resolve()),framesJournalSha256=file_hash(recording_journal_path(args.recording,'frames.jsonl')),
+                      framesJournalDecodedSha256=decoded_journal_sha,
             sourceFrames=[dict(frameId=row['frameId'],sourceFrame=row['sourceFrame'],policyRgb=row['policyRgb']) for row in rows],
             checkpointSha256=file_hash(args.checkpoint),goalSha256=file_hash(args.goal_embedding),
             sourceArchive=str(archive.resolve()),codeHashes=code_hashes)

@@ -4,6 +4,7 @@ from collections import Counter
 from dataclasses import dataclass
 import hashlib
 import json
+from policy_rgb_archive import open_recording_jsonl
 import os
 from pathlib import Path
 import time
@@ -113,7 +114,7 @@ def read_run(path):
             if k in receipts:
                 raise ValueError('Repeated terminal receipt')
             receipts[k] = receipt
-        with (path.with_name(path.stem+'-recording')/num/'observations.jsonl').open('rb') as rows:
+        with open_recording_jsonl(path.with_name(path.stem+'-recording')/num/'observations.jsonl') as rows:
             for line in rows:
                 digest.update(line)
                 f = json.loads(line)

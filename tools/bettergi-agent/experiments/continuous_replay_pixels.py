@@ -10,6 +10,7 @@ import sys
 
 import p2p_replay_sensitivity as decoder
 import prepare_replay_session as session
+from policy_rgb_archive import JOURNAL_NAMES, recording_journal_path, recording_journal_decoded_size
 
 
 def require_prepared_plan(plan):
@@ -47,9 +48,10 @@ def load_plan(path):
         directory = Path(source['recordingDirectory'])
         files = {'report': report, **{name: directory / name for name in
                  ('recording.json', 'observations.jsonl', 'frames.jsonl', 'events.jsonl', 'frames.mp4')}}
+        files={name:recording_journal_path(directory,name) if name in JOURNAL_NAMES else file for name,file in files.items()}
         for name, file in files.items():
             if name != 'frames.mp4':
-                metadata_bytes += file.stat().st_size
+                metadata_bytes += recording_journal_decoded_size(directory,name) if name in JOURNAL_NAMES else file.stat().st_size
                 session.base.require(metadata_bytes <= session.MAX_JSON_BYTES, 'metadata_memory_bound_exceeded')
             evidence[f'{number:05d}/{name}'] = session.base._file_evidence(file)
         segments.append(session.RecordedSegment(report, directory, session._read_json(report),

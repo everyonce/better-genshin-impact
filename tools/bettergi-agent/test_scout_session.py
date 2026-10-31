@@ -61,11 +61,15 @@ class FakePolicy:
         self.history=[]
         self.goals=[]
         self._pending_feedback=False
+        self._executed_candidate=None
+        self.steps_seen=0
 
     def reset(self):
         """Reset history without replacing either expensive resource."""
         self.history.clear()
         self._pending_feedback=False
+        self._executed_candidate=None
+        self.steps_seen=0
 
     def set_goal(self, path):
         """Mirror the adapter's existing goal/history reset seam."""
@@ -169,7 +173,8 @@ class ScoutSessionTests(unittest.TestCase):
         points=spec.points if spec is not None else scout.route_points(route)
         frames=[]
         for number in (1,2,3):
-            stamp=(time.perf_counter_ns()//100 if getattr(self.settings,'allow_inspected_obstacle_recovery',False) else 0)
+            stamp=(time.perf_counter_ns()//100 if (getattr(self.settings,'allow_inspected_obstacle_recovery',False)
+                or getattr(self.settings,'allow_inspected_source_gap_recovery',False)) else 0)
             source=dict(captureEpoch='synthetic',timestamp100ns=stamp+number*1_000_000,freshnessAtMs=number*100)
             pose=dict(state='valid',frameId=number,x=points[0][0],y=points[0][1],
                       layerId='MapBack_2',positionConfidence=.999,yawConfidence=.8,yawDegrees=270)
@@ -282,6 +287,7 @@ class ScoutSessionTests(unittest.TestCase):
             control.scout_encounter_guard.observe(frame,1)
             control.scout_encounter_guard.check_dispatch(frame,2)
         policy.history.append('prior-leg-history')
+        policy.steps_seen+=1
         runtime.atomic_json(args.output,dict(endReason='hybridLegLimit' if self.episode_code==0 else 'error',
             framesReceived=30,acceptedInputActions=10))
         if self.recording_payload:
@@ -640,6 +646,196 @@ class ScoutSessionTests(unittest.TestCase):
         review=self.make_review(route)
         self.recovery_review_mutation(number,review,state)
         scout.submit(watch.folder,review)
+
+    def source_gap_driver(self, watch):
+        """Supply each successor from a separately captured reviewed scene after a closed failed lease."""
+        state=json.loads((watch.folder/'session.json').read_bytes())
+        if state['state']!='awaitingReview':return
+        if len(state['legs'])>=self.target:
+            watch.reason='operatorStop'
+            return
+        if any(path.stem not in state['seenRequestIds'] for path in (watch.folder/'requests').glob('*.json')):return
+        number=len(state['legs'])
+        self.episode_error=self.source_gap_failures.get(number)
+        self.before_submit(number)
+        spec=self.reviewed_routes[number%len(self.reviewed_routes)]
+        review=self.make_review(spec.route_id,spec)
+        self.recovery_review_mutation(number,review,state)
+        scout.submit(watch.folder,review)
+
+    def prepare_source_gap_worker(self):
+        """Keep actual resident lifetimes and proof joins; replace only the offline native-prefix replay."""
+        self.prepare_executed_history_worker()
+        self.settings.allow_inspected_source_gap_recovery=True
+        self.native_contract_version=2
+        self.source_gap_failures={0:scout.source_gap.STALE_ERROR}
+        self.recording_payload=b'closed source-gap diagnostic recording'
+        self.recovery_review_mutation=lambda *args:None
+        self.driver=self.source_gap_driver
+        self.stack.enter_context(patch.object(scout.source_gap,'audit_failed_prefix',self.synthetic_source_gap_audit))
+
+    def synthetic_source_gap_audit(self,folder,request):
+        """Keep the exact failed-cause declaration while isolating the independent native replay suite."""
+        return dict(self.synthetic_prefix_audit(folder,request),failureReason=scout.source_gap.STALE_ERROR)
+
+    def test_source_gap_cli_requires_explicit_reviewed_executed_history(self):
+        """The optional retention policy cannot silently change legacy worker semantics."""
+        base=['run','--directory',str(self.settings.directory),'--owner-from',str(self.settings.owner_from)]
+        self.assertFalse(scout.options(base).allow_inspected_source_gap_recovery)
+        selected=scout.options(base+['--allow-inspected-source-gap-recovery','--p2p-executed-history','--allow-reviewed-routes'])
+        self.assertTrue(selected.allow_inspected_source_gap_recovery)
+        self.assertEqual(selected.action_hold_ms,50)
+        with self.assertRaises(SystemExit),redirect_stderr(io.StringIO()):
+            scout.options(base+['--allow-inspected-source-gap-recovery'])
+
+    def test_source_gap_retains_weights_once_and_retires_the_original_guard_and_lease(self):
+        """A failed run stays failed while a distinct reviewed successor reuses only reset model resources."""
+        self.prepare_source_gap_worker()
+        guards=[]
+        self.after_episode=lambda number,control:guards.append(control.scout_encounter_guard)
+        result=self.run_worker()
+        self.assertEqual([row['state'] for row in result['legs']],['failed','verified'],result.get('reason'))
+        self.assertEqual((len(self.loads),len(self.starts),result['inspectedSourceGapRecoveriesUsed']),(1,2,1))
+        self.assertIsNot(guards[0],guards[1])
+        self.assertNotEqual(self.episodes[0][3],self.episodes[1][3])
+        self.assertEqual(self.episodes[0][1:3],self.episodes[1][1:3])
+        self.assertEqual(result['legs'][0]['reason'],scout.source_gap.STALE_ERROR)
+        self.assertFalse(result['legs'][0]['evidenceComplete'])
+        self.assertEqual(result['legs'][0]['failedLeases'],1)
+        self.assertEqual(result['recordedBytes'],2*len(self.recording_payload))
+        self.assertIsNone(result['pendingSourceGapRecovery'])
+        successor=next(json.loads(path.read_bytes()) for path in (self.settings.directory/'requests').glob('*.json')
+                       if 'sourceGapRecovery' in json.loads(path.read_bytes()))
+        witness=successor['sourceGapRecovery']
+        self.assertEqual(successor['afterRequestId'],result['legs'][0]['requestId'])
+        self.assertTrue(witness['historyReset'])
+        self.assertEqual(witness['failureReason'],scout.source_gap.STALE_ERROR)
+        self.assertEqual(self.audits[0]['policyReuse']['sourceGapRecovery'],witness)
+        self.assertEqual([row['datasetSplit'] for row in result['legs']],['diagnostic','diagnostic'])
+
+    def test_source_gap_second_failure_exhausts_retention_without_a_third_lease(self):
+        """The opt-in is one inspected recovery, never an unbounded stale-source retry loop."""
+        self.prepare_source_gap_worker()
+        self.source_gap_failures[1]=scout.source_gap.STALE_ERROR
+        self.target=3
+        result=self.run_worker()
+        self.assertEqual((result['state'],len(self.starts),result['inspectedSourceGapRecoveriesUsed']),('failed',2,1))
+        self.assertEqual([row['state'] for row in result['legs']],['failed','failed'])
+
+    def test_source_gap_same_geometry_still_requires_a_new_review_and_capture(self):
+        """A capture delay alone does not ban geometry, but the original review cannot be replayed."""
+        self.prepare_source_gap_worker()
+        self.reviewed_routes[1]=self.reviewed_routes[0]
+        result=self.run_worker()
+        self.assertEqual([row['state'] for row in result['legs']],['failed','verified'],result.get('reason'))
+        requests=[json.loads(path.read_bytes()) for path in (self.settings.directory/'requests').glob('*.json')]
+        self.assertEqual(len({request['routeId'] for request in requests}),1)
+        self.assertEqual(len({request['reviewSha256'] for request in requests}),2)
+
+    def test_source_gap_new_file_with_old_capture_timestamp_cannot_open_a_successor(self):
+        """Retained GPU weights do not make a resealed old scene fresh after release."""
+        self.prepare_source_gap_worker()
+        def make_stale(number,review,state):
+            """Keep all internal source joins consistent while moving the source before cleanup."""
+            if number!=1:return
+            value=json.loads(review.read_bytes());endpoint=Path(value['nativeEndpoint'])
+            def rewrite_sources(value):
+                """Rewrite source timestamps in the native frame and its bound evidence together."""
+                if isinstance(value,dict):
+                    if isinstance(value.get('sourceFrame'),dict):
+                        value['sourceFrame']['timestamp100ns']=value.get('frameId',value.get('sourceFrameId',1))*1_000_000
+                    for child in value.values():rewrite_sources(child)
+                elif isinstance(value,list):
+                    for child in value:rewrite_sources(child)
+            for path in (endpoint/'result.json',endpoint/Path(value['imageName']).with_suffix('.json')):
+                document=json.loads(path.read_bytes());rewrite_sources(document);write_json(path,document)
+        self.recovery_review_mutation=make_stale
+        result=self.run_worker()
+        self.assertEqual(len(self.starts),1)
+        self.assertIn('predates completed cleanup',result['reason'])
+
+    def test_source_gap_without_opt_in_remains_terminal(self):
+        """An old worker cannot acquire recovery authority from a recognizable error string."""
+        self.prepare_source_gap_worker()
+        self.settings.allow_inspected_source_gap_recovery=False
+        result=self.run_worker()
+        self.assertEqual((result['state'],len(self.starts)),('failed',1))
+        self.assertNotIn('inspectedSourceGapRecoveriesUsed',result)
+
+    def test_source_gap_policy_does_not_recover_an_encounter_or_health_stop(self):
+        """A health or enemy observation still ends the worker even when weights could be retained."""
+        self.prepare_source_gap_worker()
+        self.source_gap_failures[0]='Scout encounter guard: healthDrop'
+        result=self.run_worker()
+        self.assertEqual((result['state'],len(self.starts),result['inspectedSourceGapRecoveriesUsed']),('failed',1,0))
+
+    def test_source_gap_unresolved_feedback_is_not_discarded_to_claim_clean_recovery(self):
+        """Incomplete model feedback is terminal rather than being hidden by a reset call."""
+        self.prepare_source_gap_worker()
+        self.after_episode=lambda number,control:setattr(self.policy,'_pending_feedback',True)
+        result=self.run_worker()
+        self.assertEqual((len(self.starts),result['inspectedSourceGapRecoveriesUsed']),(1,0))
+        self.assertIn('unresolved executed history',result['reason'])
+
+    def test_source_gap_reset_must_clear_actual_history_counter(self):
+        """Keeping weights cannot retain the failed episode's temporal cache position."""
+        self.prepare_source_gap_worker()
+        self.stack.enter_context(patch.object(self.policy,'reset',lambda:None))
+        result=self.run_worker()
+        self.assertEqual((len(self.starts),result['inspectedSourceGapRecoveriesUsed']),(1,0))
+        self.assertIn('history did not reset',result['reason'])
+
+    def test_source_gap_live_reader_thread_prevents_retention(self):
+        """No capture or recorder thread from the failed lease may cross into a new review."""
+        self.prepare_source_gap_worker()
+        finish=threading.Event();threads=[]
+        def leak(number,control):
+            """Keep a synthetic reader alive until the test explicitly retires it."""
+            thread=threading.Thread(target=finish.wait,name='synthetic-source-reader',daemon=True)
+            thread.start();threads.append(thread)
+        self.after_episode=leak
+        try:
+            result=self.run_worker()
+            self.assertEqual((len(self.starts),result['inspectedSourceGapRecoveriesUsed']),(1,0))
+            self.assertIn('threads did not retire',result['reason'])
+        finally:
+            finish.set()
+            for thread in threads:thread.join(2)
+
+    def test_source_gap_stop_and_thermal_supervision_still_win_before_retention(self):
+        """A simultaneous supervisor stop cannot be downgraded to a recoverable source delay."""
+        self.prepare_source_gap_worker()
+        self.after_episode=lambda number,control:setattr(self.watch,'reason','seriesTemperatureStop')
+        result=self.run_worker()
+        self.assertEqual((result['state'],result['reason']),('stopped','seriesTemperatureStop'))
+        self.assertEqual((len(self.starts),result['inspectedSourceGapRecoveriesUsed']),(1,0))
+
+    def test_source_gap_recording_budget_cannot_reset_at_recovery(self):
+        """The failed prefix still consumes the session's original finite storage allowance."""
+        self.prepare_source_gap_worker()
+        self.settings.record_max_mib=1
+        result=self.run_worker()
+        self.assertEqual((len(self.starts),result['inspectedSourceGapRecoveriesUsed']),(1,0))
+        self.assertIn('recording budget exhausted',result['reason'])
+
+    def test_source_gap_changed_runtime_source_prevents_retention(self):
+        """A new reviewed image never waives the original worker's code identity."""
+        self.prepare_source_gap_worker()
+        original=scout.source_gap.source_contract();changed=[False]
+        self.stack.enter_context(patch.object(scout.source_gap,'source_contract',
+            lambda:dict(original,changed='yes') if changed[0] else original))
+        self.after_episode=lambda number,control:changed.__setitem__(0,True)
+        result=self.run_worker()
+        self.assertEqual((len(self.starts),result['inspectedSourceGapRecoveriesUsed']),(1,0))
+        self.assertIn('runtime source changed',result['reason'])
+
+    def test_source_gap_explicit_stop_prevents_retention(self):
+        """An operator stop during cleanup remains terminal even with complete prefix evidence."""
+        self.prepare_source_gap_worker()
+        self.after_episode=lambda number,control:(self.settings.directory/'STOP').write_text('stop')
+        result=self.run_worker()
+        self.assertEqual((len(self.starts),result['inspectedSourceGapRecoveriesUsed']),(1,0))
+        self.assertIn('Operator stop',result['reason'])
 
     def synthetic_prefix_audit(self, folder, request):
         """Isolate worker lifecycle tests; the separate prefix suite replays complete native/RGB evidence."""

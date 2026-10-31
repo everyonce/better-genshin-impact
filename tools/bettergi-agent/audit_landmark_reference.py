@@ -3,6 +3,7 @@ import argparse
 import base64
 import hashlib
 import json
+from policy_rgb_archive import open_recording_jsonl
 from pathlib import Path
 
 from audit_hybrid_run import require
@@ -42,7 +43,7 @@ def verify(parent_file, candidate_file, freeze_file, training_episode):
     original={}
     for segment in run['segments']:
         folder=pat.parent/'patrol-recording'/f"{segment['number']:05d}"
-        with (folder/'events.jsonl').open(encoding='utf-8') as stream:
+        with open_recording_jsonl(folder/'events.jsonl') as stream:
             for line in stream:
                 row=json.loads(line)
                 if row.get('type')=='landmarkShadowSource':

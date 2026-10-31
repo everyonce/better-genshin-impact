@@ -10,7 +10,8 @@ from audit_hybrid_run import (evidence_bytes, evidence_document, require, verify
 from hybrid_routes import camera_correction, route_heading, route_points
 from navigation_profiles import SCOUT_PROFILE, SCOUT_PROFILES, allows_pose_scope, validate_capability
 from observation_timing import observation_timestamp
-from policy_rgb_archive import RGB192_BYTES
+from policy_rgb_archive import (RGB192_BYTES, RECORDING_FORMAT, JOURNAL_MAX_DECODED_BYTES, read_policy_rgb, read_recording_jsonl,
+                                recording_metadata, policy_rgb_filename)
 from reviewed_scout_route import ReviewedScoutRoute
 
 
@@ -37,10 +38,10 @@ def source_contract():
 
 def rows(path):
     """Read one bounded, unlinked journal and retain its exact byte digest."""
-    raw=evidence_bytes(path,32*1024*1024)
-    result=[json.loads(line) for line in raw.decode('utf-8').splitlines() if line.strip()]
+    path=Path(path)
+    result,digest=read_recording_jsonl(path.parent,path.name,max_decoded_bytes=JOURNAL_MAX_DECODED_BYTES,max_rows=20000)
     require(result and all(isinstance(row,dict) for row in result),'Missing or invalid original journal')
-    return result,hashlib.sha256(raw).hexdigest()
+    return result,digest
 
 
 def terminal_contract(run, part):
@@ -293,6 +294,7 @@ def audit_failed_prefix(folder, request):
     control,_=evidence_document(folder/'patrol.json.control.json',16384)
     require(control==dict(version=1,runId=run['runId'],command='run'),'Stop, pause or goal change in original control')
     record=folder/'patrol-recording/00001'
+    recording_metadata(record,part['recording'])
     observed,observed_sha=rows(record/'observations.jsonl')
     video,video_sha=rows(record/'frames.jsonl')
     events,event_sha=rows(record/'events.jsonl')
@@ -321,12 +323,15 @@ def audit_failed_prefix(folder, request):
             'Retained RGB/native source join changed')
         reference=frame.get('policyRgb') or {}
         name=reference.get('file')
-        require(name==f"policy-{index:08d}-frame-{frame['frameId']:012d}.rgb" and name not in files
+        require(name==policy_rgb_filename(index,frame['frameId'],reference.get('encoding')) and name not in files
             and (reference.get('width'),reference.get('height'),reference.get('bytes'),reference.get('format'))==(192,192,RGB192_BYTES,'rgb24'),
             'Invalid exact policy RGB identity')
-        raw=evidence_bytes(record/name,RGB192_BYTES)
+        raw=read_policy_rgb(record,reference,index=index,frame_id=frame['frameId'],recording=part['recording'])
         require(len(raw)==RGB192_BYTES and hashlib.sha256(raw).hexdigest()==reference.get('sha256'),'Retained RGB bytes changed')
         files[name]=reference['sha256']
+    if part['recording'].get('recordingFormat')==RECORDING_FORMAT:
+        require(sum(frame['policyRgb']['storedBytes'] for frame in video)==part['recording']['policyRgbStoredBytes'],
+                'Stored scout policy RGB byte count differs')
     require(all(frame.get('droppedReceipts')==0 for frame in observed),'Native observation reports dropped receipts')
     guard=verify_scout_guard(run,[part],frames,entries,folder/'patrol-recording',reuse)
     require(guard is not None,'Unprotected historical scout cannot retain a policy after failure')

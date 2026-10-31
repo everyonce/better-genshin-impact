@@ -2,6 +2,7 @@
 from collections import Counter
 import hashlib
 import json
+from policy_rgb_archive import open_recording_jsonl
 import math
 from pathlib import Path
 import re
@@ -63,7 +64,7 @@ def audit_landmarks(run, parts, events, frames, recordings, epoch, checkpoint, f
     kinds = ('hybridStartVerified','hybridEndpointVerified',RETRY)
     journal = []
     for entry in run['segments']:
-        with (Path(recordings)/f"{entry['number']:05d}"/'events.jsonl').open(encoding='utf-8') as stream:
+        with open_recording_jsonl(Path(recordings)/f"{entry['number']:05d}"/'events.jsonl') as stream:
             for line in stream:
                 event = json.loads(line)
                 if event.get('type') in kinds:

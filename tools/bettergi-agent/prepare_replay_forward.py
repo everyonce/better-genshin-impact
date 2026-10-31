@@ -8,6 +8,7 @@ import argparse
 from collections import Counter
 import copy
 import json
+from policy_rgb_archive import JOURNAL_NAMES, open_recording_jsonl, recording_journal_path
 import os
 from pathlib import Path
 import tempfile
@@ -126,15 +127,18 @@ def main(argv=None):
     paths = {'report': args.report, **{name: args.recording_dir/name for name in
              ('observations.jsonl', 'frames.jsonl', 'events.jsonl', 'recording.json', 'frames.mp4')}}
     base.require(not args.output.exists(), 'output_already_exists')
-    base.require(args.output.resolve() not in {path.resolve() for path in paths.values()}, 'output_would_overwrite_evidence')
+    base.require(args.output.resolve() not in {path.resolve() for path in paths.values()}
+                 | {(args.recording_dir/(name+'.gz')).resolve() for name in JOURNAL_NAMES},
+                 'output_would_overwrite_evidence')
     evidence = {}
     try:
+        paths = {name:recording_journal_path(path.parent,name) if name in JOURNAL_NAMES else path for name,path in paths.items()}
         evidence = {name: base._file_evidence(path) for name, path in paths.items()}
         base.require(evidence['frames.mp4']['bytes'] > 0, 'empty_video')
         payload = {}
         for name, path in paths.items():
             if name.endswith('.jsonl'):
-                with path.open(encoding='utf-8') as handle:
+                with open_recording_jsonl(path) as handle:
                     payload[name] = [json.loads(line) for line in handle if line.strip()]
             elif name != 'frames.mp4':
                 payload[name] = json.loads(path.read_text(encoding='utf-8'))

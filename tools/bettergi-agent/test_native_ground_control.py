@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 from pathlib import Path
+import random
 import re
 import tempfile
 import threading
@@ -75,8 +76,60 @@ def binding(version=1):
     return binding_from_review(old,old['reviewSha256'],old.get('nativeCombatObservation'),ground.CAPABILITY)
 
 
+def reference_match_crop(data,crop,pattern,expected_x):
+    """Retain the original scalar search as an independent exact-parity oracle for offline acceleration."""
+    dark_points=[(x,y) for y,row in enumerate(pattern) for x,value in enumerate(row) if value=='#']
+    light_points=[(x,y) for y,row in enumerate(pattern) for x,value in enumerate(row) if value=='.']
+    pixels=[data[index:index+3] for index in range(0,len(data),3)]
+    dark=[max(pixel)<150 for pixel in pixels]
+    light=[min(pixel)>=205 and max(pixel)-min(pixel)<=40 for pixel in pixels]
+    best,score=None,-1
+    for y in range(1024,1031):
+        for x in range(expected_x-3,expected_x+4):
+            start=(y-crop['y'])*crop['width']+x-crop['x']
+            d=sum(dark[start+dy*crop['width']+dx] for dx,dy in dark_points)
+            l=sum(light[start+dy*crop['width']+dx] for dx,dy in light_points)
+            value=min(d/len(dark_points)/.90,l/len(light_points)/.97)
+            if value>score:
+                score=value
+                best=dict(matched=d*100>=90*len(dark_points) and l*100>=97*len(light_points),
+                    x=x,y=y,width=30,height=25,darkMatches=d,darkExpected=len(dark_points),
+                    lightMatches=l,lightExpected=len(light_points))
+    return best
+
+
 class GroundProtocolTests(unittest.TestCase):
     """Validate closed negotiation, source binding and replayable small RGB evidence."""
+    def test_bitmask_replay_matches_scalar_thresholds_noise_and_ties(self):
+        """Optimized masks preserve exact RGB thresholds, all result fields and the first tied candidate."""
+        rng=random.Random(20261031)
+        colors=((0,0,0),(149,149,149),(150,149,149),(180,180,180),(204,255,255),
+                (205,245,205),(205,246,205),(255,255,255))
+        for name,pattern,anchor in (('eRegion',ground.E_PATTERN,1684),('qRegion',ground.Q_PATTERN,1804)):
+            crop=ground.CAPABILITY[name];count=crop['width']*crop['height']
+            cases=[bytes(color)*count for color in colors]
+            cases.extend(b''.join(bytes(rng.choice(colors)) for _ in range(count)) for _ in range(8))
+            for index,data in enumerate(cases):
+                with self.subTest(region=name,case=index):
+                    self.assertEqual(ground.match_crop(data,crop,pattern,anchor),
+                                     reference_match_crop(data,crop,pattern,anchor))
+
+    def test_bitmask_replay_matches_scalar_at_every_native_search_position(self):
+        """Each E/Q glyph remains exactly identifiable at all 49 supported offsets and crop boundaries."""
+        for name,pattern,anchor in (('eRegion',ground.E_PATTERN,1684),('qRegion',ground.Q_PATTERN,1804)):
+            crop=ground.CAPABILITY[name]
+            for top in range(1024,1031):
+                for left in range(anchor-3,anchor+4):
+                    data=bytearray([30,45,65]*crop['width']*crop['height'])
+                    for y,row in enumerate(pattern):
+                        for x,value in enumerate(row):
+                            offset=((top+y-crop['y'])*crop['width']+left+x-crop['x'])*3
+                            data[offset:offset+3]=bytes([50 if value=='#' else 240 if value=='.' else 180]*3)
+                    expected=reference_match_crop(data,crop,pattern,anchor)
+                    with self.subTest(region=name,x=left,y=top):
+                        self.assertTrue(expected['matched'])
+                        self.assertEqual(ground.match_crop(data,crop,pattern,anchor),expected)
+
     def test_native_masks_are_exact_and_glyphs_distinct(self):
         path=Path(__file__).resolve().parents[2]/'BetterGenshinImpact/GameTask/AutoAgent/AgentGroundControlRecognizer.cs'
         source=path.read_text(encoding='utf-8')

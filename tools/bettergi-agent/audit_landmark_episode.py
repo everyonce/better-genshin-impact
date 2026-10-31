@@ -4,6 +4,7 @@ import base64
 from datetime import datetime
 import hashlib
 import json
+from policy_rgb_archive import open_recording_jsonl
 from pathlib import Path
 
 from audit_hybrid_run import audit, require
@@ -46,7 +47,7 @@ def original_views(run, recording, archive, decoded, live_head):
     originals={}
     for e in run['segments']:
         n=e['number']
-        with (recording/f'{n:05d}'/'events.jsonl').open(encoding='utf-8') as stream:
+        with open_recording_jsonl(recording/f'{n:05d}'/'events.jsonl') as stream:
             for line in stream:
                 row=json.loads(line)
                 if row.get('type')!='landmarkShadowSource':

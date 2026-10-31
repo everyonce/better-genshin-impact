@@ -10,6 +10,7 @@ from unittest.mock import Mock, patch
 
 import stream_client as client
 from test_stream_segments import ContinuousBridge, ContinuousPolicy
+from test_hybrid_navigation import capability
 
 
 class StaleHoldTests(unittest.TestCase):
@@ -38,7 +39,7 @@ class StaleHoldTests(unittest.TestCase):
 
             def request(self, command, **kwargs):
                 if command == 'enableNavigationGuidance':
-                    return dict(type='navigationGuidance', enabled=True, capability={}), b''
+                    return dict(type='navigationGuidance', enabled=True, capability=capability()), b''
                 if command == 'release':
                     self.commands.append((command, kwargs))
                     self.receipt()
@@ -68,6 +69,7 @@ class StaleHoldTests(unittest.TestCase):
                 '--max-input-actions', '2', '--seconds', '3', '--output', str(path)])
             bridge, policy, nav = Bridge('inert'), ContinuousPolicy(), Mock()
             bridge.hello.update(supportsRelease=True, allowedKeys=['W','A','S','D'])
+            bridge.hello['navigationGuidance'] = capability()
             bridge.hello['worldReadiness'] = dict(version=1, requiredForInput=True)
             nav.snapshot.return_value, nav.drain_events.return_value = {}, []
             nav.prepare.side_effect = ([None] if camera else []) + [None, 'confirmingBypassReentry', 'confirmingBypassReentry', None]

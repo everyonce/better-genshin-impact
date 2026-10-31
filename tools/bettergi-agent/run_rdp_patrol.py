@@ -16,7 +16,7 @@ import time
 import uuid
 
 from hybrid_routes import EXECUTABLE_ROUTE_IDS, PATROL_STATIONS, STAIR_POST_ROUTE, STREET_PATROL_ROUTE, SURFACE_ROUTES, itinerary_legs
-from navigation_profiles import COURTYARD_PROFILE,SURFACE_PROFILE,NAVIGATION_PROFILES
+from navigation_profiles import COURTYARD_PROFILE,SURFACE_PROFILE,NAVIGATION_PROFILES,required_profile
 from resident_runtime import atomic_json, control_module, read_control_document, select_child
 from destination_queue_limits import ENDURANCE, STANDARD
 
@@ -67,10 +67,12 @@ def options(argv=None, parser=None, *, warm=False):
     p.add_argument('--camera-calibration', type=Path, help='Use and independently audit this local camera checkpoint')
     p.add_argument('--retain-policy-rgb', action='store_true',
                    help='Retain exact policy pixels inside the standard 160 MiB recording budget')
+    p.add_argument('--native-combat-observation', action='store_true',
+                   help='Retain read-only native health and red-bar candidates alongside navigation')
     args = p.parse_args(argv)
     if not warm:
-        if (args.route_id in SURFACE_ROUTES)!=(args.navigation_profile==SURFACE_PROFILE):
-            p.error('Surface routes require their explicit bounded surface navigation profile')
+        if required_profile(args.route_id)!=args.navigation_profile:
+            p.error('Fixed routes require their exact explicit navigation profile')
         if args.route_legs is not None and not 1<=args.route_legs<=4:
             p.error('--legs must be between one and four')
         if args.route_id!=STREET_PATROL_ROUTE and args.route_legs is None:
@@ -139,6 +141,8 @@ def patrol_argv(args, session, folder):
         command.append('--steering-shadow=' + str(args.steering_shadow.resolve()))
     if getattr(args,'navigation_profile',COURTYARD_PROFILE)!=COURTYARD_PROFILE:
         command.extend(['--navigation-profile',args.navigation_profile])
+    if getattr(args,'native_combat_observation',False):
+        command.append('--native-combat-observation')
     if args.landmark_shadow:
         command.append('--landmark-shadow=' + str(args.landmark_shadow.resolve()))
     if getattr(args,'retain_station_rgb',False):

@@ -31,12 +31,15 @@ BRIDGE_MIDDLE_ROUTE = 'mondstadt-bridge-middle-v1'
 BRIDGE_EXIT_ROUTE = 'mondstadt-bridge-exit-v1'
 FIELD_JUNCTION_ROUTE = 'mondstadt-field-junction-v1'
 FIELD_NORTH_ROUTE = 'mondstadt-field-north-v1'
-SURFACE_ROUTES = (BRIDGE_APPROACH_ROUTE,BRIDGE_ENTRY_ROUTE,BRIDGE_MIDDLE_ROUTE,BRIDGE_EXIT_ROUTE,FIELD_JUNCTION_ROUTE,FIELD_NORTH_ROUTE)
+FIELD_EAST_ROUTE = 'mondstadt-field-east-v1'
+SCOUT_ENTRY_ROUTE = 'mondstadt-combat-scout-entry-v1'
+SCOUT_ROUTES = (SCOUT_ENTRY_ROUTE,)
+SURFACE_ROUTES = (BRIDGE_APPROACH_ROUTE,BRIDGE_ENTRY_ROUTE,BRIDGE_MIDDLE_ROUTE,BRIDGE_EXIT_ROUTE,FIELD_JUNCTION_ROUTE,FIELD_NORTH_ROUTE,FIELD_EAST_ROUTE)
 SURVEY_ROUTES = (STREET_EXTENSION_ROUTE,STREET_TURN_ROUTE,STREET_CONTINUE_ROUTE,STREET_JUNCTION_ROUTE,
                  STREET_STAIRS_ROUTE,STREET_LOWER_LANE_ROUTE,STREET_DESCENT_ROUTE,STREET_LOWER_STEPS_ROUTE,
                  STREET_STEPS_EXIT_ROUTE,STREET_SMITHY_ROUTE,STREET_GATE_APPROACH_ROUTE,STREET_GATE_ROUTE,
                  STREET_GATE_CLEARANCE_ROUTE,STREET_GATE_CENTER_ROUTE,STREET_BRIDGE_ENTRY_ROUTE,STREET_ARCH_CLEARANCE_ROUTE,
-                 STREET_ARCH_EXIT_ROUTE) + SURFACE_ROUTES
+                 STREET_ARCH_EXIT_ROUTE) + SURFACE_ROUTES + SCOUT_ROUTES
 ROUTE_IDS = (COURTYARD_ROUTE, LAMPPOST_ROUTE, PLANTER_ROUTE, STAIR_POST_ROUTE, STAIR_APPROACH_ROUTE, STREET_PATROL_ROUTE) + SURVEY_ROUTES
 # Keep failed geometry readable for its original evidence, but refuse launching that line again.
 BLOCKED_ROUTE_IDS = (STREET_GATE_ROUTE,STREET_BRIDGE_ENTRY_ROUTE,STREET_ARCH_EXIT_ROUTE)
@@ -44,6 +47,8 @@ EXECUTABLE_ROUTE_IDS = tuple(route for route in ROUTE_IDS if route not in BLOCKE
 
 # The default segment is also advertised as the bridge's native heading anchors.
 _POINTS = {
+    # Candidate through the grass beyond the last inspected fence end; live use still requires a fresh scene review.
+    SCOUT_ENTRY_ROUTE: ((-1090,2194),(-1115,2194)),
     # Reuse the already surveyed junction/stair edge as a single reversible leg.
     STAIR_APPROACH_ROUTE: ((-844.93,2255.29),(-846.30078125,2261.13671875)),
     # Eight-unit continuation in the clear lane seen from the native stair-post endpoint.
@@ -93,6 +98,8 @@ _POINTS = {
     FIELD_JUNCTION_ROUTE: ((-1042.00,2178.00),(-1065.00,2166.00)),
     # The north-facing scene shows open ground across the road, clear of the right-side fence.
     FIELD_NORTH_ROUTE: ((-1065.00,2166.00),(-1065.00,2194.00)),
+    # The east-facing survey clears the bush and follows visible grass away from the lake edge.
+    FIELD_EAST_ROUTE: ((-1065.00,2194.00),(-1090.00,2194.00)),
     COURTYARD_ROUTE: ((-867.7041015625, 2281.378173828125), (-874.3662109375, 2274.179931640625)),
     # Surveyed level road on either side of the fixed pavement lamp and planter.
     LAMPPOST_ROUTE: ((-858.70, 2263.65), (-846.30078125, 2261.13671875)),

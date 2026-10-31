@@ -1,4 +1,4 @@
-"""Verify the sealed SIREN owner through the explicitly bounded R57 → R58 → R59 → R60 chain."""
+"""Verify the sealed SIREN owner through the explicitly bounded R57 → R58 → R59 → R60 → R61 chain."""
 import argparse
 import hashlib
 import json
@@ -59,7 +59,7 @@ def prior_owner(path):
 
 def target_package(number=58):
     """Independently check both selected binaries against the numbered managed build manifest."""
-    require(number in (58,59,60), 'Unsupported map release')
+    require(number in (58,59,60,61), 'Unsupported map release')
     original = ARTIFACTS.resolve() / f'release-r{number}'
     # Historical identity needs only the two binaries and manifest, not a retired runtime's assets.
     # A damaged or partially present live release never falls back to its witness.
@@ -101,11 +101,13 @@ def preserve_package_witness(number):
 
 
 def successor_release(receipt):
-    """Inspect the finite predecessor shape before recursion; no fourth handoff or self-reference is admitted."""
+    """Inspect the finite predecessor shape before recursion; no fifth handoff or self-reference is admitted."""
     if Path(receipt['prior']).name=='warm-launcher.json':return 59
     parent,_=evidence(Path(receipt['prior']),'map-owner-lineage.json')
-    require(Path(parent['prior']).name=='warm-launcher.json','Only the bounded R58/R59 predecessors are supported')
-    return 60
+    if Path(parent['prior']).name=='warm-launcher.json':return 60
+    grandparent,_=evidence(Path(parent['prior']),'map-owner-lineage.json')
+    require(Path(grandparent['prior']).name=='warm-launcher.json','Only the bounded R58/R59/R60 predecessors are supported')
+    return 61
 
 
 def checked_pair(root, child, package, child_sha):
@@ -145,7 +147,7 @@ def preflight(prior, before):
     require(checked_pair(roles['Primary'],roles['ChildSession'],package,source_sha) == old, 'Original child occupant changed')
     require(roles['ChildSession'].get('idleRestartVersion') == 2, 'Idle replacement capability unavailable')
     build, pins['buildSha256'] = target_package(number)
-    if number in (59,60):
+    if number in (59,60,61):
         game, pins['gameBeforeSha256'] = evidence(Path(before).with_name('game-before.json'),'game-before.json')
         require(set(game) == {'processId','windowsSessionId','startedFileTime','executable'}
                 and type(game['processId']) is int and game['processId'] > 0
@@ -154,6 +156,9 @@ def preflight(prior, before):
                 and game['windowsSessionId'] == old['child']['windowsSessionId']
                 and isinstance(game['executable'],str) and game['executable'].casefold() in ('genshinimpact.exe','yuanshen.exe'),
                 'Missing protected game identity in the original RDP session')
+        # The new handoff also carries forward the exact game already sealed by R60.
+        if number == 61:
+            require(game == receipt.get('protectedGame'), 'The sealed R60 game lifetime changed before the R61 handoff')
         pins['protectedGame'] = game
     return old, build, pins
 
@@ -200,7 +205,7 @@ def replacement(prior, folder):
 
 
 def load_map_owner(path):
-    """Load a historical warm owner, or recompute the R58 handoff from the original immutable reports."""
+    """Load a historical warm owner, or recompute the bounded handoffs from the original immutable reports."""
     path = Path(path)
     if path.name == 'warm-launcher.json':
         return prior_owner(path)[0]
@@ -215,7 +220,7 @@ if __name__ == '__main__':
     parser.add_argument('operation',choices=('game-before','preflight','seal','verify'))
     parser.add_argument('path',type=Path,help='Original warm launcher for preflight/seal, or the owner receipt to verify')
     parser.add_argument('--folder',type=Path,help='Run evidence directory containing before.json and ensure-child.json')
-    parser.add_argument('--game-process-id',type=int,help='Exact observed Genshin process for the R58 to R59 handoff')
+    parser.add_argument('--game-process-id',type=int,help='Exact observed Genshin process for the next supported child handoff')
     args = parser.parse_args()
     if args.operation == 'verify':
         print(json.dumps(load_map_owner(args.path)))

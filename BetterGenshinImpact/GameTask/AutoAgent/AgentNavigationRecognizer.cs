@@ -46,11 +46,15 @@ internal sealed class AgentNavigationRecognizer : IDisposable
         _map = MapManager.GetMap("Teyvat", "TemplateMatch") as SceneBaseMapByTemplateMatch
             ?? throw new InvalidOperationException("local_template_map_unavailable");
         _map.WarmUp();
-        _anchor = _map.ConvertGenshinMapCoordinatesToImageCoordinates(
+        var start = _map.ConvertGenshinMapCoordinatesToImageCoordinates(
             new Point2f((float)NavigationBaselineTask.StartX, (float)NavigationBaselineTask.StartY));
+        _anchor = profileId == AgentNavigationProfile.MondstadtCombatScout
+            ? _map.ConvertGenshinMapCoordinatesToImageCoordinates(new Point2f(
+                (float)AgentNavigationProfile.ScoutAnchorX, (float)AgentNavigationProfile.ScoutAnchorY))
+            : start;
         var endpoint = _map.ConvertGenshinMapCoordinatesToImageCoordinates(
             new Point2f((float)NavigationBaselineTask.EndX, (float)NavigationBaselineTask.EndY));
-        _start = new Waypoint { X = _anchor.X, Y = _anchor.Y };
+        _start = new Waypoint { X = start.X, Y = start.Y };
         _end = new Waypoint { X = endpoint.X, Y = endpoint.Y };
         _yaw = new MiniMapPreprocessor();
     }
@@ -78,6 +82,18 @@ internal sealed class AgentNavigationRecognizer : IDisposable
             bounds = new { minX = AgentNavigationProfile.MinimumX, maxX = AgentNavigationProfile.MaximumX,
                 minY = AgentNavigationProfile.MinimumY, maxY = AgentNavigationProfile.MaximumY },
             minimumPositionConfidence = .99, minimumYawConfidence = .2,
+            maxWidth = 1920, maxHeight = 1080, normalIsGroundedProof = false
+        },
+        AgentNavigationProfile.MondstadtCombatScout => new
+        {
+            version = 1, profileId, sameFrame = true, readOnly = true,
+            start = new { x = NavigationBaselineTask.StartX, y = NavigationBaselineTask.StartY },
+            end = new { x = NavigationBaselineTask.EndX, y = NavigationBaselineTask.EndY },
+            allowedLayerIds = new[] { "City_102", "MapBack_2" },
+            bounds = new { minX = AgentNavigationProfile.ScoutMinimumX, maxX = AgentNavigationProfile.ScoutMaximumX,
+                minY = AgentNavigationProfile.ScoutMinimumY, maxY = AgentNavigationProfile.ScoutMaximumY },
+            searchAnchor = new { x = AgentNavigationProfile.ScoutAnchorX, y = AgentNavigationProfile.ScoutAnchorY },
+            localOnly = true, minimumPositionConfidence = .99, minimumYawConfidence = .2,
             maxWidth = 1920, maxHeight = 1080, normalIsGroundedProof = false
         },
         _ => throw new ArgumentException("unsupported_navigation_profile", nameof(profileId))

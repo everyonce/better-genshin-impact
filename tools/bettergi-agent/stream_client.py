@@ -24,7 +24,7 @@ import uuid
 from observation_timing import frame_timing, observation_timestamp
 from host_observation import HostObservationContract
 from hybrid_routes import COURTYARD_ROUTE, EXECUTABLE_ROUTE_IDS, PATROL_STATIONS, ROUTE_IDS, STAIR_POST_ROUTE, STREET_PATROL_ROUTE, SURFACE_ROUTES
-from navigation_profiles import COURTYARD_PROFILE,SURFACE_PROFILE,NAVIGATION_PROFILES,validate_capability
+from navigation_profiles import COURTYARD_PROFILE,SURFACE_PROFILE,NAVIGATION_PROFILES,validate_capability,required_profile
 from navigation_idle_recovery import (GOAL_INTENTS, NavigationIdleRecovery, RecoverySuperseded,
                                       capture_context, eligible_frame, fresh_frame)
 from observation_profiles import (LEGACY, P2P_NATIVE, PROFILES, FrameProfileError,
@@ -807,11 +807,10 @@ def validate_navigation_scope_options(args):
     """Keep the new outdoor scope explicit and confined to its declared route family."""
     profile=getattr(args,'navigation_profile',COURTYARD_PROFILE)
     if profile not in NAVIGATION_PROFILES:raise ValueError('Unsupported navigation profile')
-    surface_route=getattr(args,'hybrid_route',None) in SURFACE_ROUTES
-    if getattr(args,'hybrid_navigation',False) and surface_route!=(profile==SURFACE_PROFILE):
-        raise ValueError('Surface routes require their explicit bounded surface navigation profile')
-    if profile==SURFACE_PROFILE and not (getattr(args,'navigation_guidance',False) or getattr(args,'hybrid_navigation',False)):
-        raise ValueError('The surface profile requires explicit native navigation guidance')
+    if getattr(args,'hybrid_navigation',False) and required_profile(getattr(args,'hybrid_route',None) or COURTYARD_ROUTE)!=profile:
+        raise ValueError('Fixed routes require their exact explicit navigation profile')
+    if profile!=COURTYARD_PROFILE and not (getattr(args,'navigation_guidance',False) or getattr(args,'hybrid_navigation',False)):
+        raise ValueError('A surface or scouting profile requires explicit native navigation guidance')
     return profile
 
 
@@ -1116,6 +1115,8 @@ def parse_arguments(argv=None):
                         help='Retain exact RGB192 files on the recording worker, inside the existing byte budget')
     parser.add_argument('--combat-shadow', action='store_true',
                         help='Record read-only combat candidates beside GPU P2P predictions; input must remain disabled')
+    parser.add_argument('--native-combat-observation', action='store_true',
+                        help='Record optional same-source native HUD evidence; this never enables input')
     parser.add_argument('--preview', action='store_true',
                         help='Save latest.jpg once per second on the recording worker; requires record-dir')
     parser.add_argument('--ffmpeg', default='ffmpeg')
@@ -1474,6 +1475,7 @@ def run_episode(args, policy=None, control=None):
     """Run one owned bridge lease with an optional already-loaded model and live controls."""
     hybrid_observe = validate_hybrid_observe_options(args)
     navigation_profile = validate_navigation_scope_options(args)
+    native_combat_enabled = getattr(args,'native_combat_observation',False)
     combat_observer = None
     if getattr(args,'combat_shadow',False):
         from combat_observer import CombatObserver,validate_shadow_options
@@ -1602,21 +1604,25 @@ def run_episode(args, policy=None, control=None):
             from hybrid_navigation import HybridNavigation
             # Validate the advertised fixed geometry before enabling native recognition.
             route_id = getattr(args, 'hybrid_route', None) or COURTYARD_ROUTE
-            HybridNavigation(bridge.hello.get('navigationGuidance') or {},route_id)
+            validate_capability(bridge.hello.get('navigationGuidance') or {},COURTYARD_PROFILE)
             if navigation_profile!=COURTYARD_PROFILE and navigation_profile not in bridge.hello.get('navigationProfiles',[]):
                 raise RuntimeError('The bridge does not support the requested outdoor localization scope')
             profile_request={} if navigation_profile==COURTYARD_PROFILE else dict(navigationProfile=navigation_profile)
             configured = bridge.request('enableNavigationGuidance',**profile_request)[0]
             if configured.get('type') != 'navigationGuidance' or configured.get('enabled') is not True:
                 raise RuntimeError('The bridge did not acknowledge native navigation guidance')
-            candidate = HybridNavigation(configured.get('capability') or {}, route_id,
-                                         remember_bypass=getattr(args, 'remember_hybrid_bypass', False),
-                                         navigation_profile=navigation_profile, **itinerary)
+            validate_capability(configured.get('capability') or {},navigation_profile)
             report['navigationGuidance'] = configured['capability']
             if getattr(args, 'hybrid_navigation', False):
-                hybrid = candidate
+                hybrid = HybridNavigation(configured['capability'], route_id,
+                    remember_bypass=getattr(args, 'remember_hybrid_bypass', False),
+                    navigation_profile=navigation_profile, **itinerary)
                 report['hybridNavigation'] = hybrid.snapshot()
                 report['hybridNavigationEvents'] = []
+        if native_combat_enabled:
+            from native_combat import negotiate
+            report['nativeCombatObservation'] = negotiate(bridge)
+            report['nativeCombatEvidenceFrames'] = 0
         if getattr(args, 'inspect_junction_map', False) or getattr(args,'recover_junction_map',False):
             from map_inspection_client import inspect_before_navigation
             if not warm or warm.itinerary_start != 'sidewalk-junction' or warm.destinations != ('west-lamp','sidewalk-junction'):
@@ -1747,6 +1753,9 @@ def run_episode(args, policy=None, control=None):
             host_contract.validate(metadata)
             if metadata.get('type') == 'frame':
                 verify_frame(metadata, pixels, profile_contract)
+                if native_combat_enabled:
+                    from native_combat import validate_frame
+                    validate_frame(metadata)
             if idle_recovery.threshold is not None:
                 context = capture_context(metadata) if metadata.get('type') == 'frame' else None
                 if recovery_capture_context is not None and context != recovery_capture_context:
@@ -1767,6 +1776,8 @@ def run_episode(args, policy=None, control=None):
                     recovery_interruption_sequence += 1
                 report['captureQuality'][metadata['frameQuality'] + 'Frames'] += 1
                 report['framesReceived'] += 1
+                if native_combat_enabled and metadata.get('combatEvidence') is not None:
+                    report['nativeCombatEvidenceFrames'] += 1
                 latest.publish(metadata, pixels)
                 if recorder:
                     # Proposal/receipt events and source/pose clocks remain complete.
@@ -2246,6 +2257,7 @@ def run_episode(args, policy=None, control=None):
                     profile_argument['execution_context'] = execution_snapshot
             result = policy.predict(image, (frame['sourceWidth'], frame['sourceHeight']), **profile_argument)
             if combat_result is not None:result['combatObservation'] = combat_result
+            if native_combat_enabled:result['nativeCombatEvidence'] = frame.get('combatEvidence')
             if execution_snapshot is not None:
                 result['executionContext'] = execution_snapshot.to_dict()
                 result['executionContextMode'] = execution_mode

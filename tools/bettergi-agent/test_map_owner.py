@@ -155,38 +155,155 @@ class MapOwnerTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             owner.preflight(receipt,second/'before.json')
 
-    def test_r60_handoff_keeps_the_same_game_and_rejects_a_fourth_transition(self):
-        first,second,previous,game=self.create_successor()
-        prior=second/'map-owner-lineage.json'
-        write(prior,owner.replacement(first,second))
-        folder=second.parent/'r60'
+    def create_next_handoff(self, prior, previous, game, number):
+        """Build a complete successor candidate, including an unsupported later release when a test needs one."""
+        folder=prior.parent.parent/f'r{number}'
         write(folder/'before.json',dict(instances=[previous['root'],previous['child']],unavailable=[]))
         write(folder/'game-before.json',game)
-        target=owner.ARTIFACTS/'release-r60/BetterGI-English-win-x64'
+        target=owner.ARTIFACTS/f'release-r{number}/BetterGI-English-win-x64'
         target.mkdir(parents=True)
         selected=dict(targetDirectory=str(target))
         for ext in ('exe','dll'):
-            data=(ext+' R60').encode()
+            data=(ext+f' R{number}').encode()
             (target/f'BetterGI.{ext}').write_bytes(data)
             selected[ext+'Sha256']=hashlib.sha256(data).hexdigest()
         write(target.parent/'build-manifest.json',dict(self.build,**selected))
         result=deepcopy(previous)
         old=previous['child']
-        result['child'].update(processId=1000,instanceNonce='a'*32,appDirectory=str(target),assemblySha256=selected['dllSha256'])
+        result['child'].update(processId=number*100,instanceNonce=f'{number:032x}',
+                               appDirectory=str(target),assemblySha256=selected['dllSha256'])
         result.update(selectedPackage=selected,previousProcessId=old['processId'])
         result['replacementEvidence'].update(previousProcessId=old['processId'],previousNonce=old['instanceNonce'],
-            replacementProcessId=1000,replacementNonce='a'*32,targetDirectory=str(target))
+            replacementProcessId=result['child']['processId'],replacementNonce=result['child']['instanceNonce'],
+            targetDirectory=str(target))
         write(folder/'ensure-child.json',result)
         write(folder/'preflight.json',dict(source=owner.load_map_owner(prior),protectedGame=game,
             targetConfigSha256=result['replacementEvidence']['existingTargetConfigSha256'],**selected))
+        return folder,result
+
+    def create_r60_successor(self):
+        """Seal the R59 predecessor before constructing the existing R60 handoff."""
+        first,second,previous,game=self.create_successor()
+        prior=second/'map-owner-lineage.json'
+        write(prior,owner.replacement(first,second))
+        folder,result=self.create_next_handoff(prior,previous,game,60)
+        return prior,folder,result,game
+
+    def create_r61_successor(self):
+        """Keep the complete original chain intact before preparing the one newly admitted transition."""
+        previous,folder,result,game=self.create_r60_successor()
+        prior=folder/'map-owner-lineage.json'
+        write(prior,owner.replacement(previous,folder))
+        folder,result=self.create_next_handoff(prior,result,game,61)
+        return prior,folder,result,game
+
+    def test_r60_handoff_keeps_the_same_game_and_rejects_stale_source(self):
+        """The newly allowed successor still cannot reuse the discovery from before the R60 replacement."""
+        prior,folder,result,game=self.create_r60_successor()
         receipt=owner.replacement(prior,folder)
         path=folder/'map-owner-lineage.json'
         write(path,receipt)
         self.assertEqual(owner.load_map_owner(path)['child'],owner.identity(result['child']))
-        with self.assertRaisesRegex(ValueError,'bounded'):owner.preflight(path,folder/'before.json')
+        with self.assertRaises(ValueError):owner.preflight(path,folder/'before.json')
         result['protectedGame']=dict(game,startedFileTime=1)
         write(folder/'ensure-child.json',result)
         with self.assertRaisesRegex(ValueError,'game lifetime'):owner.load_map_owner(path)
+
+    def test_r61_replays_original_root_and_game_but_rejects_a_fifth_transition(self):
+        """A fully populated R62 candidate must remain inadmissible even after the R61 receipt verifies."""
+        prior,folder,result,game=self.create_r61_successor()
+        receipt=owner.replacement(prior,folder)
+        path=folder/'map-owner-lineage.json'
+        write(path,receipt)
+        self.assertEqual(owner.load_map_owner(path),dict(root=self.ids['root'],child=owner.identity(result['child'])))
+        self.assertEqual(receipt['protectedGame'],game)
+        self.assertEqual(owner.load_map_owner(prior)['root'],self.ids['root'])
+        later,_=self.create_next_handoff(path,result,game,62)
+        with self.assertRaisesRegex(ValueError,'bounded'):owner.replacement(path,later)
+        with self.assertRaisesRegex(ValueError,'Unsupported map release'):owner.target_package(62)
+
+    def test_r61_rejects_coherent_or_partial_game_replacement(self):
+        """Matching new reports cannot substitute a different game for the one already sealed by R60."""
+        prior,folder,result,game=self.create_r61_successor()
+        preflight=json.loads((folder/'preflight.json').read_bytes())
+        for field,value in (('startedFileTime',1),('processId',888),('executable','YuanShen.exe')):
+            changed=dict(game,**{field:value})
+            write(folder/'game-before.json',changed)
+            write(folder/'preflight.json',dict(preflight,protectedGame=changed))
+            write(folder/'ensure-child.json',dict(result,protectedGame=changed))
+            with self.subTest(field=field),self.assertRaisesRegex(ValueError,'sealed R60 game lifetime'):
+                owner.replacement(prior,folder)
+        write(folder/'game-before.json',game)
+        write(folder/'preflight.json',preflight)
+        write(folder/'ensure-child.json',dict(result,protectedGame=dict(game,startedFileTime=1)))
+        with self.assertRaisesRegex(ValueError,'game lifetime'):owner.replacement(prior,folder)
+        write(folder/'ensure-child.json',result)
+        (folder/'game-before.json').unlink()
+        with self.assertRaises(FileNotFoundError):owner.replacement(prior,folder)
+
+    def test_r61_rejects_coherent_root_replacement(self):
+        """A replacement primary cannot inherit the original root's lineage even if its child agrees."""
+        prior,folder,result,_=self.create_r61_successor()
+        before=json.loads((folder/'before.json').read_bytes())
+        for root in (before['instances'][0],result['root']):
+            root.update(processId=10125,instanceNonce='e'*32)
+        for child in (before['instances'][1],result['child']):
+            child['rootProcessId']=10125
+        write(folder/'before.json',before)
+        write(folder/'ensure-child.json',result)
+        with self.assertRaisesRegex(ValueError,'Original child occupant changed'):
+            owner.replacement(prior,folder)
+
+    def test_r61_rejects_circular_or_skipped_predecessors(self):
+        """Bounded inspection must reject cycles before recursive replay and still validate every ancestor."""
+        prior,folder,_,_=self.create_r61_successor()
+        receipt=json.loads(prior.read_bytes())
+        parent=Path(receipt['prior'])
+        parent_receipt=json.loads(parent.read_bytes())
+        write(prior,dict(receipt,prior=str(prior)))
+        with self.assertRaisesRegex(ValueError,'bounded'):owner.replacement(prior,folder)
+        write(prior,receipt)
+        write(parent,dict(parent_receipt,prior=str(prior)))
+        with self.assertRaisesRegex(ValueError,'bounded'):owner.replacement(prior,folder)
+        write(parent,parent_receipt)
+        write(prior,dict(receipt,prior=parent_receipt['prior']))
+        with self.assertRaises(ValueError):owner.replacement(prior,folder)
+        write(prior,receipt)
+        write(parent,dict(parent_receipt,buildSha256='f'*64))
+        with self.assertRaisesRegex(ValueError,'lineage receipt'):owner.replacement(prior,folder)
+
+    def test_r61_source_and_target_witnesses_retain_exact_package_identity(self):
+        """Retirement remains replayable without allowing changed live bytes, changed witnesses, or partial releases."""
+        prior,folder,result,_=self.create_r61_successor()
+        path=folder/'map-owner-lineage.json'
+        write(path,owner.replacement(prior,folder))
+        witnesses={}
+        for number in (60,61):
+            original=owner.ARTIFACTS/f'release-r{number}'
+            dll=original/'BetterGI-English-win-x64/BetterGI.dll'
+            data=dll.read_bytes()
+            dll.write_bytes(b'changed-live-file')
+            with self.subTest(live=number),self.assertRaisesRegex(ValueError,f'Changed R{number} binary'):
+                owner.load_map_owner(path)
+            dll.write_bytes(data)
+            witnesses[number]=Path(owner.preserve_package_witness(number)['witnessDirectory'])
+            retired=owner.ARTIFACTS/f'retired-fixture-r{number}'
+            # Both directory moves remain within this test's private temporary artifact root.
+            self.assertEqual(original.parent.resolve(),owner.ARTIFACTS.resolve())
+            self.assertEqual(retired.parent.resolve(),owner.ARTIFACTS.resolve())
+            original.rename(retired)
+        self.assertEqual(owner.load_map_owner(path)['child'],owner.identity(result['child']))
+        for number,witness in witnesses.items():
+            dll=witness/'BetterGI-English-win-x64/BetterGI.dll'
+            data=dll.read_bytes()
+            dll.write_bytes(b'changed-witness')
+            with self.subTest(witness=number),self.assertRaisesRegex(ValueError,f'Changed R{number} binary'):
+                owner.load_map_owner(path)
+            dll.write_bytes(data)
+            original=owner.ARTIFACTS/f'release-r{number}'
+            original.mkdir()
+            with self.subTest(partial=number),self.assertRaises(FileNotFoundError):owner.load_map_owner(path)
+            original.rmdir()
 
     def test_small_identity_witness_survives_retirement_but_never_hides_changed_live_bytes(self):
         witness=Path(owner.preserve_package_witness(58)['witnessDirectory'])

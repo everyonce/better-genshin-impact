@@ -10,6 +10,39 @@ namespace BetterGenshinImpact.EnglishTest;
 /// <summary>Native guidance cannot promote weak matches or reuse pose fields on an unavailable frame.</summary>
 public sealed class AgentNavigationPoseTests
 {
+    /// <summary>The separate scouting scope retains strict confidence, layer, and rectangular limits.</summary>
+    [Theory]
+    [InlineData(-1350, 2050, .99, .2, "MapBack_2", true)]
+    [InlineData(-980, 2480, .99, .2, "City_102", true)]
+    [InlineData(-1350.01, 2200, .999, .8, "MapBack_2", false)]
+    [InlineData(-979.99, 2200, .999, .8, "MapBack_2", false)]
+    [InlineData(-1165, 2049.99, .999, .8, "MapBack_2", false)]
+    [InlineData(-1165, 2480.01, .999, .8, "MapBack_2", false)]
+    [InlineData(-1165, 2265, .989, .8, "MapBack_2", false)]
+    [InlineData(-1165, 2265, .999, .199, "MapBack_2", false)]
+    [InlineData(-1165, 2265, .999, .8, "MapBack_1", false)]
+    public void ScoutingScopeDoesNotBroadenTheExistingSurface(double x, double y, double position,
+        double yaw, string layer, bool accepted)
+    {
+        Assert.Equal(accepted, AgentNavigationPose.IsQualified(x, y, 15, position, yaw, layer,
+            AgentNavigationProfile.MondstadtCombatScout));
+        Assert.False(AgentNavigationPose.IsQualified(-1165, 2265, 15, .999, .8, "MapBack_2",
+            AgentNavigationProfile.MondstadtSurface));
+    }
+
+    /// <summary>A new fixed local anchor cannot silently change the original route heading anchors.</summary>
+    [Fact]
+    public void ScoutingCapabilitySeparatesSearchAnchorFromRouteGeometry()
+    {
+        var scout = JObject.FromObject(AgentNavigationRecognizer.GetCapability(AgentNavigationProfile.MondstadtCombatScout));
+        var original = JObject.FromObject(AgentNavigationRecognizer.Capability);
+        Assert.True(scout["localOnly"]!.Value<bool>());
+        Assert.Equal(-1165, scout["searchAnchor"]!["x"]!.Value<double>());
+        Assert.Equal(2265, scout["searchAnchor"]!["y"]!.Value<double>());
+        Assert.True(JToken.DeepEquals(original["start"], scout["start"]));
+        Assert.True(JToken.DeepEquals(original["end"], scout["end"]));
+    }
+
     /// <summary>Outdoor localization requires an explicit scope; low confidence and unrelated layers remain rejected.</summary>
     [Theory]
     [InlineData(-947.53906, 2222.0996, .992757, .751167, "MapBack_2", true)]

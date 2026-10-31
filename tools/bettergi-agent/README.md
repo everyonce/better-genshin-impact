@@ -494,6 +494,10 @@ Official upstreams: [GameScaling](https://github.com/THUSI-Lab/GameScaling), [Op
 
 ## Bounded navigation qualification
 
+R61 adds `--navigation-profile mondstadt-combat-scout-v1` for the separate local area X [-1350, -980], Y [2050, 2480], centered at (-1165, 2265). It retains the existing confidence thresholds and heading anchors. A fixed route must use its exact assigned profile; this does not widen the old patrol or surface scopes. `survey_surface_camera.py` accepts the same explicit profile for camera-only observation in that area.
+
+`--native-combat-observation` negotiates optional native health-color, fill-estimate and red-bar metadata on the existing authenticated stream. It is available directly in `stream_client.py` and through `run_rdp_patrol.py`, and can accompany input-disabled `--combat-shadow`. It does not enable input. Each `combatEvidence` block is bound to the exact source frame; malformed joins stop the client. A pending first capture may have no block. Unknown health and overloaded candidate sets remain explicit. Color components do not verify a hostile or a kill. See the [contract and measured CPU cost](../../Docs/research/BetterGI-Native-Combat-Observation-2026-10-31.md).
+
 `--hybrid-observe` runs the full resident navigation loop with both client and native input disabled. It rejects an input-enabled native lease. Admission and each walking leg have a 35-second wall-clock deadline checked before wait paths, including missing frames, unqualified poses and pauses. A terminal timeout remains a failed gameplay run even when it is the expected outcome of a stop qualification.
 
 `--navigation-profile mondstadt-surface-hybrid-v1` requires R60's explicitly advertised capability. It permits only `City_102` and `MapBack_2`, within world X [-1100, -820] and Y [2100, 2350], retaining the 0.99 position and 0.2 yaw thresholds. The city-only profile remains the default. Surface routes require this profile; old patrols cannot silently inherit it. The coordinator must qualify fresh live coordinates and route consistency before enabling movement, and retain its original owner binding and stop/thermal limits.

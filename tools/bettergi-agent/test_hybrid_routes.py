@@ -32,7 +32,9 @@ class HybridRouteTests(unittest.TestCase):
         for route in SURVEY_ROUTES:
             for trigger in ('stationaryForward','climbDrop'):
                 with self.subTest(route=route,trigger=trigger):
-                    nav=HybridNavigation(capability(),route)
+                    from navigation_profiles import required_profile
+                    from test_navigation_profiles import route_capability
+                    nav=HybridNavigation(route_capability(route),route,navigation_profile=required_profile(route))
                     with self.assertRaisesRegex(RuntimeError,'survey_obstacle_requires_inspection'):
                         nav._begin_recovery(trigger)
                     self.assertEqual(nav.phase,'failed')

@@ -11,7 +11,7 @@ import time
 
 from hybrid_routes import camera_correction
 from map_owner import load_map_owner
-from navigation_profiles import SURFACE_PROFILE, allows_pose_scope, validate_capability
+from navigation_profiles import SURFACE_PROFILE, SCOUT_PROFILE, allows_pose_scope, validate_capability
 from observation_profiles import P2P_NATIVE
 from probe_camera_response import Experiment, require, stable
 from resident_runtime import atomic_json, control_module, verify_bridge_identity
@@ -105,7 +105,7 @@ class SurveyGuard:
         require(not self.thread.is_alive(), 'GPU telemetry worker did not retire')
 
 
-def scene_anchor(scene, owner):
+def scene_anchor(scene, owner, profile=SURFACE_PROFILE):
     """Require an input-disabled native scene from the same sealed owner before live admission."""
     result = json.loads((scene/'result.json').read_bytes())
     require(result.get('status') == 'completed' and result.get('inputEnabled') is False
@@ -113,14 +113,16 @@ def scene_anchor(scene, owner):
             and json.loads((scene/'plan.json').read_bytes()).get('owner') == owner,
             'Expected a completed native scene from the original idle owner')
     poses = [r['navigationPose'] for r in result['observations'] if (r.get('navigationPose') or {}).get('state') == 'valid']
-    require(bool(poses) and allows_pose_scope(poses[-1], SURFACE_PROFILE), 'Scene lacks a scoped native position')
+    require(profile in (SURFACE_PROFILE,SCOUT_PROFILE) and bool(poses) and allows_pose_scope(poses[-1], profile),
+            'Scene lacks a scoped native position')
     return poses[-1]['x'], poses[-1]['y']
 
 
 def run(args, folder, report):
     """Use one authenticated child lease, one heading, pure horizontal pulses and an unconditional owned stop."""
     owner = load_map_owner(args.owner_lineage)
-    anchor = scene_anchor(args.anchor_scene, owner)
+    profile = getattr(args,'navigation_profile',SURFACE_PROFILE)
+    anchor = scene_anchor(args.anchor_scene, owner, profile)
     lifecycle = control_module()
     root, child = ready_session(lifecycle)
     report.update(owner=owner, anchorPosition=anchor, requestedHeading=args.heading,
@@ -141,10 +143,10 @@ def run(args, folder, report):
         report['hello'] = hello
         require(hello.get('inputEnabled') is True and hello.get('supportsStartBeforeMs') is True
                 and hello.get('supportsRelease') is True, 'Camera timing capabilities are missing')
-        config, payload = bridge.request('enableNavigationGuidance', navigationProfile=SURFACE_PROFILE)
+        config, payload = bridge.request('enableNavigationGuidance', navigationProfile=profile)
         require(config.get('enabled') is True and not payload, 'Surface guidance was not enabled')
-        validate_capability(config['capability'], SURFACE_PROFILE)
-        trial = Experiment(bridge, report, station=anchor, profile=SURFACE_PROFILE, seconds=35, stop_check=guard.check)
+        validate_capability(config['capability'], profile)
+        trial = Experiment(bridge, report, station=anchor, profile=profile, seconds=35, stop_check=guard.check)
         trial.collect(config)
         turn_to(trial, args.heading)
         guard.check()
@@ -179,6 +181,7 @@ def main():
     parser.add_argument('--owner-lineage', type=Path, required=True)
     parser.add_argument('--anchor-scene', type=Path, required=True)
     parser.add_argument('--heading', type=float, required=True)
+    parser.add_argument('--navigation-profile', choices=(SURFACE_PROFILE,SCOUT_PROFILE),default=SURFACE_PROFILE)
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     live = (ROOT/'artifacts/live').resolve()
@@ -202,7 +205,7 @@ def main():
                   gpuSamples=[], sourceFiles=sources, movementAllowed=False, attacksAllowed=False,
                   physicalInputDeliveryVerified=False, split='diagnostic', fitPerformed=False,
                   stopTemperatureC=STOP_C, maximumSeconds=35, actionHoldMs=100, sourceFreshnessMs=150,
-                  stopFile=str(folder/'STOP'), navigationProfile=SURFACE_PROFILE)
+                  stopFile=str(folder/'STOP'), navigationProfile=args.navigation_profile)
     atomic_json(folder/'result.json', report)
     print(json.dumps(dict(evidenceDirectory=str(folder), stopFile=str(folder/'STOP'))), flush=True)
     try:

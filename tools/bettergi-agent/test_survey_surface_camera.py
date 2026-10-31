@@ -42,6 +42,16 @@ class SurfaceCameraTests(unittest.TestCase):
         row['navigationPose']['x'] = -1100.01
         self.assertFalse(probe.qualified(row, SURFACE_PROFILE))
 
+    def test_scouting_pose_requires_its_separate_explicit_camera_scope(self):
+        from navigation_profiles import SCOUT_PROFILE
+        row,_=self.bridge.request('frame')
+        row.update(clientReceivedNs=time.perf_counter_ns(),transportRoundTripMs=0,frameQuality='usable')
+        row['navigationPose'].update(x=-1165,y=2265)
+        self.assertFalse(probe.qualified(row,SURFACE_PROFILE))
+        self.assertTrue(probe.qualified(row,SCOUT_PROFILE))
+        row['navigationPose']['x']=-1350.01
+        self.assertFalse(probe.qualified(row,SCOUT_PROFILE))
+
     def test_measured_slow_response_reaches_north_without_twelve_tiny_corrections(self):
         self.bridge.yaw, self.bridge.sensitivity = 19.5, .1
         survey.turn_to(self.trial(), 270)

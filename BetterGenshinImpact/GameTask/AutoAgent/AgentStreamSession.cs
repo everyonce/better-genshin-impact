@@ -83,6 +83,8 @@ public sealed class AgentStreamSession
     private bool _queuedEnableAttempted;
     /// <summary>Explicit same-owner opt-in to read-only native pose metadata; ordinary streams keep their existing capture cost.</summary>
     private bool _navigationGuidanceEnabled;
+    /// <summary>Optional same-image HUD analysis; ordinary streams do not pay its native pixel-processing cost.</summary>
+    private bool _combatObservationEnabled;
     /// <summary>Published before the enable flag and immutable once the capture thread may construct its recognizer.</summary>
     private string _navigationProfileId = AgentNavigationProfile.Courtyard;
     /// <summary>Explicit one-shot UI authority; ordinary actions always use the original world guard.</summary>
@@ -219,6 +221,8 @@ public sealed class AgentStreamSession
             // Inspect these same native pixels after the safety gate; never take another capture for motion hints.
             var motion = AgentMotionRecognizer.Recognize(source, readiness.Ready);
             var navigationPose = navigation?.Recognize(source, observation, readiness, motion);
+            var combatEvidence = Volatile.Read(ref _combatObservationEnabled)
+                ? AgentCombatRecognizer.Recognize(source, observation, readiness.Ready) : null;
             if (_mapInspection?.Pending == true)
                 _mapInspection.Observe(source, observation, readiness, motion, navigationPose, ct);
             _snapshots.Observe(source, observation, readiness);
@@ -230,7 +234,7 @@ public sealed class AgentStreamSession
                 next = new CapturedFrame(observation, width, height, bytes, payloadBytes,
                     NowMs - capturedAt, readiness, motion)
                 { ObservationResizeMs = Stopwatch.GetElapsedTime(resizeStarted).TotalMilliseconds,
-                    DesktopDcTiming = captureTiming, NavigationPose = navigationPose };
+                    DesktopDcTiming = captureTiming, NavigationPose = navigationPose, CombatEvidence = combatEvidence };
             }
             catch { ArrayPool<byte>.Shared.Return(bytes); throw; }
             lock (_frameGate)
@@ -426,6 +430,12 @@ public sealed class AgentStreamSession
                     await WriteAsync(pipe, new { type = "navigationGuidance", enabled = true,
                         capability = AgentNavigationRecognizer.GetCapability(navigationProfile) }, null, ct);
                     break;
+                case "enableCombatObservation":
+                    // Evidence-only negotiation does not change either native or client input authorization.
+                    Volatile.Write(ref _combatObservationEnabled, true);
+                    await WriteAsync(pipe, new { type = "combatObservation", enabled = true,
+                        capability = AgentCombatRecognizer.Capability }, null, ct);
+                    break;
                 case "enableStepApplications":
                     JObject confirmation;
                     try
@@ -466,6 +476,7 @@ public sealed class AgentStreamSession
                                 worldReadiness = currentReadiness, frameWorldReadiness = frame.Readiness,
                                 motionEvidence = MotionForReadiness(frame.MotionEvidence, frame.Readiness, currentReadiness),
                                 navigationPose = frame.NavigationPose,
+                                combatEvidence = frame.CombatEvidence,
                                 frame.Observation.SourceFrame,
                                 sourceTimestampKind = frame.Observation.SourceFrame is null ? "unknown" : "wgc_reported_compositor_qpc",
                                 sourceFrameAgeMs = frame.Observation.SourceFrame is { } sourceTiming
@@ -585,7 +596,9 @@ public sealed class AgentStreamSession
             freshnessClockKinds = new[] { "reported_compositor_qpc", "first_acquisition_qpc" }, measuresGameRenderAge = false },
         supportsReadinessSnapshots = true, diagnostics = _snapshots.Snapshot(),
         navigationGuidance = AgentNavigationRecognizer.Capability,
-        navigationProfiles = new[] { AgentNavigationProfile.Courtyard, AgentNavigationProfile.MondstadtSurface },
+        combatObservation = AgentCombatRecognizer.Capability,
+        navigationProfiles = new[] { AgentNavigationProfile.Courtyard, AgentNavigationProfile.MondstadtSurface,
+            AgentNavigationProfile.MondstadtCombatScout },
         worldReadiness = new
         {
             version = 1, requiredForInput = true, method = "paimon_hud_and_modal_templates",
@@ -785,6 +798,8 @@ public sealed class AgentStreamSession
         public AgentMotionEvidence MotionEvidence { get; } = motionEvidence;
         /// <summary>Optional localization from these same native pixels, with no carried-over pose on skipped recognition.</summary>
         public AgentNavigationPose? NavigationPose { get; init; }
+        /// <summary>Optional, immutable HUD evidence from this source image, never refreshed independently.</summary>
+        public AgentCombatEvidence? CombatEvidence { get; init; }
         /// <summary>Acquire under the publication lock before reading the buffer.</summary>
         public void Retain() => Interlocked.Increment(ref _references);
         /// <summary>Recycle only after the publication slot and transport have both finished.</summary>

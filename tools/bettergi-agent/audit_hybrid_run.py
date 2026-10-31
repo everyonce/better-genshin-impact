@@ -12,7 +12,7 @@ from hybrid_routes import (COURTYARD_ROUTE, PATROL_STATIONS, STAIR_POST_ROUTE, S
 from observation_timing import observation_timestamp
 from destination_queue_limits import ENDURANCE, STANDARD, queue_limits
 from hybrid_routes import SURFACE_ROUTES
-from navigation_profiles import COURTYARD_PROFILE,SURFACE_PROFILE,validate_capability,allows_pose_scope
+from navigation_profiles import COURTYARD_PROFILE,SURFACE_PROFILE,validate_capability,allows_pose_scope,required_profile
 
 
 def require(condition, message):
@@ -827,9 +827,9 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
     navigation_profile=parts[0]['hybridNavigation'].get('profileId',COURTYARD_PROFILE)
     require(all(part['hybridNavigation'].get('profileId',COURTYARD_PROFILE)==navigation_profile for part in parts),
             'Navigation scope changed within the run')
-    require((route_id in SURFACE_ROUTES)==(navigation_profile==SURFACE_PROFILE),
-            'Surface route and explicit localization scope differ')
-    if navigation_profile==SURFACE_PROFILE:
+    require(required_profile(route_id)==navigation_profile,
+            'Fixed route and explicit localization scope differ')
+    if navigation_profile!=COURTYARD_PROFILE:
         for part in parts:validate_capability(part.get('navigationGuidance') or {},navigation_profile)
         for frame in frames.values():
             pose=frame.get('navigationPose') or {}

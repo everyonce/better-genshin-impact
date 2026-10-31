@@ -16,7 +16,7 @@ from hybrid_routes import (COURTYARD_ROUTE, PATROL_SEGMENTS, PATROL_STATIONS, ST
 
 PROFILE = COURTYARD_ROUTE
 START, END = route_points(COURTYARD_ROUTE)
-from navigation_profiles import validate_capability,allows_pose_scope
+from navigation_profiles import validate_capability,allows_pose_scope,required_profile
 
 
 def yaw_error(a, b):
@@ -39,6 +39,8 @@ class HybridNavigation:
                  itinerary_destinations=None, itinerary_start='stair-front', stationary_photo_retries=False,
                  navigation_profile=PROFILE):
         validate_capability(capability,navigation_profile)
+        if required_profile(route_id)!=navigation_profile:
+            raise ValueError('Fixed route and explicit navigation profile differ')
         self.navigation_profile=navigation_profile
         self.route_id = route_id
         self.start, self.end = route_points(route_id)

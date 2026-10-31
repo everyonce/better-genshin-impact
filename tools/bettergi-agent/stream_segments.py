@@ -74,7 +74,9 @@ class StreamSegments:
         self.early_receipts = deque(maxlen=self.MAX_CONTEXT)
         self.started = time.perf_counter() if now is None else now
         self.next_at = self.started + args.segment_seconds
-        self.counter_base = {key: 0 for key in self.COUNTERS}
+        # Optional metadata counts must be deltas per segment, while the lease retains their absolute total.
+        self.counter_base = {key: 0 for key in self.COUNTERS
+                             + tuple(key for key in ('nativeCombatEvidenceFrames',) if key in report)}
         self.quality_base = {key: 0 for key in report['captureQuality'] if key != 'check'}
         self.context = self._context(None)
         self.recorder = self._new_recorder()
@@ -158,7 +160,7 @@ class StreamSegments:
         for key in self.LISTS:
             if key in report:
                 snapshot[key], report[key] = report[key], []
-        for key in self.COUNTERS:
+        for key in self.counter_base:
             snapshot[key] = report[key] - self.counter_base[key]
             self.counter_base[key] = report[key]
         quality = dict(report['captureQuality'])
@@ -286,6 +288,8 @@ class StreamSegments:
                     'acceptedInputActions': report['acceptedInputActions'], 'framesReceived': report['framesReceived'],
                     'unacknowledgedAction': report.get('unacknowledgedAction', {}).get('requestId'),
                     'endReason': report['endReason'],
+                    **({'nativeCombatEvidenceFrames': report['nativeCombatEvidenceFrames']}
+                       if 'nativeCombatEvidenceFrames' in report else {}),
                     **({'navigationClimbRecovery': copy.deepcopy(report['navigationClimbRecovery']),
                         'unacknowledgedRecoveryAction': report.get('unacknowledgedRecoveryAction', {}).get('requestId')}
                        if 'navigationClimbRecovery' in report else {})}

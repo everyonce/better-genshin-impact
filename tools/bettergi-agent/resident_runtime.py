@@ -368,6 +368,16 @@ def run_resident(args, load_policy, run_episode, *, policy_reuse=None):
     previous_identity = None
     pending_start_identity = None
     try:
+        if policy_reuse is not None:
+            from scout_encounter_guard import ScoutEncounterGuard,validate_binding
+            guard_binding=validate_binding(policy_reuse.get('scoutEncounterGuard'))
+            if (getattr(args,'scout_encounter_guard',None)!=guard_binding
+                    or not getattr(args,'native_combat_observation',False)
+                    or getattr(args,'navigation_profile',None)!='mondstadt-combat-scout-v1'
+                    or args.max_observation_age_ms!=150 or args.action_hold_ms!=100 or args.seconds>35):
+                raise ValueError('Cached scout requires its unchanged reviewed encounter guard and limits')
+            control.scout_encounter_guard=ScoutEncounterGuard(guard_binding)
+            summary['scoutEncounterGuard']=guard_binding
         control.publish(state='loading', inputRequested=args.enable_input)
         loading_started = time.monotonic()
         # The Windows monotonic clock used for deadlines may be too coarse for a cached acquisition.
@@ -502,6 +512,13 @@ def run_resident(args, load_policy, run_episode, *, policy_reuse=None):
                 episode_error = error
                 segment['error'] = str(error)
                 segment['exitCode'] = 1
+            if policy_reuse is not None and episode_error is None and not segment['exitCode']:
+                # A returned success cannot bypass the sensor gate, including an early/empty lease.
+                guard_state=control.scout_encounter_guard.snapshot()
+                if not guard_state['admitted'] or guard_state['trip'] is not None:
+                    from scout_encounter_guard import ScoutEncounterStop
+                    episode_error=ScoutEncounterStop('Scout encounter guard did not complete a healthy admitted lease')
+                    segment.update(error=str(episode_error),exitCode=1)
             if lease is None and Path(segment_args.lease_output).exists():
                 lease = json.loads(Path(segment_args.lease_output).read_text(encoding='utf-8'))
             if lease is not None:
@@ -538,7 +555,7 @@ def run_resident(args, load_policy, run_episode, *, policy_reuse=None):
                 summary['recordedBytes'] += sum(path.stat().st_size for path in Path(segment_args.record_dir).iterdir()
                                                 if path.is_file())
             atomic_json(output, summary)
-            if episode_error is not None and not is_transport_failure(episode_error):
+            if episode_error is not None and (policy_reuse is not None or not is_transport_failure(episode_error)):
                 raise episode_error
             lease_failed = (segment['exitCode'] or (lease is not None and
                 (lease.get('status') == 'failed' or any(part.get('exitCode') for part in lease['segments']))))
@@ -569,6 +586,10 @@ def run_resident(args, load_policy, run_episode, *, policy_reuse=None):
         summary.update(status='failed', error=str(error), endReason='error')
         raise
     finally:
+        if getattr(control,'scout_encounter_guard',None) is not None:
+            summary['scoutEncounterGuardState']=control.scout_encounter_guard.snapshot()
+            if hasattr(control,'scout_encounter_guard_release'):
+                summary['scoutEncounterGuardRelease']=copy.deepcopy(control.scout_encounter_guard_release)
         summary.update(control.goal_state(), goalChanges=control.goal_events())
         if summary['goalError']:
             summary.update(status='failed', error=summary['goalError'])

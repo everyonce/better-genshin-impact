@@ -809,6 +809,9 @@ class CachedPolicyAuditTests(unittest.TestCase):
             session['reviewedScoutRoutePolicy']=reviewed_route_policy()
         source=session_dir/'policy-proof.json'
         source_sha=cls.write(source,session)
+        cls.write(session_dir/'manifest.json',dict(version=1,sessionId=session['sessionId'],owner=owner,worker=worker,
+            configuration=configuration,modelConfigurationSha256=fingerprint,stopTemperatureC=78,
+            sourceFreshnessMs=150,actionHoldMs=100,legDeadlineSeconds=35))
         request=dict(version=1,sessionId='c'*32,requestId='e'*32,modelConfigurationSha256=fingerprint,
             maximumLegs=1,navigationProfile='mondstadt-combat-scout-v1',routeId=SCOUT_GRASS_ROUTE)
         if reviewed_scout_route is not None:
@@ -849,6 +852,51 @@ class CachedPolicyAuditTests(unittest.TestCase):
             self.assertEqual(verify_policy_reuse(run,path,proof)['runId'],'9'*32)
             proof.unlink()
             with self.assertRaises((ValueError,OSError)):verify_policy_reuse(run,path,proof)
+
+    def test_guard_declaration_cannot_disagree_with_the_original_session_manifest(self):
+        """Removing either declaration cannot downgrade guarded evidence to historical semantics."""
+        from scout_encounter_guard import guard_policy
+        for declared_in in ('manifest','proof'):
+            with self.subTest(declared_in=declared_in),tempfile.TemporaryDirectory() as directory:
+                run={};path=Path(directory).resolve()/'session'/'legs'/('e'*32)/'run.json'
+                proof,reuse=self.proof(path,run)
+                source=Path(reuse['sessionProof'])
+                selected=source.parent/'manifest.json' if declared_in=='manifest' else source
+                document=json.loads(selected.read_bytes());document['scoutEncounterGuardPolicy']=guard_policy()
+                self.write(selected,document)
+                reuse['sessionProofSha256']=hashlib.sha256(source.read_bytes()).hexdigest()
+                run.update(policyReuse=copy.deepcopy(reuse),policyReuseSha256=self.write(proof,reuse))
+                with self.assertRaisesRegex(ValueError,'declaration differs from the original session manifest'):
+                    verify_policy_reuse(run,path,proof)
+
+    def test_historical_reuse_rejects_guard_remnants_anywhere_in_the_original_chain(self):
+        """A terminal trip or release record is never compatible with an undeclared historical guard."""
+        for location in ('manifest','session','request','reuse','run'):
+            for field in ('scoutEncounterGuardState','scoutEncounterGuardRelease'):
+                with self.subTest(location=location,field=field),tempfile.TemporaryDirectory() as directory:
+                    run={};path=Path(directory).resolve()/'session'/'legs'/('e'*32)/'run.json'
+                    proof,reuse=self.proof(path,run);source=Path(reuse['sessionProof'])
+                    manifest_path=source.parent/'manifest.json';request_path=Path(reuse['requestFile'])
+                    manifest=json.loads(manifest_path.read_bytes());session=json.loads(source.read_bytes())
+                    request=json.loads(request_path.read_bytes())
+                    target=dict(manifest=manifest,session=session,request=request,reuse=reuse,run=run)[location]
+                    target[field]=dict(trip=dict(reason='enemyBarCandidate'))
+                    self.write(manifest_path,manifest)
+                    reuse.update(sessionProofSha256=self.write(source,session),requestSha256=self.write(request_path,request))
+                    run.update(policyReuse=copy.deepcopy(reuse),policyReuseSha256=self.write(proof,reuse))
+                    with self.assertRaisesRegex(ValueError,'undeclared encounter guard'):
+                        verify_policy_reuse(run,path,proof)
+
+    def test_original_manifest_is_required_and_bound_even_for_historical_reuse(self):
+        """Historical acceptance still requires the original worker manifest and matching session identity."""
+        for change in ('missing','sessionId','modelConfigurationSha256'):
+            with self.subTest(change=change),tempfile.TemporaryDirectory() as directory:
+                run={};path=Path(directory).resolve()/'session'/'legs'/('e'*32)/'run.json'
+                proof,reuse=self.proof(path,run);manifest=Path(reuse['sessionProof']).parent/'manifest.json'
+                if change=='missing':manifest.unlink()
+                else:
+                    document=json.loads(manifest.read_bytes());document[change]='changed';self.write(manifest,document)
+                with self.assertRaises((ValueError,OSError)):verify_policy_reuse(run,path,proof)
 
     @classmethod
     def reseal_request(cls, run, proof_path, reuse, request):

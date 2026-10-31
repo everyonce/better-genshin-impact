@@ -28,15 +28,17 @@ from map_owner import load_map_owner
 from navigation_profiles import SCOUT_PROFILE, allows_pose_scope, required_profile
 from run_patrol_series import SeriesGuard
 from reviewed_scout_route import ReviewedScoutRoute,reviewed_route_policy
+from scout_encounter_guard import binding_from_review,guard_policy
+from episode_split import reserve_split
 
 
 ROOT = Path(__file__).resolve().parents[2]
 LIVE = ROOT/'artifacts/live'
 PER_LEG_FIELDS = frozenset(('pipe','output','record_dir','control_file','seconds','segment_seconds',
-    'record_max_mib','patrol_series_binding','hybrid_route','navigation_profile','reviewed_scout_route'))
+    'record_max_mib','patrol_series_binding','hybrid_route','navigation_profile','reviewed_scout_route','scout_encounter_guard'))
 REQUEST_FIELDS = frozenset(('version','sessionId','requestId','afterRequestId','routeId','navigationProfile',
     'maximumLegs','modelConfigurationSha256','reviewFile','reviewSha256','nativePlanSha256',
-    'nativeResultSha256','imageSha256','imageMetadataSha256'))
+    'nativeResultSha256','imageSha256','imageMetadataSha256','scoutEncounterGuard'))
 
 
 def require(value, message):
@@ -326,7 +328,8 @@ def review_evidence(path, manifest, after_ns):
     require(min((endpoint/'result.json').stat().st_mtime_ns,image.with_suffix('.json').stat().st_mtime_ns)>=after_ns,
             'A fresh native scene is required after the previous leg or worker startup')
     evidence=dict(routeId=route,reviewSha256=review_sha,nativePlanSha256=plan_sha,nativeResultSha256=result_sha,
-                  imageSha256=review['imageSha256'],imageMetadataSha256=metadata_sha)
+                  imageSha256=review['imageSha256'],imageMetadataSha256=metadata_sha,
+                  scoutEncounterGuard=binding_from_review(review,review_sha))
     if spec is not None:evidence.update(routeSpec=spec.document(),routeSpecSha256=spec.sha256)
     return evidence
 
@@ -352,6 +355,7 @@ def submit(directory, review):
     """Publish one explicit immutable request; this function never generates another destination."""
     directory=live_path(directory)
     manifest,_=read_json(directory/'manifest.json')
+    require(manifest.get('scoutEncounterGuardPolicy')==guard_policy(),'This worker lacks the fixed scout encounter guard')
     state,_=read_json(directory/'session.json')
     require(state.get('sessionId')==manifest['sessionId'] and state.get('state')=='awaitingReview'
             and not (directory/'STOP').exists(),'The scout worker is not waiting for a reviewed request')
@@ -396,6 +400,11 @@ def account_leg(row, terminal_state=None, reason=None):
         require(type(size) is int and size>=0,'Resident recording byte accounting is unavailable')
         row['recordedBytes']=size
         require(report.get('status') in ('completed','failed'),'Resident manifest did not reach a terminal state')
+        # Scout experiments are diagnostic, including failures; reserve before
+        # another request can use their recordings or terminal accounting.
+        split=reserve_split(Path(row['directory']),report['runId'],'diagnostic')
+        require(split['sourceManifestSha256']==digest,'Scout split reservation differs from terminal evidence')
+        row['datasetSplit']='diagnostic'
         if row['state']!='verified' and report['status']=='failed':row['state']='failed'
         row.pop('accountingError',None)
     except (OSError,ValueError,TypeError,AttributeError) as error:
@@ -430,7 +439,8 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
     manifest=dict(version=1,sessionId=session_id,owner=owner,worker=dict(processId=os.getpid(),windowsSessionId=owner['child']['windowsSessionId']),
         routes={route:[list(point) for point in route_points(route)] for route in routes},
         modelConfigurationSha256=canonical_sha(configuration),configuration=configuration,
-        stopTemperatureC=78,sourceFreshnessMs=150,actionHoldMs=100,legDeadlineSeconds=35,sessionSeconds=settings.seconds)
+        stopTemperatureC=78,sourceFreshnessMs=150,actionHoldMs=100,legDeadlineSeconds=35,sessionSeconds=settings.seconds,
+        scoutEncounterGuardPolicy=guard_policy())
     if getattr(settings,'allow_reviewed_routes',False):manifest['reviewedScoutRoutePolicy']=reviewed_route_policy()
     runtime.atomic_json(directory/'manifest.json',manifest)
     state=dict(version=1,sessionId=session_id,state='loading',modelLoads=0,modelLoadSeconds=0.0,
@@ -466,7 +476,8 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
         watch.check()
         proof=dict(version=1,kind='scout-policy-session',sessionId=session_id,worker=manifest['worker'],owner=owner,
                    modelConfigurationSha256=manifest['modelConfigurationSha256'],configuration=configuration,
-                   checkpointSha256=OPEN_P2P_SHA256,modelLoads=1,modelLoadSeconds=state['modelLoadSeconds'])
+                   checkpointSha256=OPEN_P2P_SHA256,modelLoads=1,modelLoadSeconds=state['modelLoadSeconds'],
+                   scoutEncounterGuardPolicy=guard_policy())
         if 'reviewedScoutRoutePolicy' in manifest:proof['reviewedScoutRoutePolicy']=manifest['reviewedScoutRoutePolicy']
         runtime.atomic_json(directory/'policy-proof.json',proof)
         proof_sha=file_sha(directory/'policy-proof.json')
@@ -494,6 +505,7 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
             folder.mkdir(parents=True,exist_ok=False)
             spec=ReviewedScoutRoute.from_document(request['routeSpec']) if 'routeSpec' in request else None
             args=leg_arguments(settings,owner,request['routeId'],folder,watch.binding(),remaining,spec)
+            args.scout_encounter_guard=copy.deepcopy(request['scoutEncounterGuard'])
             verify_configuration(args)
             watch.check()
             require(not getattr(policy,'_pending_feedback',False),'Previous model action history is unresolved')
@@ -505,7 +517,8 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
             reuse=dict(version=1,sessionId=session_id,worker=manifest['worker'],owner=owner,
                 modelConfigurationSha256=manifest['modelConfigurationSha256'],sessionProof=str(directory/'policy-proof.json'),
                 sessionProofSha256=proof_sha,requestId=request['requestId'],requestFile=str(path),requestSha256=request_sha,
-                routeId=request['routeId'],navigationProfile=SCOUT_PROFILE)
+                routeId=request['routeId'],navigationProfile=SCOUT_PROFILE,
+                scoutEncounterGuard=copy.deepcopy(request['scoutEncounterGuard']))
             if spec is not None:reuse.update(routeSpec=spec.document(),routeSpecSha256=spec.sha256)
 
             def cached(current):
@@ -513,6 +526,7 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
                 verify_configuration(current)
                 require(current.hybrid_route==request['routeId'],'Cached policy belongs to another reviewed route')
                 require(getattr(current,'reviewed_scout_route',None)==spec,'Cached policy geometry differs from its reviewed request')
+                require(current.scout_encounter_guard==request['scoutEncounterGuard'],'Cached scout health guard differs from its reviewed request')
                 watch.check()
                 return policy
 

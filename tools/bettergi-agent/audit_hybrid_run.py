@@ -151,6 +151,17 @@ def verify_scout_review(request, owner, points, spec=None):
     require(selected['sourceFrame']['captureEpoch']==samples[0]['sourceFrame']['captureEpoch']
             and selected['frameWorldReadiness'].get('epoch')==samples[0]['frameWorldReadiness'].get('epoch'),
             'Reviewed PNG belongs to another source/world epoch')
+    return review
+
+
+def has_scout_guard_evidence(value):
+    """Find guard fields or journal markers at any retained level without reinterpreting old HUD evidence."""
+    if isinstance(value,dict):
+        return (any(key.startswith('scoutEncounterGuard') or key=='scout_encounter_guard' for key in value)
+                or any(isinstance(value.get(key),str) and value[key].startswith('scoutEncounterGuard')
+                       for key in ('type','endReason'))
+                or any(has_scout_guard_evidence(item) for item in value.values()))
+    return isinstance(value,list) and any(has_scout_guard_evidence(item) for item in value)
 
 
 def verify_policy_reuse(run, run_path, proof_path):
@@ -187,6 +198,13 @@ def verify_policy_reuse(run, run_path, proof_path):
     require(isinstance(configuration,dict) and fingerprint==session.get('modelConfigurationSha256')==reuse.get('modelConfigurationSha256')
             and session.get('checkpointSha256')==configuration.get('checkpointSha256')==OPEN_P2P_SHA256,
             'Cached model configuration or Open P2P checkpoint changed')
+    # The original manifest decides whether this was a guarded worker. Removing a derived
+    # proof declaration must never select historical semantics for a newer guarded run.
+    manifest,_=document(source.parent/'manifest.json')
+    require(manifest.get('sessionId')==session['sessionId'] and manifest.get('modelConfigurationSha256')==fingerprint,
+            'Original scout manifest belongs to another policy session')
+    require(('scoutEncounterGuardPolicy' in session)==('scoutEncounterGuardPolicy' in manifest),
+            'Scout encounter guard declaration differs from the original session manifest')
     settings=configuration.get('arguments') or {}
     require(settings.get('model')=='open-p2p' and settings.get('history')==41 and settings.get('cuda_graph') is True
             and settings.get('p2p_fast_start') is True and settings.get('goal_intent')=='ground-navigation'
@@ -222,8 +240,102 @@ def verify_policy_reuse(run, run_path, proof_path):
     else:
         require('routeSpecSha256' not in reuse and 'routeSpecSha256' not in request,'Geometry digest has no explicit specification')
         require(required_profile(request['routeId'])==SCOUT_PROFILE,'Cached fixed route changed scout scope')
-    verify_scout_review(request,owner,spec.points if spec is not None else route_points(request['routeId']),spec)
+    review=verify_scout_review(request,owner,spec.points if spec is not None else route_points(request['routeId']),spec)
+    if 'scoutEncounterGuardPolicy' in session:
+        from scout_encounter_guard import binding_from_review,guard_policy,validate_binding
+        expected=binding_from_review(review,request['reviewSha256'])
+        require(session['scoutEncounterGuardPolicy']==guard_policy()==manifest.get('scoutEncounterGuardPolicy')
+                and manifest.get('stopTemperatureC')==78 and manifest.get('sourceFreshnessMs')==150
+                and manifest.get('actionHoldMs')==100 and manifest.get('legDeadlineSeconds')==35
+                and settings.get('native_combat_observation') is True,
+                'Scout encounter guard session policy or unchanged limits differ')
+        require(all(validate_binding(value.get('scoutEncounterGuard'))==expected for value in (request,reuse,run)),
+                'Scout encounter guard baseline differs from the original review')
+    else:
+        # Old recordings retain their original unguarded semantics; never infer a guard retroactively.
+        require(not any(has_scout_guard_evidence(value) for value in (manifest,session,request,reuse,run)),
+                'Historical scout evidence retains an undeclared encounter guard')
     return reuse
+
+
+def verify_scout_guard(run, parts, frames, entries, recordings, reuse):
+    """Replay guarded sensor intake independently and join every accepted dispatch to its latest safe poll."""
+    binding=reuse.get('scoutEncounterGuard') if reuse else None
+    if binding is None:
+        require(not any(has_scout_guard_evidence(value) for value in (run,reuse,parts,list(frames.values()))),
+                'Historical scout evidence retains an undeclared encounter guard')
+        for entry in entries:
+            journal=Path(recordings)/f"{entry['number']:05d}"/'events.jsonl'
+            # Early clean recordings did not require this journal. When retained, its
+            # guard namespace cannot disappear merely by stripping report declarations.
+            if journal.is_file():
+                with journal.open(encoding='utf-8') as stream:
+                    for line in stream:
+                        require(not has_scout_guard_evidence(json.loads(line)),
+                                'Historical scout journal retains an undeclared encounter guard')
+        return None
+    from scout_encounter_guard import ScoutEncounterGuard,sensor_frame,validate_binding
+    guard=ScoutEncounterGuard(binding)
+    observations=[]
+    dispatches={}
+    first_frames={}
+    previous_ns=-1
+    for entry,part in zip(entries,parts):
+        require(validate_binding(part.get('scoutEncounterGuard'))==binding,'Segment scout guard binding changed')
+        with (Path(recordings)/f"{entry['number']:05d}"/'events.jsonl').open(encoding='utf-8') as stream:
+            for line in stream:
+                event=json.loads(line)
+                if event.get('type')=='scoutEncounterGuardRelease':
+                    at=event.get('clientTimeNs')
+                    require(type(at) is int and at>=previous_ns,'Scout release clock crossed intake or dispatch')
+                    require(guard.acknowledge_release(event.get('response'),event.get('payloadBytes'),at,event.get('reason'))==event,
+                            'Scout release acknowledgement or disarm transition changed')
+                    previous_ns=at
+                    continue
+                if event.get('type')=='scoutEncounterGuardDispatch':
+                    marker=event.get('marker') or {}
+                    at=marker.get('clientDispatchNs')
+                    request_id=event.get('requestId')
+                    require(type(at) is int and at>=previous_ns and isinstance(request_id,str)
+                            and request_id not in dispatches,'Scout dispatch journal identity or clock changed')
+                    require(guard.check_dispatch(event.get('frame') or {},at)==marker
+                            and event.get('state')==guard.snapshot(),'Scout dispatch gate differs from sensor replay')
+                    dispatches[request_id]=event
+                    previous_ns=at
+                    continue
+                if event.get('type')!='scoutEncounterGuardObservation':continue
+                at=event.get('clientReceivedNs')
+                require(type(at) is int and at>previous_ns,'Scout guard intake clock did not advance')
+                replay=guard.observe(event.get('frame') or {},at)
+                require(replay==event,'Scout guard journal changed its source, evidence, or decision')
+                require(guard.trip is None,'Scout encounter/health stop cannot prove a completed route')
+                observations.append(event)
+                previous_ns=at
+                frame=event['frame']
+                if frame.get('type')=='frame':first_frames.setdefault(frame['frameId'],frame)
+        require(part.get('scoutEncounterGuardState')==guard.snapshot(),'Segment scout guard state differs from intake replay')
+    require(guard.admitted and observations and run.get('scoutEncounterGuardState')==guard.snapshot(),
+            'Resident scout guard admission or final state is missing')
+    require(set(first_frames)==set(frames) and all(first_frames[key]==sensor_frame(frame) for key,frame in frames.items()),
+            'Scout guard sources differ from the original retained native observations')
+    for decision in (decision for part in parts
+                     for decision in part.get('decisions',[])+part.get('navigationClimbActions',[])):
+        if decision.get('acceptance',{}).get('type')!='accepted':continue
+        marker=decision.get('scoutEncounterGuard') or {}
+        dispatched=dispatches.get(decision['acceptance'].get('requestId')) or {}
+        index=marker.get('observationIndex')
+        require(type(index) is int and 1<=index<=len(observations),'Accepted scout action lacks its guard intake boundary')
+        event=observations[index-1]
+        at=marker.get('clientDispatchNs')
+        require(marker==dispatched.get('marker') and dispatched.get('frame')==sensor_frame(frames[decision['frameId']])
+                and marker.get('bindingSha256')==guard.sha256 and marker.get('frameId')==decision['frameId']
+                and event['state']['state']=='ready' and event['state']['trip'] is None
+                and marker.get('latestFrameId')==event['state']['lastObservation']['frame']['frameId']
+                and type(at) is int and event['clientReceivedNs']<=at
+                and (index==len(observations) or at<observations[index]['clientReceivedNs']),
+                'Scout dispatch crossed a newer sensor intake or changed its guard binding')
+    return dict(bindingSha256=guard.sha256,observations=len(observations),distinctSources=guard.distinct_sources,
+                releases=guard.releases)
 
 
 # Derive the expected sequence independently of the planner's leg-advance logic.
@@ -1027,6 +1139,7 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
                 require(row['frameId'] not in frames, 'Duplicate original frame identity')
                 frames[row['frameId']] = row
     require(bool(parts), 'No recorded segments')
+    verify_scout_guard(run,parts,frames,run['segments'],recordings,reuse)
     lease = tuple(parts[0]['hello'][k] for k in ('sessionId', 'ownerEpoch'))
     require(all(tuple(p['hello'][k] for k in ('sessionId', 'ownerEpoch')) == lease for p in parts),
             'More than one controller lease was used')

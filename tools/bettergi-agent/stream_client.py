@@ -859,6 +859,28 @@ def validate_navigation_climb_options(args):
         raise ValueError('navigation-climb-recovery currently requires execution-context off')
 
 
+def scout_release(bridge, guard, report, recorder, reason):
+    """Serialize the native release and guard disarm with intake, retaining the exact acknowledgement."""
+    with (guard.intake_lock if guard is not None else nullcontext()):
+        reply,payload=bridge.request('release')
+        if guard is not None:
+            event=guard.acknowledge_release(reply,len(payload),time.perf_counter_ns(),reason)
+            report['scoutEncounterGuardState']=event['state']
+            if recorder:recorder.event(event)
+        return reply,payload
+
+
+def scout_dispatch(guard, report, recorder, frame, request_id):
+    """Record the final source-bound gate for either a model/navigation action or an existing X recovery."""
+    from scout_encounter_guard import sensor_frame
+    marker=guard.check_dispatch(frame,time.perf_counter_ns())
+    report['scoutEncounterGuardState']=guard.snapshot()
+    if recorder:
+        recorder.event(dict(type='scoutEncounterGuardDispatch',requestId=request_id,marker=copy.deepcopy(marker),
+                            frame=sensor_frame(frame),state=report['scoutEncounterGuardState']))
+    return marker
+
+
 class ClimbRecoveryStream:
     """Serial integration of pure recovery intents with the existing standard bridge.
 
@@ -886,6 +908,7 @@ class ClimbRecoveryStream:
         self.bridge, self.handle, self.hello = bridge, bridge.handle, bridge.hello
         self.hello_value = copy.deepcopy(bridge.hello)
         self.control, self.report, self.recorder = control, report, recorder
+        self.scout_guard = getattr(control,'scout_encounter_guard',None)
         self.collect, self.reset, self.clear, self.released = collect, reset, clear, released
         self.drop_resumed = drop_resumed
         self.warm = None
@@ -947,7 +970,7 @@ class ClimbRecoveryStream:
                     raise RuntimeError('Reader did not retire; skip another pipe request and close the original handle')
                 if not self.identity_matches():
                     raise RuntimeError('Original bridge changed; release not sent through substituted connection')
-                reply, payload = self.bridge.request('release')
+                reply, payload = scout_release(self.bridge,self.scout_guard,self.report,self.recorder,'climbFailureCleanup')
                 self.collect(reply)
                 if payload or reply.get('type') != 'released':
                     raise RuntimeError('Recovery cleanup release was not acknowledged')
@@ -961,6 +984,9 @@ class ClimbRecoveryStream:
 
     def check_control(self):
         """Run before goal mutation or generic pause handling can release a pending X."""
+        if self.scout_guard is not None and self.scout_guard.snapshot()['trip'] is not None:
+            from scout_encounter_guard import ScoutEncounterStop
+            raise ScoutEncounterStop('Scout encounter guard: '+self.scout_guard.snapshot()['trip']['reason'])
         if not self.identity_matches():
             raise self.terminate('connection_identity_changed')
         if self.helper.blocks_model and self.token is not None and self.control.prediction_token() != self.token:
@@ -975,7 +1001,7 @@ class ClimbRecoveryStream:
                 raise self.terminate(event['reason'])
             self.check_control()
             if kind == 'release':
-                reply, payload = self.bridge.request('release')
+                reply, payload = scout_release(self.bridge,self.scout_guard,self.report,self.recorder,'climbRecovery')
                 self.record(dict(kind='release_returned', origin=event['origin'], attempt=event['attempt'],
                                  response=copy.deepcopy(reply), payloadBytes=len(payload)))
                 self.collect(reply)
@@ -999,10 +1025,15 @@ class ClimbRecoveryStream:
                 continue
             if kind == 'action':
                 arguments = event['arguments']
+                guard_marker = None
                 def submit_recovery():
                     """Only evidence retention and owned bridge I/O; never re-enter control methods."""
-                    return transmit_bound_action(self.bridge, self.warm, self.report, arguments,
-                                                 'unacknowledgedRecoveryAction', copy.deepcopy(arguments))
+                    nonlocal guard_marker
+                    with (self.scout_guard.intake_lock if self.scout_guard is not None else nullcontext()):
+                        if self.scout_guard is not None:
+                            guard_marker=scout_dispatch(self.scout_guard,self.report,self.recorder,frame,arguments['requestId'])
+                        return transmit_bound_action(self.bridge, self.warm, self.report, arguments,
+                                                     'unacknowledgedRecoveryAction', copy.deepcopy(arguments))
                 # The monitor cannot change the token between this final check and the write.
                 # Interpret/refuse/clean up only after the plain control lock is released.
                 submitted, result = self.control.guarded_submit(self.token, submit_recovery)
@@ -1018,6 +1049,7 @@ class ClimbRecoveryStream:
                            frameId=arguments['frameId'], requestId=arguments['requestId'],
                            arguments=copy.deepcopy(arguments), acceptance=copy.deepcopy(reply),
                            controlToken=self.token, modelHistoryCommitted=False)
+                if guard_marker is not None:row['scoutEncounterGuard']=guard_marker
                 if self.warm:
                     row['warmRequestId'] = self.warm.current['id']
                     if reply.get('type') == 'accepted':
@@ -1041,6 +1073,10 @@ class ClimbRecoveryStream:
         was_blocked = self.helper.blocks_model
         try:
             self.check_control()
+            if self.scout_guard is not None and self.scout_guard.snapshot()['state']!='ready':
+                # An explicit release may temporarily invalidate HUD recognition. Wait for
+                # reconfirmation without consuming an X intent or extending any deadline.
+                return True
             if dropped_receipts:
                 raise self.terminate('receipt_loss')
             for receipt in receipts:
@@ -1486,6 +1522,9 @@ def run_episode(args, policy=None, control=None):
     hybrid_observe = validate_hybrid_observe_options(args)
     navigation_profile = validate_navigation_scope_options(args)
     native_combat_enabled = getattr(args,'native_combat_observation',False)
+    scout_guard = getattr(control,'scout_encounter_guard',None)
+    if getattr(args,'scout_encounter_guard',None) is not None and scout_guard is None:
+        raise ValueError('Scout encounter guard requires the reviewed resident owner')
     combat_observer = None
     if getattr(args,'combat_shadow',False):
         from combat_observer import CombatObserver,validate_shadow_options
@@ -1497,6 +1536,8 @@ def run_episode(args, policy=None, control=None):
         from PIL import Image
     bridge = Bridge(args.pipe)
     try:
+        if scout_guard is not None and (not native_combat_enabled or bridge.hello.get('supportsRelease') is not True):
+            raise ValueError('Scout encounter guard requires native HUD evidence and acknowledged release')
         if hybrid_observe and bridge.hello.get('inputEnabled') is not False:
             raise ValueError('Hybrid observation requires input disabled at the native bridge as well')
         if combat_observer is not None and bridge.hello.get('inputEnabled') is not False:
@@ -1547,6 +1588,9 @@ def run_episode(args, policy=None, control=None):
     if combat_observer is not None:
         report['combatShadow'] = dict(inputAuthority=False,enemyRecognitionQualified=False,
                                     observer='coarse-red-bar-and-health-color-v1',goalEmbedding=args.goal_embedding)
+    if scout_guard is not None:
+        report['scoutEncounterGuard'] = copy.deepcopy(scout_guard.binding)
+        report['scoutEncounterGuardState'] = scout_guard.snapshot()
     if execution_mode != 'off':
         report['executionContext'] = {'mode': execution_mode, 'schema': 'execution-context-v1',
                                       'knowledgeClock': 'client_perf_counter_ns',
@@ -1741,7 +1785,7 @@ def run_episode(args, policy=None, control=None):
             if recorder:
                 recorder.fail('Server dropped execution receipts; this episode has incomplete labels')
 
-    receive_lock = threading.Lock()
+    receive_lock = scout_guard.intake_lock if scout_guard is not None else threading.Lock()
     received_frame_id = None
     recovery_capture_context = None
 
@@ -1760,6 +1804,59 @@ def run_episode(args, policy=None, control=None):
             start = time.perf_counter_ns()
             metadata, pixels = bridge.request('frame')
             arrived = time.perf_counter_ns()
+            if scout_guard is not None:
+                guard_event = scout_guard.observe(metadata, arrived)
+                report['scoutEncounterGuardState'] = guard_event['state']
+                trip = guard_event['state']['trip']
+                if trip:
+                    # Latch and retain the original trigger before recorder, receipt or reader errors.
+                    stopped.set()
+                    report['endReason'] = 'scoutEncounterGuard'
+                try:
+                    if recorder:
+                        recorder.event(guard_event)
+                    if trip:
+                        # Preserve exact hazardous pixels only after the ordinary host/profile/sensor
+                        # checks. They enter evidence storage, never the policy's latest-frame slot.
+                        try:
+                            host_contract.validate(metadata)
+                            verify_frame(metadata, pixels, profile_contract)
+                            from native_combat import validate_frame
+                            validate_frame(metadata)
+                            if len(pixels) != metadata['width'] * metadata['height'] * 3:
+                                raise ValueError('Trigger RGB payload does not match declared dimensions')
+                            metadata['clientReceivedNs'] = arrived
+                            metadata['transportRoundTripMs'] = (arrived-start)/1e6
+                            metadata['frameQuality'] = rgb_frame_quality(pixels)
+                            report['captureQuality'][metadata['frameQuality'] + 'Frames'] += 1
+                            report['framesReceived'] += 1
+                            if metadata.get('combatEvidence') is not None:
+                                report['nativeCombatEvidenceFrames'] += 1
+                            report['scoutEncounterGuardTriggerRecorded'] = bool(recorder and recorder.put(
+                                recording_frame_metadata(metadata, execution_mode), pixels))
+                        except Exception as error:
+                            report['scoutEncounterGuardTriggerCaptureError'] = str(error)
+                except Exception as error:
+                    if not trip:raise
+                    report['scoutEncounterGuardTriggerCaptureError'] = str(error)
+                finally:
+                    if trip:
+                        try:
+                            collect_receipts(metadata)
+                        except Exception as error:
+                            report['scoutEncounterGuardTriggerReceiptError'] = str(error)
+                        try:
+                            # This attempt is unconditional even if trigger retention or receipt intake failed.
+                            released, payload = scout_release(bridge,scout_guard,report,recorder,'scoutEncounterGuard')
+                            report['scoutEncounterGuardRelease'] = copy.deepcopy(released)
+                            control.scout_encounter_guard_release = copy.deepcopy(released)
+                            if released.get('type') != 'released' or payload:
+                                raise RuntimeError('Scout encounter guard release was not acknowledged')
+                            collect_receipts(released)
+                        except Exception as error:
+                            report['scoutEncounterGuardReleaseError'] = str(error)
+                        from scout_encounter_guard import ScoutEncounterStop
+                        raise ScoutEncounterStop('Scout encounter guard: '+trip['reason'])
             host_contract.validate(metadata)
             if metadata.get('type') == 'frame':
                 verify_frame(metadata, pixels, profile_contract)
@@ -1849,7 +1946,7 @@ def run_episode(args, policy=None, control=None):
                     if stale_replay:
                         pending_count = len(receipt_inbox)
                         pending_hybrid_receipts = receipt_inbox[:] if pending_count <= 12 else []
-                    released = bridge.request('release')[0]
+                    released = scout_release(bridge,scout_guard,report,recorder,reason)[0]
                     if released.get('type') != 'released':
                         raise RuntimeError('The bridge did not acknowledge input release')
                     collect_receipts(released)
@@ -1972,7 +2069,7 @@ def run_episode(args, policy=None, control=None):
                                    args.max_observation_age_ms, motion_capability))
             if not idle_recovery.window_is_current(checked_at / 1e9, eligible):
                 raise RecoverySuperseded()
-            released = bridge.request('release')[0]
+            released = scout_release(bridge,scout_guard,report,recorder,'navigationIdleRecovery')[0]
             collect_receipts(released)
             server_snapshot = (time.perf_counter(), released)
             return released
@@ -2113,6 +2210,11 @@ def run_episode(args, policy=None, control=None):
                 refresh_started = time.perf_counter_ns()
                 poll_frame()
                 refresh_ms = (time.perf_counter_ns()-refresh_started)/1e6
+            if scout_guard is not None and scout_guard.snapshot()['state']!='ready':
+                # Released/startup sensor gaps wait before either recovery or world-transition
+                # handling. A newer terminal trip is still checked by each dispatch boundary.
+                cadence.advance(time.perf_counter())
+                continue
             # Keep observing while the admitted first successor action produces its original terminal receipt.
             awaiting_dispatch = warm and warm.awaiting_batch_dispatch_receipt(server_snapshot[1].get('serverNowMs'))
             if climb and not awaiting_dispatch and not awaiting_photo and not awaiting_batch and not awaiting_release_retry:
@@ -2154,6 +2256,10 @@ def run_episode(args, policy=None, control=None):
             frame, pixels = item
             selected_at = time.perf_counter_ns()
             previous = frame['frameId']
+            if scout_guard is not None and scout_guard.snapshot()['state']!='ready':
+                # Startup pending/unavailable sensors do not enter model history or acquire input.
+                cadence.advance(time.perf_counter())
+                continue
             # Preserve blank captures as evidence but never feed them into policy history.
             # A later usable frame resumes inference normally after a loading fade.
             if frame['frameQuality'] != 'usable':
@@ -2365,7 +2471,12 @@ def run_episode(args, policy=None, control=None):
                     arguments = dict(requestId=request_id, frameId=frame['frameId'],
                         observedAtMs=frame['capturedAtMs'], expiresAtMs=observed_at+700, modelId=action_model_id,
                         steps=result['steps'], **start_deadline)
-                    return transmit_bound_action(bridge,warm,report,arguments,'unacknowledgedAction',evidence)
+                    # Intake and dispatch share this gate only for guarded scouts: a newer latched
+                    # hazard can never be overtaken by an inference that started on healthy pixels.
+                    with (receive_lock if scout_guard is not None else nullcontext()):
+                        if scout_guard is not None:
+                            result['scoutEncounterGuard'] = scout_dispatch(scout_guard,report,recorder,frame,request_id)
+                        return transmit_bound_action(bridge,warm,report,arguments,'unacknowledgedAction',evidence)
                 submitted, response = control.guarded_submit(control_token, submit_action) if warm else (True, submit_action())
                 if submitted:
                     result['acceptance'], response_payload = response
@@ -2418,6 +2529,8 @@ def run_episode(args, policy=None, control=None):
             if recorder:
                 recorder.event({'type': 'proposal', 'frameId': frame['frameId'],
                                 **({'warmRequestId': result['warmRequestId']} if warm else {}),
+                                **({'scoutEncounterGuard': result['scoutEncounterGuard']}
+                                   if 'scoutEncounterGuard' in result else {}),
                                 **({key: result[key] for key in ('episodeStep', 'validHistoryFrames', 'cudaGraphActive')}
                                    if warm and warm.destinations else {}),
                                 'proposalJournalVersion': 2,
@@ -2534,6 +2647,12 @@ def run_episode(args, policy=None, control=None):
             report['finalGoalState'] = control.goal_state()
             if report['finalGoalState']['goalError']:
                 report.setdefault('error', report['finalGoalState']['goalError'])
+        if scout_guard is not None:
+            report['scoutEncounterGuardState'] = scout_guard.snapshot()
+            if report['scoutEncounterGuardState']['trip'] is not None:
+                report.setdefault('error', 'Scout encounter guard: '+report['scoutEncounterGuardState']['trip']['reason'])
+            elif not report['scoutEncounterGuardState']['admitted']:
+                report.setdefault('error', 'Scout encounter guard never admitted native health evidence')
         report.setdefault('endReason', 'noUsableFrames' if report.get('captureError') else
                           'streamError' if report.get('streamError') else 'error' if report.get('error') else
                           'durationElapsed' if time.perf_counter() >= deadline else 'stopped')

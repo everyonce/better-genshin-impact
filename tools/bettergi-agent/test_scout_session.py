@@ -14,6 +14,7 @@ from unittest.mock import patch
 
 import resident_runtime as runtime
 import scout_session as scout
+from episode_split import read_split,reserve_split
 
 
 def write_json(path, value):
@@ -119,6 +120,7 @@ class ScoutSessionTests(unittest.TestCase):
         self.episode_code=0
         self.episode_error=None
         self.recording_payload=b''
+        self.admit_guard=True
         self.audits=[]
         self.watch=None
         self.stack.enter_context(patch.object(scout.client,'run_episode',self.episode))
@@ -186,6 +188,11 @@ class ScoutSessionTests(unittest.TestCase):
         self.assertEqual((args.action_hold_ms,args.max_observation_age_ms,args.hybrid_legs),(100,150,1))
         self.assertLessEqual(args.seconds,35)
         self.episodes.append((args,policy.weights,policy.graph,control.run_id))
+        if self.admit_guard:
+            from test_scout_encounter_guard import sample
+            frame=sample(health=args.scout_encounter_guard['baselineHealthFraction'])
+            control.scout_encounter_guard.observe(frame,1)
+            control.scout_encounter_guard.check_dispatch(frame,2)
         policy.history.append('prior-leg-history')
         runtime.atomic_json(args.output,dict(endReason='hybridLegLimit' if self.episode_code==0 else 'error',
             framesReceived=30,acceptedInputActions=10))
@@ -225,6 +232,9 @@ class ScoutSessionTests(unittest.TestCase):
         self.assertEqual([r['modelLoadSeconds'] for r in self.audits],[0.0,0.0])
         self.assertEqual(result['modelLoads'],1)
         self.assertTrue(self.watch.closed)
+        for row in result['legs']:
+            self.assertEqual(row['datasetSplit'],'diagnostic')
+            self.assertEqual(read_split(Path(row['directory']),row['runId'])['split'],'diagnostic')
 
     def test_two_different_explicit_geometries_reuse_actual_resident_without_route_table_edits(self):
         """Two fresh reviews select different local immutable routes across real resident lifetimes."""
@@ -339,6 +349,46 @@ class ScoutSessionTests(unittest.TestCase):
         self.assertEqual(result['legs'][0]['residentStatus'],'failed')
         self.assertEqual(result['legs'][0]['runId'],self.episodes[0][3])
 
+    def test_unadmitted_guard_cannot_convert_a_zero_episode_code_into_route_success(self):
+        """Missing native health admission stays terminal even if an episode seam incorrectly returns zero."""
+        self.admit_guard=False
+        result=self.run_worker()
+        self.assertEqual((result['state'],result['legs'][0]['state']),('failed','failed'))
+        self.assertEqual((len(self.starts),len(self.episodes),len(self.audits)),(1,1,0))
+        report=json.loads((Path(result['legs'][0]['directory'])/'patrol.json').read_bytes())
+        self.assertEqual(report['failedLeases'],1)
+        self.assertFalse(report['scoutEncounterGuardState']['admitted'])
+
+    def test_guard_trip_keeps_terminal_accounting_and_cannot_retry_or_verify_route(self):
+        """The retained hazard and failed archive remain bound to the one original native lease."""
+        from test_scout_encounter_guard import sample
+        self.recording_payload=b'hazard evidence bytes'
+        self.after_episode=lambda number,control:control.scout_encounter_guard.observe(sample(2,health=.5),3)
+        result=self.run_worker()
+        self.assertEqual((result['state'],len(self.starts),len(self.episodes),len(self.audits)),('failed',1,1,0))
+        self.assertEqual(result['recordedBytes'],len(self.recording_payload))
+        self.assertTrue(result['recordedBytesComplete'])
+        report=json.loads((Path(result['legs'][0]['directory'])/'patrol.json').read_bytes())
+        self.assertEqual(report['failedLeases'],1)
+        self.assertEqual(report['scoutEncounterGuardState']['trip']['reason'],'reviewedHealthFractionDrop')
+
+    def test_resealed_guard_baseline_cannot_replace_original_review_health_in_audit(self):
+        """Resealing derived request/reuse files never changes the original manually inspected HP values."""
+        from audit_hybrid_run import verify_policy_reuse
+        from scout_encounter_guard import binding_from_review
+        self.target=1;result=self.run_worker()
+        output=Path(result['legs'][0]['directory'])/'patrol.json'
+        report=json.loads(output.read_bytes());reuse=report['policyReuse']
+        request_path=Path(reuse['requestFile']);request=json.loads(request_path.read_bytes())
+        changed=binding_from_review(dict(inspectedHealth=1000,inspectedMaximumHealth=2700),request['reviewSha256'])
+        request['scoutEncounterGuard']=changed;write_json(request_path,request)
+        reuse.update(scoutEncounterGuard=changed,requestSha256=hashlib.sha256(request_path.read_bytes()).hexdigest())
+        proof=Path(str(output)+'.reuse.json');write_json(proof,reuse)
+        report.update(scoutEncounterGuard=changed,policyReuseSha256=hashlib.sha256(proof.read_bytes()).hexdigest())
+        with patch.object(runtime,'OPEN_P2P_SHA256',scout.OPEN_P2P_SHA256):
+            with self.assertRaisesRegex(ValueError,'baseline differs from the original review'):
+                verify_policy_reuse(report,output,proof)
+
     def test_raised_failed_resident_keeps_original_run_bytes_and_terminal_state(self):
         """Mirror a real obstacle exception after the resident archive has been written and closed."""
         self.episode_error='hybrid_navigation:survey_obstacle_requires_inspection'
@@ -352,6 +402,22 @@ class ScoutSessionTests(unittest.TestCase):
         self.assertTrue(row['modelReused'])
         self.assertEqual((len(self.loads),len(self.starts),len(self.episodes),len(self.audits)),(1,1,1,0))
         self.assertEqual((Path(self.episodes[0][0].record_dir)/'synthetic-recording.bin').read_bytes(),self.recording_payload)
+        self.assertEqual(row['datasetSplit'],'diagnostic')
+        self.assertEqual(read_split(Path(row['directory']),row['runId'])['split'],'diagnostic')
+
+    def test_terminal_accounting_preserves_a_conflicting_existing_split(self):
+        """A prior reservation cannot be silently overwritten to make a scout result admissible."""
+        folder=self.live/'conflicting-reservation'
+        report=dict(runId='a'*32,status='completed',recordedBytes=123)
+        write_json(folder/'patrol.json',report)
+        original=(folder/'patrol.json').read_bytes()
+        reserve_split(folder,report['runId'],'holdout')
+        row=dict(directory=str(folder),requestId='b'*32,state='verified')
+        scout.account_leg(row)
+        self.assertEqual(row['state'],'failed')
+        self.assertIn('different reserved split',row['accountingError'])
+        self.assertEqual(read_split(folder,report['runId'])['split'],'holdout')
+        self.assertEqual((folder/'patrol.json').read_bytes(),original)
 
     def test_success_then_failure_counts_both_archives_once_without_a_third_leg(self):
         """Finalization must neither omit the failed suffix nor double-count an earlier verified leg."""
@@ -377,6 +443,7 @@ class ScoutSessionTests(unittest.TestCase):
         self.assertFalse(result['recordedBytesComplete'])
         self.assertTrue(row['accountingError'])
         self.assertEqual((self.starts,self.episodes),([],[]))
+        self.assertFalse((Path(row['directory'])/'experience-split.json').exists())
 
     def test_busy_child_after_success_is_unresolved_cleanup(self):
         """A successful model result does not excuse a still-owned native lease."""

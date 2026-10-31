@@ -2,12 +2,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const recovery = require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/recovery.js');
 
-// Preserve the observed header geometry and slash-as-seven OCR without importing live artifacts.
+// Preserve the observed header geometry, with an unqualified separator for passive-wait tests.
+// The exact captured slash-as-seven shape is covered by statue-power-ocr.test.cjs.
 const unreadableRows = [
   { text: "Statue's Blessing", x: 1525, y: 24, width: 253, height: 51 },
   { text: 'In combat', x: 28, y: 38, width: 203, height: 27 },
   { text: 'Click on the character portrait to restore HP', x: 218, y: 38, width: 559, height: 29 },
-  { text: 'Restorative Power:10000710000', x: 1401, y: 591, width: 501, height: 39 },
+  { text: 'Restorative Power:10000810000', x: 1401, y: 591, width: 501, height: 39 },
 ];
 const validRows = [
   { text: "Statue's Blessing", x: 1519, y: 27, width: 251, height: 44 },
@@ -51,7 +52,7 @@ function assertNoInput(h) {
   assert.deepEqual(h.calls.filter(row => !['sleep', 'observe'].includes(row[0])), []);
 }
 
-test('captured slash-as-seven transition accepts the third fresh valid panel before healing', async () => {
+test('unqualified power transition accepts the third fresh valid panel before healing', async () => {
   const initial = panel(17);
   assert.equal(recovery.hasStatueHealingPanel(initial), false);
   const frames = [panel(18), panel(19), panel(20, validRows),
@@ -85,7 +86,7 @@ test('Blessing selection reaching unreadable power waits rather than falling int
   assert.equal(h.count(), 4);
 });
 
-for (const power of ['Restorative Power:10000710000', null, 'Restorative Power: 10001 / 10000', 'Restorative Power: 10000 / 0']) {
+for (const power of ['Restorative Power:10000810000', null, 'Restorative Power: 10001 / 10000', 'Restorative Power: 10000 / 0']) {
   test(`unqualified power remains bounded and input-free: ${power}`, async () => {
     const rows = unreadableRows.filter(row => !row.text.startsWith('Restorative Power:'));
     if (power !== null) rows.push({ ...unreadableRows[3], text: power });

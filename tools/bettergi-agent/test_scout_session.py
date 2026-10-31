@@ -24,16 +24,26 @@ def write_json(path, value):
 
 
 class IdleChildTests(unittest.TestCase):
-    """A stopped menu pilot is idle only after its service has released ownership."""
+    """Stopped or faulted menu pilots are idle only after the service has released ownership."""
     def test_terminal_pilot_states_require_explicitly_released_ownership(self):
         """Cover the live stopped-pilot handoff and refuse ambiguous or still-owned states."""
-        for state in ('idle','completed','failed','cancelled','stopped'):
+        for state in ('idle','completed','failed','cancelled','stopped','faulted'):
             child=dict(taskRunning=False,agentStreamRunning=False,pilotState=state,serviceOwnsPilot=False)
             self.assertTrue(scout.idle_child(child),state)
             for ownership in (True,None,0):
                 self.assertFalse(scout.idle_child(dict(child,serviceOwnsPilot=ownership)),(state,ownership))
             del child['serviceOwnsPilot']
             self.assertFalse(scout.idle_child(child),state)
+
+    def test_faulted_pilot_requires_explicit_false_task_and_stream_flags(self):
+        """A fault label cannot substitute for proof that its input owner and task actually retired."""
+        child=dict(taskRunning=False,agentStreamRunning=False,pilotState='faulted',serviceOwnsPilot=False)
+        for field in ('taskRunning','agentStreamRunning'):
+            for value in (True,None,0,'false'):
+                with self.subTest(field=field,value=value):
+                    self.assertFalse(scout.idle_child(dict(child,**{field:value})))
+            missing=dict(child);del missing[field]
+            self.assertFalse(scout.idle_child(missing),field)
 
     def test_busy_or_unknown_child_cannot_start_another_lease(self):
         """The new stopped state does not bypass active tasks, streams, or a stopping pilot."""

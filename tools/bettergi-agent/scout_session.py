@@ -184,10 +184,10 @@ def owner_pair(lifecycle, owner):
 
 
 def idle_child(child):
-    """Require released script ownership, including after an explicitly stopped UI pilot."""
+    """Require released ownership even when a completed UI pilot retains a stopped/faulted label."""
     return (child.get('taskRunning') is False and child.get('agentStreamRunning') is False
             and child.get('serviceOwnsPilot') is False
-            and child.get('pilotState') in ('idle','completed','failed','cancelled','stopped'))
+            and child.get('pilotState') in ('idle','completed','failed','cancelled','stopped','faulted'))
 
 
 def require_ordinary(session):

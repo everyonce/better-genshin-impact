@@ -298,6 +298,19 @@ function actOneStatueHealingPortraits(rows) {
     if(third.length===1)portraits.push(478);
     return portraits;
 }
+// Keep this small pure check equivalent to recovery.js's alternate power gate.
+// It never changes arbitrary sevens: only the observed fixed-10000 panel row qualifies.
+function actOneStatueAlternativePower(rows) {
+    rows=rows||[];
+    if(rows.filter(function(r){return /Click on the character portrait to restore HP/.test(String(r.text||''))&&Number(r.y)<100;}).length!==1||
+       rows.filter(function(r){return /^Statue.s Blessing$/.test(String(r.text||'').trim())&&Number(r.x)>1400&&Number(r.y)<100;}).length!==1)return null;
+    var power=rows.filter(function(r){return /^Restorative Power:/.test(String(r.text||'').trim());});
+    if(power.length!==1)return null;
+    var r=power[0],match=/^Restorative Power:\s*([0-9]{1,5})\s*7\s*10000$/.exec(String(r.text||'').trim());
+    if(!match||![r.x,r.y,r.width,r.height].every(Number.isFinite)||r.x<1380||r.x>1420||r.y<580||r.y>630||
+       r.width<450||r.width>530||r.height<20||r.height>50||Number(match[1])>10000)return null;
+    return Number(match[1]);
+}
 function actOneLisaLockedTemplePanel(o,now,session){
     if(!o||o.session!==session||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>1000||
        !o.hud||o.hud.world||o.hud.health||o.hud.auto||o.hud.dialogueReady||!Array.isArray(o.ocr))return false;
@@ -7900,7 +7913,9 @@ function createActOneAdapter(sessionId) {
             if(!lastObservation || Date.now()-lastObservation.timestamp>1000 ||
                !lastObservation.ocr.some(function(r){return /Click on the character portrait to restore HP/.test(r.text) && r.y<100;}) ||
                !lastObservation.ocr.some(function(r){return /^Statue.s Blessing$/.test(r.text.trim()) && r.x>1400 && r.y<100;}) ||
-               !lastObservation.ocr.some(function(r){return /Restorative Power:\s*[1-9][0-9]*\s*\//.test(r.text);})) throw new Error('Fresh Statue healing panel required');
+               lastObservation.ocr.filter(function(r){return /Restorative Power:/.test(String(r.text||''));}).length!==1 ||
+               (!lastObservation.ocr.some(function(r){return /Restorative Power:\s*[1-9][0-9]*\s*\//.test(r.text);})&&
+                !(actOneStatueAlternativePower(lastObservation.ocr)>0))) throw new Error('Fresh Statue healing panel required');
             // The recorded starter roster has Traveler, Amber, then Kaeya.
             // Heal the third portrait only when its card is present in this panel.
             var portraits=actOneStatueHealingPortraits(lastObservation.ocr);

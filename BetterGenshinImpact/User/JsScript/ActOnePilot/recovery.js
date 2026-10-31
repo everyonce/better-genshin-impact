@@ -51,11 +51,26 @@ var ActOneRecovery = (function () {
         return rows.some(function(r){return /Click on the character portrait to restore HP/.test(String(r.text||''))&&Number(r.y)<100;})&&
             rows.some(function(r){return /^Statue.s Blessing$/.test(String(r.text||'').trim())&&Number(r.x)>1400&&Number(r.y)<100;});
     }
-    function hasStatueHealingPanel(current, allowDepleted) {
+    // A retained Blessing frame read the slash as "7". Accept only that exact
+    // fixed-capacity shape in the known power row, with unique panel evidence.
+    function alternativeStatuePower(current) {
         var rows=current&&current.ocr||[];
+        if(rows.filter(function(r){return /Click on the character portrait to restore HP/.test(String(r.text||''))&&Number(r.y)<100;}).length!==1||
+           rows.filter(function(r){return /^Statue.s Blessing$/.test(String(r.text||'').trim())&&Number(r.x)>1400&&Number(r.y)<100;}).length!==1)return null;
+        var power=rows.filter(function(r){return /^Restorative Power:/.test(String(r.text||'').trim());});
+        if(power.length!==1)return null;
+        var r=power[0],match=/^Restorative Power:\s*([0-9]{1,5})\s*7\s*10000$/.exec(String(r.text||'').trim());
+        if(!match||![r.x,r.y,r.width,r.height].every(Number.isFinite)||r.x<1380||r.x>1420||r.y<580||r.y>630||
+           r.width<450||r.width>530||r.height<20||r.height>50||Number(match[1])>10000)return null;
+        return Number(match[1]);
+    }
+    function hasStatueHealingPanel(current, allowDepleted) {
+        var rows=current&&current.ocr||[],alternative=alternativeStatuePower(current);
         return hasStatueHealingHeaders(current)&&
-            rows.some(function(r){var match=/Restorative Power:\s*([0-9]+)\s*\/\s*([0-9]+)/.exec(String(r.text||''));
-                return !!(match&&Number(match[2])>0&&Number(match[1])<=Number(match[2])&&(Number(match[1])>0||allowDepleted===true));});
+            rows.filter(function(r){return /Restorative Power:/.test(String(r.text||''));}).length===1&&
+            (rows.some(function(r){var match=/Restorative Power:\s*([0-9]+)\s*\/\s*([0-9]+)/.exec(String(r.text||''));
+                return !!(match&&Number(match[2])>0&&Number(match[1])<=Number(match[2])&&(Number(match[1])>0||allowDepleted===true));})||
+             alternative!==null&&(alternative>0||allowDepleted===true));
     }
     async function openUnknownHealthStatue(current,api,observe,depth) {
         var hp=current&&current.hud&&current.hud.health;

@@ -1261,6 +1261,8 @@ def parse_arguments(argv=None):
                         help='Experimental P2P temperature for shadow runs; live input keeps temperature 1')
     parser.add_argument('--p2p-execution-feedback', action='store_true',
                         help='Roll back rejected P2P predictions instead of storing unexecuted actions in history')
+    parser.add_argument('--p2p-executed-history', action='store_true',
+                        help='Opt in to serialized receipt-verified scout history with 50 or 60 ms holds')
     parser.add_argument('--soft-cadence', action='store_true',
                         help='Accept late but still fresh actions; never queue missed policy ticks')
     parser.add_argument('--fresh-frame-at-decision', action=argparse.BooleanOptionalAction, default=None,
@@ -1493,6 +1495,9 @@ def parse_arguments(argv=None):
         from combat_observer import validate_shadow_options
         try:validate_shadow_options(args)
         except ValueError as error:parser.error(str(error))
+    from p2p_executed_history import validate_executed_history_options
+    try:validate_executed_history_options(args)
+    except ValueError as error:parser.error(str(error))
     return args
 
 
@@ -1603,6 +1608,7 @@ def load_policy(args):
                               p2p_mouse_sampling=args.p2p_mouse_sampling,
                               observation_profile=getattr(args, 'observation_profile', LEGACY),
                               execution_feedback=args.p2p_execution_feedback, goal_embedding=args.goal_embedding,
+                              **({'executed_history': True} if getattr(args, 'p2p_executed_history', False) else {}),
                               instruction=args.instruction,
                               sampling=args.sampling, temperature=args.temperature,
                               top_k=args.top_k, top_p=args.top_p,
@@ -1645,6 +1651,9 @@ def action_response_accepted(response, request_id, payload=b''):
 
 def run_episode(args, policy=None, control=None):
     """Run one owned bridge lease with an optional already-loaded model and live controls."""
+    from p2p_executed_history import (MODE as EXECUTED_HISTORY_MODE, ExecutedHistoryRecorder,
+        encode_controller_step, executed_history_policy, source_after_terminal, validate_executed_history_options)
+    executed_history = validate_executed_history_options(args, policy, control, require_bound=True)
     combat_binding = validate_combat_trial_options(args, policy, control)
     combat_guard = None
     hybrid_observe = validate_hybrid_observe_options(args)
@@ -1718,6 +1727,12 @@ def run_episode(args, policy=None, control=None):
               'controlTransitions': [], 'goalChanges': [],
               'captureQuality': {'check': 'wholeBufferBlackOrWhite', 'usableFrames': 0,
                                  'allBlackFrames': 0, 'allWhiteFrames': 0, 'rejectedPredictions': 0}}
+    if executed_history:
+        report.update(historyCommitMode=EXECUTED_HISTORY_MODE,
+                      executedHistoryPolicy=executed_history_policy(args.action_hold_ms), executedHistoryEvents=[])
+        report['proposalJournal'] = dict(version=3, historyCommitMode=EXECUTED_HISTORY_MODE)
+    history_predecessor = None
+    history_requests, history_receipts = {}, set()
     if getattr(args,'warm_endurance',False):
         from destination_queue_limits import ENDURANCE
         report['queueLimitsProfile'] = ENDURANCE.profile
@@ -1815,6 +1830,7 @@ def run_episode(args, policy=None, control=None):
             if getattr(args, 'hybrid_navigation', False):
                 hybrid = HybridNavigation(configured['capability'], route_id,
                     remember_bypass=getattr(args, 'remember_hybrid_bypass', False),
+                    **({'action_hold_ms': args.action_hold_ms} if executed_history else {}),
                     navigation_profile=navigation_profile, reviewed_scout_route=getattr(args,'reviewed_scout_route',None), **itinerary)
                 report['hybridNavigation'] = hybrid.snapshot()
                 report['hybridNavigationEvents'] = []
@@ -1839,6 +1855,8 @@ def run_episode(args, policy=None, control=None):
             report['readinessDiagnostics'] = configured['diagnostics']
         server_keys = set(bridge.hello.get('allowedKeys', []))
         configured_keys, effective_keys = resolve_input_keys(args.input_keys, server_keys)
+        if executed_history and (not effective_keys or not effective_keys <= {'W', 'A', 'S', 'D'}):
+            raise ValueError('Executed-history scout input remains limited to W/A/S/D')
         report['configuredInputKeys'] = configured_keys
         report['effectiveInputKeys'] = sorted(effective_keys)
         photo_survey = None
@@ -1862,6 +1880,8 @@ def run_episode(args, policy=None, control=None):
                                           preview=args.preview, retain_policy_rgb=getattr(args,'retain_policy_rgb',False)) if args.record_dir else None
         if combat_guard is not None:
             recorder = CombatTrialRecorder(recorder)
+        if executed_history:
+            recorder = ExecutedHistoryRecorder(recorder)
         if climb:
             climb.recorder = recorder
     except Exception as error:
@@ -1898,10 +1918,23 @@ def run_episode(args, policy=None, control=None):
         except Exception as error:
             if combat_guard is not None:
                 close_combat_setup_failure(args, bridge, combat_guard, report, recorder, error, 'recordingFailure')
+            elif executed_history:
+                # This happens before the ordinary episode finally owns cleanup.
+                # Preserve the first error and always attempt release, encoder close and pipe close.
+                report.update(error=str(error), endReason='executedHistorySetupFailure')
+                cleanup = []
+                for label, operation in (('release', lambda: bridge.request('release')),
+                                         ('recorderClose', lambda: archive.finish(report) if archive else recorder.close()),
+                                         ('pipeClose', bridge.handle.close)):
+                    try:operation()
+                    except Exception as failure:cleanup.append(dict(operation=label, error=str(failure)))
+                if cleanup:error.add_note('Executed-history setup cleanup: ' + json.dumps(cleanup))
             raise
 
     if recorder:
         record_initial_event({'type': 'episodeStart', 'sessionId': bridge.hello['sessionId'],
+                        **({'historyCommitMode': EXECUTED_HISTORY_MODE,
+                            'executedHistoryPolicy': report['executedHistoryPolicy']} if executed_history else {}),
                         **({'combatTrialGuard': combat_binding} if combat_guard is not None else {}),
                         **({'hostSourceContract': report['hostSourceContract']} if host_contract.policy is not None else {}),
                         'proposalJournal': report['proposalJournal'],
@@ -1935,6 +1968,12 @@ def run_episode(args, policy=None, control=None):
         for receipt in metadata.get('receipts', []):
             report['receipts'].append(receipt)
             receipt_inbox.append(receipt)
+            if executed_history:
+                if recorder:recorder.event(receipt)
+                identity = receipt.get('requestId') if isinstance(receipt, dict) else None
+                if identity not in history_requests or identity in history_receipts:
+                    raise RuntimeError('Executed-history receipt is unknown or duplicated')
+                history_receipts.add(identity)
             if combat_guard is not None:
                 event = combat_guard.receipt(receipt, time.perf_counter_ns())
                 report['combatTrialGuardState'] = event['state']
@@ -1948,13 +1987,15 @@ def run_episode(args, policy=None, control=None):
                     and not receipt.get('appliedSteps')):
                 unapplied_receipt_sequence += 1
                 report['unappliedAcceptedActions'] += 1
-            if recorder:
+            if recorder and not executed_history:
                 recorder.event(receipt)
         dropped = metadata.get('droppedReceipts', 0)
         if dropped > report['serverDroppedReceipts']:
             report['serverDroppedReceipts'] = dropped
             if recorder:
                 recorder.fail('Server dropped execution receipts; this episode has incomplete labels')
+            if executed_history:
+                raise RuntimeError('Executed-history terminal receipts were dropped')
 
     receive_lock = (combat_guard.intake_lock if combat_guard is not None else
                     scout_guard.intake_lock if scout_guard is not None else threading.Lock())
@@ -1982,6 +2023,10 @@ def run_episode(args, policy=None, control=None):
                     collect_receipts(released)
                 except Exception as release_error:
                     report['combatTrialReleaseError'] = str(release_error)
+            elif executed_history:
+                # Publish the terminal reader latch before dropping the intake lock.
+                # A waiting inference must not dispatch in the reader's exception gap.
+                stopped.set()
             raise
 
     def poll_frame():
@@ -2161,9 +2206,67 @@ def run_episode(args, policy=None, control=None):
     seen_recovery_interruptions = 0
     recording_error_reported = False
 
+    def finish_executed_feedback(result, frame, request, control_token):
+        """Resolve one action before another prediction, retaining failures before retirement."""
+        previous_receipt = (None if history_predecessor is None else
+                            {key: history_predecessor[key] for key in ('requestId', 'endedAtMs')})
+        event = dict(type='p2pExecutedHistory', version=1, historyCommitMode=EXECUTED_HISTORY_MODE,
+            outcome='failed', requestId=request['requestId'] if request else None,
+            frameId=frame['frameId'], modelId=result.get('hybridNavigation', {}).get('owner', args.model),
+            sourceFrame=copy.deepcopy(frame['sourceFrame']), observationTimestampMs=observation_timestamp(frame),
+            step=copy.deepcopy(result['steps'][0]), encodedAction=encode_controller_step(result['steps'][0]),
+            arguments=copy.deepcopy(request), acceptance=copy.deepcopy(result['acceptance']), receipt=None,
+            previousReceipt=previous_receipt, error=None)
+        failure = None
+        try:
+            if result['acceptance']['type'] != 'accepted':
+                policy.finish_action(False)
+                event['outcome'] = 'rejected'
+            else:
+                started = time.perf_counter_ns()
+                policy.prepare_executed_action(event['step'])
+                event['candidatePreparationMs'] = (time.perf_counter_ns()-started)/1e6
+                while True:
+                    # The reader remains live during GPU work and receipt waiting.
+                    # Its latched hazard, an operator stop, or any ownership change wins.
+                    if stopped.is_set() or control.prediction_token() != control_token or control.snapshot()[0] != 'run':
+                        raise RuntimeError('Executed-history action interrupted before its terminal proof')
+                    if time.perf_counter() >= deadline:
+                        raise RuntimeError('Executed-history lease ended before its terminal proof')
+                    hybrid.check_leg_deadline()
+                    recorder.check()
+                    with receive_lock:
+                        matches = [item for item in receipt_inbox if item.get('requestId') == request['requestId']]
+                        if len(matches) > 1 or report['serverDroppedReceipts']:
+                            raise RuntimeError('Executed-history terminal evidence is duplicated or incomplete')
+                        if matches:
+                            event['receipt'] = copy.deepcopy(matches[0])
+                            policy.finish_executed_action(event['receipt'], request, result['acceptance'])
+                            event['outcome'] = 'committed'
+                            break
+                        received_at, status = server_snapshot
+                        server_now = status.get('serverNowMs')
+                        if (type(server_now) not in (int, float) or not math.isfinite(server_now)
+                                or server_now+(time.perf_counter()-received_at)*1000 >= request['expiresAtMs']):
+                            raise RuntimeError('Executed-history receipt is unavailable before the original request deadline')
+                    stopped.wait(.002)
+        except Exception as error:
+            failure, event['error'] = error, str(error)
+            # Partial or unknown execution cannot preserve a counterfactual cache.
+            policy.reset()
+            forbid_reconnect(error, 'executedHistoryIncomplete')
+        event['history'] = policy.executed_history_counters()
+        event['clientTimeNs'] = time.perf_counter_ns()
+        return event, failure
+
     def hold(reason, force_release=False, preserve_navigation=False):
         """Release once per interruption and clear stale context without unloading weights."""
         nonlocal hold_reason
+        endpoint_reconfirmation = (hybrid is not None and hybrid.phase == 'verifying'
+                                   and reason in ('worldTransition', 'client_release', 'world_confirming',
+                                                  'world_observation_invalidated', 'payloadNotGameWorld'))
+        if executed_history and reason != 'hybridEndpoint' and not endpoint_reconfirmation:
+            raise RuntimeError('Executed-history interruption is terminal: ' + reason)
         if combat_guard is not None:
             from combat_trial_guard import CombatTrialStop
             report['combatTrialGuardState'] = combat_guard.fail('inputInterrupted', time.perf_counter_ns(), interruption=reason)['state']
@@ -2349,6 +2452,8 @@ def run_episode(args, policy=None, control=None):
     stop_failure = None
     try:
         while time.perf_counter() < deadline and not stopped.is_set():
+            if executed_history:
+                recorder.check()
             if recorder and recorder.error and not recording_error_reported:
                 if combat_guard is not None:
                     raise RuntimeError('Combat trial recording failed: ' + str(recorder.error))
@@ -2447,6 +2552,8 @@ def run_episode(args, policy=None, control=None):
                 continue
             # Control and goal changes are settled before selecting the next world observation.
             if observed_receipt_sequence != seen_unapplied_receipts and not (climb and climb.helper.blocks_model):
+                if executed_history:
+                    raise RuntimeError('Executed-history unapplied receipt cannot resume with empty history')
                 policy.reset()
                 reset_checked_at = time.perf_counter_ns()
                 idle_recovery.history_reset(noop_history_reset, reset_checked_at / 1e9,
@@ -2525,6 +2632,9 @@ def run_episode(args, policy=None, control=None):
             frame, pixels = item
             selected_at = time.perf_counter_ns()
             previous = frame['frameId']
+            if executed_history and not source_after_terminal(frame, observation_timestamp(frame), history_predecessor):
+                cadence.advance(time.perf_counter())
+                continue
             if scout_guard is not None and scout_guard.snapshot()['state']!='ready':
                 # Startup pending/unavailable sensors do not enter model history or acquire input.
                 cadence.advance(time.perf_counter())
@@ -2564,6 +2674,10 @@ def run_episode(args, policy=None, control=None):
                     # Journal the exact post-refusal pose samples before recording the reissued native release.
                     publish_hybrid(frame, pixels)
                     hybrid.released(hold('hybridEndpoint', force_release=True))
+                elif executed_history and hybrid_wait in ('confirmingStart', 'duplicatePose', 'sourceNotIncreasing'):
+                    # These are read-only sampling waits. There is no pending action
+                    # and no reason to erase settled visual/action history.
+                    pass
                 elif hybrid_wait not in (None, 'endpointVerified', 'verifyingEndpoint', 'waitingAfterRelease',
                                          'waitingAfterClimbResume', 'confirmingBypassReentry',
                                          'waitingForDestinationPhoto', 'destinationPhotoRetry', 'batchEndpointStillVerified',
@@ -2603,6 +2717,8 @@ def run_episode(args, policy=None, control=None):
                 continue
             if (getattr(policy, 'execution_feedback', False) and last_accepted_at is not None
                     and time.perf_counter()-last_accepted_at > .5 and not history_gap_reset):
+                if executed_history:
+                    raise RuntimeError('Executed-history acceptance gap cannot resume with empty history')
                 policy.reset()
                 idle_recovery.interrupt('acceptanceGapHistoryReset')
                 history_gap_reset = True
@@ -2684,6 +2800,12 @@ def run_episode(args, policy=None, control=None):
                 result['controllerResampling'] = 'explicit-hybrid-selection; original modelSteps retained'
                 action_model_id = selection['owner']
                 publish_hybrid()
+            if executed_history:
+                # Validate before input; unsupported fields never get silently dropped by the codec.
+                encode_controller_step(result['steps'][0])
+                result['executedHistoryPredecessor'] = (None if history_predecessor is None else
+                    {key: history_predecessor[key] for key in ('requestId', 'endedAtMs')})
+            executed_request = None
             rejection = proposal_rejection(result, server_keys, args.enable_input, age,
                                            args.max_observation_age_ms, policy_ms, cadence.period * 1000,
                                            trial_keys=effective_keys, enforce_compute_budget=not args.soft_cadence)
@@ -2737,12 +2859,20 @@ def run_episode(args, policy=None, control=None):
                     'expiresAtMs': observed_at+700, **start_deadline}
                 def submit_action():
                     """Finish this policy transaction under the current resident authority."""
+                    nonlocal executed_request
                     arguments = dict(requestId=request_id, frameId=frame['frameId'],
                         observedAtMs=frame['capturedAtMs'], expiresAtMs=observed_at+700, modelId=action_model_id,
                         steps=result['steps'], **start_deadline)
                     # Intake and dispatch share this gate only for guarded scouts: a newer latched
                     # hazard can never be overtaken by an inference that started on healthy pixels.
                     with (receive_lock if scout_guard is not None or combat_guard is not None else nullcontext()):
+                        if executed_history:
+                            if stopped.is_set():
+                                raise RuntimeError('Executed-history reader stopped before dispatch')
+                            recorder.check()
+                            executed_request = dict(version=1, command='action',
+                                **{key: bridge.hello[key] for key in ('sessionId', 'ownerEpoch', 'goalVersion')},
+                                **copy.deepcopy(arguments))
                         if scout_guard is not None:
                             result['scoutEncounterGuard'] = scout_dispatch(scout_guard,report,recorder,frame,request_id)
                         if combat_guard is not None:
@@ -2757,12 +2887,15 @@ def run_episode(args, policy=None, control=None):
                             result['startBeforeMs'] = arguments['startBeforeMs']
                             evidence.update(expiresAtMs=arguments['expiresAtMs'], startBeforeMs=arguments['startBeforeMs'])
                         response = transmit_bound_action(bridge,warm,report,arguments,'unacknowledgedAction',evidence)
+                        if executed_history and action_response_accepted(response[0], request_id, response[1]):
+                            # Register while intake is excluded, before a fast terminal reply can be collected.
+                            history_requests[request_id] = copy.deepcopy(executed_request)
                         if combat_guard is not None:
                             event = combat_guard.admission(response[0], len(response[1]), time.perf_counter_ns())
                             report['combatTrialGuardState'] = event['state']
                             recorder.event(event)
                         return response
-                submitted, response = control.guarded_submit(control_token, submit_action) if warm or combat_guard is not None else (True, submit_action())
+                submitted, response = control.guarded_submit(control_token, submit_action) if warm or combat_guard is not None or executed_history else (True, submit_action())
                 if submitted:
                     result['acceptance'], response_payload = response
                     committed = (False if combat_guard is not None and result['acceptance'].get('type') == 'notSubmitted'
@@ -2793,7 +2926,16 @@ def run_episode(args, policy=None, control=None):
                 report['acceptedInputActions'] += 1
                 last_accepted_at = time.perf_counter()
                 history_gap_reset = False
-            if getattr(policy, 'execution_feedback', False):
+            feedback_error = None
+            if executed_history:
+                event, feedback_error = finish_executed_feedback(result, frame, executed_request, control_token)
+                result['historyCommitted'] = event['outcome'] == 'committed'
+                result['executedHistory'] = event
+                report['executedHistoryEvents'].append(event)
+                if result['historyCommitted']:
+                    history_predecessor = dict(requestId=event['requestId'], frameId=event['frameId'],
+                        endedAtMs=event['receipt']['endedAtMs'], sourceFrame=copy.deepcopy(event['sourceFrame']))
+            elif getattr(policy, 'execution_feedback', False):
                 model_committed = committed and action_model_id == args.model
                 policy.finish_action(model_committed)
                 result['historyCommitted'] = model_committed
@@ -2821,7 +2963,10 @@ def run_episode(args, policy=None, control=None):
                                    if 'combatTrialGuard' in result else {}),
                                 **({key: result[key] for key in ('episodeStep', 'validHistoryFrames', 'cudaGraphActive')}
                                    if warm and warm.destinations else {}),
-                                'proposalJournalVersion': 2,
+                                'proposalJournalVersion': 3 if executed_history else 2,
+                                **({'historyCommitMode': EXECUTED_HISTORY_MODE,
+                                    'executedHistoryPredecessor': result['executedHistoryPredecessor']}
+                                   if executed_history else {}),
                                 # Null explicitly means this policy has no acceptance feedback.
                                 'historyCommitted': result.get('historyCommitted'),
                                 'observedAtMs': frame['capturedAtMs'], 'model': action_model_id,
@@ -2843,6 +2988,10 @@ def run_episode(args, policy=None, control=None):
                                 'latestFrameQuality': result['latestFrameQuality'],
                                 'frameTiming': result['frameTiming'],
                                 'policyWallMs': policy_ms, 'estimatedObservationAgeMs': age})
+                if executed_history:
+                    recorder.event(result['executedHistory'])
+            if feedback_error is not None:
+                raise feedback_error
             print(json.dumps({'frameId': previous, 'modelMs': result['fullActionMs'], 'ageMs': age,
                               'acceptance': result['acceptance']}), flush=True)
             if control:
@@ -2904,6 +3053,25 @@ def run_episode(args, policy=None, control=None):
             raise
     finally:
         stopped.set()
+        if executed_history:
+            # Attempt release before any encoder failure or cache reset can interrupt cleanup.
+            # Keep the raw acknowledgement even when its journal write fails.
+            with receive_lock:
+                try:
+                    released, payload = bridge.request('release')
+                    report['executedHistoryRelease'] = dict(response=copy.deepcopy(released), payloadBytes=len(payload))
+                    marker = scout_guard.acknowledge_release(released, len(payload), time.perf_counter_ns(), 'executedHistoryTeardown')
+                    report['scoutEncounterGuardState'] = marker['state']
+                    collect_receipts(released)
+                    if recorder:recorder.event(marker)
+                except Exception as error:
+                    stop_failure = error
+                    report['executedHistoryReleaseError'] = str(error)
+            try:
+                policy.reset()
+            except Exception as error:
+                stop_failure = stop_failure or error
+                report['executedHistoryResetError'] = str(error)
         if combat_guard is not None:
             # Release is unconditional, including failed recording, unknown admission,
             # an interrupted final hold and an already latched reader hazard.
@@ -3022,6 +3190,8 @@ def run_episode(args, policy=None, control=None):
             forbid_reconnect(failure, 'stopOnlyFailure')
             report.setdefault('error', str(failure) or type(failure).__name__)
         if failure is not None:
+            if executed_history:
+                forbid_reconnect(failure, 'executedHistoryModeFailure')
             # A pipe loss never overrides concurrent non-transport or ownership failures.
             if receive_failure and not is_transport_failure(receive_failure[0]):
                 forbid_reconnect(failure, 'frameProcessingFailure')
@@ -3043,11 +3213,12 @@ def run_episode(args, policy=None, control=None):
                                 'maxInputActions': args.max_input_actions,
                                 'acceptedInputActions': report['acceptedInputActions']})
             except Exception as error:
-                if combat_guard is None:
+                if combat_guard is None and not executed_history:
                     raise
                 report['recordingFinalizationError'] = str(error)
-                report['combatTrialGuardState'] = combat_guard.fail('recordingFailure', time.perf_counter_ns(), error=str(error))['state']
-                report.setdefault('error', 'Combat trial journal finalization failed')
+                if combat_guard is not None:
+                    report['combatTrialGuardState'] = combat_guard.fail('recordingFailure', time.perf_counter_ns(), error=str(error))['state']
+                report.setdefault('error', 'Required journal finalization failed')
             try:
                 if archive:
                     manifest = archive.finish(report)
@@ -3055,9 +3226,10 @@ def run_episode(args, policy=None, control=None):
                 else:
                     report['recording'] = recorder.close()
             except Exception as error:
-                if combat_guard is None:
+                if combat_guard is None and not executed_history:
                     raise
                 report['recording'] = dict(error=str(error))
+                if executed_history:report.setdefault('error', 'Executed-history recording close failed')
             if combat_guard is not None and (recorder.error or report.get('recording', {}).get('error')):
                 report['combatTrialGuardState'] = combat_guard.fail('recordingFailure', time.perf_counter_ns(),
                     error=recorder.error or report['recording']['error'])['state']

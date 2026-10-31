@@ -564,6 +564,16 @@ Explicit geometry is immutable, directed, limited to two points and 40 units, an
 
 An intentional stop produces terminal session state `stopped` and process code 1; assess its reason separately from completed leg audits. Keep failed trials and native recordings as diagnostics, and reserve diagnostic or holdout episodes before export so they cannot enter fitting. See the [live measurements and limitations](../../Docs/research/BetterGI-Native-Combat-Observation-2026-10-31.md).
 
+### Executed-action history trial
+
+Inside the ordinary RDP worker, `scout_session.py run --p2p-executed-history --allow-reviewed-routes` selects the optional `receipt-verified-executed-actions-v1` mode. It defaults to 50 ms holds; `--action-hold-ms 60` is the other supported trial duration. Each session uses its own trial directory, with its 26 runtime sources retained in the sibling `source-snapshot` before model loading. The manifest, request, cached-policy proof and resident proof bind the mode, hold, source hashes and fixed goal. Existing workers retain 100 ms holds and their original history behavior.
+
+The policy keeps the selected native or model action in its temporal history only after a matching `completed` / `horizon_complete` receipt. It reconstructs the complete timestep from the saved prior cache using the actual integer keys and mouse deltas. Both model inference and reconstruction use independently validated CUDA graphs prepared before the input lease. Rejected actions roll back exactly; one pending action blocks the next prediction, which also requires a newer source after the terminal receipt. The journal retains commanded duration separately from the native start/end interval because the model has no duration token.
+
+This initial mode requires one explicitly reviewed leg, retained exact RGB, the native encounter guard, a 35-second deadline and 150 ms source freshness. Climb and inspected-obstacle recovery are disabled. Partial, replaced, missing or contradictory receipts, recording loss and mid-leg interruptions retire the trial after release/reset. The independent audit checks every original proposal, receipt, history transition and source join. A configured 10 Hz decision target is not a measured end-to-end feedback rate.
+
+`validate_p2p_executed_history.py` performs an offline GPU check on an existing exact-RGB recording. It compares all corrected cache tensors with upstream's complete two-pass path across H41 fill/rollover, checks exact rollback and reports prediction/reconstruction timings. Its synthetic receipts grant no live-game qualification.
+
 ### Bounded combat prototype
 
 `combat_trial.py` runs one separate normal-attack experiment in the original minimized RDP session. It loads the installed Open P2P model once with FP16, H41, CUDA graph prewarm and accepted-input history. The trial lasts at most five seconds and admits at most three unchanged pure-LBUTTON proposals, each held for 100 ms. It requires two fresh native observations of one enemy-bar candidate. Every attack must finish, release explicitly, and receive healthy target evidence from a source at least 60 ms after release before another attack. Movement, camera changes, other keys, goal changes, reconnects and automatic retries are excluded from this initial experiment.

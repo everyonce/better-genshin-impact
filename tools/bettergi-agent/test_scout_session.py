@@ -207,7 +207,8 @@ class ScoutSessionTests(unittest.TestCase):
         """Complete one synthetic lease with the real resident's unique run/control identity."""
         self.assertIs(policy,self.policy)
         self.assertEqual(policy.history,[])
-        self.assertEqual((args.action_hold_ms,args.max_observation_age_ms,args.hybrid_legs),(100,150,1))
+        expected_hold=getattr(self.settings,'action_hold_ms',100)
+        self.assertEqual((args.action_hold_ms,args.max_observation_age_ms,args.hybrid_legs),(expected_hold,150,1))
         self.assertLessEqual(args.seconds,35)
         self.episodes.append((args,policy.weights,policy.graph,control.run_id))
         if self.admit_guard:
@@ -257,6 +258,138 @@ class ScoutSessionTests(unittest.TestCase):
         for row in result['legs']:
             self.assertEqual(row['datasetSplit'],'diagnostic')
             self.assertEqual(read_split(Path(row['directory']),row['runId'])['split'],'diagnostic')
+
+    def test_executed_history_cli_pins_hold_and_excludes_inspected_recovery(self):
+        """Only an explicit opt-in can select shorter holds; the original worker defaults stay fixed."""
+        base=['run','--directory',str(self.settings.directory),'--owner-from',str(self.settings.owner_from)]
+        self.assertEqual(scout.options(base).action_hold_ms,100)
+        selected=scout.options(base+['--p2p-executed-history','--allow-reviewed-routes'])
+        self.assertEqual((selected.p2p_executed_history,selected.action_hold_ms),(True,50))
+        self.assertEqual(scout.options(base+['--p2p-executed-history','--allow-reviewed-routes','--action-hold-ms','60']).action_hold_ms,60)
+        for extra in (['--action-hold-ms','50'],['--p2p-executed-history','--action-hold-ms','100'],
+                      ['--p2p-executed-history','--allow-inspected-obstacle-recovery'],['--p2p-executed-history'],
+                      ['--p2p-executed-history','--allow-reviewed-routes','--route',scout.SCOUT_GRASS_ROUTE]):
+            with self.subTest(extra=extra),self.assertRaises(SystemExit):scout.options(base+extra)
+
+    def test_executed_history_declaration_cannot_change_mode_hold_or_recovery(self):
+        """Mutable top-level declarations cannot override the immutable model arguments."""
+        manifest=dict(configuration=dict(arguments=dict(p2p_executed_history=True,action_hold_ms=50,
+                      navigation_climb_recovery=False)),historyCommitMode=scout.EXECUTED_HISTORY_MODE,actionHoldMs=50)
+        self.assertEqual(scout.manifest_history_declaration(manifest),
+            dict(historyCommitMode=scout.EXECUTED_HISTORY_MODE,actionHoldMs=50))
+        for update in (dict(historyCommitMode='accepted-proposals-only'),dict(actionHoldMs=60),
+                       dict(actionHoldMs=True),dict(inspectedObstacleRecoveryPolicy={})):
+            with self.subTest(update=update),self.assertRaises(ValueError):
+                scout.manifest_history_declaration(manifest|update)
+        for update in (dict(p2p_executed_history=False),dict(p2p_executed_history=1),
+                       dict(action_hold_ms=100),dict(navigation_climb_recovery=True)):
+            changed=copy.deepcopy(manifest)
+            changed['configuration']['arguments'].update(update)
+            with self.subTest(update=update),self.assertRaises(ValueError):scout.manifest_history_declaration(changed)
+        self.assertEqual(scout.manifest_history_declaration(dict(actionHoldMs=100)),{})
+
+    def prepare_executed_history_worker(self):
+        """Select real source archival while substituting only GPU execution and native control."""
+        self.settings.p2p_executed_history=True
+        self.settings.action_hold_ms=50
+        self.settings.allow_reviewed_routes=True
+        self.reviewed_routes=[scout.ReviewedScoutRoute(((-1135,2267),(-1135,2280))),
+                              scout.ReviewedScoutRoute(((-1135,2280),(-1150,2280)))]
+        self.policy.metadata['historyCommitMode']=scout.EXECUTED_HISTORY_MODE
+        self.policy.executed_history=True
+
+    def test_executed_history_reuses_weights_with_mode_and_hold_bound_to_every_leg(self):
+        """Two real resident lifetimes retain model identity and independently checked declarations."""
+        self.prepare_executed_history_worker()
+        self.test_two_reviewed_routes_load_once_reset_history_and_retire_each_lease()
+        manifest=json.loads((self.settings.directory/'manifest.json').read_bytes())
+        documents=[manifest,json.loads((self.settings.directory/'policy-proof.json').read_bytes())]
+        documents.extend(json.loads(path.read_bytes()) for path in (self.settings.directory/'requests').glob('*.json'))
+        documents.extend(json.loads(path.read_bytes()) for path in (self.settings.directory/'legs').glob('*/patrol.json.reuse.json'))
+        self.assertEqual(len(documents),6)
+        for document in documents:
+            self.assertEqual((document.get('historyCommitMode'),document.get('actionHoldMs')),
+                             (scout.EXECUTED_HISTORY_MODE,50))
+        self.assertTrue(manifest['configuration']['arguments']['p2p_executed_history'])
+        self.assertEqual(manifest['configuration']['executedHistorySourceSha256'],scout.executed_history_sources())
+        for name,digest in manifest['configuration']['executedHistorySourceSha256'].items():
+            self.assertEqual(scout.file_sha(self.live/'source-snapshot'/name),digest)
+        for args,*_ in self.episodes:self.assertFalse(args.navigation_climb_recovery)
+
+    def test_conflicting_source_archive_is_preserved_and_refused_before_model_load(self):
+        """An existing snapshot cannot be silently overwritten to pass a new proof."""
+        self.prepare_executed_history_worker()
+        archive=self.live/'source-snapshot'
+        archive.mkdir()
+        conflict=archive/'p2p_executed_history_graph.py'
+        conflict.write_bytes(b'original conflicting source evidence')
+        with self.assertRaisesRegex(ValueError,'source snapshot differs'):
+            scout.run_session(self.settings,lifecycle=self.lifecycle,loader=self.load,
+                              watch_factory=self.make_watch,auditor=self.audit)
+        self.assertEqual(conflict.read_bytes(),b'original conflicting source evidence')
+        self.assertEqual((self.loads,self.starts),([],[]))
+        self.assertTrue(self.watch.closed)
+
+    def test_executed_history_cannot_change_hold_after_a_completed_leg(self):
+        """A new valid hold is still a different immutable worker configuration and opens no new lease."""
+        self.prepare_executed_history_worker()
+        self.before_submit=lambda number:setattr(self.settings,'action_hold_ms',60) if number==1 else None
+        result=self.run_worker()
+        self.assertEqual((result['state'],len(self.loads),len(self.starts)),('failed',1,1))
+        self.assertIn('Cached model configuration changed',result['reason'])
+        self.assertEqual([row['state'] for row in result['legs']],['verified'])
+        self.assertTrue(self.watch.closed)
+
+    def test_executed_history_source_change_refuses_the_next_cached_acquisition(self):
+        """A source fingerprint mismatch after review cannot start another input lifetime."""
+        self.prepare_executed_history_worker()
+        original=scout.executed_history_sources()
+        def change_source(number):
+            """Simulate a later file hash without changing any shared repository file."""
+            if number==1:
+                changed=original|{'p2p_action_codec.py':'0'*64}
+                self.stack.enter_context(patch.object(scout,'executed_history_sources',return_value=changed))
+        self.before_submit=change_source
+        result=self.run_worker()
+        self.assertEqual((result['state'],len(self.loads),len(self.starts)),('failed',1,1))
+        self.assertIn('Executed-history runtime source or policy changed',result['reason'])
+        self.assertEqual([row['state'] for row in result['legs']],['verified'])
+
+    def test_executed_history_policy_must_confirm_the_requested_mode_before_review(self):
+        """A loader that ignores the new flag is rejected before any request or input lease."""
+        self.prepare_executed_history_worker()
+        self.policy.metadata.clear()
+        result=self.run_worker()
+        self.assertEqual((result['state'],len(self.loads),len(self.starts)),('failed',1,0))
+        self.assertIn('Loaded policy did not enable',result['reason'])
+        self.assertTrue(self.watch.closed)
+
+    def test_resident_refuses_mismatched_or_undeclared_history_proofs_before_input(self):
+        """The actual resident boundary independently checks mode/hold before cached acquisition."""
+        self.prepare_executed_history_worker()
+        for index,kind in enumerate(('wrong-hold','boolean-hold','missing-mode','wrong-mode','legacy-downgrade','missing-proof')):
+            self.settings.directory=self.live/f'refused-resident-{index}'
+            def changed_runner(args,load,episode,*,policy_reuse):
+                """Alter only the proposed resident admission and retain the real refusal path."""
+                proof=copy.deepcopy(policy_reuse)
+                if kind=='wrong-hold':proof['actionHoldMs']=60
+                elif kind=='boolean-hold':proof['actionHoldMs']=True
+                elif kind=='missing-mode':proof.pop('historyCommitMode')
+                elif kind=='wrong-mode':proof['historyCommitMode']='accepted-proposals-only'
+                elif kind=='legacy-downgrade':
+                    args=copy.copy(args)
+                    args.p2p_executed_history,args.action_hold_ms=False,100
+                else:proof=None
+                return runtime.run_resident(args,load,episode,policy_reuse=proof)
+            with self.subTest(kind=kind):
+                result=self.run_worker(runner=changed_runner)
+                self.assertEqual(result['state'],'failed')
+                expected=('Legacy cached scout cannot declare' if kind=='legacy-downgrade'
+                          else 'Executed history requires its matching cached-session mode and hold')
+                self.assertIn(expected,result['reason'])
+                self.assertEqual((self.starts,self.episodes),([],[]))
+                self.assertEqual(len(self.loads),index+1)
+                self.assertTrue(self.watch.closed)
 
     def test_two_different_explicit_geometries_reuse_actual_resident_without_route_table_edits(self):
         """Two fresh reviews select different local immutable routes across real resident lifetimes."""

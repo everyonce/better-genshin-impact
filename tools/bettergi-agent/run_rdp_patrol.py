@@ -124,6 +124,11 @@ def ready_session(lifecycle):
 
 def patrol_argv(args, session, folder):
     """Use the same resident, observation profile and input owner as the audited street patrol."""
+    # The scout worker supplies this opt-in after binding its reviewed geometry.
+    executed_history=getattr(args,'p2p_executed_history',False)
+    hold=getattr(args,'action_hold_ms',50 if executed_history else 100)
+    if type(executed_history) is not bool or type(hold) is not int or hold not in ((50,60) if executed_history else (100,)):
+        raise ValueError('Executed history requires 50 or 60 ms holds; existing patrols retain 100 ms')
     requested_legs = getattr(args,'route_legs',None)
     if requested_legs is None:requested_legs=getattr(args,'destination_legs',args.circuits*4)
     command = [str(args.gpu_python.resolve()), '-B', '-X', 'utf8', str(Path(__file__).with_name('stream_client.py').resolve()),
@@ -132,11 +137,14 @@ def patrol_argv(args, session, folder):
                '--goal-embedding', str(args.goal_embedding.resolve()), '--goal-intent=ground-navigation',
                '--hybrid-navigation', '--navigation-climb-recovery', '--hybrid-route', getattr(args,'route_id',STREET_PATROL_ROUTE),
                '--hybrid-legs', str(requested_legs), '--fps=20', '--decision-hz=10',
-               '--max-observation-age-ms=150', '--action-hold-ms=100', '--enable-input', '--resident',
+               '--max-observation-age-ms=150', '--action-hold-ms='+str(hold), '--enable-input', '--resident',
                '--rdp-session-id', str(session), '--observation-profile=p2p-native-hamming-192-v1',
                '--seconds', str(args.seconds), '--segment-seconds', str(min(30, args.seconds)),
                '--preview', '--record-max-mib='+str((ENDURANCE if getattr(args,'endurance',False) else STANDARD).recording_mib), '--record-dir', str(folder/'patrol-recording'),
                '--ffmpeg', str(args.ffmpeg.resolve()), '--output', str(folder/'patrol.json')]
+    if executed_history:
+        command.remove('--navigation-climb-recovery')
+        command.append('--p2p-executed-history')
     if args.steering_shadow:
         command.append('--steering-shadow=' + str(args.steering_shadow.resolve()))
     if getattr(args,'navigation_profile',COURTYARD_PROFILE)!=COURTYARD_PROFILE:

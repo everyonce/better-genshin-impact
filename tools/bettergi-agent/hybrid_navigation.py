@@ -39,7 +39,11 @@ class HybridNavigation:
 
     def __init__(self, capability, route_id=COURTYARD_ROUTE, remember_bypass=False, *,
                  itinerary_destinations=None, itinerary_start='stair-front', stationary_photo_retries=False,
-                 navigation_profile=PROFILE, reviewed_scout_route=None):
+                 navigation_profile=PROFILE, reviewed_scout_route=None, action_hold_ms=100):
+        # Short receipt-serialized trials change the hold, never the one-shot mouse delta.
+        if type(action_hold_ms) is not int or action_hold_ms not in (50,60,100):
+            raise ValueError('Hybrid navigation requires a 50, 60 or 100 ms action hold')
+        self.action_hold_ms=action_hold_ms
         validate_capability(capability,navigation_profile)
         self.reviewed_scout_route=reviewed_scout_route
         if reviewed_scout_route is not None:
@@ -705,7 +709,7 @@ class HybridNavigation:
         elif self.phase == 'walking':
             self.stall_samples.clear()
         self.selections[reason] += 1
-        step = dict(durationMs=100, keys=keys, mouseDx=dx, mouseDy=0)
+        step = dict(durationMs=self.action_hold_ms, keys=keys, mouseDx=dx, mouseDy=0)
         selection = dict(owner=owner, reason=reason, target=self.target_name, pose=copy.deepcopy(pose),
                          completedLegs=self.legs, modelSteps=copy.deepcopy(proposal.get('steps', [])), step=step, **self.segment)
         if self.bypass:

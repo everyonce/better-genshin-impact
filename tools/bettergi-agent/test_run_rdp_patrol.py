@@ -4,6 +4,7 @@ from concurrent.futures import Future
 from pathlib import Path
 from queue import SimpleQueue
 import tempfile
+import time
 from threading import Event
 import unittest
 from unittest.mock import Mock, patch
@@ -52,6 +53,39 @@ class PatrolLauncherTests(unittest.TestCase):
                           ['--route','mondstadt-street-extension-12-v1','--legs','1'],
                           ['--remember-hybrid-bypass'],['--route','mondstadt-stair-post-v1','--legs','1','--camera-calibration','unused']):
             with self.subTest(arguments=arguments),self.assertRaises(SystemExit):patrol.options(arguments)
+
+    def test_executed_history_command_selects_short_hold_without_climb_recovery(self):
+        """The explicit experiment keeps all observation and input limits while serializing feedback."""
+        from hybrid_routes import SCOUT_GRASS_ROUTE
+        from navigation_profiles import SCOUT_PROFILE
+        from reviewed_scout_route import ReviewedScoutRoute
+        spec=ReviewedScoutRoute(((-1135,2267),(-1135,2280)))
+        geometry=self.folder/'reviewed-route.json'
+        geometry.write_text(json.dumps(spec.document()),encoding='utf-8')
+        for hold in (50,60):
+            with self.subTest(hold=hold):
+                args=patrol.options(['--route',SCOUT_GRASS_ROUTE,'--legs','1','--navigation-profile',SCOUT_PROFILE,
+                    '--seconds','35','--retain-policy-rgb','--native-combat-observation'])
+                args.p2p_executed_history,args.action_hold_ms=True,hold
+                command=patrol.patrol_argv(args,7,self.folder)
+                self.assertIn('--p2p-executed-history',command)
+                self.assertNotIn('--navigation-climb-recovery',command)
+                route_index=command.index('--hybrid-route')
+                command[route_index:route_index+2]=['--reviewed-scout-route',str(geometry)]
+                binding=f"--patrol-series-binding=101:{'a'*32}:202:{'b'*32}:{time.monotonic_ns()+120_000_000_000}"
+                parsed=parse_arguments(command[5:]+[binding])
+                self.assertTrue(parsed.p2p_executed_history)
+                self.assertFalse(parsed.navigation_climb_recovery)
+                self.assertEqual((parsed.action_hold_ms,parsed.max_observation_age_ms,parsed.decision_hz),(hold,150,10))
+                self.assertEqual((parsed.history,parsed.fps,parsed.hybrid_legs),(41,20,1))
+
+    def test_argv_builder_rejects_undeclared_or_incompatible_short_holds(self):
+        """The internal scout mode cannot silently alter ordinary patrol timing."""
+        for enabled,hold in ((False,50),(False,60),(True,100),(True,True),('true',50)):
+            args=patrol.options([])
+            args.p2p_executed_history,args.action_hold_ms=enabled,hold
+            with self.subTest(enabled=enabled,hold=hold),self.assertRaises(ValueError):
+                patrol.patrol_argv(args,7,self.folder)
 
     def test_discover_requires_one_current_minimized_and_idle_authenticated_pair(self):
         self.assertEqual(patrol.ready_session(self.api), (self.root, self.child))

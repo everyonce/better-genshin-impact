@@ -1,5 +1,6 @@
 """Real pretrained policies with explicit compatibility and action boundaries."""
 from collections import deque
+from copy import deepcopy
 import math
 from pathlib import Path
 import sys
@@ -206,13 +207,17 @@ class GameScalingAdapter:
 class OpenP2PAdapter:
     """Execute real 150M policy weights with persistent temporal KV state."""
     def __init__(self, checkpoint, source, cache_root, history=200, dtype='float16', cuda_graph=False,
-                 fast_start=False, execution_feedback=False, goal_embedding=None,
+                 fast_start=False, execution_feedback=False, goal_embedding=None, executed_history=False,
                  p2p_mouse_sampling=None, observation_profile='legacy-area-640x360-v1', checkpoint_scope=None, **kwargs):
         if checkpoint_scope is not None:
             from checkpoint_load_scope import CheckpointLoadScope
             if type(checkpoint_scope) is not CheckpointLoadScope:
                 raise TypeError('checkpoint_scope_type')
         try:
+            if type(executed_history) is not bool or (executed_history and not
+                    (cuda_graph and fast_start and execution_feedback)):
+                raise ValueError('Executed history requires explicit CUDA graph, fast start and feedback')
+            self.executed_history = executed_history
             if checkpoint_scope is not None:
                 checkpoint_scope.begin_adapter(self, checkpoint=checkpoint, history=history, dtype=dtype,
                     cuda_graph=cuda_graph, fast_start=fast_start, execution_feedback=execution_feedback,
@@ -235,6 +240,9 @@ class OpenP2PAdapter:
             if execution_feedback and not fast_start:
                 raise ValueError('Execution feedback requires the resettable fixed-capacity cache')
             self.execution_feedback = execution_feedback
+            if self.executed_history:
+                from p2p_executed_history import validate_action_mapping
+                validate_action_mapping(self.model.action_mapping)
             self._history_backup = None
             self._pending_feedback = False
             self._goal_tensor = None
@@ -254,6 +262,9 @@ class OpenP2PAdapter:
                              'historyCommit': 'accepted-proposals-only' if execution_feedback else 'all-predictions',
                              'rotaryPositions': 'on-device FP32 original formula; no finite cache or periodic reset',
                              'parameterCount': sum(parameter.numel() for parameter in self.model.parameters())}
+            if self.executed_history:
+                from p2p_executed_history import MODE
+                self.metadata.update(historyCommitMode=MODE, historyCommit=MODE)
             self.reset()
             if goal_embedding:
                 self.set_goal(goal_embedding)
@@ -298,6 +309,7 @@ class OpenP2PAdapter:
             self.text.zero_()
         self.steps_seen = 0
         self._pending_feedback = False
+        self._executed_candidate = None
 
     def _begin_history_transaction(self):
         """Preserve the prior state so an unexecuted proposal cannot become action history."""
@@ -317,6 +329,7 @@ class OpenP2PAdapter:
             self._backup_valid.copy_(self.temporal_cache.valid_tokens)
         self._backup_steps = self.steps_seen
         self._pending_feedback = True
+        self._executed_candidate = None
 
     def finish_action(self, accepted):
         """Commit a server-accepted proposal or restore history after complete rejection.
@@ -329,6 +342,8 @@ class OpenP2PAdapter:
             return
         if type(accepted) is not bool or not self._pending_feedback:
             raise RuntimeError('One explicit boolean acceptance is required per pending prediction')
+        if accepted and getattr(self, 'executed_history', False):
+            raise RuntimeError('Executed history requires a verified receipt, not admission acceptance')
         if not accepted:
             self.idx.copy_(self._backup_idx)
             self.temporal_cache.valid_tokens.copy_(self._backup_valid)
@@ -337,6 +352,54 @@ class OpenP2PAdapter:
                 state.v_cache.copy_(saved.v_cache)
             self.steps_seen = self._backup_steps
         self._pending_feedback = False
+        self._executed_candidate = None
+
+    def prepare_executed_action(self, step):
+        """Build a provisional corrected timestep; no later prediction may use it yet."""
+        if not getattr(self, 'executed_history', False) or not self._pending_feedback or self._executed_candidate is not None:
+            raise RuntimeError('Exactly one pending executed-history candidate is required')
+        from p2p_executed_history import encode_controller_step
+        encoded = encode_controller_step(step)
+        # The prediction advanced the mask once. Rebuild from its saved prior KV
+        # and index with that same mask, never from the sampled candidate cache.
+        next_idx, next_state = self._executed_forward(encoded)
+        if len(next_state) != len(self.state):
+            raise RuntimeError('Executed-history cache layer count changed')
+        self.idx.copy_(next_idx)
+        for current, replacement in zip(self.state, next_state):
+            current.k_cache.copy_(replacement.k_cache)
+            current.v_cache.copy_(replacement.v_cache)
+        if self.idx.is_cuda:
+            torch.cuda.synchronize(self.idx.device)
+        self._executed_candidate = dict(step=deepcopy(step), encodedAction=deepcopy(encoded))
+        return deepcopy(encoded)
+
+    def _executed_forward(self, encoded):
+        """Use the validated selected-action graph and the original prepared frame/text."""
+        if getattr(self,'executed_graph',None) is None:
+            raise RuntimeError('Executed-history graph was not prepared before prediction')
+        return self.executed_graph.replay(self._backup_idx,self._history_backup,encoded)
+
+    def finish_executed_action(self, receipt, request, acceptance):
+        """Commit only the exact completed native action used to construct this cache."""
+        from p2p_executed_history import encode_controller_step, verify_completed_receipt
+        if (not getattr(self, 'executed_history', False) or not self._pending_feedback
+                or self._executed_candidate is None):
+            raise RuntimeError('No executed-history candidate is pending')
+        verify_completed_receipt(receipt, request, acceptance)
+        if (request['steps'][0] != self._executed_candidate['step']
+                or encode_controller_step(request['steps'][0]) != self._executed_candidate['encodedAction']):
+            raise RuntimeError('Executed-history candidate differs from the submitted step')
+        self._pending_feedback = False
+        self._executed_candidate = None
+
+    def executed_history_counters(self):
+        """Expose small replay counters without retaining or copying model tensors."""
+        return dict(beforeFrames=self._backup_steps, afterFrames=self.steps_seen,
+                    validFrames=min(self.steps_seen, self.config.shared.n_seq_timesteps),
+                    beforeIndex=int(self._backup_idx.item()), afterIndex=int(self.idx.item()),
+                    beforeValidTokens=int(self._backup_valid.item()),
+                    afterValidTokens=int(self.temporal_cache.valid_tokens.item()))
 
     def _forward(self, frame, idx, state, uniform=None):
         """Keep all numeric work on CUDA, including upstream tensor allocation."""
@@ -368,6 +431,13 @@ class OpenP2PAdapter:
             torch.testing.assert_close(actual.k_cache, reference.k_cache, rtol=1e-3, atol=1e-3)
             torch.testing.assert_close(actual.v_cache, reference.v_cache, rtol=1e-3, atol=1e-3)
         self.metadata['graphCaptureValidated'] = True
+        if getattr(self,'executed_history',False):
+            from p2p_executed_history_graph import ExecutedHistoryGraph
+            # Startup preparation has no transaction yet, so this graph owns its
+            # prior-state buffers and receives the real backup only when replayed.
+            self.executed_graph=ExecutedHistoryGraph(self.model,self.static_frame,self.static_idx,
+                                                     self.static_state,self.text,self.dtype)
+            self.metadata['executedHistoryGraph']=dict(self.executed_graph.validation)
 
     def predict(self, image, source_size=None, observation_profile=None):
         started = time.perf_counter_ns()

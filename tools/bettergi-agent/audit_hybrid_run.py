@@ -20,6 +20,17 @@ from navigation_profiles import COURTYARD_PROFILE,SURFACE_PROFILE,SCOUT_PROFILE,
 from reviewed_scout_route import ReviewedScoutRoute,load_reviewed_route,reviewed_route_policy
 
 
+# Keep this independent verifier's expected contract explicit; do not delegate it to the runtime ledger.
+EXECUTED_HISTORY_MODE='receipt-verified-executed-actions-v1'
+EXECUTED_HISTORY_SOURCE_NAMES=('scout_session.py','audit_scout_obstacle.py','audit_hybrid_run.py',
+    'resident_runtime.py','stream_client.py','scout_encounter_guard.py','hybrid_navigation.py',
+    'reviewed_scout_route.py','run_patrol_series.py','run_rdp_patrol.py','bridge_transport.py',
+    'policy_rgb_archive.py','episode_split.py','observation_timing.py','model_adapters.py',
+    'native_combat.py','navigation_profiles.py','p2p_startup.py','p2p_temporal_cache.py',
+    'p2p_executed_history.py','p2p_action_codec.py','p2p_loader.py','p2p_compat_attention.py',
+    'p2p_sampling.py','p2p_rotary.py','p2p_executed_history_graph.py')
+
+
 def require(condition, message):
     """Fail closed on incomplete evidence rather than inferring successful gameplay."""
     if not condition:
@@ -47,6 +58,249 @@ def evidence_document(path, maximum=1024*1024):
     value=json.loads(raw.decode('utf-8-sig'))
     require(isinstance(value,dict),'Expected cached-policy evidence object')
     return value,hashlib.sha256(raw).hexdigest()
+
+
+def executed_history_descriptor(hold):
+    """State the expected receipt contract independently of the executable runtime helper."""
+    return dict(version=1,historyCommitMode=EXECUTED_HISTORY_MODE,actionHoldMs=hold,maxPendingActions=1,
+        requiredReceiptStatus='completed',requiredReceiptReason='horizon_complete',maxAppliedSteps=1,
+        postTerminalSourceRequired=True,receiptDeadline='original-proposal-and-lease',
+        incompleteReceipt='release-reset-retire',mouseDelta='one-shot-unscaled',durationToken=False,
+        maxKeyboardTokens=4,maxMouseButtonTokens=2)
+
+
+def verify_executed_history_sources(configuration, manifest, session_directory, hold):
+    """Bind the independent descriptor to the original archived runtime, never current working files."""
+    expected=executed_history_descriptor(hold)
+    require(json.dumps(configuration.get('executedHistoryPolicy'),sort_keys=True,allow_nan=False)
+            ==json.dumps(expected,sort_keys=True,allow_nan=False)
+            and json.dumps(manifest.get('configuration'),sort_keys=True,allow_nan=False)
+                ==json.dumps(configuration,sort_keys=True,allow_nan=False),
+            'Executed-history policy descriptor or manifest configuration changed')
+    sources=configuration.get('executedHistorySourceSha256')
+    require(isinstance(sources,dict) and set(sources)==set(EXECUTED_HISTORY_SOURCE_NAMES),
+            'Executed-history original source contract is incomplete')
+    snapshot=Path(session_directory).parent/'source-snapshot'
+    for name,digest in sources.items():
+        require(isinstance(digest,str) and re.fullmatch('[a-f0-9]{64}',digest) is not None
+                and hashlib.sha256(evidence_bytes(snapshot/name,2*1024*1024)).hexdigest()==digest,
+                'Executed-history archived source differs: '+name)
+
+
+def has_executed_history_evidence(value):
+    """Prevent a stripped opt-in declaration from reinterpreting new journals as legacy proposals."""
+    if isinstance(value,dict):
+        return (any(key.startswith('executedHistory') for key in value)
+                or value.get('historyCommitMode')==EXECUTED_HISTORY_MODE
+                or value.get('historyCommit')==EXECUTED_HISTORY_MODE or value.get('p2p_executed_history') is True
+                or value.get('type')=='p2pExecutedHistory' or value.get('proposalJournalVersion')==3
+                or any(has_executed_history_evidence(item) for item in value.values()))
+    return isinstance(value,list) and any(has_executed_history_evidence(item) for item in value)
+
+
+def executed_history_encoding(step, hold):
+    """Independently encode the bounded scout selection, not the policy's unexecuted prediction."""
+    require(isinstance(step,dict) and set(step)=={'keys','durationMs','mouseDx','mouseDy'}
+            and type(step.get('durationMs')) is int and step['durationMs']==hold
+            and isinstance(step.get('keys'),list) and all(type(key) is str for key in step['keys'])
+            and len(step['keys'])==len(set(step['keys'])) and set(step['keys'])<=set('WASD')
+            and all(type(step.get(key)) is int and -(2**31)<=step[key]<2**31 for key in ('mouseDx','mouseDy')),
+            'Executed-history selected step changed its hold or scout input scope')
+    # These are the pinned upstream token IDs and bucket edges, independent of runtime codec calls.
+    keys=sorted({'A':6,'D':7,'W':11,'S':12}[key] for key in step['keys'])
+    x=(-500.1,-144.1,-76.1,-46.1,-29.1,-18.1,-11.1,-6.1,-3.1,-1.1,-.1,0,1,3,6,11,18,29,46,76,144,500)
+    y=(-150.1,-24.1,-12.1,-7.1,-4.1,-3.1,-1.1,-.1,0,1,3,4,7,12,24,150)
+    return dict(keys=keys+[0]*(4-len(keys)),mouseButtons=[0,0],
+                mouseDxBin=sum(edge<step['mouseDx'] for edge in x),mouseDyBin=sum(edge<step['mouseDy'] for edge in y))
+
+
+def verify_executed_history(run, parts, frames, entries, recordings, reuse):
+    """Join predictions, chosen actions, terminal receipts and cache commits without runtime callbacks."""
+    journals=[]
+    for entry in entries:
+        path=Path(recordings)/f"{entry['number']:05d}"/'events.jsonl'
+        # Early historical fixtures did not retain an event journal; new-mode evidence must have one.
+        raw=evidence_bytes(path,32*1024*1024) if path.is_file() and path.stat().st_size else b''
+        rows=[json.loads(line) for line in raw.splitlines()]
+        require(all(isinstance(row,dict) for row in rows),'Invalid original executed-history journal row')
+        journals.append(rows)
+    if not reuse or reuse.get('historyCommitMode')!=EXECUTED_HISTORY_MODE:
+        require(not any(has_executed_history_evidence(value) for value in (run,parts,list(frames.values()),journals)),
+                'Historical route contains undeclared executed-history evidence')
+        return None
+    hold=reuse.get('actionHoldMs')
+    require(type(hold) is int and hold in (50,60),'Executed-history audit has no pinned selected hold')
+    require(parts and len(parts)==len(entries)==len(journals),'Executed-history segment journal coverage differs')
+    previous=None
+    before_frames=before_index=before_tokens=0
+    previous_client_ns=-1
+    committed=rejected=0
+    request_ids=set()
+    submitted_ids=set()
+
+    def finite(value):
+        """Reject boolean and nonfinite timing values before comparing native clock evidence."""
+        return type(value) in (int,float) and math.isfinite(value)
+
+    for part,rows in zip(parts,journals):
+        metadata=part.get('policyMetadata') or {}
+        require(part.get('historyCommitMode')==EXECUTED_HISTORY_MODE
+                and metadata.get('historyCommitMode')==metadata.get('historyCommit')==EXECUTED_HISTORY_MODE
+                and type(metadata.get('historyFrames')) is int and metadata['historyFrames']==41
+                and part.get('proposalJournal')==dict(version=3,historyCommitMode=EXECUTED_HISTORY_MODE)
+                and type(part['proposalJournal']['version']) is int,
+                'Executed-history report or model metadata differs from the pinned mode')
+        policy=executed_history_descriptor(hold)
+        starts=[row for row in rows if row.get('type')=='episodeStart']
+        require(json.dumps(part.get('executedHistoryPolicy'),sort_keys=True,allow_nan=False)==json.dumps(policy,sort_keys=True)
+                and len(starts)==1 and starts[0].get('sessionId')==part['hello'].get('sessionId')
+                and starts[0].get('historyCommitMode')==EXECUTED_HISTORY_MODE
+                and starts[0].get('executedHistoryPolicy')==policy and starts[0].get('proposalJournal')==part['proposalJournal'],
+                'Executed-history initial episode declaration differs from the selected receipt policy')
+        recording=part.get('recording') or {}
+        require(all(recording.get(key) is True for key in ('complete','lossless','closed','workerRetired'))
+                and recording.get('error') is None and type(part.get('serverDroppedReceipts')) is int
+                and part['serverDroppedReceipts']==0
+                and all(type(recording.get(key)) is int and recording[key]==0 for key in
+                        ('droppedFrames','droppedEvents','droppedObservations','abandonedFrames')),
+                'Executed-history recording or native receipt retention is incomplete')
+        require(not any(part.get(key) for key in ('navigationClimbActions','navigationClimbRecoveryEvents',
+                                                'navigationClimbRecovery','inspectedObstacleRecovery')),
+                'Executed-history run retained recovery activity')
+        paired=[(index,row) for index,row in enumerate(rows) if row.get('type') in ('proposal','p2pExecutedHistory')]
+        decisions=part.get('decisions')
+        events=part.get('executedHistoryEvents')
+        receipts=part.get('receipts')
+        require(isinstance(decisions,list) and isinstance(events,list) and isinstance(receipts,list)
+                and all(isinstance(value,dict) for value in decisions+events+receipts)
+                and len(paired)==2*len(decisions)==2*len(events)
+                and [row.get('type') for _,row in paired]==['proposal','p2pExecutedHistory']*len(decisions),
+                'Executed-history proposal/commit journals are missing, duplicated or reordered')
+        receipt_rows=[(index,row) for index,row in enumerate(rows) if 'requestId' in row and 'status' in row and 'appliedSteps' in row]
+        receipt_ids=[receipt.get('requestId') for receipt in receipts]
+        require(all(isinstance(value,str) and value for value in receipt_ids) and len(set(receipt_ids))==len(receipt_ids)
+                and len(receipt_rows)==len(receipts)
+                and {row.get('requestId') for _,row in receipt_rows}==set(receipt_ids),
+                'Executed-history native receipt journal is missing or duplicated')
+        terminal={receipt['requestId']:receipt for receipt in receipts}
+        journal_terminal={row['requestId']:(index,row) for index,row in receipt_rows}
+        accepted_here=set()
+        for number,(decision,event) in enumerate(zip(decisions,events)):
+            proposal_index,proposal=paired[number*2]
+            event_index,original=paired[number*2+1]
+            require(event==original==decision.get('executedHistory') and event.get('type')=='p2pExecutedHistory'
+                    and type(event.get('version')) is int and event['version']==1
+                    and event.get('historyCommitMode')==EXECUTED_HISTORY_MODE,
+                    'Executed-history report differs from its original event journal')
+            frame=frames.get(decision.get('frameId'))
+            require(isinstance(frame,dict) and type(frame.get('frameId')) is int and frame['frameId']>0,
+                    'Executed-history prediction has no original source frame')
+            source=frame.get('sourceFrame') or {}
+            observed=observation_timestamp(frame)
+            require(isinstance(source.get('captureEpoch'),str) and source['captureEpoch']
+                    and type(source.get('timestamp100ns')) is int and source['timestamp100ns']>0 and finite(observed)
+                    and all(type(value.get('frameId')) is int for value in (event,proposal,decision))
+                    and event.get('frameId')==proposal.get('frameId')==decision['frameId']
+                    and event.get('sourceFrame')==source
+                    and event.get('observationTimestampMs')==proposal.get('observationTimestampMs')
+                        ==decision.get('observationTimestampMs')==observed,
+                    'Executed-history prediction source or clock differs from retained native evidence')
+            predecessor=None if previous is None else {key:previous[key] for key in ('requestId','endedAtMs')}
+            require(event.get('previousReceipt')==proposal.get('executedHistoryPredecessor')
+                        ==decision.get('executedHistoryPredecessor')==predecessor
+                    and 'executedHistoryPredecessor' in proposal and 'executedHistoryPredecessor' in decision
+                    and 'previousReceipt' in event,
+                    'Executed-history prediction lost its exact preceding terminal receipt')
+            if previous is not None:
+                require(frame['frameId']>previous['frameId'] and source['captureEpoch']==previous['sourceFrame']['captureEpoch']
+                        and source['timestamp100ns']>previous['sourceFrame']['timestamp100ns'] and observed>previous['endedAtMs'],
+                        'Executed-history prediction used a source from before the prior action ended')
+            step=event.get('step')
+            encoded=executed_history_encoding(step,hold)
+            acceptance=decision.get('acceptance') or {}
+            model=(decision.get('hybridNavigation') or {}).get('owner')
+            require(model in ('hybrid-native','open-p2p') and event.get('modelId')==proposal.get('model')==model
+                    and decision.get('steps')==proposal.get('steps')==[step]
+                    and json.dumps(event.get('encodedAction'),sort_keys=True,allow_nan=False)==json.dumps(encoded,sort_keys=True)
+                    and event.get('acceptance')==proposal.get('acceptance')==acceptance
+                    and type(proposal.get('proposalJournalVersion')) is int and proposal['proposalJournalVersion']==3
+                    and proposal.get('historyCommitMode')==EXECUTED_HISTORY_MODE
+                    and proposal.get('hybridNavigation')==decision.get('hybridNavigation')
+                    and 'rawPolicySteps' in proposal and proposal['rawPolicySteps']==decision.get('rawPolicySteps')
+                    and proposal.get('historyCommitted') is decision.get('historyCommitted'),
+                    'Executed-history chosen action, codec or proposal attribution changed')
+            require(acceptance.get('type') in ('accepted','rejected','notSubmitted'),
+                    'Executed-history proposal has an unknown admission outcome')
+            at=event.get('clientTimeNs')
+            require(type(at) is int and at>previous_client_ns,'Executed-history commit clock did not advance')
+            previous_client_ns=at
+            history=event.get('history') or {}
+            fields=('beforeFrames','afterFrames','validFrames','beforeIndex','afterIndex','beforeValidTokens','afterValidTokens')
+            require(isinstance(history,dict) and set(history)==set(fields)
+                    and all(type(history.get(key)) is int and history[key]>=0 for key in fields)
+                    and (history['beforeFrames'],history['beforeIndex'],history['beforeValidTokens'])
+                        ==(before_frames,before_index,before_tokens),
+                    'Executed-history cache counters reset or lost their preceding state')
+            is_accepted=acceptance.get('type')=='accepted'
+            require(event.get('outcome')==('committed' if is_accepted else 'rejected')
+                    and decision.get('historyCommitted') is is_accepted and event.get('error') is None,
+                    'Executed-history acceptance was relabeled as a completed commit')
+            arguments=event.get('arguments')
+            request=event.get('requestId')
+            if arguments is not None:
+                require(isinstance(arguments,dict) and isinstance(request,str) and request
+                        and request not in submitted_ids
+                        and arguments.get('requestId')==acceptance.get('requestId')==request
+                        and type(arguments.get('version')) is int and arguments['version']==1
+                        and arguments.get('command')=='action' and type(arguments.get('frameId')) is int
+                        and type(arguments.get('goalVersion')) is int
+                        and all(arguments.get(key)==part['hello'].get(key) for key in ('sessionId','ownerEpoch','goalVersion'))
+                        and arguments.get('frameId')==frame['frameId'] and arguments.get('modelId')==model
+                        and arguments.get('observedAtMs')==frame.get('capturedAtMs') and arguments.get('steps')==[step]
+                        and arguments.get('startBeforeMs')==proposal.get('startBeforeMs')==observed+150
+                        and finite(arguments.get('expiresAtMs')) and arguments['expiresAtMs']==observed+700,
+                        'Executed-history original action envelope changed')
+                submitted_ids.add(request)
+            if is_accepted:
+                require(arguments is not None and request not in request_ids and event.get('error') is None,
+                        'Executed-history accepted request is duplicated, missing or failed')
+                receipt=terminal.get(request) or {}
+                original_receipt=journal_terminal.get(request)
+                require(original_receipt and original_receipt[0]<proposal_index<event_index
+                        and original_receipt[1]==receipt==event.get('receipt')
+                        and receipt.get('requestId')==request and type(receipt.get('frameId')) is int
+                        and receipt['frameId']==frame['frameId']
+                        and receipt.get('modelId')==model and receipt.get('status')=='completed'
+                        and receipt.get('reason')=='horizon_complete'
+                        and finite(acceptance.get('acceptedAtMs')) and receipt.get('acceptedAtMs')==acceptance['acceptedAtMs'],
+                        'Executed-history commit lacks its exact positive terminal receipt')
+                applied=receipt.get('appliedSteps')
+                require(isinstance(applied,list) and len(applied)==1 and type(applied[0].get('index')) is int
+                        and applied[0]['index']==0 and all(applied[0].get(key)==step[key] for key in ('keys','mouseDx','mouseDy'))
+                        and all(type(applied[0].get(key)) is int for key in ('mouseDx','mouseDy'))
+                        and finite(applied[0].get('startedAtMs')) and finite(receipt.get('endedAtMs'))
+                        and observed<=acceptance['acceptedAtMs']<=applied[0]['startedAtMs']<=arguments['startBeforeMs']
+                        and finite(arguments.get('observedAtMs')) and arguments['observedAtMs']<=acceptance['acceptedAtMs']
+                        and receipt['endedAtMs']>=acceptance['acceptedAtMs']+hold
+                        and applied[0]['startedAtMs']<receipt['endedAtMs']<arguments['expiresAtMs']
+                        and receipt['endedAtMs']<=35000,
+                        'Executed-history applied step or positive terminal interval changed')
+                before_frames+=1;before_index+=12;before_tokens=min(before_tokens+12,41*12)
+                previous=dict(requestId=request,endedAtMs=receipt['endedAtMs'],frameId=frame['frameId'],sourceFrame=source)
+                request_ids.add(request);accepted_here.add(request);committed+=1
+            else:
+                require(event.get('receipt') is None
+                        and (arguments is not None if acceptance['type']=='rejected' else arguments is None and request is None),
+                        'Executed-history refusal retains a receipt or an unsubmitted request')
+                rejected+=1
+            require((history['afterFrames'],history['afterIndex'],history['afterValidTokens'],history['validFrames'])
+                    ==(before_frames,before_index,before_tokens,min(before_frames,41)),
+                    'Executed-history cache advance does not match the completed selected action')
+        require(accepted_here==set(terminal),'Executed-history accepted actions and terminal receipts are not a bijection')
+    require(committed==run.get('acceptedInputActions'),'Executed-history accepted total differs from its commits')
+    return dict(historyCommitMode=EXECUTED_HISTORY_MODE,actionHoldMs=hold,committedActions=committed,
+                rejectedPredictions=rejected,finalHistoryFrames=before_frames,finalValidHistoryFrames=min(before_frames,41),
+                physicalInputDeliveryVerified=False)
 
 
 def verify_scout_goal_state(value, label, *, decision=False):
@@ -215,10 +469,15 @@ def verify_policy_reuse(run, run_path, proof_path):
                 and 'scoutEncounterGuardPolicy' in manifest,
                 'Northern cached scouting lacks its explicit reviewed-only scope')
     settings=configuration.get('arguments') or {}
+    executed_history=settings.get('p2p_executed_history',False)
+    hold=settings.get('action_hold_ms')
+    require(type(executed_history) is bool and type(hold) is int
+            and hold in ((50,60) if executed_history else (100,)),
+            'Cached policy history mode or selected hold is invalid')
     require(settings.get('model')=='open-p2p' and settings.get('history')==41 and settings.get('cuda_graph') is True
             and settings.get('p2p_fast_start') is True and settings.get('goal_intent')=='ground-navigation'
             and settings.get('observation_profile')=='p2p-native-hamming-192-v1'
-            and settings.get('max_observation_age_ms')==150 and settings.get('action_hold_ms')==100
+            and settings.get('max_observation_age_ms')==150
             and settings.get('hybrid_legs')==1 and run.get('observationProfile')==settings['observation_profile'],
             'The cached policy changed its reviewed preprocessing or action limits')
     worker,owner=session.get('worker'),session.get('owner')
@@ -239,6 +498,26 @@ def verify_policy_reuse(run, run_path, proof_path):
             and request.get('navigationProfile')==reuse.get('navigationProfile')==profile
             and request.get('routeId')==reuse.get('routeId'),
             'The fresh reviewed request changed before reuse audit')
+    declarations=(manifest,session,request,reuse)
+    if executed_history:
+        require(all(value.get('historyCommitMode')==EXECUTED_HISTORY_MODE
+                    and type(value.get('actionHoldMs')) is int and value['actionHoldMs']==hold for value in declarations),
+                'Executed-history mode or hold differs across its original proof chain')
+        require(run.get('historyCommitMode')==EXECUTED_HISTORY_MODE
+                and type(run.get('actionHoldMs')) is int and run['actionHoldMs']==hold,
+                'Resident summary executed-history mode or hold differs from its original proof')
+        require('scoutEncounterGuardPolicy' in manifest and settings.get('p2p_execution_feedback') is True
+                and settings.get('navigation_climb_recovery') is False
+                and not settings.get('allow_inspected_obstacle_recovery',False)
+                and all(not any(key in value for key in ('inspectedObstacleRecoveryPolicy','recoverySourceSha256',
+                                                         'inspectedObstacleRecovery','obstacleRecovery')) for value in declarations),
+                'Executed-history scouting cannot retain climb or inspected-obstacle recovery authority')
+        verify_executed_history_sources(configuration,manifest,source.parent,hold)
+    else:
+        require(all('historyCommitMode' not in value for value in declarations)
+                and all('actionHoldMs' not in value for value in (session,request,reuse))
+                and all(key not in configuration for key in ('executedHistoryPolicy','executedHistorySourceSha256')),
+                'Historical cached policy retains an undeclared executed-history mode or hold')
     spec=None
     if 'routeSpec' in reuse or 'routeSpec' in request:
         spec=ReviewedScoutRoute.from_document(request.get('routeSpec'))
@@ -255,7 +534,7 @@ def verify_policy_reuse(run, run_path, proof_path):
         expected=binding_from_review(review,request['reviewSha256'])
         require(session['scoutEncounterGuardPolicy']==guard_policy()==manifest.get('scoutEncounterGuardPolicy')
                 and manifest.get('stopTemperatureC')==78 and manifest.get('sourceFreshnessMs')==150
-                and manifest.get('actionHoldMs')==100 and manifest.get('legDeadlineSeconds')==35
+                and manifest.get('actionHoldMs')==hold and manifest.get('legDeadlineSeconds')==35
                 and settings.get('native_combat_observation') is True,
                 'Scout encounter guard session policy or unchanged limits differ')
         require(all(validate_binding(value.get('scoutEncounterGuard'))==expected for value in (request,reuse,run)),
@@ -1149,6 +1428,7 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
                 frames[row['frameId']] = row
     require(bool(parts), 'No recorded segments')
     verify_scout_guard(run,parts,frames,run['segments'],recordings,reuse)
+    executed_history=verify_executed_history(run,parts,frames,run['segments'],recordings,reuse)
     lease = tuple(parts[0]['hello'][k] for k in ('sessionId', 'ownerEpoch'))
     require(all(tuple(p['hello'][k] for k in ('sessionId', 'ownerEpoch')) == lease for p in parts),
             'More than one controller lease was used')
@@ -1358,6 +1638,7 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
                 verifiedCameraRebinds=sum(b['cameraAllowanceUsed'] for r in replays for b in r['rebinds']),
                 physicalInputDeliveryVerified=False, generalNavigationQualified=False)
     if reuse is not None:result['policyReuse']=reuse
+    if executed_history is not None:result['executedHistory']=executed_history
     if spec is not None:
         result.update(scope='reviewed-scout-endpoint-and-software-input-joins',routeSpec=spec.document(),routeSpecSha256=spec.sha256)
     return result

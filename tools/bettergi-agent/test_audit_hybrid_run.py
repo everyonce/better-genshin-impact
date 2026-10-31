@@ -6,7 +6,8 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from audit_hybrid_run import audit, audit_bypasses, audit_rebind, verify_policy_reuse
+from audit_hybrid_run import (EXECUTED_HISTORY_MODE,EXECUTED_HISTORY_SOURCE_NAMES,audit,audit_bypasses,audit_rebind,
+                              verify_executed_history,verify_policy_reuse)
 from hybrid_navigation import START, END
 from hybrid_routes import LAMPPOST_ROUTE, PATROL_STATIONS, STAIR_POST_ROUTE, STREET_PATROL_ROUTE, route_heading, route_points
 
@@ -841,6 +842,145 @@ class CachedPolicyAuditTests(unittest.TestCase):
         for segment in run['segments']:segment.update(processId=22,instanceNonce='b'*32)
         return proof_path,reuse
 
+    @classmethod
+    def executed_proof(cls,path,run,hold=50):
+        """Seal the opt-in mode and selected hold through every original session/request document."""
+        from scout_encounter_guard import binding_from_review,guard_policy
+        from p2p_executed_history import executed_history_policy
+        proof,reuse=cls.proof(path,run,dict(p2p_executed_history=True,action_hold_ms=hold,
+            p2p_execution_feedback=True,navigation_climb_recovery=False,native_combat_observation=True))
+        source=Path(reuse['sessionProof'])
+        session=json.loads(source.read_bytes())
+        manifest_path=source.parent/'manifest.json'
+        manifest=json.loads(manifest_path.read_bytes())
+        request_path=Path(reuse['requestFile'])
+        request=json.loads(request_path.read_bytes())
+        review=json.loads(Path(request['reviewFile']).read_bytes())
+        binding=binding_from_review(review,request['reviewSha256'])
+        snapshot=source.parent.parent/'source-snapshot'
+        snapshot.mkdir(exist_ok=True)
+        hashes={}
+        for name in EXECUTED_HISTORY_SOURCE_NAMES:
+            raw=('# synthetic archived '+name+'\n').encode()
+            (snapshot/name).write_bytes(raw)
+            hashes[name]=hashlib.sha256(raw).hexdigest()
+        configuration=session['configuration']
+        configuration.update(executedHistorySourceSha256=hashes,executedHistoryPolicy=executed_history_policy(hold))
+        fingerprint=hashlib.sha256(json.dumps(configuration,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+        manifest['configuration']=copy.deepcopy(configuration)
+        for document in (manifest,session,request,reuse):
+            document.update(historyCommitMode=EXECUTED_HISTORY_MODE,actionHoldMs=hold,modelConfigurationSha256=fingerprint)
+        run.update(historyCommitMode=EXECUTED_HISTORY_MODE,actionHoldMs=hold)
+        for document in (manifest,session):document['scoutEncounterGuardPolicy']=guard_policy()
+        for document in (request,reuse,run):document['scoutEncounterGuard']=copy.deepcopy(binding)
+        cls.write(manifest_path,manifest)
+        reuse['sessionProofSha256']=cls.write(source,session)
+        cls.reseal_request(run,proof,reuse,request)
+        return proof,reuse
+
+    def test_executed_history_requires_original_source_bytes_and_exact_policy_descriptor(self):
+        """A rehashed proof cannot omit a dependency, change the receipt policy or substitute an archive."""
+        for mutation in ('changed-file','missing-file','missing-pin','descriptor','manifest-configuration'):
+            with self.subTest(mutation=mutation),tempfile.TemporaryDirectory() as directory:
+                run={};path=Path(directory).resolve()/'session'/'legs'/('e'*32)/'run.json'
+                proof,reuse=self.executed_proof(path,run)
+                source=Path(reuse['sessionProof']);session=json.loads(source.read_bytes())
+                manifest_path=source.parent/'manifest.json';manifest=json.loads(manifest_path.read_bytes())
+                request=json.loads(Path(reuse['requestFile']).read_bytes())
+                target=source.parent.parent/'source-snapshot'/'p2p_executed_history.py'
+                if mutation=='changed-file':target.write_bytes(target.read_bytes()+b'# replaced\n')
+                elif mutation=='missing-file':target.unlink()
+                elif mutation=='missing-pin':session['configuration']['executedHistorySourceSha256'].pop(target.name)
+                elif mutation=='descriptor':session['configuration']['executedHistoryPolicy']['requiredReceiptStatus']='replaced'
+                else:manifest['configuration']['goalSha256']='0'*64
+                if mutation in ('missing-pin','descriptor'):
+                    fingerprint=hashlib.sha256(json.dumps(session['configuration'],sort_keys=True,separators=(',',':')).encode()).hexdigest()
+                    for document in (manifest,session,request,reuse):document['modelConfigurationSha256']=fingerprint
+                    manifest['configuration']=copy.deepcopy(session['configuration'])
+                self.write(manifest_path,manifest)
+                reuse['sessionProofSha256']=self.write(source,session)
+                self.reseal_request(run,proof,reuse,request)
+                with self.assertRaises((ValueError,OSError)):verify_policy_reuse(run,path,proof)
+
+    def test_resident_summary_must_retain_the_exact_declared_mode_and_integer_hold(self):
+        """New summary fields are claims about the original worker, not independent timing overrides."""
+        for key,value in (('historyCommitMode','accepted-proposals-only'),('historyCommitMode',None),
+                          ('actionHoldMs',60),('actionHoldMs',100),('actionHoldMs',50.0),('actionHoldMs',True),
+                          ('actionHoldMs',None)):
+            with self.subTest(key=key,value=value),tempfile.TemporaryDirectory() as directory:
+                run={};path=Path(directory).resolve()/'session'/'legs'/('e'*32)/'run.json'
+                proof,reuse=self.executed_proof(path,run)
+                if value is None:run.pop(key)
+                else:run[key]=value
+                with self.assertRaisesRegex(ValueError,'Resident summary executed-history'):
+                    verify_policy_reuse(run,path,proof)
+
+    def test_executed_history_mode_and_hold_are_bound_across_the_original_chain(self):
+        """Neither a self-consistent short hold nor a stripped declaration can select historical replay."""
+        for hold in (50,60):
+            for selected in (None,'manifest','session','request','reuse'):
+                for mutation in ('mode','hold','missing') if selected else ('none',):
+                    with self.subTest(hold=hold,selected=selected,mutation=mutation),tempfile.TemporaryDirectory() as directory:
+                        run={};path=Path(directory).resolve()/'session'/'legs'/('e'*32)/'run.json'
+                        proof,reuse=self.executed_proof(path,run,hold)
+                        source=Path(reuse['sessionProof'])
+                        targets=dict(manifest=source.parent/'manifest.json',session=source,
+                                     request=Path(reuse['requestFile']),reuse=proof)
+                        if selected:
+                            document=json.loads(targets[selected].read_bytes())
+                            if mutation=='mode':document['historyCommitMode']='accepted-proposals-only'
+                            elif mutation=='hold':document['actionHoldMs']=60 if hold==50 else 50
+                            else:document.pop('historyCommitMode')
+                            self.write(targets[selected],document)
+                            if selected=='reuse':reuse=document
+                            reuse['sessionProofSha256']=hashlib.sha256(source.read_bytes()).hexdigest()
+                            reuse['requestSha256']=hashlib.sha256(Path(reuse['requestFile']).read_bytes()).hexdigest()
+                            run.update(policyReuse=copy.deepcopy(reuse),policyReuseSha256=self.write(proof,reuse))
+                            with self.assertRaisesRegex(ValueError,'mode or hold differs'):verify_policy_reuse(run,path,proof)
+                        else:
+                            self.assertEqual(verify_policy_reuse(run,path,proof)['actionHoldMs'],hold)
+
+    def test_executed_history_proof_cannot_keep_recovery_authority(self):
+        """A fresh successor or hidden recovery declaration cannot retain the opted-in policy."""
+        for selected,key in (('manifest','inspectedObstacleRecoveryPolicy'),('session','recoverySourceSha256'),
+                             ('request','obstacleRecovery'),('reuse','inspectedObstacleRecovery')):
+            with self.subTest(selected=selected,key=key),tempfile.TemporaryDirectory() as directory:
+                run={};path=Path(directory).resolve()/'session'/'legs'/('e'*32)/'run.json'
+                proof,reuse=self.executed_proof(path,run)
+                source=Path(reuse['sessionProof'])
+                targets=dict(manifest=source.parent/'manifest.json',session=source,request=Path(reuse['requestFile']),reuse=proof)
+                document=json.loads(targets[selected].read_bytes());document[key]={}
+                self.write(targets[selected],document)
+                if selected=='reuse':reuse=document
+                reuse['sessionProofSha256']=hashlib.sha256(source.read_bytes()).hexdigest()
+                reuse['requestSha256']=hashlib.sha256(Path(reuse['requestFile']).read_bytes()).hexdigest()
+                run.update(policyReuse=copy.deepcopy(reuse),policyReuseSha256=self.write(proof,reuse))
+                with self.assertRaisesRegex(ValueError,'recovery authority'):verify_policy_reuse(run,path,proof)
+
+    def test_short_hold_without_the_mode_and_undeclared_mode_remnants_are_rejected(self):
+        """The ordinary cached contract still accepts100ms and never acquires a new mode implicitly."""
+        for settings in ({},{'p2p_executed_history':False},{'action_hold_ms':50},
+                         {'p2p_executed_history':True},{'p2p_executed_history':1,'action_hold_ms':50}):
+            with self.subTest(settings=settings),tempfile.TemporaryDirectory() as directory:
+                run={};path=Path(directory).resolve()/'session'/'legs'/('e'*32)/'run.json'
+                proof,reuse=self.proof(path,run,settings)
+                if settings.get('action_hold_ms',100)!=100 or settings.get('p2p_executed_history',False):
+                    with self.assertRaises(ValueError):verify_policy_reuse(run,path,proof)
+                else:self.assertEqual(verify_policy_reuse(run,path,proof)['runId'],'9'*32)
+        for selected in ('manifest','session','request','reuse'):
+            with self.subTest(undeclared=selected),tempfile.TemporaryDirectory() as directory:
+                run={};path=Path(directory).resolve()/'session'/'legs'/('e'*32)/'run.json'
+                proof,reuse=self.proof(path,run)
+                source=Path(reuse['sessionProof'])
+                targets=dict(manifest=source.parent/'manifest.json',session=source,request=Path(reuse['requestFile']),reuse=proof)
+                document=json.loads(targets[selected].read_bytes());document['historyCommitMode']=EXECUTED_HISTORY_MODE
+                self.write(targets[selected],document)
+                if selected=='reuse':reuse=document
+                reuse['sessionProofSha256']=hashlib.sha256(source.read_bytes()).hexdigest()
+                reuse['requestSha256']=hashlib.sha256(Path(reuse['requestFile']).read_bytes()).hexdigest()
+                run.update(policyReuse=copy.deepcopy(reuse),policyReuseSha256=self.write(proof,reuse))
+                with self.assertRaisesRegex(ValueError,'undeclared executed-history'):verify_policy_reuse(run,path,proof)
+
     def test_zero_load_requires_explicit_matching_proof(self):
         """Ordinary audits retain their original one-load contract unchanged."""
         self.assertIsNone(verify_policy_reuse(dict(modelLoads=1),'unused',None))
@@ -1053,3 +1193,280 @@ class CachedPolicyAuditTests(unittest.TestCase):
             proof,_=self.proof(path,run,checkpoint_sha=G4_SHA256)
             with self.assertRaisesRegex(ValueError,'Open P2P checkpoint changed'):
                 verify_policy_reuse(run,path,proof)
+
+
+class ExecutedHistoryAuditTests(unittest.TestCase):
+    """Replay a serialized executed-action history without loading weights or opening native endpoints."""
+    @staticmethod
+    def trace(hold=50,count=3):
+        """Retain one refused prediction followed by real-shaped native/model completed receipts."""
+        from p2p_executed_history import encode_controller_step,executed_history_policy
+        frames={}
+        part=dict(historyCommitMode=EXECUTED_HISTORY_MODE,
+            policyMetadata=dict(historyFrames=41,historyCommit=EXECUTED_HISTORY_MODE,historyCommitMode=EXECUTED_HISTORY_MODE),
+            proposalJournal=dict(version=3,historyCommitMode=EXECUTED_HISTORY_MODE),
+            executedHistoryPolicy=executed_history_policy(hold),serverDroppedReceipts=0,
+            recording=dict(complete=True,lossless=True,closed=True,workerRetired=True,error=None,
+                           droppedFrames=0,droppedEvents=0,droppedObservations=0,abandonedFrames=0),
+            hello=dict(sessionId='lease',ownerEpoch='owner',goalVersion=1),
+            decisions=[],receipts=[],executedHistoryEvents=[])
+        rows=[dict(type='episodeStart',sessionId='lease',historyCommitMode=EXECUTED_HISTORY_MODE,
+                   executedHistoryPolicy=executed_history_policy(hold),proposalJournal=copy.deepcopy(part['proposalJournal']))]
+        previous=None
+        committed=0
+        for index in range(count):
+            frame_id=index+1;observed=100+index*200
+            source=dict(captureEpoch='pixels',timestamp100ns=observed*10000,capturedAtMs=observed,
+                        acquiredAtMs=observed+3,freshnessAtMs=observed,freshnessClockKind='reported_compositor_qpc')
+            frames[frame_id]=dict(frameId=frame_id,capturedAtMs=observed+3,sourceFrame=source)
+            model='hybrid-native' if index%2 else 'open-p2p'
+            step=dict(keys=['W'] if index%2 else [],durationMs=hold,mouseDx=0 if index%2 else 3,mouseDy=0)
+            accepted=index>0
+            acceptance=(dict(type='accepted',requestId='action-'+str(index),acceptedAtMs=observed+10)
+                        if accepted else dict(type='notSubmitted',reason='staleObservation'))
+            request=acceptance.get('requestId')
+            arguments=receipt=None
+            if accepted:
+                arguments=dict(version=1,command='action',**part['hello'],requestId=request,frameId=frame_id,
+                    modelId=model,observedAtMs=observed+3,startBeforeMs=observed+150,expiresAtMs=observed+700,steps=[step])
+                receipt=dict(requestId=request,frameId=frame_id,modelId=model,status='completed',reason='horizon_complete',
+                    acceptedAtMs=observed+10,endedAtMs=observed+hold+15,
+                    appliedSteps=[dict(index=0,startedAtMs=observed+12,keys=step['keys'],mouseDx=step['mouseDx'],mouseDy=0)])
+                part['receipts'].append(copy.deepcopy(receipt));rows.append(copy.deepcopy(receipt))
+            history=dict(beforeFrames=committed,afterFrames=committed+int(accepted),validFrames=min(committed+int(accepted),41),
+                beforeIndex=committed*12,afterIndex=(committed+int(accepted))*12,
+                beforeValidTokens=min(committed,41)*12,afterValidTokens=min(committed+int(accepted),41)*12)
+            event=dict(type='p2pExecutedHistory',version=1,historyCommitMode=EXECUTED_HISTORY_MODE,
+                outcome='committed' if accepted else 'rejected',requestId=request,frameId=frame_id,modelId=model,
+                sourceFrame=copy.deepcopy(source),observationTimestampMs=observed,step=copy.deepcopy(step),
+                encodedAction=encode_controller_step(step),acceptance=copy.deepcopy(acceptance),receipt=copy.deepcopy(receipt),
+                arguments=copy.deepcopy(arguments),previousReceipt=copy.deepcopy(previous),history=history,error=None,
+                clientTimeNs=1_000_000*(index+1))
+            decision=dict(frameId=frame_id,observationTimestampMs=observed,steps=[copy.deepcopy(step)],
+                acceptance=copy.deepcopy(acceptance),hybridNavigation=dict(owner=model),historyCommitted=accepted,
+                rawPolicySteps=[dict(keys=['SPACE'],durationMs=100,mouseDx=0,mouseDy=0)],executedHistory=copy.deepcopy(event),
+                executedHistoryPredecessor=copy.deepcopy(previous))
+            proposal=dict(type='proposal',proposalJournalVersion=3,historyCommitMode=EXECUTED_HISTORY_MODE,
+                frameId=frame_id,observationTimestampMs=observed,hybridNavigation=copy.deepcopy(decision['hybridNavigation']),
+                rawPolicySteps=copy.deepcopy(decision['rawPolicySteps']),
+                observedAtMs=observed+3,model=model,steps=[copy.deepcopy(step)],acceptance=copy.deepcopy(acceptance),
+                historyCommitted=accepted,startBeforeMs=observed+150 if accepted else None,
+                executedHistoryPredecessor=copy.deepcopy(previous))
+            part['decisions'].append(decision);part['executedHistoryEvents'].append(copy.deepcopy(event))
+            rows.extend([proposal,copy.deepcopy(event)])
+            if accepted:
+                committed+=1;previous=dict(requestId=request,endedAtMs=receipt['endedAtMs'])
+        return dict(acceptedInputActions=committed),part,frames,rows,dict(historyCommitMode=EXECUTED_HISTORY_MODE,actionHoldMs=hold)
+
+    @staticmethod
+    def replace_event(part,rows,index,change):
+        """Reapply a semantic mutation to all retained copies, defeating simple outer equality checks."""
+        event=copy.deepcopy(part['executedHistoryEvents'][index]);change(event)
+        part['executedHistoryEvents'][index]=copy.deepcopy(event)
+        part['decisions'][index]['executedHistory']=copy.deepcopy(event)
+        ordinal=[number for number,row in enumerate(rows) if row.get('type')=='p2pExecutedHistory'][index]
+        rows[ordinal]=copy.deepcopy(event)
+
+    def replay(self,trace):
+        """Use the real bounded JSONL reader instead of passing an in-memory journal shortcut."""
+        run,part,frames,rows,reuse=trace
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory).resolve();recording=root/'00001';recording.mkdir()
+            (recording/'events.jsonl').write_text('\n'.join(json.dumps(row) for row in rows),encoding='utf-8')
+            return verify_executed_history(run,[part],frames,[dict(number=1)],root,reuse)
+
+    def test_native_and_policy_selections_commit_only_completed_steps_with_bounded_history(self):
+        """A refused prediction rolls back; native corrections and model choices share the actual-action history."""
+        for hold,count in ((50,3),(60,3),(50,44)):
+            with self.subTest(hold=hold,count=count):
+                result=self.replay(self.trace(hold,count))
+                self.assertEqual(result['committedActions'],count-1)
+                self.assertEqual(result['rejectedPredictions'],1)
+                self.assertEqual(result['finalHistoryFrames'],count-1)
+                self.assertEqual(result['finalValidHistoryFrames'],min(count-1,41))
+                self.assertFalse(result['physicalInputDeliveryVerified'])
+
+    def test_actual_stream_loop_journal_replays_native_and_model_commits(self):
+        """Join the production stream/controller loop using only inert policy, recorder and native boundaries."""
+        from test_p2p_executed_history_stream import inert_arguments,run_fixture
+        from test_stream_client import CapturingRecorder
+
+        class RetainedRecorder(CapturingRecorder):
+            """Report accurate closure of the synchronous in-memory fixture, which has no writer thread."""
+            def close(self):
+                """All stored records remain present and no simulated queue can drop them."""
+                return dict(super().close(),lossless=True,closed=True,workerRetired=True,
+                    droppedFrames=0,droppedEvents=0,droppedObservations=0,abandonedFrames=0)
+
+        for hold in (50,60):
+            with self.subTest(hold=hold),tempfile.TemporaryDirectory() as directory:
+                root=Path(directory).resolve()
+                code,part,recorder,bridge,policy=run_fixture(root,recorder=RetainedRecorder(),args=inert_arguments(root,hold=hold))
+                self.assertEqual((code,part['status']),(0,'completed'))
+                record=root/'independent-history-recording'/'00001';record.mkdir(parents=True)
+                (record/'events.jsonl').write_text('\n'.join(json.dumps(row) for row in recorder.events),encoding='utf-8')
+                frames={metadata['frameId']:metadata for metadata,pixels in recorder.frames}
+                result=verify_executed_history(part,[part],frames,[dict(number=1)],record.parent,
+                    dict(historyCommitMode=EXECUTED_HISTORY_MODE,actionHoldMs=hold))
+                self.assertEqual((result['committedActions'],result['finalHistoryFrames']),(3,3))
+                self.assertEqual(len(policy.commits),3)
+
+    def test_explicit_server_rejection_rolls_back_without_a_terminal_receipt(self):
+        """A bound rejection is distinct from admission and leaves the next prediction's cache empty."""
+        trace=self.trace();run,part,frames,rows,reuse=trace
+        acceptance=dict(type='rejected',requestId='rejected-0',reason='focusNotReady')
+        step=part['decisions'][0]['steps'][0]
+        arguments=dict(version=1,command='action',**part['hello'],requestId='rejected-0',frameId=1,modelId='open-p2p',
+            observedAtMs=103,startBeforeMs=250,expiresAtMs=800,steps=[copy.deepcopy(step)])
+        part['decisions'][0]['acceptance']=copy.deepcopy(acceptance)
+        proposal=[row for row in rows if row.get('type')=='proposal'][0]
+        proposal.update(acceptance=copy.deepcopy(acceptance),startBeforeMs=250)
+        self.replace_event(part,rows,0,lambda event:event.update(acceptance=copy.deepcopy(acceptance),
+            requestId='rejected-0',arguments=copy.deepcopy(arguments)))
+        result=self.replay(trace)
+        self.assertEqual((result['committedActions'],result['rejectedPredictions']),(2,1))
+
+    def test_missing_duplicate_reordered_and_contradictory_journal_rows_are_rejected(self):
+        """A report cannot invent a terminal receipt or a history commit that its original journal lacks."""
+        for mutation in ('missing-event','duplicate-event','missing-receipt','duplicate-receipt','late-receipt','report-only','receipt-only'):
+            with self.subTest(mutation=mutation):
+                trace=self.trace();run,part,frames,rows,reuse=trace
+                receipt_index=next(i for i,row in enumerate(rows) if 'appliedSteps' in row)
+                if mutation=='missing-event':rows.pop()
+                elif mutation=='duplicate-event':rows.append(copy.deepcopy(rows[-1]))
+                elif mutation=='missing-receipt':rows.pop(receipt_index)
+                elif mutation=='duplicate-receipt':rows.append(copy.deepcopy(rows[receipt_index]))
+                elif mutation=='late-receipt':rows.append(rows.pop(receipt_index))
+                elif mutation=='report-only':part['executedHistoryEvents'][1]['step']['mouseDx']=2
+                else:part['receipts'][0]['endedAtMs']+=1
+                with self.assertRaises(ValueError):self.replay(trace)
+
+    def test_replaced_cancelled_empty_and_mismatched_receipts_cannot_be_committed(self):
+        """Rehash-equivalent copies still need a positive completed single-step native interval."""
+        for mutation in ('replaced','cancelled','reason','empty','extra-step','index','keys','mouse','frame','model',
+                         'admission','late-start','zero-interval','expired','unknown-request'):
+            with self.subTest(mutation=mutation):
+                trace=self.trace();run,part,frames,rows,reuse=trace
+                receipt=copy.deepcopy(part['receipts'][0])
+                if mutation in ('replaced','cancelled'):receipt['status']=mutation
+                elif mutation=='reason':receipt['reason']='client_stop'
+                elif mutation=='empty':receipt['appliedSteps']=[]
+                elif mutation=='extra-step':receipt['appliedSteps']*=2
+                elif mutation=='index':receipt['appliedSteps'][0]['index']=1
+                elif mutation=='keys':receipt['appliedSteps'][0]['keys']=['SPACE']
+                elif mutation=='mouse':receipt['appliedSteps'][0]['mouseDx']=1
+                elif mutation=='frame':receipt['frameId']=1
+                elif mutation=='model':receipt['modelId']='open-p2p'
+                elif mutation=='admission':receipt['acceptedAtMs']-=1
+                elif mutation=='late-start':receipt['appliedSteps'][0]['startedAtMs']=451
+                elif mutation=='zero-interval':receipt['endedAtMs']=receipt['appliedSteps'][0]['startedAtMs']
+                elif mutation=='expired':receipt['endedAtMs']=1000
+                else:receipt['requestId']='unsubmitted'
+                part['receipts'][0]=copy.deepcopy(receipt)
+                index=next(i for i,row in enumerate(rows) if 'appliedSteps' in row)
+                rows[index]=copy.deepcopy(receipt)
+                self.replace_event(part,rows,1,lambda event:event.update(receipt=copy.deepcopy(receipt)))
+                with self.assertRaises(ValueError):self.replay(trace)
+
+    def test_host_capture_and_commanded_horizon_bound_the_terminal_interval(self):
+        """Consistent evidence cannot admit a future host frame or finish before the commanded horizon."""
+        for hold in (50,60):
+            for mutation in ('exact-boundary','future-host-frame','short-horizon'):
+                with self.subTest(hold=hold,mutation=mutation):
+                    trace=self.trace(hold);run,part,frames,rows,reuse=trace
+                    # Use the final action so a changed terminal does not merely
+                    # fail the independent successor/predecessor equality check.
+                    receipt=copy.deepcopy(part['receipts'][-1])
+                    accepted=receipt['acceptedAtMs']
+                    receipt['endedAtMs']=accepted+hold-(.001 if mutation=='short-horizon' else 0)
+                    host_at=accepted+(1 if mutation=='future-host-frame' else 0)
+                    frames[3]['capturedAtMs']=host_at
+                    proposals=[row for row in rows if row.get('type')=='proposal']
+                    proposals[-1]['observedAtMs']=host_at
+                    part['receipts'][-1]=copy.deepcopy(receipt)
+                    index=next(i for i,row in enumerate(rows) if row.get('requestId')==receipt['requestId']
+                               and 'appliedSteps' in row)
+                    rows[index]=copy.deepcopy(receipt)
+                    def update_event(event):
+                        """Keep every original envelope/event copy consistent with the selected mutation."""
+                        event['arguments']['observedAtMs']=host_at
+                        event['receipt']=copy.deepcopy(receipt)
+                    self.replace_event(part,rows,2,update_event)
+                    if mutation=='exact-boundary':
+                        self.assertEqual(self.replay(trace)['committedActions'],2)
+                    else:
+                        with self.assertRaisesRegex(ValueError,'positive terminal interval'):
+                            self.replay(trace)
+
+    def test_prediction_sources_must_follow_the_last_completed_interval(self):
+        """New poll/frame labels alone cannot replace a genuinely newer post-terminal native source."""
+        for mutation in ('clock','raw-timestamp','capture-epoch','wrong-source','predecessor'):
+            with self.subTest(mutation=mutation):
+                trace=self.trace();run,part,frames,rows,reuse=trace
+                proposal=[row for row in rows if row.get('type')=='proposal'][2]
+                if mutation=='predecessor':
+                    predecessor=dict(requestId='different',endedAtMs=part['receipts'][0]['endedAtMs'])
+                    proposal['executedHistoryPredecessor']=predecessor
+                    part['decisions'][2]['executedHistoryPredecessor']=copy.deepcopy(predecessor)
+                    self.replace_event(part,rows,2,lambda event:event.update(previousReceipt=predecessor))
+                else:
+                    if mutation=='clock':
+                        frames[3]['sourceFrame']['freshnessAtMs']=part['receipts'][0]['endedAtMs']
+                        frames[3]['sourceFrame']['capturedAtMs']=part['receipts'][0]['endedAtMs']
+                    elif mutation=='raw-timestamp':frames[3]['sourceFrame']['timestamp100ns']=frames[2]['sourceFrame']['timestamp100ns']
+                    elif mutation=='capture-epoch':frames[3]['sourceFrame']['captureEpoch']='another'
+                    else:frames[3]['sourceFrame']['timestamp100ns']+=1
+                    if mutation!='wrong-source':
+                        observed=frames[3]['sourceFrame']['freshnessAtMs']
+                        part['decisions'][2]['observationTimestampMs']=proposal['observationTimestampMs']=observed
+                        self.replace_event(part,rows,2,lambda event:event.update(sourceFrame=copy.deepcopy(frames[3]['sourceFrame']),
+                                                                              observationTimestampMs=observed))
+                with self.assertRaises(ValueError):self.replay(trace)
+
+    def test_wrong_mode_hold_codec_envelope_and_cache_state_are_rejected(self):
+        """History labels must represent the chosen controller action and preserve its settled cache state."""
+        for mutation in ('mode','hold','codec','envelope','expiry','deadline','native-reset','refusal-advance','false-commit','climb'):
+            with self.subTest(mutation=mutation):
+                trace=self.trace();run,part,frames,rows,reuse=trace
+                if mutation=='mode':part['policyMetadata']['historyCommitMode']='accepted-proposals-only'
+                elif mutation=='hold':reuse['actionHoldMs']=60
+                elif mutation=='climb':part['navigationClimbActions']=[dict(keys=['X'])]
+                elif mutation=='false-commit':
+                    part['decisions'][1]['historyCommitted']=False
+                    [row for row in rows if row.get('type')=='proposal'][1]['historyCommitted']=False
+                else:
+                    def change(event):
+                        """Mutate every copy of one claimed history transaction identically."""
+                        if mutation=='codec':event['encodedAction']['keys']=[1,0,0,0]
+                        elif mutation=='envelope':event['arguments']['sessionId']='another'
+                        elif mutation=='expiry':event['arguments']['expiresAtMs']+=1
+                        elif mutation=='deadline':event['arguments']['startBeforeMs']+=1
+                        elif mutation=='native-reset':event['history'].update(afterFrames=0,afterIndex=0,afterValidTokens=0,validFrames=0)
+                        else:event['history'].update(afterFrames=1,afterIndex=12,afterValidTokens=12,validFrames=1)
+                    self.replace_event(part,rows,0 if mutation=='refusal-advance' else 1,change)
+                with self.assertRaises(ValueError):self.replay(trace)
+
+    def test_policy_declarations_and_terminal_retention_cannot_be_downgraded(self):
+        """A completed receipt trace cannot conceal its altered policy or an incomplete original recording."""
+        for mutation in ('descriptor','episode-start','server-drops','recorder-drops','not-closed','not-lossless','not-retired'):
+            with self.subTest(mutation=mutation):
+                trace=self.trace();run,part,frames,rows,reuse=trace
+                if mutation=='descriptor':part['executedHistoryPolicy']['requiredReceiptStatus']='accepted'
+                elif mutation=='episode-start':rows[0]['historyCommitMode']='accepted-proposals-only'
+                elif mutation=='server-drops':part['serverDroppedReceipts']=1
+                elif mutation=='recorder-drops':part['recording']['droppedObservations']=1
+                else:part['recording'][{'not-closed':'closed','not-lossless':'lossless','not-retired':'workerRetired'}[mutation]]=False
+                with self.assertRaises(ValueError):self.replay(trace)
+
+    def test_legacy_history_replay_is_unchanged_but_new_event_downgrades_are_refused(self):
+        """Ordinary100ms evidence stays outside this opt-in contract, including absent early journals."""
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertIsNone(verify_executed_history({},[dict(proposalJournal=dict(version=2,
+                historyCommitMode='accepted-proposals-only'))],{},[dict(number=1)],Path(directory),None))
+        for mutation in ('part','journal','metadata'):
+            with self.subTest(mutation=mutation):
+                run,part,frames,rows,reuse=self.trace()
+                if mutation=='part':part={'executedHistoryEvents':[]};rows=[]
+                elif mutation=='journal':part={};rows=[dict(type='p2pExecutedHistory')]
+                else:part={'policyMetadata':{'historyCommitMode':EXECUTED_HISTORY_MODE}};rows=[]
+                with self.assertRaises(ValueError):self.replay((run,part,frames,rows,None))

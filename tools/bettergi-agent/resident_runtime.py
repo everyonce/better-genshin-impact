@@ -340,6 +340,15 @@ def completed_passive_observation(args, summary, end_reason):
 def run_resident(args, load_policy, run_episode, *, policy_reuse=None):
     """Own one bounded run, retaining weights/graphs through pause and bridge replacement."""
     require_current_rdp(args.rdp_session_id)
+    from p2p_executed_history import MODE, validate_executed_history_options
+    executed_history=validate_executed_history_options(args)
+    if executed_history:
+        if (not isinstance(policy_reuse,dict) or policy_reuse.get('historyCommitMode')!=MODE
+                or type(policy_reuse.get('actionHoldMs')) is not int
+                or policy_reuse['actionHoldMs']!=args.action_hold_ms):
+            raise ValueError('Executed history requires its matching cached-session mode and hold')
+    elif isinstance(policy_reuse,dict) and any(key in policy_reuse for key in ('historyCommitMode','actionHoldMs')):
+        raise ValueError('Legacy cached scout cannot declare executed-history mode or timing')
     if getattr(args,'reviewed_scout_route',None) is not None:
         from reviewed_scout_route import validate_reviewed_options
         route=validate_reviewed_options(args)
@@ -376,15 +385,18 @@ def run_resident(args, load_policy, run_episode, *, policy_reuse=None):
                     or not getattr(args,'native_combat_observation',False)
                     or getattr(args,'navigation_profile',None) not in SCOUT_PROFILES
                     or policy_reuse.get('navigationProfile')!=args.navigation_profile
-                    or args.max_observation_age_ms!=150 or args.action_hold_ms!=100 or args.seconds>35):
+                    or args.max_observation_age_ms!=150
+                    or (not executed_history and args.action_hold_ms!=100) or args.seconds>35):
                 raise ValueError('Cached scout requires its unchanged reviewed encounter guard and limits')
             control.scout_encounter_guard=ScoutEncounterGuard(guard_binding)
             summary['scoutEncounterGuard']=guard_binding
+            if executed_history:summary.update(historyCommitMode=MODE,actionHoldMs=args.action_hold_ms)
         control.publish(state='loading', inputRequested=args.enable_input)
         loading_started = time.monotonic()
         # The Windows monotonic clock used for deadlines may be too coarse for a cached acquisition.
         acquisition_started_ns = time.perf_counter_ns()
         policy = load_policy(args)
+        if executed_history:validate_executed_history_options(args,policy,control,require_bound=True)
         policy_acquire_seconds = (time.perf_counter_ns()-acquisition_started_ns)/1e9
         control.set_initial_goal(getattr(policy, 'metadata', {}).get('goal'), getattr(args, 'goal_intent', 'unspecified'))
         summary['modelLoadSeconds'] = time.monotonic()-loading_started

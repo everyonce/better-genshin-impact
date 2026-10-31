@@ -108,5 +108,28 @@ class ReviewedScoutRouteTests(unittest.TestCase):
             setattr(changed,key,value)
             with self.subTest(key=key),self.assertRaises(ValueError):validate_reviewed_options(changed)
 
+    def test_short_holds_require_explicit_executed_history_and_exclude_recovery(self):
+        """The opt-in history contract cannot shorten ordinary holds or retain obstacle/climb authority."""
+        route=self.route()
+        args=SimpleNamespace(reviewed_scout_route=route,hybrid_route=route.route_id,navigation_profile=SCOUT_PROFILE,
+            resident=True,enable_input=True,model='open-p2p',hybrid_navigation=True,hybrid_legs=1,seconds=35,
+            max_observation_age_ms=150,action_hold_ms=100,patrol_series_binding=('exact','owner'))
+        self.assertEqual(validate_reviewed_options(args),route)
+        for hold in (50,60):
+            changed=copy.copy(args)
+            changed.action_hold_ms=hold
+            with self.subTest(ordinary_hold=hold),self.assertRaises(ValueError):validate_reviewed_options(changed)
+            changed.p2p_executed_history=True
+            self.assertEqual(validate_reviewed_options(changed),route)
+            for key in ('navigation_climb_recovery','allow_inspected_obstacle_recovery','remember_hybrid_bypass'):
+                forbidden=copy.copy(changed)
+                setattr(forbidden,key,True)
+                with self.subTest(hold=hold,forbidden=key),self.assertRaises(ValueError):validate_reviewed_options(forbidden)
+        for mode,hold in ((True,100),(True,49),(True,61),(True,50.0),(1,50),('true',50),(None,100)):
+            changed=copy.copy(args)
+            changed.p2p_executed_history=mode
+            changed.action_hold_ms=hold
+            with self.subTest(mode=mode,hold=hold),self.assertRaises(ValueError):validate_reviewed_options(changed)
+
 
 if __name__=='__main__':unittest.main()

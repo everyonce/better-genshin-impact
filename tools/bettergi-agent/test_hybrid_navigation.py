@@ -94,6 +94,28 @@ class HybridNavigationTests(unittest.TestCase):
         selected = nav.choose(item, proposal(['W']))
         self.assertEqual(selected['step'], dict(keys=[], mouseDx=350, mouseDy=0, durationMs=100))
 
+    def test_short_holds_preserve_one_shot_native_and_model_camera_deltas(self):
+        """Faster feedback must not shrink or multiply a selected relative mouse movement."""
+        for hold in (50,60):
+            with self.subTest(hold=hold):
+                nav=HybridNavigation(capability(),action_hold_ms=hold)
+                for number in range(1,4):nav.prepare(frame(number,number*100))
+                original=proposal(['W'],dx=2)
+                selected=nav.choose(frame(3,300),original)
+                self.assertEqual(selected['step'],dict(keys=['W'],mouseDx=2,mouseDy=0,durationMs=hold))
+                self.assertEqual(original,proposal(['W'],dx=2))
+                turned=frame(4,400,yaw=0,heading=90)
+                turned['navigationPose']['mouseToEnd']=500
+                nav.prepare(turned)
+                self.assertEqual(nav.choose(turned,proposal(['W']))['step'],
+                    dict(keys=[],mouseDx=350,mouseDy=0,durationMs=hold))
+
+    def test_short_hold_choice_never_extends_the_hundred_millisecond_ceiling(self):
+        """Only the two bounded trial holds and the unchanged legacy duration are supported."""
+        for hold in (True,50.0,0,49,61,101,1000):
+            with self.subTest(hold=hold),self.assertRaises(ValueError):
+                HybridNavigation(capability(),action_hold_ms=hold)
+
     def test_three_polls_of_one_frame_cannot_confirm_start(self):
         nav = HybridNavigation(capability())
         item = frame(1, 100)

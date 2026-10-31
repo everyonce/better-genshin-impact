@@ -43,6 +43,9 @@ PER_LEG_FIELDS = frozenset(('pipe','output','record_dir','control_file','seconds
 REQUEST_FIELDS = frozenset(('version','sessionId','requestId','afterRequestId','routeId','navigationProfile',
     'maximumLegs','modelConfigurationSha256','reviewFile','reviewSha256','nativePlanSha256',
     'nativeResultSha256','imageSha256','imageMetadataSha256','scoutEncounterGuard'))
+EXECUTED_HISTORY_MODE='receipt-verified-executed-actions-v1'
+EXECUTED_HISTORY_EXTRA_SOURCES=('p2p_executed_history.py','p2p_action_codec.py','p2p_loader.py',
+    'p2p_compat_attention.py','p2p_sampling.py','p2p_rotary.py','p2p_executed_history_graph.py')
 
 
 def require(value, message):
@@ -92,7 +95,68 @@ def model_contract(args):
     checkpoint,goal=Path(args.checkpoint).resolve(strict=True),Path(args.goal_embedding).resolve(strict=True)
     checkpoint_sha=file_sha(checkpoint)
     require(checkpoint_sha==OPEN_P2P_SHA256,'The scout session requires the exact deployed Open P2P checkpoint')
-    return dict(arguments=immutable_arguments(args),checkpointSha256=checkpoint_sha,goalSha256=file_sha(goal))
+    contract=dict(arguments=immutable_arguments(args),checkpointSha256=checkpoint_sha,goalSha256=file_sha(goal))
+    if getattr(args,'p2p_executed_history',False):
+        from p2p_executed_history import executed_history_policy
+        contract.update(executedHistorySourceSha256=executed_history_sources(),
+                        executedHistoryPolicy=executed_history_policy(args.action_hold_ms))
+    return contract
+
+
+def executed_history_sources():
+    """Pin the existing receipt/navigation boundary and every local P2P runtime helper."""
+    root=Path(__file__).absolute().parent
+    return source_contract()|{name:file_sha(root/name) for name in EXECUTED_HISTORY_EXTRA_SOURCES}
+
+
+def archive_executed_history_sources(directory, contract):
+    """Retain exact runtime bytes before model loading, or verify the launcher's existing snapshot."""
+    archive=directory.parent/'source-snapshot'
+    archive.mkdir(exist_ok=True)
+    live_path(archive)
+    source=Path(__file__).absolute().parent
+    for name,digest in contract.items():
+        raw=(source/name).read_bytes()
+        require(hashlib.sha256(raw).hexdigest()==digest,'Executed-history source changed before archival')
+        target=archive/name
+        try:
+            with target.open('xb') as stream:stream.write(raw)
+        except FileExistsError:pass
+        live_path(target)
+        require(target.stat().st_nlink==1 and file_sha(target)==digest,
+                'Executed-history source snapshot differs from the frozen runtime')
+
+
+def history_declaration(args):
+    """Expose the opt-in history semantics without adding fields to historical requests."""
+    if not getattr(args,'p2p_executed_history',False):return {}
+    hold=args.action_hold_ms
+    require(type(hold) is int and hold in (50,60),'Executed history requires a 50 or 60 ms hold')
+    require(getattr(args,'navigation_climb_recovery',False) is False,
+            'Executed history excludes climb recovery')
+    return dict(historyCommitMode=EXECUTED_HISTORY_MODE,actionHoldMs=hold)
+
+
+def manifest_history_declaration(manifest):
+    """Require the declared mode and hold to match the immutable worker configuration."""
+    configuration=manifest.get('configuration',{})
+    require(isinstance(configuration,dict),'Invalid worker model configuration')
+    arguments=configuration.get('arguments',{})
+    require(isinstance(arguments,dict),'Invalid worker model arguments')
+    enabled=arguments.get('p2p_executed_history',False)
+    require(type(enabled) is bool,'Invalid executed-history mode flag')
+    if not enabled:
+        require('historyCommitMode' not in manifest,'Undeclared executed-history mode')
+        return {}
+    hold=arguments.get('action_hold_ms')
+    require(type(hold) is int and hold in (50,60)
+            and manifest.get('historyCommitMode')==EXECUTED_HISTORY_MODE
+            and type(manifest.get('actionHoldMs')) is int and manifest['actionHoldMs']==hold,
+            'Worker executed-history declaration differs from its immutable configuration')
+    require(arguments.get('navigation_climb_recovery') is False
+            and 'inspectedObstacleRecoveryPolicy' not in manifest,
+            'Executed history excludes climb and inspected-obstacle recovery')
+    return dict(historyCommitMode=EXECUTED_HISTORY_MODE,actionHoldMs=hold)
 
 
 def file_stamp(path):
@@ -235,6 +299,11 @@ def leg_arguments(settings, owner, route, folder, binding, remaining_mib, review
         '--goal-embedding',str(settings.goal_embedding),'--ffmpeg',str(settings.ffmpeg),
         '--native-combat-observation','--retain-policy-rgb'])
     options.navigation_profile=profile
+    options.p2p_executed_history=getattr(settings,'p2p_executed_history',False)
+    options.action_hold_ms=getattr(settings,'action_hold_ms',50 if options.p2p_executed_history else 100)
+    if options.p2p_executed_history:
+        require(not getattr(settings,'allow_inspected_obstacle_recovery',False),
+                'Executed history excludes inspected-obstacle recovery')
     argv=patrol.patrol_argv(options,owner['child']['windowsSessionId'],folder)[5:]
     if reviewed_route is not None:
         require(route==reviewed_route.route_id,'Explicit scout route identity changed')
@@ -272,6 +341,7 @@ def qualify_review_frame(frame, anchor, profile=SCOUT_PROFILE):
 
 def session_profile(manifest):
     """Keep historical scout records unchanged; northern workers require explicit reviewed geometry only."""
+    manifest_history_declaration(manifest)
     profile=manifest.get('navigationProfile',SCOUT_PROFILE)
     require(profile in SCOUT_PROFILES,'Unknown worker navigation profile')
     if profile!=SCOUT_PROFILE:
@@ -360,6 +430,10 @@ def validate_request(path, manifest, after_id, after_ns):
     """Consume only a single fresh request for this session, configuration and prior completed leg."""
     request,digest=read_json(path,16384)
     fields=REQUEST_FIELDS|{'routeSpec','routeSpecSha256'} if 'routeSpec' in request else REQUEST_FIELDS
+    history=manifest_history_declaration(manifest)
+    fields=fields|set(history)
+    require(all(request.get(key)==value and type(request.get(key)) is type(value) for key,value in history.items()),
+            'Request executed-history mode or hold differs from its worker')
     if 'obstacleRecovery' in request:
         fields=fields|{'obstacleRecovery'}
         require(manifest.get('inspectedObstacleRecoveryPolicy')==recovery_policy(),
@@ -388,7 +462,7 @@ def submit(directory, review):
     request=dict(version=1,sessionId=manifest['sessionId'],requestId=uuid.uuid4().hex,
         afterRequestId=state['afterRequestId'],navigationProfile=session_profile(manifest),maximumLegs=1,
         modelConfigurationSha256=manifest['modelConfigurationSha256'],reviewFile=str(live_path(review)),
-        **review_evidence(review,manifest,state['reviewAfterUnixNs']))
+        **review_evidence(review,manifest,state['reviewAfterUnixNs']),**manifest_history_declaration(manifest))
     if state.get('pendingObstacleRecovery') is not None:
         request['obstacleRecovery']=copy.deepcopy(state['pendingObstacleRecovery'])
         verify_recovery_request(request,request['obstacleRecovery'],manifest['owner'])
@@ -467,14 +541,14 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
     profile=getattr(settings,'navigation_profile',SCOUT_PROFILE)
     _,anchor=scout_scope(profile)
     bootstrap_spec=None
-    if profile==SCOUT_PROFILE:
+    if profile==SCOUT_PROFILE and not getattr(settings,'p2p_executed_history',False):
         routes=settings.routes or [SCOUT_GRASS_ROUTE,SCOUT_GROVE_ROUTE]
         require(routes and len(set(routes))==len(routes) and all(route in SCOUT_ROUTES and required_profile(route)==profile
                 for route in routes),'Only explicitly registered scout routes may enter a worker')
         bootstrap_route=routes[0]
     else:
         require(not settings.routes and getattr(settings,'allow_reviewed_routes',False),
-                'Northern scouting requires explicit reviewed routes, not the original fixed routes')
+                'This worker requires explicit reviewed routes, not the original fixed routes')
         routes=[]
         # This geometry supplies loader arguments only; it is never submitted or executed by the worker.
         bootstrap_spec=ReviewedScoutRoute(((anchor['x'],anchor['y']),(anchor['x']+1,anchor['y'])),profile)
@@ -485,12 +559,15 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
     try:
         base=leg_arguments(settings,owner,bootstrap_route,directory/'bootstrap',watch.binding(),settings.record_max_mib,bootstrap_spec)
         configuration=model_contract(base)
+        if 'executedHistorySourceSha256' in configuration:
+            archive_executed_history_sources(directory,configuration['executedHistorySourceSha256'])
         checkpoint_stamp=file_stamp(base.checkpoint)
         manifest=dict(version=1,sessionId=session_id,owner=owner,worker=dict(processId=os.getpid(),windowsSessionId=owner['child']['windowsSessionId']),
             routes={route:[list(point) for point in route_points(route)] for route in routes},navigationProfile=profile,
             modelConfigurationSha256=canonical_sha(configuration),configuration=configuration,
-            stopTemperatureC=78,sourceFreshnessMs=150,actionHoldMs=100,legDeadlineSeconds=35,sessionSeconds=settings.seconds,
+            stopTemperatureC=78,sourceFreshnessMs=150,actionHoldMs=base.action_hold_ms,legDeadlineSeconds=35,sessionSeconds=settings.seconds,
             scoutEncounterGuardPolicy=guard_policy())
+        manifest.update(history_declaration(base))
         if getattr(settings,'allow_reviewed_routes',False):manifest['reviewedScoutRoutePolicy']=reviewed_route_policy(profile)
         if getattr(settings,'allow_inspected_obstacle_recovery',False):
             manifest.update(inspectedObstacleRecoveryPolicy=recovery_policy(),recoverySourceSha256=source_contract())
@@ -522,6 +599,11 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
                 'Cached checkpoint or instruction bytes changed')
         if 'recoverySourceSha256' in manifest:
             require(source_contract()==manifest['recoverySourceSha256'],'Inspected recovery runtime source changed')
+        if 'executedHistorySourceSha256' in configuration:
+            from p2p_executed_history import executed_history_policy
+            require(executed_history_sources()==configuration['executedHistorySourceSha256']
+                    and executed_history_policy(args.action_hold_ms)==configuration['executedHistoryPolicy'],
+                    'Executed-history runtime source or policy changed')
 
     try:
         publish()
@@ -531,12 +613,16 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
         state.update(modelLoads=int(policy is not None),modelLoadSeconds=time.monotonic()-began)
         require(policy is not None and callable(getattr(policy,'reset',None)) and callable(getattr(policy,'set_goal',None)),
                 'A resettable, goal-conditioned Open P2P policy is required')
+        if getattr(base,'p2p_executed_history',False):
+            require((getattr(policy,'metadata',None) or {}).get('historyCommitMode')==EXECUTED_HISTORY_MODE,
+                    'Loaded policy did not enable receipt-verified executed history')
         verify_configuration(base)
         watch.check()
         proof=dict(version=1,kind='scout-policy-session',sessionId=session_id,worker=manifest['worker'],owner=owner,navigationProfile=profile,
                    modelConfigurationSha256=manifest['modelConfigurationSha256'],configuration=configuration,
                    checkpointSha256=OPEN_P2P_SHA256,modelLoads=1,modelLoadSeconds=state['modelLoadSeconds'],
                    scoutEncounterGuardPolicy=guard_policy())
+        proof.update(history_declaration(base))
         if 'reviewedScoutRoutePolicy' in manifest:proof['reviewedScoutRoutePolicy']=manifest['reviewedScoutRoutePolicy']
         if 'inspectedObstacleRecoveryPolicy' in manifest:
             proof.update(inspectedObstacleRecoveryPolicy=manifest['inspectedObstacleRecoveryPolicy'],
@@ -586,6 +672,7 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
                 sessionProofSha256=proof_sha,requestId=request['requestId'],requestFile=str(path),requestSha256=request_sha,
                 routeId=request['routeId'],navigationProfile=profile,
                 scoutEncounterGuard=copy.deepcopy(request['scoutEncounterGuard']))
+            reuse.update(history_declaration(args))
             if spec is not None:reuse.update(routeSpec=spec.document(),routeSpecSha256=spec.sha256)
             if pending_recovery is not None:reuse['obstacleRecovery']=copy.deepcopy(pending_recovery)
 
@@ -708,6 +795,10 @@ def options(argv=None):
     run.add_argument('--allow-reviewed-routes',action='store_true',help='Allow fresh explicit two-point scout reviews within the existing scope')
     run.add_argument('--allow-inspected-obstacle-recovery',action='store_true',
                      help='Retain only the loaded policy after at most one fully audited geometric stop; require a new reviewed route')
+    run.add_argument('--p2p-executed-history',action='store_true',
+                     help='Commit only verified completed actions and fresh subsequent observations to model history')
+    run.add_argument('--action-hold-ms',type=int,choices=(50,60,100),
+                     help='Defaults to 50 for executed history and 100 for existing scout workers')
     agent=ROOT/'artifacts/agent'
     run.add_argument('--checkpoint',type=Path,default=agent/'models/open-p2p-150M/150M/checkpoint-step=00500000.ckpt')
     run.add_argument('--source',type=Path,default=agent/'sources/open-p2p')
@@ -725,6 +816,14 @@ def options(argv=None):
     geometry.add_argument('--end',type=float,nargs=2,required=True)
     geometry.add_argument('--navigation-profile',choices=SCOUT_PROFILES,default=SCOUT_PROFILE)
     args=parser.parse_args(argv)
+    if args.command=='run':
+        args.action_hold_ms=args.action_hold_ms or (50 if args.p2p_executed_history else 100)
+        if args.action_hold_ms not in ((50,60) if args.p2p_executed_history else (100,)):
+            parser.error('Executed history requires 50 or 60 ms holds; existing scouts retain 100 ms')
+        if args.p2p_executed_history and args.allow_inspected_obstacle_recovery:
+            parser.error('Executed history excludes inspected-obstacle recovery')
+        if args.p2p_executed_history and (args.routes or not args.allow_reviewed_routes):
+            parser.error('Executed history requires --allow-reviewed-routes and no fixed --route')
     if args.command=='run' and not (30<=args.seconds<=1800 and 1<=args.record_max_mib<=160):
         parser.error('Keep the session within 30-1800 seconds and 1-160 MiB')
     if args.command=='run' and args.navigation_profile!=SCOUT_PROFILE and (args.routes or not args.allow_reviewed_routes):

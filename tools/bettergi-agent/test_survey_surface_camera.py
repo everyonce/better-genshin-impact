@@ -1,5 +1,7 @@
 """Exercise surface camera-only feedback and stop behavior without connecting to a game."""
 from pathlib import Path
+import json
+import tempfile
 import time
 from types import SimpleNamespace
 import unittest
@@ -7,7 +9,7 @@ from unittest.mock import Mock, patch
 
 import probe_camera_response as probe
 import survey_surface_camera as survey
-from navigation_profiles import SURFACE_PROFILE
+from navigation_profiles import SURFACE_PROFILE, SCOUT_PROFILE, NORTH_SCOUT_PROFILE
 from test_probe_camera_response import CameraBridge
 
 
@@ -71,6 +73,49 @@ class SurfaceCameraTests(unittest.TestCase):
         self.assertTrue(probe.qualified(row,SCOUT_PROFILE))
         row['navigationPose']['x']=-1350.01
         self.assertFalse(probe.qualified(row,SCOUT_PROFILE))
+
+    def test_northern_turn_uses_its_own_scope_and_never_emits_keys(self):
+        """A northern position is unavailable to old scopes but permits bounded camera feedback."""
+        self.anchor = (-1329.833984375, 2564.1875)
+        self.bridge.yaw = 75.5
+        trial = probe.Experiment(self.bridge, self.report, station=self.anchor,
+                                profile=NORTH_SCOUT_PROFILE, seconds=35)
+        survey.turn_to(trial, 197)
+        self.assertLessEqual(abs(self.report['finalYawDegrees'] - 197), 3)
+        self.assertTrue(self.bridge.issued)
+        for request in self.bridge.issued:
+            self.assertEqual(request['steps'][0]['keys'], [])
+            self.assertEqual(request['steps'][0]['mouseDy'], 0)
+        row, _ = self.bridge.request('frame')
+        row.update(clientReceivedNs=time.perf_counter_ns(), transportRoundTripMs=0, frameQuality='usable')
+        self.assertTrue(probe.qualified(row, NORTH_SCOUT_PROFILE))
+        self.assertFalse(probe.qualified(row, SCOUT_PROFILE))
+        self.assertFalse(probe.qualified(row, SURFACE_PROFILE))
+
+    def test_northern_scene_refuses_cross_scope_or_modified_native_contract(self):
+        """Reusing coordinates alone cannot substitute an old profile or widen the northern scope."""
+        from test_north_scout_scope import north_capability
+        owner = {'root': {'processId': 1}, 'child': {'processId': 2}}
+        with tempfile.TemporaryDirectory() as directory:
+            scene = Path(directory)
+            plan = dict(owner=owner, navigationProfile=NORTH_SCOUT_PROFILE)
+            result = dict(status='completed', inputEnabled=False, ownerIdleMinimizedAfter=True,
+                capability=north_capability(), observations=[dict(navigationPose=dict(
+                    state='valid', x=-1329.833984375, y=2564.1875, layerId='MapBack_2'))])
+            (scene/'plan.json').write_text(json.dumps(plan), encoding='utf-8')
+            (scene/'result.json').write_text(json.dumps(result), encoding='utf-8')
+            self.assertEqual(survey.scene_anchor(scene, owner, NORTH_SCOUT_PROFILE),
+                             (-1329.833984375, 2564.1875))
+            plan['navigationProfile'] = SCOUT_PROFILE
+            (scene/'plan.json').write_text(json.dumps(plan), encoding='utf-8')
+            with self.assertRaisesRegex(ValueError, 'Northern scene profile'):
+                survey.scene_anchor(scene, owner, NORTH_SCOUT_PROFILE)
+            plan['navigationProfile'] = NORTH_SCOUT_PROFILE
+            result['capability']['bounds']['maxY'] += 1
+            (scene/'plan.json').write_text(json.dumps(plan), encoding='utf-8')
+            (scene/'result.json').write_text(json.dumps(result), encoding='utf-8')
+            with self.assertRaisesRegex(ValueError, 'navigation contract'):
+                survey.scene_anchor(scene, owner, NORTH_SCOUT_PROFILE)
 
     def test_measured_slow_response_reaches_north_without_twelve_tiny_corrections(self):
         self.bridge.yaw, self.bridge.sensitivity = 19.5, .1

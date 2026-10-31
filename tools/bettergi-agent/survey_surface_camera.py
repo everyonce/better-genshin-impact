@@ -11,7 +11,7 @@ import time
 
 from hybrid_routes import camera_correction
 from map_owner import load_map_owner
-from navigation_profiles import SURFACE_PROFILE, SCOUT_PROFILE, allows_pose_scope, validate_capability
+from navigation_profiles import SURFACE_PROFILE, SCOUT_PROFILES, NORTH_SCOUT_PROFILE, allows_pose_scope, validate_capability
 from observation_profiles import P2P_NATIVE
 from probe_camera_response import Experiment, MAX_PITCH_MOUSE_UNITS, require, stable
 from resident_runtime import atomic_json, control_module, verify_bridge_identity
@@ -120,12 +120,17 @@ class SurveyGuard:
 def scene_anchor(scene, owner, profile=SURFACE_PROFILE):
     """Require an input-disabled native scene from the same sealed owner before live admission."""
     result = json.loads((scene/'result.json').read_bytes())
+    plan = json.loads((scene/'plan.json').read_bytes())
     require(result.get('status') == 'completed' and result.get('inputEnabled') is False
             and result.get('ownerIdleMinimizedAfter') is True
-            and json.loads((scene/'plan.json').read_bytes()).get('owner') == owner,
+            and plan.get('owner') == owner,
             'Expected a completed native scene from the original idle owner')
+    # Northern camera admission must retain its explicit scene scope and exact native contract.
+    if profile == NORTH_SCOUT_PROFILE:
+        require(plan.get('navigationProfile') == profile, 'Northern scene profile differs')
+        validate_capability(result.get('capability') or {}, profile)
     poses = [r['navigationPose'] for r in result['observations'] if (r.get('navigationPose') or {}).get('state') == 'valid']
-    require(profile in (SURFACE_PROFILE,SCOUT_PROFILE) and bool(poses) and allows_pose_scope(poses[-1], profile),
+    require(profile in (SURFACE_PROFILE,*SCOUT_PROFILES) and bool(poses) and allows_pose_scope(poses[-1], profile),
             'Scene lacks a scoped native position')
     return poses[-1]['x'], poses[-1]['y']
 
@@ -200,7 +205,7 @@ def main():
     direction.add_argument('--heading', type=float)
     direction.add_argument('--pitch-delta', type=int,
                            help='One relative vertical mouse shift in [-80, 80], excluding zero; no pitch angle is inferred')
-    parser.add_argument('--navigation-profile', choices=(SURFACE_PROFILE,SCOUT_PROFILE),default=SURFACE_PROFILE)
+    parser.add_argument('--navigation-profile', choices=(SURFACE_PROFILE,*SCOUT_PROFILES),default=SURFACE_PROFILE)
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     live = (ROOT/'artifacts/live').resolve()

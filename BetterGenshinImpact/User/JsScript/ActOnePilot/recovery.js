@@ -45,10 +45,15 @@ var ActOneRecovery = (function () {
         return !!(fPrompt&&fPrompt.frameId===current.frameId&&String(fPrompt.text||'').trim()==='F'&&Number(fPrompt.x)>=1080&&Number(fPrompt.x)<=1170&&
             Number(fPrompt.y)>=490&&Number(fPrompt.y)<=590);
     }
-    function hasStatueHealingPanel(current, allowDepleted) {
+    // Recognize the existing panel headers independently of the numeric power reading.
+    function hasStatueHealingHeaders(current) {
         var rows=current&&current.ocr||[];
         return rows.some(function(r){return /Click on the character portrait to restore HP/.test(String(r.text||''))&&Number(r.y)<100;})&&
-            rows.some(function(r){return /^Statue.s Blessing$/.test(String(r.text||'').trim())&&Number(r.x)>1400&&Number(r.y)<100;})&&
+            rows.some(function(r){return /^Statue.s Blessing$/.test(String(r.text||'').trim())&&Number(r.x)>1400&&Number(r.y)<100;});
+    }
+    function hasStatueHealingPanel(current, allowDepleted) {
+        var rows=current&&current.ocr||[];
+        return hasStatueHealingHeaders(current)&&
             rows.some(function(r){var match=/Restorative Power:\s*([0-9]+)\s*\/\s*([0-9]+)/.exec(String(r.text||''));
                 return !!(match&&Number(match[2])>0&&Number(match[1])<=Number(match[2])&&(Number(match[1])>0||allowDepleted===true));});
     }
@@ -97,6 +102,27 @@ var ActOneRecovery = (function () {
     async function run(current, api, observe, depth) {
         depth=depth||0;
         if(depth>4) return {status:'stopped',reason:'Recovery transition limit reached'};
+        // A recognized panel with unreadable power must settle before any recovery input.
+        // Keep the strict slash parser and never reinterpret a changed panel as another task.
+        if(hasStatueHealingHeaders(current)&&!hasStatueHealingPanel(current)) {
+            for(var powerPoll=0;powerPoll<3&&!hasStatueHealingPanel(current);powerPoll++) {
+                if(hasStatueHealingPanel(current,true))
+                    return {status:'stopped',reason:'Statue Restorative Power is depleted; no further input sent',powerPolls:powerPoll,frameId:current.frameId};
+                if(typeof current.session!=='string'||!current.session||!Number.isInteger(current.frameId)||current.frameId<1||!Number.isFinite(current.timestamp))
+                    return {status:'stopped',reason:'Statue power transition lacks source identity; no further input sent',powerPolls:powerPoll,frameId:current.frameId};
+                api.checkStop();await api.sleep(350);api.checkStop();
+                var powerPrevious=current;
+                current=await observe();api.checkStop();
+                if(!current||current.session!==powerPrevious.session||!Number.isInteger(current.frameId)||current.frameId<=powerPrevious.frameId||
+                    !Number.isFinite(current.timestamp)||current.timestamp<=powerPrevious.timestamp)
+                    return {status:'stopped',reason:'Statue power transition did not produce a fresh same-session frame; no further input sent',powerPolls:powerPoll+1,frameId:current&&current.frameId};
+                if(!hasStatueHealingHeaders(current))
+                    return {status:'stopped',reason:'Statue healing panel headers changed while reading power; no further input sent',powerPolls:powerPoll+1,frameId:current.frameId};
+            }
+            if(!hasStatueHealingPanel(current))
+                return {status:'stopped',reason:hasStatueHealingPanel(current,true)?'Statue Restorative Power is depleted; no further input sent':
+                    'Statue Restorative Power remained unqualified after bounded observation; no further input sent',powerPolls:powerPoll,frameId:current.frameId};
+        }
         if(typeof api.wolfClosingCharacterRecoveryReady==='function'&&api.wolfClosingCharacterRecoveryReady(current)) {
             api.checkStop();api.wolfClosingCharacterRecoveryContinue();await api.sleep(900);current=await observe();
             return {status:'completed',reason:'One verified Kaeya acquisition overlay dismissed; inspect the world and journal',
@@ -232,7 +258,19 @@ var ActOneRecovery = (function () {
             for(var hpPoll=0;hpPoll<6 && !current.hud.world;hpPoll++){api.checkStop();await api.sleep(350);current=await observe();}
             var restored=current.hud.health;
             if(current.hud.world && restored && restored.current/restored.max>=0.95) {
-                var paused=await api.pauseCombat();current=await observe();
+                var journalPrevious=current,paused=await api.pauseCombat();current=await observe();
+                // A single pause key may precede settled journal OCR; only observe this transition.
+                for(var journalPoll=0;paused&&!current.hud.journal&&journalPoll<3;journalPoll++) {
+                    if(typeof journalPrevious.session!=='string'||!journalPrevious.session||current.session!==journalPrevious.session||
+                        !Number.isInteger(journalPrevious.frameId)||!Number.isInteger(current.frameId)||current.frameId<=journalPrevious.frameId||
+                        !Number.isFinite(journalPrevious.timestamp)||!Number.isFinite(current.timestamp)||current.timestamp<=journalPrevious.timestamp)
+                        return {status:'stopped',reason:'Statue healed but journal transition lacks fresh same-session evidence',health:restored,paused:false};
+                    api.checkStop();await api.sleep(350);api.checkStop();journalPrevious=current;
+                    current=await observe();api.checkStop();
+                    if(!current||!current.hud||current.session!==journalPrevious.session||!Number.isInteger(current.frameId)||current.frameId<=journalPrevious.frameId||
+                        !Number.isFinite(current.timestamp)||current.timestamp<=journalPrevious.timestamp)
+                        return {status:'stopped',reason:'Statue healed but journal transition did not produce a fresh same-session frame',health:restored,paused:false};
+                }
                 return {status:paused&&current.hud.journal?'completed':'stopped',reason:'Statue healing applied',health:restored,paused:current.hud.journal};
             }
             return {status:'stopped',reason:'Inspect screen after Statue healing',health:restored};

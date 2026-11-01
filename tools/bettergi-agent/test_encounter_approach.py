@@ -584,6 +584,143 @@ class ApproachTests(unittest.TestCase):
                 audit_recording(folder, self.bound, report)
 
 
+class OwnerDiscoveryTests(unittest.TestCase):
+    """Exercise the real discovery parser and original guards with inert pipe names/status replies."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Import only transport definitions; every OS identity and endpoint operation is replaced below."""
+        from resident_runtime import control_module
+        cls.control = control_module()
+
+    def fixture(self):
+        """Provide one exact original pair and an injectable same-user advertisement snapshot."""
+        sid = 'S-1-5-21-inert-approach-owner-tests'
+        prefix = 'BetterGI.ExternalControl.' + approach.hashlib.sha256(sid.encode()).hexdigest()[:16].upper() + '.'
+        names = {role: prefix + str(value['windowsSessionId']) + '.' + str(value['processId'])
+                 for role, value in OWNER.items()}
+        packages = {role: dict(assemblySha256=letter * 64, appDirectory=str((approach.ROOT / ('inert-' + role)).resolve()))
+                    for role, letter in (('root', 'a'), ('child', 'b'))}
+        root = dict(OWNER['root'], instanceType='Primary', automationEnabled=True, uiStatus='current',
+                    childWindowMinimized=True, childSessionId=OWNER['child']['windowsSessionId'], childConnectedState=1,
+                    **packages['root'])
+        child = dict(OWNER['child'], instanceType='ChildSession', automationEnabled=True, remoteDesktop=True,
+                     runtimeRunning=True, automationState='game_ready', taskRunning=False, agentStreamRunning=False,
+                     serviceOwnsPilot=False, pilotState='idle', **packages['child'])
+        plan = dict(owner=copy.deepcopy(OWNER), originalOwner=dict(nativePackages=packages))
+        snapshot, calls, discoveries, errors = list(names.values()), [], [], {}
+        states = {state['processId']: state for state in (root, child)}
+
+        def exchange(command, process_id, session_id):
+            """Return a bounded fixture status without opening a native endpoint."""
+            calls.append((command, process_id, session_id))
+            if process_id in errors:
+                raise self.control.ControlError(errors[process_id])
+            return copy.deepcopy(states[process_id])
+
+        def discover(**arguments):
+            """Use the production same-user parser, connection-error collection and candidate cap."""
+            discoveries.append(copy.deepcopy(arguments))
+            return self.control.discover(names=arguments.get('names', snapshot),
+                                         user_sid=arguments.get('user_sid', sid), exchange_fn=exchange)
+
+        lifecycle = SimpleNamespace(discover=discover, require_role=self.control.require_role,
+            _require_connected_root=self.control._require_connected_root,
+            transport=SimpleNamespace(WinPipeApi=lambda: SimpleNamespace(current_user_sid=lambda: sid)))
+        return SimpleNamespace(plan=plan, lifecycle=lifecycle, snapshot=snapshot, names=names, prefix=prefix,
+                               root=root, child=child, calls=calls, discoveries=discoveries, errors=errors)
+
+    def test_missing_original_advertisements_use_one_pinned_discovery(self):
+        """A transiently absent name still receives exactly one authenticated status request."""
+        for missing_both in (False, True):
+            with self.subTest(missing_both=missing_both):
+                item = self.fixture()
+                item.snapshot[:] = [] if missing_both else [item.names['child']]
+                with patch.object(approach.os, 'listdir', return_value=item.snapshot):
+                    actual = approach.owner_pair(item.lifecycle, item.plan, idle=True)
+                self.assertEqual(actual, (item.root, item.child))
+                self.assertEqual(len(item.discoveries), 1)
+                self.assertEqual(set(item.discoveries[0]['names']), set(item.names.values()))
+                self.assertEqual(len(item.calls), 2)
+                self.assertTrue(all(command == 'status' for command, _, _ in item.calls))
+
+    def test_default_scout_discovery_still_refuses_a_missing_advertisement(self):
+        """The optional approach path does not change any existing scout caller's behavior."""
+        import scout_session
+        item = self.fixture()
+        item.snapshot[:] = [item.names['child']]
+        with self.assertRaisesRegex(ValueError, 'Incomplete or ambiguous scout ownership'):
+            scout_session.owner_pair(item.lifecycle, item.plan['owner'])
+        self.assertEqual(item.discoveries, [{}])
+        self.assertEqual(len(item.calls), 1)
+
+    def test_all_extra_same_user_advertisements_fail_before_candidate_cap(self):
+        """No additional advertised identity can disappear behind the existing 32-candidate cap."""
+        for count in (1, 40):
+            with self.subTest(count=count):
+                item = self.fixture()
+                item.snapshot.extend(item.prefix + '99.' + str(9000 + index) for index in range(count))
+                with patch.object(approach.os, 'listdir', return_value=item.snapshot), \
+                     self.assertRaises(approach.OwnerDiscoveryError) as caught:
+                    approach.owner_pair(item.lifecycle, item.plan)
+                self.assertEqual(caught.exception.diagnostics['extraCount'], count)
+                self.assertEqual(caught.exception.diagnostics['advertisedCount'], count + 2)
+                self.assertEqual(item.discoveries, [])
+                self.assertEqual(item.calls, [])
+
+    def test_other_user_advertisements_remain_outside_this_users_discovery(self):
+        """The same-user boundary remains exactly the existing hashed-SID pipe-name rule."""
+        item = self.fixture()
+        item.snapshot.append('BetterGI.ExternalControl.OTHERUSER.99.9999')
+        with patch.object(approach.os, 'listdir', return_value=item.snapshot):
+            self.assertEqual(approach.owner_pair(item.lifecycle, item.plan), (item.root, item.child))
+        self.assertEqual(len(item.calls), 2)
+
+    def test_changed_nonce_and_original_state_guards_still_refuse(self):
+        """Seeding advertisements never relaxes identity, package, minimized, role or connection checks."""
+        mutations = (('child', 'instanceNonce', 'replacement'), ('child', 'instanceType', 'Primary'),
+                     ('child', 'assemblySha256', 'c' * 64), ('child', 'remoteDesktop', False),
+                     ('child', 'runtimeRunning', False), ('root', 'childWindowMinimized', False),
+                     ('root', 'childConnectedState', 0))
+        for role, key, value in mutations:
+            with self.subTest(role=role, key=key):
+                item = self.fixture()
+                getattr(item, role)[key] = value
+                with patch.object(approach.os, 'listdir', return_value=item.snapshot), \
+                     self.assertRaises(approach.OwnerDiscoveryError) as caught:
+                    approach.owner_pair(item.lifecycle, item.plan)
+                self.assertEqual(len(caught.exception.diagnostics['instances']), 2)
+                self.assertEqual(len(item.discoveries), 1)
+
+    def test_actual_connection_error_is_retained_without_generic_retry(self):
+        """A genuinely unavailable pinned endpoint still stops and preserves its exact query error."""
+        item = self.fixture()
+        item.errors[OWNER['root']['processId']] = 'Control pipe connection timed out after at most 2 seconds: inert-root'
+        with patch.object(approach.os, 'listdir', return_value=item.snapshot), \
+             self.assertRaises(approach.OwnerDiscoveryError) as caught:
+            approach.owner_pair(item.lifecycle, item.plan)
+        evidence = caught.exception.diagnostics
+        self.assertEqual(len(item.discoveries), 1)
+        self.assertEqual(len(item.calls), 2)
+        self.assertEqual(evidence['unavailable'], [dict(processId=OWNER['root']['processId'],
+            windowsSessionId=OWNER['root']['windowsSessionId'], error=item.errors[OWNER['root']['processId']])])
+        self.assertIn('inert-root', str(caught.exception))
+        report = {}
+        approach.retain_owner_failure(report, caught.exception)
+        self.assertEqual(report['ownerDiscoveryFailure'], evidence)
+
+    def test_snapshot_error_retains_its_phase_and_original_targets(self):
+        """A namespace failure is distinguishable from an endpoint identity or status failure."""
+        item = self.fixture()
+        with patch.object(approach.os, 'listdir', side_effect=OSError('inert namespace failure')), \
+             self.assertRaises(approach.OwnerDiscoveryError) as caught:
+            approach.owner_pair(item.lifecycle, item.plan)
+        self.assertEqual(caught.exception.diagnostics['phase'], 'same_user_snapshot')
+        self.assertEqual(caught.exception.diagnostics['expected'], OWNER)
+        self.assertEqual(caught.exception.diagnostics['error'], 'inert namespace failure')
+        self.assertEqual(item.calls, [])
+
+
 class WorkerBoundaryTests(unittest.TestCase):
     """Exercise the actual Bridge interface without opening an OS pipe, process or model."""
 
@@ -592,7 +729,8 @@ class WorkerBoundaryTests(unittest.TestCase):
         cls.bound = binding()
 
     def simulate(self, *, reject_identity=False, stop_on_discovery=False, expire_during_start=False,
-                 close_failure=False, review_expiry_during_discovery=False):
+                 close_failure=False, review_expiry_during_discovery=False, host_expiry_during_discovery=False,
+                 owner_failure_after_start=False):
         """Run the broker-worker wrapper solely with faithful file-handle and lifecycle stand-ins."""
         with tempfile.TemporaryDirectory() as temporary, ExitStack() as stack:
             folder = Path(temporary)
@@ -639,15 +777,30 @@ class WorkerBoundaryTests(unittest.TestCase):
                     (folder / 'STOP').write_text('inert stop', encoding='utf-8')
                 if review_expiry_during_discovery and len(discoveries) == 2:
                     clock.sleep(2)
+                if host_expiry_during_discovery and len(discoveries) == 2:
+                    clock.sleep(41)
+                if owner_failure_after_start and len(discoveries) == 3:
+                    raise approach.OwnerDiscoveryError('inert owner read failure',
+                        dict(phase='pinned_status_reads', unavailable=[dict(error='inert connect timeout')]))
                 return {}, copy.deepcopy(child)
             def identity(*args):
                 if reject_identity:
                     raise ValueError('wrong native pipe owner')
             success = dict(status='completed', releaseAcknowledged=True, stopAcknowledged=True, receiptsComplete=True)
+            def episode(*args, **kwargs):
+                """Match the episode's error-to-report conversion after the worker records its ownership evidence."""
+                if owner_failure_after_start:
+                    clock.sleep(.3)
+                    try:
+                        kwargs['check']()
+                    except approach.OwnerDiscoveryError as error:
+                        return dict(success, status='failed', error=str(error))
+                    raise AssertionError('Expected the inert owner failure')
+                return copy.deepcopy(success)
             stack.enter_context(patch.object(approach, 'verify_plan', return_value=(plan, folder, sha)))
             stack.enter_context(patch.object(approach, 'ordinary_identity', return_value=dict(processId=44, parentProcessId=33)))
             stack.enter_context(patch.object(approach, 'owner_pair', side_effect=owners))
-            stack.enter_context(patch.object(approach, 'run_episode', return_value=success))
+            stack.enter_context(patch.object(approach, 'run_episode', side_effect=episode))
             stack.enter_context(patch.object(approach, 'original_review_deadline', return_value=clock() +
                 (1_000_000_000 if review_expiry_during_discovery else 120_000_000_000)))
             stack.enter_context(patch('resident_runtime.control_module', return_value=lifecycle))
@@ -710,6 +863,74 @@ class WorkerBoundaryTests(unittest.TestCase):
         self.assertEqual(starts, [])
         self.assertEqual(requests, [])
         self.assertEqual(closed, 0)
+
+    def test_original_host_expiry_during_discovery_prevents_start(self):
+        """A blocking owner read cannot renew the original host deadline before listener creation."""
+        report, requests, starts, closed = self.simulate(host_expiry_during_discovery=True)
+        self.assertEqual(report['status'], 'failed')
+        self.assertEqual(starts, [])
+        self.assertEqual(requests, [])
+        self.assertEqual(closed, 0)
+        self.assertIn('after owner discovery', report['error'])
+
+    def test_owner_error_evidence_survives_episode_error_conversion(self):
+        """An episode can catch the exception while the worker still retains its actual discovery evidence."""
+        report, requests, starts, closed = self.simulate(owner_failure_after_start=True)
+        self.assertEqual(report['status'], 'failed')
+        self.assertEqual(report['ownerDiscoveryFailure']['unavailable'], [dict(error='inert connect timeout')])
+        self.assertTrue(report['cleanupVerified'])
+        self.assertEqual(len(starts), 1)
+        self.assertEqual(closed, 1)
+
+
+class HostBoundaryTests(unittest.TestCase):
+    """Keep a monitor's actual discovery failure through STOP and final host accounting without a broker launch."""
+
+    def test_host_monitor_retains_discovery_evidence_and_one_stop(self):
+        """A completed inert future models one worker while the host monitor fails its ownership check."""
+        with tempfile.TemporaryDirectory() as temporary, ExitStack() as stack:
+            folder = Path(temporary)
+            clock = Clock()
+            plan = dict(runId='a' * 32, owner=copy.deepcopy(OWNER), runtime=dict(executable='C:/inert/python.exe'))
+            sha = 'b' * 64
+            terminal = dict(runId=plan['runId'], planSha256=sha, worker=dict(processId=22),
+                            status='failed', cleanupVerified=True)
+            approach.exclusive_json(folder / 'worker-result.json', terminal)
+            broker = dict(windowsSessionId=OWNER['child']['windowsSessionId'], remoteDesktop=True,
+                          elevated=False, integrityRid=8192, timedOut=False, outputIncomplete=False,
+                          success=False, returnCode=2)
+            failure = approach.OwnerDiscoveryError('inert monitor failure',
+                dict(phase='pinned_status_reads', unavailable=[dict(error='inert root status failure')]))
+            submissions = []
+            states = iter((False, True))
+            future = SimpleNamespace(done=lambda: next(states), result=lambda: copy.deepcopy(broker))
+            class Pool:
+                """Expose the executor interface without starting a thread or invoking a submitted function."""
+                def __enter__(self):
+                    return self
+                def __exit__(self, *_):
+                    return False
+                def submit(self, function, *args):
+                    submissions.append((function, args))
+                    return future
+            def no_broker_call(*_):
+                raise AssertionError('No native broker operation is permitted in this test')
+            lifecycle = SimpleNamespace(run_command=no_broker_call)
+            stack.enter_context(patch.object(approach, 'verify_plan', return_value=(plan, folder, sha)))
+            stack.enter_context(patch.object(approach, 'owner_pair', side_effect=[({}, {}), failure, ({}, {})]))
+            stack.enter_context(patch('resident_runtime.control_module', return_value=lifecycle))
+            verify = stack.enter_context(patch('combat_process_identity.verify_worker_broker'))
+            stack.enter_context(patch('concurrent.futures.ThreadPoolExecutor', return_value=Pool()))
+            stack.enter_context(patch('encounter_approach.time.perf_counter_ns', side_effect=clock))
+            stack.enter_context(patch('encounter_approach.time.time_ns', return_value=1_000_000_000))
+            stack.enter_context(patch('encounter_approach.time.sleep', side_effect=clock.sleep))
+            report = approach.launch(folder / 'plan.json')
+            self.assertEqual(report['status'], 'failed')
+            self.assertEqual(report['ownerDiscoveryFailure'], failure.diagnostics)
+            self.assertEqual((folder / 'STOP').read_text(), str(failure))
+            self.assertEqual(json.loads((folder / 'result.json').read_bytes()), report)
+            self.assertEqual(len(submissions), 1)
+            verify.assert_called_once()
 
 
 class SourceClosureTests(unittest.TestCase):

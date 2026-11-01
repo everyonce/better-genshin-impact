@@ -901,16 +901,66 @@ def verify_plan(path, *, fresh=True, current_sources=True):
     return plan, folder, sha
 
 
+class OwnerDiscoveryError(ValueError):
+    """Retain the first bounded ownership failure even when a caller records only its error string."""
+
+    def __init__(self, message, diagnostics):
+        """Keep exact compact discovery evidence without turning a failure into a retry."""
+        self.diagnostics = copy.deepcopy(diagnostics)
+        super().__init__(message + ' | ownership=' + json.dumps(self.diagnostics, separators=(',', ':')))
+
+
+def retain_owner_failure(report, error, field='ownerDiscoveryFailure'):
+    """Keep a structured first failure before an episode or wrapper reduces it to text."""
+    if isinstance(error, OwnerDiscoveryError):
+        report.setdefault(field, copy.deepcopy(error.diagnostics))
+
+
 def owner_pair(lifecycle, plan, *, idle=False):
-    """Read the original minimized owners; never reconnect, replace, start a game, or discover a substitute."""
-    from scout_session import owner_pair as original_pair, idle_child
-    root, child = original_pair(lifecycle, plan['owner'])
-    for role, state in (('root', root), ('child', child)):
-        pin = plan['originalOwner']['nativePackages'][role]
-        require(state.get('assemblySha256', '').lower() == pin['assemblySha256']
-                and str(Path(state.get('appDirectory', '')).resolve()) == pin['appDirectory'], 'Original native package changed')
-    require(not idle or idle_child(child), 'Original child is not idle and released')
-    return root, child
+    """Read only the original owners, tolerating missing advertisements but never extra endpoints or failed reads."""
+    from scout_session import validate_owner_discovery, idle_child
+    started = time.perf_counter_ns()
+    details = dict(phase='same_user_snapshot', startedAtClientNs=started, expected=copy.deepcopy(plan['owner']))
+    try:
+        sid = lifecycle.transport.WinPipeApi().current_user_sid()
+        prefix = 'BetterGI.ExternalControl.' + hashlib.sha256(sid.encode('utf-8')).hexdigest()[:16].upper() + '.'
+        pattern = re.compile('^' + re.escape(prefix) + r'(\d+)\.(\d+)$')
+        expected = {prefix + str(value['windowsSessionId']) + '.' + str(value['processId'])
+                    for value in plan['owner'].values()}
+        require(len(expected) == 2, 'The original owner must identify two distinct endpoints')
+        # The native single-client server disposes/recreates its pipe after each request. Seed only
+        # the already pinned addresses, so a missing advertisement reaches the existing connect wait.
+        advertised = set(name for name in os.listdir('\\\\.\\pipe\\') if pattern.fullmatch(name))
+        extra = advertised - expected
+        ordered = sorted(advertised)
+        details.update(advertised=ordered[:32], advertisedCount=len(ordered), advertisedTruncated=len(ordered) > 32,
+                       advertisedSha256=digest(('\n'.join(ordered)).encode('utf-8')),
+                       seededMissing=sorted(expected - advertised), extra=sorted(extra)[:32], extraCount=len(extra))
+        # Inspect the whole snapshot before discover's 32-candidate cap. An extra advertised endpoint
+        # is terminal even if it would sort outside that cap; never contact or substitute that owner.
+        require(not extra, 'Additional same-user control endpoints are advertised')
+        details['phase'] = 'pinned_status_reads'
+        discovery = lifecycle.discover(names=sorted(advertised | expected), user_sid=sid)
+        fields = ('processId', 'windowsSessionId', 'instanceNonce', 'instanceType', 'assemblySha256', 'appDirectory',
+                  'uiStatus', 'childSessionId', 'childConnectedState', 'childWindowMinimized', 'remoteDesktop',
+                  'automationEnabled', 'runtimeRunning', 'automationState', 'taskRunning', 'agentStreamRunning',
+                  'serviceOwnsPilot', 'pilotState')
+        details['instances'] = [{key: (value[:512] if isinstance(value, str) else value)
+                                 for key in fields if (value := state.get(key)) is not None}
+                                for state in discovery.get('instances', [])[:32]]
+        details['unavailable'] = copy.deepcopy(discovery.get('unavailable', []))
+        details['phase'] = 'original_owner_validation'
+        root, child = validate_owner_discovery(lifecycle, plan['owner'], discovery)
+        for role, state in (('root', root), ('child', child)):
+            pin = plan['originalOwner']['nativePackages'][role]
+            require(state.get('assemblySha256', '').lower() == pin['assemblySha256']
+                    and str(Path(state.get('appDirectory', '')).resolve()) == pin['appDirectory'], 'Original native package changed')
+        require(not idle or idle_child(child), 'Original child is not idle and released')
+        return root, child
+    except Exception as error:
+        details.update(elapsedMs=(time.perf_counter_ns() - started) / 1_000_000,
+                       errorType=type(error).__name__, error=str(error)[:512])
+        raise OwnerDiscoveryError(str(error), details) from error
 
 
 def stop_requested(folder):
@@ -964,7 +1014,11 @@ def worker(plan_path):
         now = time.perf_counter_ns()
         require(not stop_requested(folder) and now < claim['deadlineMonotonicNs'], 'Operator or host deadline stop')
         if now >= next_owner_check:
-            owner_pair(lifecycle, plan)
+            try:
+                owner_pair(lifecycle, plan)
+            except OwnerDiscoveryError as error:
+                retain_owner_failure(report, error)
+                raise
             next_owner_check = time.perf_counter_ns() + 250_000_000
         # Discovery is synchronous. A STOP or expiry during that call must win before any subsequent input/start.
         require(not stop_requested(folder) and time.perf_counter_ns() < claim['deadlineMonotonicNs']
@@ -1009,6 +1063,7 @@ def worker(plan_path):
         report['episode'] = run_episode(bridge, plan['binding'], folder / 'recording', check=check, deadline_ns=lease_deadline)
         report['status'] = report['episode']['status']
     except BaseException as error:
+        retain_owner_failure(report, error)
         report.update(status='failed', error=str(error) or type(error).__name__)
     finally:
         if bridge is not None and authenticated and report['episode'] is None:
@@ -1040,6 +1095,7 @@ def worker(plan_path):
                 require(time.perf_counter_ns() < deadline, 'Original child cleanup remains unresolved')
                 time.sleep(.05)
         except BaseException as error:
+            retain_owner_failure(report, error, 'ownerCleanupFailure')
             report.update(status='failed', cleanupError=str(error))
         episode = report.get('episode') or {}
         report['cleanupVerified'] = bool(report['ownerIdleMinimizedAfter'] and episode.get('releaseAcknowledged')
@@ -1071,6 +1127,7 @@ def launch(plan_path):
 
     def request_stop(reason):
         """Stop the cooperative worker locally without affecting any other listener."""
+        retain_owner_failure(report, reason)
         report.setdefault('stopReason', str(reason))
         try:
             with (folder / 'STOP').open('x', encoding='utf-8') as stream:

@@ -175,7 +175,11 @@ def file_stamp(path):
 
 def owner_pair(lifecycle, owner):
     """Verify the original pair while permitting independent passive work between leases."""
-    discovery=lifecycle.discover()
+    return validate_owner_discovery(lifecycle,owner,lifecycle.discover())
+
+
+def validate_owner_discovery(lifecycle, owner, discovery):
+    """Apply the unchanged owner guards to one supplied, complete discovery result."""
     require(not discovery.get('unavailable') and len(discovery['instances'])==2,'Incomplete or ambiguous scout ownership')
     roles={entry['instanceType']:entry for entry in discovery['instances']}
     root,child=roles['Primary'],roles['ChildSession']

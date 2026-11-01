@@ -737,26 +737,31 @@ def run_episode(bridge, binding, directory, *, clock=time.perf_counter_ns, sleep
 
 
 def source_files():
-    """Follow only local Python imports plus the bounded broker directory; never enumerate weights or drives."""
+    """Follow bounded local imports and the broker's explicit dynamic transport, without drive/weight scans."""
     agent = Path(__file__).resolve().parent
     broker = ROOT / 'tools/rdp-automation'
+    transport = ROOT / 'tools/quest-pilot'
+    directories = (agent, broker, transport)
     pending = [Path(__file__).resolve(), agent / 'stream_client.py', agent / 'resident_runtime.py',
                agent / 'scout_session.py', agent / 'map_owner.py', agent / 'combat_process_identity.py',
                agent / 'capture_scout_scene.py', agent / 'audit_encounter_approach.py']
     pending += [path for path in broker.glob('*.py') if not path.name.startswith('test_')]
+    # rdp_control executes this exact path through importlib; ordinary import ASTs cannot discover it.
+    # Follow its local imports, but do not enumerate unrelated quest-pilot scripts.
+    pending.append(transport / 'controller-control.py')
     found = set()
     while pending:
         path = pending.pop()
         if path in found:
             continue
-        require(path.parent in (agent, broker), 'Python dependency escaped its two source directories')
+        require(path.parent in directories, 'Python dependency escaped its bounded source directories')
         found.add(path)
         tree = ast.parse(read_bytes(path, 2 * 1024 * 1024).decode('utf-8-sig'))
         for node in ast.walk(tree):
             names = ([node.module.split('.')[0]] if isinstance(node, ast.ImportFrom) and node.module else
                      [part.name.split('.')[0] for part in node.names] if isinstance(node, ast.Import) else [])
             for name in names:
-                for directory in (agent, broker):
+                for directory in directories:
                     candidate = directory / (name + '.py')
                     if candidate.is_file():
                         pending.append(candidate)

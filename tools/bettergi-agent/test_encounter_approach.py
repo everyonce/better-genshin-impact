@@ -712,6 +712,42 @@ class WorkerBoundaryTests(unittest.TestCase):
         self.assertEqual(closed, 0)
 
 
+class SourceClosureTests(unittest.TestCase):
+    """Seal the broker's explicit dynamic transport and only its reachable local dependencies."""
+
+    def test_installed_contract_pins_dynamic_transport(self):
+        """The real transport is a source dependency before its module can execute."""
+        path = approach.ROOT / 'tools/quest-pilot/controller-control.py'
+        contract = approach.source_contract()
+        self.assertEqual(contract[str(path.relative_to(approach.ROOT))], approach.digest(approach.read_bytes(path)))
+
+    def test_dynamic_transport_local_imports_without_directory_enumeration(self):
+        """A tiny inert source tree proves transitive imports, cycles and excluded unrelated scripts."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            agent = root / 'tools/bettergi-agent'
+            broker = root / 'tools/rdp-automation'
+            transport = root / 'tools/quest-pilot'
+            for path in (agent, broker, transport):
+                path.mkdir(parents=True)
+            seeds = ('encounter_approach.py', 'stream_client.py', 'resident_runtime.py', 'scout_session.py',
+                     'map_owner.py', 'combat_process_identity.py', 'capture_scout_scene.py', 'audit_encounter_approach.py')
+            for name in seeds:
+                (agent / name).write_text('# Inert source fixture.\n', encoding='utf-8')
+            (broker / 'rdp_control.py').write_text('# Dynamic transport is a path, not an import.\n', encoding='utf-8')
+            (transport / 'controller-control.py').write_text('import local_transport_helper\n', encoding='utf-8')
+            (transport / 'local_transport_helper.py').write_text('from transport_leaf import marker\n', encoding='utf-8')
+            (transport / 'transport_leaf.py').write_text('import local_transport_helper\nmarker = 1\n', encoding='utf-8')
+            unrelated = transport / 'unrelated.py'
+            unrelated.write_text('This unrelated file is intentionally not valid Python.\n', encoding='utf-8')
+            with patch.object(approach, 'ROOT', root), patch.object(approach, '__file__', str(agent / seeds[0])):
+                found = set(approach.source_files())
+            expected = {agent / name for name in seeds} | {broker / 'rdp_control.py'}
+            expected |= {transport / name for name in ('controller-control.py', 'local_transport_helper.py', 'transport_leaf.py')}
+            self.assertEqual(found, expected)
+            self.assertNotIn(unrelated, found)
+
+
 class PrepareTests(unittest.TestCase):
     """Prepare/verify touch only bounded inert files and refuse every changed authority boundary."""
 

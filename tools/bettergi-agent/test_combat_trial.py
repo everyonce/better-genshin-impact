@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import threading
 import time
 from types import SimpleNamespace
 import unittest
@@ -354,6 +355,109 @@ class CombatTrialTests(unittest.TestCase):
         """Read the final immutable wrapper."""
         return json.loads((self.folder / 'patrol.json').read_bytes())
 
+    def assert_terminal_status(self):
+        """The final small sidecar describes the same outcome without claiming process exit."""
+        report = self.report()
+        status = json.loads((self.folder / 'patrol.json.status.json').read_bytes())
+        self.assertEqual((status['state'], status['phase']), (report['status'], 'terminal'))
+        self.assertEqual((status['runId'], status['worker']), (report['runId'], report['worker']))
+        self.assertEqual(status['cleanupVerified'], report['cleanupVerified'])
+        self.assertEqual(status['ownerIdleMinimizedAfter'], report.get('ownerIdleMinimizedAfter', False))
+        self.assertFalse(status['inputEnabled'])
+        self.assertTrue(status['monitorRetired'])
+        self.assertTrue(report['terminalStatusPublished'])
+        self.assertNotIn('workerRetired', status)
+        self.assertLess((self.folder / 'patrol.json.status.json').stat().st_size, 32 * 1024)
+
+    def test_terminal_status_replaces_actual_running_writer_after_retirement(self):
+        """Exercise the real status thread and the live running/inputEnabled stale-sidecar shape."""
+        self.prepare()
+        self.claim()
+        original_episode, original_write = self.episode, trial.runtime.atomic_json
+        running = threading.Event()
+        controls, written = [], []
+        def write(path, document):
+            """Signal only after the actual asynchronous running snapshot is on disk."""
+            original_write(path, document)
+            if Path(path).name == 'patrol.json.status.json':
+                written.append(document.copy())
+                if document.get('state') == 'running' and document.get('inputEnabled') is True:
+                    running.set()
+        def episode(args, policy, control):
+            """Publish normal stream progress before returning the inert terminal episode."""
+            controls.append(control)
+            control.publish(state='running', inputEnabled=True)
+            self.assertTrue(running.wait(2), 'Actual status writer did not publish running')
+            return original_episode(args, policy, control)
+        self.episode = episode
+        with patch.object(trial.runtime, 'atomic_json', write):
+            self.assertEqual(self.worker(), 0)
+        self.assertFalse(controls[0].worker.is_alive())
+        self.assert_terminal_status()
+        self.assertEqual(len([row for row in written if row.get('phase') == 'terminal']), 1)
+        self.assertEqual((written[-1]['state'], written[-1]['inputEnabled']), ('completed', False))
+        self.assertEqual(self.report()['finalControlDocument']['command'], 'run')
+        self.assertEqual((self.loads, self.lifecycle.starts, self.episodes), (1, 1, 1))
+
+    def test_terminal_status_publication_failure_is_retained_as_unresolved(self):
+        """A filesystem failure cannot erase cleanup/episode evidence or report status retirement."""
+        self.prepare()
+        self.claim()
+        original_write = trial.runtime.atomic_json
+        def write(path, document):
+            """Refuse only the final sidecar write, after the actual monitor has closed."""
+            if document.get('phase') == 'terminal':
+                raise PermissionError('inert terminal status sharing refusal')
+            return original_write(path, document)
+        with patch.object(trial.runtime, 'atomic_json', write):
+            self.assertEqual(self.worker(), 1)
+        report = self.report()
+        self.assertEqual(report['status'], 'unresolved')
+        self.assertFalse(report['terminalStatusPublished'])
+        self.assertIn('inert terminal status sharing refusal', report['terminalStatusError'])
+        self.assertTrue(report['cleanupVerified'])
+        self.assertTrue(report['ownerIdleMinimizedAfter'])
+        self.assertEqual(report['nativeEpisode']['status'], 'completed')
+        self.assertEqual((self.loads, self.lifecycle.starts, self.episodes), (1, 1, 1))
+
+    def test_live_status_writer_cannot_be_claimed_retired_or_overwritten(self):
+        """A real blocked writer survives the bounded close and makes retirement unresolved."""
+        self.prepare()
+        self.claim()
+        original_episode, original_write = self.episode, trial.runtime.atomic_json
+        blocked, release = threading.Event(), threading.Event()
+        controls, terminal_writes = [], []
+        def write(path, document):
+            """Hold one actual monitor write until run_worker has reported the join failure."""
+            if document.get('state') == 'running':
+                blocked.set()
+                if not release.wait(8):
+                    raise RuntimeError('Inert blocked writer was not released')
+            if document.get('phase') == 'terminal':
+                terminal_writes.append(document)
+            return original_write(path, document)
+        def episode(args, policy, control):
+            """Let final cleanup encounter the blocked monitor, never a fabricated thread state."""
+            controls.append(control)
+            control.publish(state='running', inputEnabled=True)
+            self.assertTrue(blocked.wait(2))
+            return original_episode(args, policy, control)
+        self.episode = episode
+        try:
+            with patch.object(trial.runtime, 'atomic_json', write):
+                self.assertEqual(self.worker(), 1)
+                report = self.report()
+                self.assertEqual(report['status'], 'unresolved')
+                self.assertFalse(report['terminalStatusPublished'])
+                self.assertIn('status writer did not retire', report['terminalStatusError'])
+                self.assertEqual(terminal_writes, [])
+                self.assertTrue(controls[0].worker.is_alive())
+        finally:
+            release.set()
+            for control in controls:
+                control.worker.join(timeout=2)
+                self.assertFalse(control.worker.is_alive())
+
     def test_legacy_plan_still_uses_complete_shared_evidence_verifier(self):
         """The reviewed-paused optimization never redirects historical/default plan admission."""
         self.prepare()
@@ -685,6 +789,7 @@ class CombatTrialTests(unittest.TestCase):
         self.assertEqual((self.lifecycle.starts, self.episodes), (1, 0))
         self.assertEqual(self.report()['nativeStartOutcome'], 'unresolved')
         self.assertEqual(self.report()['status'], 'unresolved')
+        self.assert_terminal_status()
 
     def test_failed_episode_keeps_recording_guard_and_original_manifest_split(self):
         """An applied partial trial remains diagnostic evidence, never a retry opportunity."""
@@ -700,6 +805,7 @@ class CombatTrialTests(unittest.TestCase):
         report = self.report()
         self.assertEqual(report['status'], 'failed')
         self.assertEqual(report['combatTrialGuardState']['trip']['reason'], 'healthFractionDrop')
+        self.assert_terminal_status()
         self.assertEqual(report['acceptedInputActions'], 1)
         self.assertGreater(report['recordedBytes'], 0)
         self.assertEqual(read_split(self.folder, self.plan['runId'])['sourceManifestSha256'],
@@ -717,6 +823,7 @@ class CombatTrialTests(unittest.TestCase):
         self.episode_action = inconclusive
         self.assertEqual(self.worker(), 1)
         self.assertEqual(self.report()['status'], 'inconclusive')
+        self.assert_terminal_status()
 
     def test_missing_third_post_frame_cannot_complete(self):
         """Three admissions are insufficient without the final release-to-frame drain."""

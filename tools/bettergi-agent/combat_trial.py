@@ -1372,6 +1372,21 @@ def terminal_outcome(episode, binding):
     return 'failed'
 
 
+def publish_terminal_status(control, report):
+    """Replace progress only after its writer retires; this is not process-exit proof."""
+    require(not control.worker.is_alive(), 'Combat status writer did not retire')
+    # Keep this mutable status small. Native cleanup remains a separate explicit
+    # fact: disabling further worker input does not prove an unknown lease idle.
+    terminal = dict(version=1, runId=report['runId'], worker=report['worker'],
+        state=report['status'], phase='terminal', inputEnabled=False, monitorRetired=True,
+        modelLoads=report['modelLoads'], modelLoadAttempts=report['modelLoadAttempts'],
+        acceptedInputActions=report.get('acceptedInputActions', 0),
+        nativeStartAttempted=report['nativeStartAttempted'], nativeStartOutcome=report['nativeStartOutcome'],
+        cleanupVerified=report['cleanupVerified'], ownerIdleMinimizedAfter=report.get('ownerIdleMinimizedAfter', False),
+        finishedAtUnixNs=report['finishedAtUnixNs'], updatedAtUnixMs=time.time_ns() // 1_000_000)
+    runtime.atomic_json(control.status_path, terminal)
+
+
 def run_worker(plan_path, *, lifecycle=None, loader=None, episode=None, identity_reader=None, watch_factory=None,
                paused_preparation=False, prepared_callback=None, pause_probe=None,
                reviewed_paused=False, reviewed_resume_callback=None):
@@ -1662,6 +1677,15 @@ def run_worker(plan_path, *, lifecycle=None, loader=None, episode=None, identity
                 or report['nativeStartAttempted'] and report['nativeEpisode'] is None):
             report['status'] = 'unresolved'
         report.update(phase='terminal', finishedAtUnixNs=time.time_ns())
+        if control is not None:
+            try:
+                # The asynchronous writer is already closed above. Never leave
+                # a successful terminal report paired with stale running status.
+                publish_terminal_status(control, report)
+                report['terminalStatusPublished'] = True
+            except BaseException as error:
+                report.update(status='unresolved', terminalStatusPublished=False,
+                              terminalStatusError=str(error) or type(error).__name__)
         manifest_sha = exclusive_json(folder / 'patrol.json', report)
         finalization = dict(runId=plan['runId'], manifestSha256=manifest_sha, status='failed')
         try:

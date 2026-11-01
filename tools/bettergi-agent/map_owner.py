@@ -1,5 +1,6 @@
 """Verify the sealed SIREN owner through the explicitly bounded R57 → R58 → R59 → R60 → R61 → R62 → R63 → R64 → R65 → R66 → R67 → R68 chain."""
 import argparse
+from copy import deepcopy
 import hashlib
 import json
 from pathlib import Path
@@ -38,6 +39,53 @@ def identity(status):
             and isinstance(pair['instanceNonce'], str) and re.fullmatch('[a-f0-9]{32}', pair['instanceNonce']),
             'Invalid Windows process identity')
     return pair
+
+
+def retain_pilot_identity_snapshot(report, root, child, phase, at_ns):
+    """Retain bounded detached status scalars before validation, without granting any control authority."""
+    keys = ('processId', 'windowsSessionId', 'instanceNonce', 'rootProcessId', 'childSessionId',
+            'childConnectedState', 'childWindowMinimized', 'serviceOwnsPilot', 'taskRunning',
+            'agentStreamRunning', 'pilotState', 'scriptState', 'scriptSession', 'heartbeatFresh',
+            'heartbeatAtUnixMs', 'frameId', 'uiStatus', 'activeRequestId')
+    rows = report.setdefault('pilotIdentityChecks', [])
+    if len(rows) >= 64:
+        del rows[1]
+        report['pilotIdentityChecksOmitted'] = report.get('pilotIdentityChecksOmitted', 0) + 1
+    rows.append(dict(phase=phase, checkedAtUnixNs=at_ns,
+                     root={key: deepcopy(root.get(key)) for key in keys},
+                     child={key: deepcopy(child.get(key)) for key in keys}))
+
+
+def pilot_retirement_ready(root, child, expected_owner, script_session, *, stop_acknowledged):
+    """Validate one read-only retirement snapshot; callers retain their original deadline and never replay stop.
+
+    A missing heartbeat is pending only after one acknowledged stop. It cannot prove release.
+    Any nonempty foreign session or changed owner fails immediately, even if task flags are false.
+    This function performs no I/O, waits, commands, retries, or artifact deletion.
+    """
+    require(isinstance(expected_owner, dict) and set(expected_owner) == {'root', 'child'},
+            'Invalid expected pilot owner')
+    for role, status in (('root', root), ('child', child)):
+        require(isinstance(status, dict) and isinstance(expected_owner[role], dict)
+                and all(key in status for key in ('windowsSessionId', 'processId', 'instanceNonce')),
+                'Incomplete pilot owner status')
+        require(identity(status) == identity(expected_owner[role]), 'Pilot retirement owner changed')
+    require(root.get('childConnectedState') == 1 and root.get('childWindowMinimized') is True
+            and root.get('childSessionId') == child['windowsSessionId']
+            and child.get('rootProcessId') == root['processId'], 'Pilot retirement RDP parent changed')
+    require(all(root.get(key) is False for key in ('taskRunning', 'agentStreamRunning', 'serviceOwnsPilot'))
+            and child.get('agentStreamRunning') is False, 'Concurrent ownership during pilot retirement')
+    require(type(stop_acknowledged) is bool and isinstance(script_session, str) and 0 < len(script_session) <= 128,
+            'Invalid pilot retirement acknowledgement/session')
+    require(type(child.get('serviceOwnsPilot')) is bool and type(child.get('taskRunning')) is bool,
+            'Incomplete pilot retirement task flags')
+    observed_session = child.get('scriptSession')
+    if observed_session is None:
+        require(stop_acknowledged and child.get('heartbeatFresh') is False,
+                'Missing pilot retirement heartbeat without acknowledged stop')
+        return False
+    require(observed_session == script_session, 'Another pilot replaced the owned script session')
+    return child['serviceOwnsPilot'] is False and child['taskRunning'] is False
 
 
 def prior_owner(path):

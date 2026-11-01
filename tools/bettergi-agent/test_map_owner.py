@@ -950,3 +950,77 @@ class MapOwnerTest(unittest.TestCase):
             write(path,owner.R62_CLEAN_CAPTURE)
             with self.subTest(release=number),self.assertRaisesRegex(ValueError,'Unexpected target capture settings'):
                 owner.check_clean_target(build)
+
+
+class PilotRetirementTest(unittest.TestCase):
+    """Pure post-stop evidence checks; no process, pipe, native input, or mutable live file is accessed."""
+    def setUp(self):
+        self.ids = dict(root=dict(processId=10124, windowsSessionId=1, instanceNonce='a'*32),
+                        child=dict(processId=25656, windowsSessionId=3, instanceNonce='b'*32))
+        flags = dict(taskRunning=False, agentStreamRunning=False, serviceOwnsPilot=False)
+        self.root = dict(self.ids['root'], **flags, childWindowMinimized=True, childConnectedState=1, childSessionId=3)
+        self.child = dict(self.ids['child'], **flags, rootProcessId=10124, scriptSession='owned-session',
+                          heartbeatFresh=True, pilotState='faulted')
+
+    def ready(self, acknowledged=True):
+        return owner.pilot_retirement_ready(self.root, self.child, self.ids, 'owned-session',
+                                            stop_acknowledged=acknowledged)
+
+    def test_exact_released_faulted_owner_is_ready_without_claiming_delivery(self):
+        self.assertTrue(self.ready());self.assertTrue(self.ready(False))
+
+    def test_known_owned_task_still_running_is_pending(self):
+        for service, task in ((True,True),(True,False),(False,True)):
+            self.child.update(serviceOwnsPilot=service,taskRunning=task)
+            with self.subTest(service=service,task=task):self.assertFalse(self.ready())
+
+    def test_missing_heartbeat_only_pending_after_ack_and_never_proves_release(self):
+        self.child.update(scriptSession=None,heartbeatFresh=False)
+        self.assertFalse(self.ready())
+        with self.assertRaisesRegex(ValueError,'without acknowledged stop'):self.ready(False)
+        self.child['heartbeatFresh']=True
+        with self.assertRaisesRegex(ValueError,'without acknowledged stop'):self.ready()
+
+    def test_nonempty_foreign_session_immediately_rejects_even_when_released(self):
+        for value in ('foreign-session','',123,{'unexpected':'value'}):
+            self.child['scriptSession']=value
+            with self.subTest(value=value),self.assertRaisesRegex(ValueError,'Another pilot'):self.ready()
+
+    def test_changed_owner_or_parent_or_minimization_rejects(self):
+        changes=(('root','instanceNonce','c'*32),('child','processId',99),('child','windowsSessionId',4),
+                 ('child','rootProcessId',99),('root','childWindowMinimized',False),
+                 ('root','childConnectedState',0),('root','childSessionId',4))
+        for role,key,value in changes:
+            before=deepcopy(getattr(self,role));getattr(self,role)[key]=value
+            with self.subTest(role=role,key=key),self.assertRaises(ValueError):self.ready()
+            setattr(self,role,before)
+
+    def test_missing_true_or_non_boolean_task_flags_cannot_prove_idle(self):
+        for role,key,value in (('root','taskRunning',True),('root','serviceOwnsPilot',None),
+                               ('root','agentStreamRunning',True),('child','agentStreamRunning',True),
+                               ('child','serviceOwnsPilot',None),('child','taskRunning',0)):
+            before=deepcopy(getattr(self,role));getattr(self,role)[key]=value
+            with self.subTest(role=role,key=key),self.assertRaises(ValueError):self.ready()
+            setattr(self,role,before)
+
+    def test_invalid_ack_or_absent_owned_session_rejects(self):
+        for acknowledged,session in ((None,'owned-session'),(1,'owned-session'),(True,None),(True,'')):
+            with self.subTest(ack=acknowledged,session=session),self.assertRaises(ValueError):
+                owner.pilot_retirement_ready(self.root,self.child,self.ids,session,stop_acknowledged=acknowledged)
+
+    def test_bounded_snapshot_preserves_first_latest_and_rejecting_values(self):
+        report={}
+        for i in range(70):
+            self.child['scriptSession']='foreign' if i==69 else 'owned-session'
+            owner.retain_pilot_identity_snapshot(report,self.root,self.child,'post-stop',i)
+        rows=report['pilotIdentityChecks']
+        self.assertEqual((len(rows),rows[0]['checkedAtUnixNs'],rows[-1]['checkedAtUnixNs']),(64,0,69))
+        self.assertEqual(report['pilotIdentityChecksOmitted'],6)
+        with self.assertRaisesRegex(ValueError,'Another pilot'):self.ready()
+        self.assertEqual(rows[-1]['child']['scriptSession'],'foreign')
+
+    def test_snapshot_is_detached_even_for_malformed_mutable_field(self):
+        report={};self.child['scriptSession']={'unexpected':['retained']}
+        owner.retain_pilot_identity_snapshot(report,self.root,self.child,'post-stop',1)
+        self.child['scriptSession']['unexpected'].clear()
+        self.assertEqual(report['pilotIdentityChecks'][0]['child']['scriptSession'],{'unexpected':['retained']})

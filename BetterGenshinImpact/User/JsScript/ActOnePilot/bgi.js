@@ -2105,6 +2105,14 @@ function actOneWolfClosingDialogueState(o, now, session) {
 if(typeof module!=='undefined'&&module.exports) Object.assign(module.exports,{wolfClosingDialogueState:actOneWolfClosingDialogueState});
 if(typeof module!=='undefined'&&module.exports) Object.assign(module.exports,{lionFalconWaypointReady:actOneLionFalconWaypointReady});
 
+// UI-only revision hashing keeps the same UTF-16/FNV arithmetic and original admission clock.
+// Bind the immutable built-in once per file instead of resolving Math.imul for every code unit.
+function actOneInventoryUiRevisionHash(source) {
+    var hash=2166136261,multiply32=Math.imul;
+    for(var c=0;c<source.length;c++)hash=multiply32(hash^source.charCodeAt(c),16777619)>>>0;
+    return hash;
+}
+
 function createActOneAdapter(sessionId,options) {
     // The startup setting is retained across every request refresh.
     var inventoryUiOnly=!!options&&options.inventoryUiOnlyV1===true;
@@ -3335,7 +3343,8 @@ function createActOneAdapter(sessionId,options) {
             if(value.mission==='questStep'&&value.step==='wolfWitnessAction')names.push('wolf-witness-action.js');
             for(var i=0;i<names.length;i++) {
                 var source=file.readTextSync(names[i]), hash=2166136261;
-                for(var c=0;c<source.length;c++) hash=Math.imul(hash^source.charCodeAt(c),16777619)>>>0;
+                if(inventoryUiOnly)hash=actOneInventoryUiRevisionHash(source);
+                else for(var c=0;c<source.length;c++) hash=Math.imul(hash^source.charCodeAt(c),16777619)>>>0;
                 revision[names[i]]=hash.toString(16);
                 var path='revisions/'+revision[names[i]]+'/'+names[i]+'.txt';
                 if(!file.isExists(path) && !file.writeTextSync(path,source)) throw new Error('Cannot preserve controller revision');

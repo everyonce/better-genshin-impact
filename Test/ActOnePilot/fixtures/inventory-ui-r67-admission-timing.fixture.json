@@ -1,0 +1,437 @@
+{
+  "version": 1,
+  "kind": "retained-r67-ui-admission-clock-fixture",
+  "before": {
+    "session": "mvxszgyf-0wjbhie6barr",
+    "frameId": 1,
+    "timestamp": 1793535931125,
+    "screenshotPath": "observations/mvxszgyf-0wjbhie6barr/frame-0001.png",
+    "ocr": [
+      {
+        "text": "Lumina",
+        "x": 1682,
+        "y": 260,
+        "width": 79,
+        "height": 23
+      },
+      {
+        "text": "Amber",
+        "x": 1684,
+        "y": 349,
+        "width": 75,
+        "height": 29
+      },
+      {
+        "text": "aeya",
+        "x": 1684,
+        "y": 455,
+        "width": 59,
+        "height": 15
+      },
+      {
+        "text": "Lisa",
+        "x": 1720,
+        "y": 536,
+        "width": 37,
+        "height": 17
+      },
+      {
+        "text": "2211/4015",
+        "x": 914,
+        "y": 1003,
+        "width": 97,
+        "height": 20
+      },
+      {
+        "text": "Enter",
+        "x": 41,
+        "y": 1025,
+        "width": 112,
+        "height": 30
+      },
+      {
+        "text": "e",
+        "x": 1680,
+        "y": 1026,
+        "width": 37,
+        "height": 25
+      },
+      {
+        "text": "q",
+        "x": 1802,
+        "y": 1028,
+        "width": 35,
+        "height": 25
+      },
+      {
+        "text": "UID: 693306810",
+        "x": 1678,
+        "y": 1052,
+        "width": 183,
+        "height": 27
+      },
+      {
+        "text": "E",
+        "x": 1692,
+        "y": 1029.3333333333333,
+        "width": 14.333333333333334,
+        "height": 19.333333333333332
+      },
+      {
+        "text": "Q",
+        "x": 1809.3333333333333,
+        "y": 1029,
+        "width": 20,
+        "height": 22.333333333333332
+      },
+      {
+        "text": "Kaeya",
+        "x": 1669.6666666666667,
+        "y": 446.66666666666663,
+        "width": 68.33333333333333,
+        "height": 27.333333333333332
+      }
+    ],
+    "map": null,
+    "hud": {
+      "foodQuantity": null,
+      "auto": false,
+      "climbing": false,
+      "groundControls": true,
+      "enemyBars": [],
+      "aerialBossVisible": false,
+      "aerialBoss": null,
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": {
+        "current": 2211,
+        "max": 4015
+      },
+      "healthOcr": [
+        "2211/4015"
+      ],
+      "healthDiagnostic": {
+        "fullRow": [
+          "2211/4015"
+        ],
+        "primary": [
+          "2211/4015"
+        ],
+        "left": [],
+        "right": [],
+        "decision": "primary-scaled-confirmed"
+      },
+      "healthPct": 0.5506849315068493,
+      "lowHealth": true,
+      "world": true,
+      "interact": false,
+      "objectives": [],
+      "enemyBarDiagnostic": null,
+      "loading": false,
+      "unknownHud": false,
+      "partyNameOcr": {
+        "version": 1,
+        "kind": "scaled-same-capture-party-strip-v1",
+        "session": "mvxszgyf-0wjbhie6barr",
+        "frameId": 1,
+        "observationStartedAtUnixMs": 1793535930647,
+        "startedAtUnixMs": 1793535930996,
+        "finishedAtUnixMs": 1793535931124,
+        "region": {
+          "x": 1640,
+          "y": 240,
+          "width": 140,
+          "height": 350
+        },
+        "scale": 3,
+        "rawRows": [
+          {
+            "text": "Lumina",
+            "x": 135,
+            "y": 58,
+            "width": 229,
+            "height": 60
+          },
+          {
+            "text": "Amber",
+            "x": 152,
+            "y": 328,
+            "width": 215,
+            "height": 64
+          },
+          {
+            "text": "Kaeya",
+            "x": 89,
+            "y": 620,
+            "width": 205,
+            "height": 82
+          },
+          {
+            "text": "Lisa",
+            "x": 235,
+            "y": 872,
+            "width": 134,
+            "height": 72
+          }
+        ],
+        "addedRows": [
+          {
+            "text": "Kaeya",
+            "x": 1669.6666666666667,
+            "y": 446.66666666666663,
+            "width": 68.33333333333333,
+            "height": 27.333333333333332
+          }
+        ]
+      }
+    },
+    "timings": {
+      "mapDiagnostic": {
+        "reason": "Inventory UI-only v1: map and orientation deliberately omitted",
+        "mode": "inventory-ui-only-v1"
+      },
+      "captureMs": 1,
+      "ocrMs": 473,
+      "ocrFindMultiMs": 452,
+      "ocrReadCount": 5,
+      "fullOcrMs": 223,
+      "reviveStockOcrMs": 0,
+      "healthOcrMs": 37,
+      "objectiveOcrMs": 15,
+      "controlOcrMs": 56,
+      "cooldownOcrMs": 0,
+      "spikeSurfaceMs": 0,
+      "levelPanelOcrMs": 0,
+      "interactionOcrMs": 0,
+      "objectiveSource": "crop",
+      "pngWriteMs": 4,
+      "pngWriteMode": "overlapped",
+      "pngScheduleMs": 3,
+      "pngWaitMs": 1,
+      "mapMs": 0,
+      "totalMs": 478,
+      "partyNameOcrMs": 128
+    },
+    "uiObservation": {
+      "version": 1,
+      "kind": "inventory-ui-only-v1",
+      "mapOmitted": true,
+      "orientationOmitted": true,
+      "observationStartedAtUnixMs": 1793535930647
+    }
+  },
+  "frame2": {
+    "session": "mvxszgyf-0wjbhie6barr",
+    "frameId": 2,
+    "timestamp": 1793535932052,
+    "screenshotPath": "observations/mvxszgyf-0wjbhie6barr/frame-0002.png",
+    "ocr": [
+      {
+        "text": "Lumina",
+        "x": 1679,
+        "y": 258,
+        "width": 83,
+        "height": 27
+      },
+      {
+        "text": " Amber",
+        "x": 1680,
+        "y": 349,
+        "width": 79,
+        "height": 29
+      },
+      {
+        "text": "Kaeya",
+        "x": 1676,
+        "y": 453,
+        "width": 67,
+        "height": 20
+      },
+      {
+        "text": "Lisa",
+        "x": 1720,
+        "y": 536,
+        "width": 37,
+        "height": 17
+      },
+      {
+        "text": "2211/4015",
+        "x": 914,
+        "y": 1003,
+        "width": 97,
+        "height": 20
+      },
+      {
+        "text": "Enter",
+        "x": 41,
+        "y": 1025,
+        "width": 112,
+        "height": 30
+      },
+      {
+        "text": "e",
+        "x": 1680,
+        "y": 1026,
+        "width": 37,
+        "height": 25
+      },
+      {
+        "text": "q",
+        "x": 1802,
+        "y": 1028,
+        "width": 35,
+        "height": 25
+      },
+      {
+        "text": "UID: 693306810",
+        "x": 1678,
+        "y": 1052,
+        "width": 183,
+        "height": 27
+      },
+      {
+        "text": "E",
+        "x": 1692.6666666666667,
+        "y": 1029.6666666666667,
+        "width": 13.666666666666666,
+        "height": 19
+      },
+      {
+        "text": "Q",
+        "x": 1809.3333333333333,
+        "y": 1029,
+        "width": 20,
+        "height": 22.333333333333332
+      }
+    ],
+    "map": null,
+    "hud": {
+      "foodQuantity": null,
+      "auto": false,
+      "climbing": false,
+      "groundControls": true,
+      "enemyBars": [],
+      "aerialBossVisible": false,
+      "aerialBoss": null,
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": {
+        "current": 2211,
+        "max": 4015
+      },
+      "healthOcr": [
+        "2211/4015"
+      ],
+      "healthDiagnostic": {
+        "fullRow": [
+          "2211/4015"
+        ],
+        "primary": [
+          "2211/4015"
+        ],
+        "left": [],
+        "right": [],
+        "decision": "primary-scaled-confirmed"
+      },
+      "healthPct": 0.5506849315068493,
+      "lowHealth": true,
+      "world": true,
+      "interact": false,
+      "objectives": [],
+      "enemyBarDiagnostic": null,
+      "loading": false,
+      "unknownHud": false
+    },
+    "timings": {
+      "mapDiagnostic": {
+        "reason": "Inventory UI-only v1: map and orientation deliberately omitted",
+        "mode": "inventory-ui-only-v1"
+      },
+      "captureMs": 3,
+      "ocrMs": 319,
+      "ocrFindMultiMs": 310,
+      "ocrReadCount": 4,
+      "fullOcrMs": 212,
+      "reviveStockOcrMs": 0,
+      "healthOcrMs": 36,
+      "objectiveOcrMs": 14,
+      "controlOcrMs": 55,
+      "cooldownOcrMs": 0,
+      "spikeSurfaceMs": 0,
+      "levelPanelOcrMs": 0,
+      "interactionOcrMs": 0,
+      "objectiveSource": "crop",
+      "pngWriteMs": 4,
+      "pngWriteMode": "overlapped",
+      "pngScheduleMs": 3,
+      "pngWaitMs": 1,
+      "mapMs": 0,
+      "totalMs": 335,
+      "partyNameOcrMs": 0
+    },
+    "uiObservation": {
+      "version": 1,
+      "kind": "inventory-ui-only-v1",
+      "mapOmitted": true,
+      "orientationOmitted": true,
+      "observationStartedAtUnixMs": 1793535931717
+    }
+  },
+  "request": {
+    "id": "starfell-shore-97a74d66f5ff4add914c4a84bcf14f0c",
+    "session": "mvxszgyf-0wjbhie6barr",
+    "expectedFrameId": 1,
+    "createdAt": 1793535931263,
+    "mission": "questStep",
+    "step": "worldInventory"
+  },
+  "receipt": {
+    "session": "mvxszgyf-0wjbhie6barr",
+    "id": "starfell-shore-97a74d66f5ff4add914c4a84bcf14f0c",
+    "mission": "questStep",
+    "status": "stopped",
+    "timestamp": 1793535932541,
+    "frameId": 3,
+    "details": {
+      "elapsedMs": 1137,
+      "result": {
+        "status": "stopped",
+        "step": "worldInventory",
+        "pausedInventory": false,
+        "frameId": 2
+      },
+      "inputEvents": [
+        {
+          "type": "controllerRevision",
+          "files": {
+            "main.js": "3dc3d0df",
+            "engine.js": "48567678",
+            "bgi.js": "11b70f69",
+            "mission.js": "81653a18",
+            "combat.js": "ddb5823",
+            "recovery.js": "e33bb75f"
+          },
+          "startedAt": 1793535931705
+        }
+      ]
+    }
+  },
+  "originalSha256": {
+    "artifacts/live/2026-10-30-endurance/north-starfell-encounter-pause-r67-ui-warm-01/before.json": "b8634c68d56a7a32a529f25a80aaa7056d8a6b01657d06e6aefabadd82c12f01",
+    "artifacts/live/2026-10-30-endurance/north-starfell-encounter-pause-r67-ui-warm-01/result.json": "a8da7ac06a1830284a1ab3dc4f33acc3509df4cedb787e947fd1a69d4708bfa2",
+    "artifacts/release-r67/BetterGI-English-win-x64/User/JsScript/ActOnePilot/observations/mvxszgyf-0wjbhie6barr/frame-0002.json": "c618cf422bc712a04287d300b3a84795d7d3e5d4171bc5bda8e39f09d10f8596"
+  },
+  "note": "Exact retained clocks; synthetic adapter/engine tests isolate the admission boundary, not the unmeasured internal wall-time breakdown."
+}

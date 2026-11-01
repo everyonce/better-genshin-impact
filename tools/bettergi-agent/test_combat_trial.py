@@ -1253,6 +1253,53 @@ class CombatPreparedTrialTests(unittest.TestCase):
         self.assertTrue(self.report()['cleanupVerified'])
         self.assertTrue((self.folder / 'worker-owner-after.json').is_file())
 
+    def test_ready_status_sharing_retry_keeps_exact_worker_validation(self):
+        """A transient sharing error may recover, but foreign status still cannot become readiness."""
+        self.begin()
+        def inspect(ready):
+            """Read the real immutable readiness witness while injecting only status publication races."""
+            original, calls = trial.document, []
+            def sharing(path, *args):
+                if Path(path).name == 'patrol.json.status.json':
+                    calls.append(1)
+                    if len(calls) == 1:
+                        # Actual Windows CRT open/read_text sharing failure:
+                        # errno EACCES, winerror None and the mutable filename.
+                        error = PermissionError(13, 'Permission denied', str(path))
+                        raise error
+                return original(path, *args)
+            with patch.object(trial, 'document', side_effect=sharing):
+                actual = trial.ready_preparation(self.plan_path)
+            self.assertEqual(actual['ready'], ready)
+            self.assertEqual(len(calls), 2)
+            status = original(self.folder / 'patrol.json.status.json')[0]
+            for key, value in (('runId', 'f' * 32), ('worker', {}), ('state', 'loading')):
+                def foreign(path, *args):
+                    return (dict(status, **{key: value}), 'foreign') if Path(path).name == 'patrol.json.status.json' else original(path, *args)
+                with patch.object(trial, 'document', side_effect=foreign), patch.object(trial.time, 'sleep') as sleeping:
+                    with self.assertRaisesRegex(ValueError, 'not awaiting'):
+                        trial.ready_preparation(self.plan_path)
+                    sleeping.assert_not_called()
+            trial.request_stop(self.folder, self.preparation, 'testStop')
+        self.assertEqual(self.worker(inspect), 1)
+        self.assertEqual((self.loads, self.lifecycle.starts), (1, 0))
+
+    def test_worker_readiness_acknowledgement_retries_the_same_crt_sharing_race(self):
+        """The worker's asynchronous status acknowledgement uses the same bounded publication handling."""
+        self.begin()
+        original, calls = trial.document, []
+        def reading(path, *args):
+            """Raise only on the first mutable-status read after immutable readiness exists."""
+            if Path(path).name == 'patrol.json.status.json' and (self.folder / 'prepared.json').exists():
+                calls.append(1)
+                if len(calls) == 1:
+                    raise PermissionError(13, 'Permission denied', str(path))
+            return original(path, *args)
+        with patch.object(trial, 'document', side_effect=reading):
+            self.assertEqual(self.worker(self.arm), 0)
+        self.assertGreaterEqual(len(calls), 2)
+        self.assertEqual((self.loads, self.lifecycle.starts), (1, 1))
+
     def test_changed_final_probe_result_preserves_unresolved_recording(self):
         """A later episode cannot complete while its original loading/cleanup evidence contradicts itself."""
         self.begin()
@@ -1338,6 +1385,85 @@ class CombatPreparedTrialTests(unittest.TestCase):
         self.assertEqual(self.worker(stripped), 1)
         self.assertEqual((self.loads, self.lifecycle.starts), (1, 0))
         self.assertIn('stripped or invented', self.report()['error'])
+
+
+class CombatWaitingStatusTests(unittest.TestCase):
+    """Exercise only the bounded mutable-status reader, without a process, model or native controller."""
+    def setUp(self):
+        """Create one valid control file and a deterministic unchanged shared deadline."""
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.folder = Path(self.temp.name)
+        self.run_id = 'e' * 32
+        self.clock = 1_000_000_000
+        self.claim = dict(deadlineMonotonicNs=self.clock + 2_000_000_000)
+        (self.folder / 'patrol.json.control.json').write_bytes(canonical(dict(version=1, runId=self.run_id, command='run')))
+        patcher = patch.object(trial.time, 'monotonic_ns', side_effect=lambda: self.clock)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def advance(self, seconds):
+        """Advance only the synthetic monotonic clock; never wait on Windows."""
+        self.clock += int(seconds * 1e9)
+
+    def sharing(self, code, filename=None):
+        """Create a Windows sharing/access exception without using the operating system."""
+        error = PermissionError(13, 'Permission denied', filename)
+        if code is not None:
+            error.winerror = code
+        return error
+
+    def test_only_known_windows_sharing_errors_can_recover(self):
+        """The reader accepts a successful later read only within its original bounded window."""
+        for code in (None, 5, 32, 33):
+            with self.subTest(code=code), patch.object(trial, 'document', side_effect=[self.sharing(code, str(self.folder / 'patrol.json.status.json')), ({'state': 'preparedPaused'}, 'sha')]) as read, \
+                 patch.object(trial.time, 'sleep', side_effect=self.advance):
+                deadline = self.claim['deadlineMonotonicNs']
+                self.assertEqual(trial.read_waiting_status(self.folder, self.claim, self.run_id)[1], 'sha')
+                self.assertEqual(read.call_count, 2)
+                self.assertEqual(self.claim['deadlineMonotonicNs'], deadline)
+
+    def test_persistent_sharing_failure_is_bounded_to_half_a_second(self):
+        """A permanent access failure is not converted into a successful or unbounded wait."""
+        for code in (None, 32):
+            began = self.clock
+            with self.subTest(code=code), patch.object(trial, 'document', side_effect=self.sharing(code, str(self.folder / 'patrol.json.status.json'))) as read, \
+                 patch.object(trial.time, 'sleep', side_effect=self.advance):
+                with self.assertRaises(PermissionError):
+                    trial.read_waiting_status(self.folder, self.claim, self.run_id)
+            self.assertEqual(self.clock - began, 500_000_000)
+            self.assertEqual(read.call_count, 10)
+
+    def test_stop_control_and_original_deadline_win_during_sharing_retry(self):
+        """A sharing race cannot extend the original lifetime or hide an explicit stop."""
+        for mode in ('stop', 'control', 'deadline'):
+            with self.subTest(mode=mode):
+                (self.folder / 'STOP').unlink(missing_ok=True)
+                (self.folder / 'patrol.json.control.json').write_bytes(canonical(dict(version=1, runId=self.run_id, command='run')))
+                self.claim['deadlineMonotonicNs'] = self.clock + (50_000_000 if mode == 'deadline' else 2_000_000_000)
+                def sleep(seconds):
+                    """Inject the terminal event before a second status read could be attempted."""
+                    self.advance(seconds)
+                    if mode == 'stop':
+                        (self.folder / 'STOP').write_text('stop')
+                    elif mode == 'control':
+                        (self.folder / 'patrol.json.control.json').write_bytes(canonical(dict(version=1, runId=self.run_id, command='pause')))
+                with patch.object(trial, 'document', side_effect=self.sharing(32)) as read, \
+                     patch.object(trial.time, 'sleep', side_effect=sleep):
+                    with self.assertRaisesRegex(ValueError, 'not awaiting'):
+                        trial.read_waiting_status(self.folder, self.claim, self.run_id)
+                self.assertEqual(read.call_count, 1)
+
+    def test_missing_malformed_and_other_access_errors_are_not_retried(self):
+        """Only the selected mutable-file sharing failures qualify for this retry path."""
+        for error in (FileNotFoundError('missing'), json.JSONDecodeError('bad', '{', 0), self.sharing(None),
+                      self.sharing(None, str(self.folder / 'unrelated.json')), self.sharing(123)):
+            with self.subTest(error=type(error).__name__), patch.object(trial, 'document', side_effect=error) as read, \
+                 patch.object(trial.time, 'sleep') as sleeping:
+                with self.assertRaises(type(error)):
+                    trial.read_waiting_status(self.folder, self.claim, self.run_id)
+                self.assertEqual(read.call_count, 1)
+                sleeping.assert_not_called()
 
 
 if __name__ == '__main__':

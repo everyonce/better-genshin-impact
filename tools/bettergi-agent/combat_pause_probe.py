@@ -1,5 +1,6 @@
 """One input-disabled native inventory observation immediately before combat prewarm."""
 import json
+import copy
 import os
 from pathlib import Path
 import re
@@ -47,6 +48,7 @@ def probe_inventory(preparation, folder, lifecycle, watch, control):
         inputEnabled=False, inventoryVerified=False, physicalInputDeliveryVerified=False,
         pilotStartAttempted=False, pilotStartOutcome='notAttempted')
     session = request_raw = None
+    observed_start_session = None
     created_group = False
     deadline = time.monotonic() + 20
     if hasattr(watch, 'series'):
@@ -54,6 +56,7 @@ def probe_inventory(preparation, folder, lifecycle, watch, control):
 
     def state(*, supervising=True, integrity=True):
         """Keep watchdog latches and the exact original pair active during passive capture."""
+        nonlocal observed_start_session
         if supervising:
             watch.check()
             trial.exact_control(control, preparation['runId'])
@@ -63,6 +66,11 @@ def probe_inventory(preparation, folder, lifecycle, watch, control):
             and Path(current_child.get('appDirectory', '')) == app, 'Passive probe runtime changed')
         if session is not None and current_child.get('serviceOwnsPilot') is True:
             trial.require(current_child.get('scriptSession') == session, 'Passive probe script ownership changed')
+        start = report.get('startEvidence')
+        candidate = current_child.get('scriptSession')
+        if start and start.get('acknowledged') is True and candidate and candidate != start['priorSession']:
+            trial.require(observed_start_session in (None, candidate), 'Passive startup session was replaced')
+            observed_start_session = candidate
         if integrity and created_group:
             actual = json.loads(trial.read_bytes(group_path))
             trial.require(type(actual.get('index')) is int and 0 <= actual['index'] <= 100,
@@ -79,12 +87,15 @@ def probe_inventory(preparation, folder, lifecycle, watch, control):
 
     def command(name):
         """Stop through the owner-bound API only after an immediate matching session check."""
-        _, live = state(supervising=name != 'stopPilot', integrity=name != 'stopPilot')
+        nonlocal observed_start_session
+        current_root, live = state(supervising=name != 'stopPilot', integrity=name != 'stopPilot')
         if name == 'stopPilot':
             trial.require(isinstance(session, str) and session and live.get('serviceOwnsPilot') is True
                 and live.get('scriptSession') == session, 'Unknown passive pilot start cannot be stopped')
         else:
             trial.require(name == 'startPilot' and trial.idle_child(live), 'Passive pilot admission is not idle')
+            report['startEvidence'] = dict(ownerBefore=copy.deepcopy(dict(root=current_root, child=live)),
+                priorSession=live.get('scriptSession'), sentAtUnixNs=time.time_ns(), acknowledged=False)
             report.update(pilotStartAttempted=True, pilotStartOutcome='unresolved')
         # Native stopPilot has no expectedScriptSession parameter. The preceding
         # check is explicit evidence, not an atomic native script reservation.
@@ -92,8 +103,85 @@ def probe_inventory(preparation, folder, lifecycle, watch, control):
             targetWindowsSessionId=owner['child']['windowsSessionId'], targetNonce=owner['child']['instanceNonce']),
             owner['child']['processId'], owner['child']['windowsSessionId'])
         report['controls'].append(dict(command=name, receivedAtUnixNs=time.time_ns(), status=result))
+        if name == 'startPilot':
+            trial.require(all(result.get(key) == value for key, value in owner['child'].items())
+                and result.get('serviceOwnsPilot') is True and result.get('taskRunning') is True
+                and result.get('agentStreamRunning') is False and result.get('pilotState') in ('starting', 'idle'),
+                'Passive start acknowledgement differs from the original owner')
+            report['startEvidence'].update(acknowledged=True, acknowledgedAtUnixNs=report['controls'][-1]['receivedAtUnixNs'])
+            candidate = result.get('scriptSession')
+            if candidate and candidate != report['startEvidence']['priorSession']:
+                observed_start_session = candidate
         trial.runtime.atomic_json(out / 'progress.json', report)
         return result
+
+    def learn_started_session_for_cleanup():
+        """Correlate startup under exclusive orchestration for cleanup, never for new work."""
+        nonlocal session
+        start = report.get('startEvidence') or {}
+        trial.require(start.get('acknowledged') is True and len(report['controls']) == 1
+            and report['controls'][0]['command'] == 'startPilot' and not report['requests']
+            and isinstance(start.get('priorSession'), str) and re.fullmatch(r'[A-Za-z0-9-]{1,100}', start['priorSession'])
+            and type(start.get('sentAtUnixNs')) is int and type(start.get('acknowledgedAtUnixNs')) is int
+            and start['acknowledgedAtUnixNs'] >= start['sentAtUnixNs']
+            and trial.idle_child(start['ownerBefore']['child']),
+            'Unknown passive pilot start cannot be adopted for cleanup')
+        limit = time.monotonic() + 3
+        # R64 has no caller-bound start ticket. Fresh session/source continuity
+        # rejects observed replacement, but is not atomic correlation against an
+        # unobserved identical start by another concurrent controller.
+        cleanup = dict(kind='passive-startup-cleanup-v1', cleanupOnly=True, maximumWaitSeconds=3,
+            correlation='exclusive-controller-fresh-session-v1', atomicStartCorrelation=False,
+            startedAtUnixNs=time.time_ns(), polls=0, confirmed=False)
+        report['startupCleanup'] = cleanup
+        while True:
+            trial.require(time.monotonic() < limit, 'Passive startup cleanup identity timed out')
+            _, live = state(supervising=False)
+            cleanup['polls'] += 1
+            trial.require(not request_path.exists(), 'A request appeared during passive startup cleanup')
+            trial.require(live.get('serviceOwnsPilot') is True and live.get('taskRunning') is True,
+                          'Passive startup ownership changed before cleanup confirmation')
+            if live.get('pilotState') == 'idle':
+                try:
+                    raw = trial.read_bytes(pilot / 'controller-status.json', allow_empty=True)
+                    heartbeat = json.loads(raw)
+                except (FileNotFoundError, json.JSONDecodeError):
+                    # Native heartbeat publication can be briefly incomplete.
+                    # This only waits for evidence; it grants no work authority.
+                    time.sleep(.05)
+                    continue
+                except PermissionError as error:
+                    if not trial.status_sharing_failure(error, pilot / 'controller-status.json'):
+                        raise
+                    time.sleep(.05)
+                    continue
+                candidate, now_ms = heartbeat.get('session'), time.time_ns() // 1_000_000
+                trial.require(isinstance(candidate, str) and re.fullmatch(r'[A-Za-z0-9-]{1,100}', candidate)
+                    and candidate != start['priorSession'] and candidate == live.get('scriptSession') == observed_start_session
+                    and heartbeat.get('version') == 1 and heartbeat.get('state') == 'idle'
+                    and heartbeat.get('processId') == owner['child']['processId']
+                    and heartbeat.get('windowsSessionId') == owner['child']['windowsSessionId']
+                    and heartbeat.get('remoteDesktop') is True and heartbeat.get('activeRequestId') is None
+                    and heartbeat.get('error') is None and type(heartbeat.get('frameId')) is int and heartbeat['frameId'] >= 1
+                    and type(heartbeat.get('heartbeatAt')) is int
+                    and start['sentAtUnixNs'] // 1_000_000 <= heartbeat['heartbeatAt'] <= now_ms
+                    and now_ms - heartbeat['heartbeatAt'] <= 1500
+                    and live.get('heartbeatFresh') is True and type(live.get('heartbeatAtUnixMs')) is int
+                    and start['sentAtUnixNs'] // 1_000_000 <= live['heartbeatAtUnixMs'] <= now_ms
+                    and now_ms - live['heartbeatAtUnixMs'] <= 1500,
+                    'Passive cleanup heartbeat is stale, foreign or active')
+                for name, sha in sources.items():
+                    trial.require(trial.digest(trial.read_bytes(pilot / name)) == sha,
+                                  'Passive startup source changed before cleanup')
+                trial.require(not request_path.exists(), 'A request appeared during passive startup cleanup')
+                trial.require(time.monotonic() < limit, 'Passive startup cleanup identity timed out')
+                cleanup.update(confirmed=True, confirmedAtUnixNs=time.time_ns(), session=candidate,
+                    heartbeat=heartbeat, heartbeatSha256=trial.digest(raw), ownerAtConfirmation=copy.deepcopy(live))
+                session = candidate
+                report.update(scriptSession=session, pilotStartOutcome='confirmed', confirmationPhase='cleanupOnly')
+                return
+            trial.require(live.get('pilotState') == 'starting', 'Passive startup failed before cleanup identity')
+            time.sleep(.05)
 
     def retain(label):
         """Retain original JSON/PNG pairs, not a re-timestamped observation summary."""
@@ -183,6 +271,8 @@ def probe_inventory(preparation, folder, lifecycle, watch, control):
             # loading, but cannot suppress retirement of our confirmed session.
             _, live = state(supervising=False, integrity=False)
             if live.get('serviceOwnsPilot') is True:
+                if session is None:
+                    learn_started_session_for_cleanup()
                 command('stopPilot')
             trial.await_idle(lifecycle, owner)
             current_root, current_child = state(supervising=False, integrity=False)

@@ -8,6 +8,7 @@ paths call run_episode once. Failed starts never reconnect or renew the deadline
 """
 import argparse
 import copy
+import errno
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
@@ -401,6 +402,41 @@ def verify_preparation(preparation, folder, *, recent_pause=False, originals=Tru
     return proof
 
 
+def status_sharing_failure(error, path):
+    """Recognize Win32 sharing codes or the observed CRT EACCES on this exact mutable file."""
+    if not isinstance(error, PermissionError):
+        return False
+    code = getattr(error, 'winerror', None)
+    return code in (5, 32, 33) or (code is None and error.errno == errno.EACCES
+        and isinstance(error.filename, (str, os.PathLike)) and Path(error.filename) == Path(path))
+
+
+def read_waiting_status(folder, claim, run_id):
+    """Retry only transient Windows status sharing failures inside a fixed half-second budget."""
+    deadline = claim.get('deadlineMonotonicNs')
+    require(type(deadline) is int, 'Prepared worker deadline is invalid')
+    retry_until = min(time.monotonic_ns() + 500_000_000, deadline)
+    last_error = None
+    while True:
+        command, error = runtime.read_control_document(folder / 'patrol.json.control.json', run_id)
+        require(not (folder / 'STOP').exists() and not (folder / 'patrol.json').exists()
+            and not (folder / 'ARM-CONSUMED.json').exists()
+            and not error and command == dict(version=1, runId=run_id, command='run')
+            and time.monotonic_ns() < deadline, 'Worker is not awaiting its one combat arm')
+        if last_error is not None and time.monotonic_ns() >= retry_until:
+            raise last_error
+        try:
+            return document(folder / 'patrol.json.status.json')
+        except PermissionError as sharing_error:
+            if not status_sharing_failure(sharing_error, folder / 'patrol.json.status.json'):
+                raise
+            last_error = sharing_error
+            remaining = retry_until - time.monotonic_ns()
+            if remaining <= 0:
+                raise
+            time.sleep(min(.05, remaining / 1e9))
+
+
 def ready_preparation(path, *, require_waiting=True):
     """Read an actually published worker witness, never an operator-declared loaded model."""
     preparation, sha = load_preparation(path)
@@ -423,7 +459,7 @@ def ready_preparation(path, *, require_waiting=True):
         and ready['preparedAtUnixNs'] >= preparation['createdAtUnixNs'] and ready['preparedAtClientNs'] > 0
         and ready.get('modelLoads') == 1, 'Prepared model timing or load witness changed')
     if require_waiting:
-        status, _ = document(folder / 'patrol.json.status.json')
+        status, _ = read_waiting_status(folder, claim, preparation['runId'])
         command, error = runtime.read_control_document(folder / 'patrol.json.control.json', preparation['runId'])
         require(not (folder / 'STOP').exists() and not (folder / 'patrol.json').exists()
             and not (folder / 'ARM-CONSUMED.json').exists()
@@ -689,9 +725,11 @@ def await_prepared_arm(preparation, preparation_sha, policy, identity, claim, co
         watch.check()
         exact_control(control, preparation['runId'])
         try:
-            status, _ = document(folder / 'patrol.json.status.json')
+            status, _ = read_waiting_status(folder, claim, preparation['runId'])
         except FileNotFoundError:
             status = {}
+        watch.check()
+        exact_control(control, preparation['runId'])
         if (status.get('state') == 'preparedPaused' and status.get('runId') == preparation['runId']
                 and status.get('preparedSha256') == ready_sha and status.get('worker') == identity):
             break

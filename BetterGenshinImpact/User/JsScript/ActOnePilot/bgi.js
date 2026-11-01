@@ -1269,6 +1269,73 @@ function actOneWolfWindWitnessProof(reports,witness,session,now) {
     return {witnessFrameId:witness.frameId,failedPauseId:failedPause.id,latestPauseId:latestPause.id,
         latestPauseFrameId:latestPause.frameId,health:{current:witness.hud.health.current,max:witness.hud.health.max}};
 }
+// UI-only localization omission must never turn an ambient place label into a map.
+// These are positive full-map UI bands; the legacy !pos heuristic remains separate.
+function actOneInventoryUiBigMap(rows) {
+    if(actOneFullMapState(rows))return true;
+    return (rows||[]).some(function(r){
+        if(!r||![r.x,r.y,r.width,r.height].every(Number.isFinite))return false;
+        var text=String(r.text||'').trim();
+        return r.x>=1350&&r.x<=1880&&r.y>=930&&r.y<=1060&&
+            (/^Exploration Progress\b/.test(text)||/^(Teyvat|Starfell Valley|Galesong Hill|Windwail Highland|Brightcrown Mountains)$/.test(text))||
+            r.x>=1500&&r.x<=1880&&r.y>=0&&r.y<=110&&/^\d{1,3}\s*\/\s*(?:160|200)$/.test(text);
+    });
+}
+// The mode recognizes only an ordinary inventory or a positive main-world HUD.
+// A modal, login, loading screen or unrelated menu supplies no world authority.
+function actOneInventoryUiUnknown(rows) {
+    return actOneEnterGameAuthPrompt(rows)||actOneEnterGameUnknownUi(rows)||(rows||[]).some(function(r){
+        var text=String(r&&r.text||'').trim();
+        return /^Inventory capacity\b/i.test(text)||
+            /^(Food|Weapons|Artifacts|Character Development Items|Precious Items|Gadgets|Quest Items|Materials|Furnishings|Party Setup|Character Selection|Wish|Shop|Adventure Rank|World Level|Continue Challenge|Domain Entrance|Amount to use|Obtained New Character)$/i.test(text);
+    });
+}
+// Same-capture layout is shared by strict world proof and the separate B-only fallback.
+// Layout alone supplies neither health readiness nor position/yaw.
+function actOneInventoryUiLayoutEvidence(rows,hud) {
+    if(!Array.isArray(rows)||!hud||hud.groundControls!==true||hud.climbing!==false||
+       hud.auto!==false||hud.journal!==false||hud.bigMap!==false||hud.dialogueReady!==false||hud.choice!==false||
+       hud.loading||hud.unknownHud||hud.tutorialStep||hud.characterAcquired||
+       !actOneGroundControlEvidence(rows)||!actTwoOriginalAccount(rows)||
+       actOneInventoryUiBigMap(rows)||actOneInventoryUiUnknown(rows)||actOneEnterGameLoading(rows))return false;
+    var party=Object.create(null);
+    rows.forEach(function(r){
+        if(r&&[r.x,r.y,r.width,r.height].every(Number.isFinite)&&r.width>0&&r.height>0&&
+           r.x>=1550&&r.x<=1810&&r.y>=240&&r.y<=650&&/^(Lumina|Traveler|Amber|Kaeya|Lisa)$/.test(String(r.text||'').trim()))
+            party[String(r.text).trim()]=true;
+    });
+    return Object.keys(party).length>=2;
+}
+// World/resume proof still requires the original positively parsed health.
+function actOneInventoryUiWorldEvidence(rows,hud) {
+    var hp=hud&&hud.health;
+    if(!actOneInventoryUiLayoutEvidence(rows,hud)||!hp||
+       ![hp.current,hp.max].every(Number.isFinite)||hp.current<=0||hp.max<=0||hp.current>hp.max||
+       !Array.isArray(hud.healthOcr)||!hud.healthOcr.every(function(text){return typeof text==='string';}))return false;
+    var parsed=actOneHealth(hud.healthOcr.map(function(text){return {text:text};}));
+    return !!(parsed&&parsed.current===hp.current&&parsed.max===hp.max&&(!hud.healthDiagnostic||
+       ['full-frame-confirmed','primary-scaled-confirmed','halves-agree-after-primary-conflict',
+        'primary-scaled-readable','independent-halves-fallback'].indexOf(hud.healthDiagnostic.decision)>=0));
+}
+// A newly omitted localization result cannot waive the existing 1000ms UI gate.
+function actOneInventoryUiInputFresh(o,now,session) {
+    var mode=o&&o.uiObservation;
+    return !!(o&&o.session===session&&Number.isInteger(o.frameId)&&o.frameId>0&&o.map===null&&
+        Number.isFinite(now)&&Number.isFinite(o.timestamp)&&mode&&mode.version===1&&
+        mode.kind==='inventory-ui-only-v1'&&mode.mapOmitted===true&&mode.orientationOmitted===true&&
+        Number.isFinite(mode.observationStartedAtUnixMs)&&mode.observationStartedAtUnixMs<=o.timestamp&&
+        now>=o.timestamp&&now-mode.observationStartedAtUnixMs<=1000);
+}
+// Preserve only the existing bounded full-frame HP-row fallback for B. The private
+// admitted before-frame must be a positive world; this input frame stays unknown.
+function actOneInventoryUiPauseFallback(o,now,session,before,admittedAt) {
+    if(!actOneInventoryUiInputFresh(o,now,session)||!actOneInventoryUiInputFresh(before,admittedAt,session)||
+       admittedAt>now||o.frameId<=before.frameId||o.uiObservation.observationStartedAtUnixMs<admittedAt||
+       before.hud.world!==true||!actOneInventoryUiWorldEvidence(before.ocr,before.hud)||
+       !o.hud||o.hud.world!==false||o.hud.health!==null||!actOneInventoryUiLayoutEvidence(o.ocr,o.hud))return false;
+    var row=actOneFullHealthCandidate(o.ocr),hp=row&&actOneHealth([row]);
+    return !!(hp&&hp.current>0&&hp.max>0&&hp.current<=hp.max);
+}
 function actOneWorldInventoryPauseReady(o,now) {
     var h=o&&o.hud,p=o&&o.map,hp=h&&h.health;
     if(!o||!Number.isFinite(o.timestamp)||!Number.isFinite(now)||now<o.timestamp||now-o.timestamp>1000||
@@ -1956,7 +2023,9 @@ function actOneWolfClosingDialogueState(o, now, session) {
 if(typeof module!=='undefined'&&module.exports) Object.assign(module.exports,{wolfClosingDialogueState:actOneWolfClosingDialogueState});
 if(typeof module!=='undefined'&&module.exports) Object.assign(module.exports,{lionFalconWaypointReady:actOneLionFalconWaypointReady});
 
-function createActOneAdapter(sessionId) {
+function createActOneAdapter(sessionId,options) {
+    // The startup setting is retained across every request refresh.
+    var inventoryUiOnly=!!options&&options.inventoryUiOnlyV1===true;
     var pauseProtectionActive=false,pauseProtectionObserver=null,pauseProtectionKeys=Object.create(null),pauseProtectionLastInputFrame=-1,pauseProtectionLastStatusAt=-Infinity;
     function loadLocalPause(){
         var protector=eval(file.readTextSync('local-pause.js')+'\nActOneLocalPause;');
@@ -2200,6 +2269,8 @@ function createActOneAdapter(sessionId) {
             o.frameId===lastObservation.frameId&&o.timestamp===lastObservation.timestamp&&o.frameId>windriseState.lastInputFrame);
     }
     var worldInventoryCloseAttempted=false;
+    // A new request cannot inherit another request's positive before-frame or B attempt.
+    var inventoryUiPauseBefore=null,inventoryUiPauseAdmittedAt=null,inventoryUiPauseAttempted=false;
     var expectedSession = Number(sessionId), held = null, request = null, events = [], lastObservation = null, navLastAcceptedPosition = null, heartbeat = null, focusRecoveryAttempted = false, wolfInfoAttempted = false, lionDomainStartAttempted=false, lionPartyStartAttempted=false, lionFalconWaypointAttempted=false, wolfContinueAttempted = false, wolfInventoryContinueAttempted = false, wolfInventoryOpenAttempted = false, wolfKaeyaFoodAttempted = false, wolfFeedKaeyaAttempted = false, wolfRecoveryFoodUseAttempted=false, wolfRecoveryFoodSelectAttempted=false, wolfRecoveryFoodFeedAttempted=false, wolfRecoveryFoodCloseAttempted=false, wolfExitFlameAttempted=false, wolfWindContinueAttempted=false, wolfWindSpaceAttempted=false, wolfWindRideContinueAttempted=false, wolfWindRideSpaceAttempted=false, wolfGlideContinueAttempted=false, wolfGlideMoves=0, wolfGlideLastMoveFrame=null, wolfGlideBaseline=null, wolfDefensiveCryoAttempted = false, wolfAimCryoAttempted = false, wolfCloseFoodAttempted = false, wolfCloseFoodCompletedAt = null, wolfCloseFoodLookAttempted = false, wolfCloseFoodForwardAttempted = false, wolfCloseFoodSkillAttempted = false, wolfTurretSkillAttempted = false, wolfTurretForwardAttempted = false, wolfTurretSkillFinishedAt = null, wolfTurretBaseline = null, wolfConsoleContinueAttempted=false, wolfConsoleInteractAttempted=false, wolfApproachContinueAttempted=false, wolfApproachMoveAttempted=false, wolfApproachHydroFrame=null,wolfApproachHydroReceiptId=null,wolfCombatSeekForwards=0,wolfCombatSeekTurns=0,wolfCombatSeekFrames=[],wolfBurstContinueAttempted=false,wolfBurstQAttempted=false,wolfBurstPauseAttempted=false,wolfCryoContinueAttempted=false,wolfCryoResumeConfirmedAt=null,wolfCryoBaseline=null,wolfCryoSkillAttempted=false,wolfCryoPauseAttempted=false,wolfCryoWaitMs=6500,wolfCryoWaitPlan=null,wolfReviveContinueAttempted=false,wolfReviveContinueFrame=null,wolfReviveSelectAttempted=false,wolfReviveAmberBaseline=null,wolfReviveRecoverySelectAttempted=false,wolfReviveRecoveryConfirmAttempted=false,wolfReviveRecoverySelectFrame=null,wolfReviveRecoveryConfirmFrame=null,wolfReviveRecoveryAmberBaseline=null,ocrPrimitiveMs=0,ocrReadCount=0;
     function dispose(v) { if (v && typeof v.dispose === 'function') v.dispose(); }
     var wolfCryoLastInputFrame = null;
@@ -3125,10 +3196,14 @@ function createActOneAdapter(sessionId) {
             Number.isInteger(o.frameId)&&Number.isFinite(Number(o.timestamp))&&Date.now()>=Number(o.timestamp)&&Date.now()-o.timestamp<=1000);
     }
     return {
+        inventoryUiOnlyV1: function () {return inventoryUiOnly;},
         setHeartbeat: function (callback) {heartbeat=callback;},
         heartbeat: function (_,force) {if(heartbeat)heartbeat(force===true);},
         now: function () { return Date.now(); }, sleep: function (ms) { return sleep(ms); }, checkStop: checkStop,
-        beginMission: function (value) {
+        beginMission: function (value,inventoryUiBefore) {
+            if(inventoryUiOnly&&!(value&&(value.mission==='observe'||value.mission==='stop'||
+               value.mission==='questStep'&&['worldInventory','worldInventoryClose'].indexOf(value.step)>=0)))
+                throw new Error('Inventory UI-only mode rejects unrelated commands');
             pauseProtectionActive=false;pauseProtectionObserver=null;pauseProtectionKeys=Object.create(null);pauseProtectionLastInputFrame=-1;pauseProtectionLastStatusAt=-Infinity;
             lionFieldState={closed:false,selected:false,fought:false,returnedAmber:false,paused:false,lastInputFrame:-1,observer:null,chartedProbePending:false,chartedProbeAnchor:null,climbReleaseArmed:false,climbReleaseAttempted:false};
             lisaRecoveryState={closed:false,mapOpened:false,teleported:false,lastInputFrame:-1,observer:null};
@@ -3137,6 +3212,7 @@ function createActOneAdapter(sessionId) {
             statueDialogueState={advanceAttempted:false,leaveAttempted:false,lastInputFrame:-1};
             lisaNavigationState={active:false,lastInputFrame:-1,lastField:null};
             worldInventoryCloseAttempted=false;
+            inventoryUiPauseBefore=null;inventoryUiPauseAdmittedAt=null;inventoryUiPauseAttempted=false;
             lionDomainStartAttempted=false;lionPartyStartAttempted=false;lionFalconWaypointAttempted=false;
             wolfClosingState={begun:false,inputs:0,lastFrame:-1,lastFinishedAt:null};
             wolfChestAttempted=false;
@@ -3182,7 +3258,14 @@ function createActOneAdapter(sessionId) {
                 var path='revisions/'+revision[names[i]]+'/'+names[i]+'.txt';
                 if(!file.isExists(path) && !file.writeTextSync(path,source)) throw new Error('Cannot preserve controller revision');
             }
-            events.push({type:'controllerRevision',files:revision,startedAt:Date.now()});
+            var admittedAt=Date.now();
+            events.push({type:'controllerRevision',files:revision,startedAt:admittedAt});
+            var pauseBefore=inventoryUiBefore;
+            if(inventoryUiOnly&&value.mission==='questStep'&&value.step==='worldInventory'&&pauseBefore&&
+               pauseBefore.frameId===value.expectedFrameId&&actOneInventoryUiInputFresh(pauseBefore,admittedAt,value.session)&&
+               pauseBefore.hud.world===true&&actOneInventoryUiWorldEvidence(pauseBefore.ocr,pauseBefore.hud)){
+                inventoryUiPauseBefore=JSON.parse(JSON.stringify(pauseBefore));inventoryUiPauseAdmittedAt=admittedAt;
+            }
         }, events: function () { return events; },
         seedObservation: function (value) {
             ready();
@@ -5951,6 +6034,7 @@ function createActOneAdapter(sessionId) {
             checkStop();o=o||lastObservation;
             if(worldInventoryCloseAttempted||!request||request.mission!=='questStep'||request.step!=='worldInventoryClose'||
                !o||!lastObservation||o.frameId!==lastObservation.frameId||o.timestamp!==lastObservation.timestamp)return false;
+            if(inventoryUiOnly&&(!actOneInventoryUiInputFresh(o,Date.now(),request.session)||o.hud.loading||o.hud.unknownHud))return false;
             var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
             return !!gate(o,Date.now(),request.session);
         },
@@ -5963,6 +6047,16 @@ function createActOneAdapter(sessionId) {
         },
         pauseWorldInventory: async function () {
             checkStop();var o=lastObservation,h=o&&o.hud;
+            if(inventoryUiOnly) {
+                if(!request||request.mission!=='questStep'||request.step!=='worldInventory'||
+                   inventoryUiPauseAttempted||!inventoryUiPauseBefore||
+                   !actOneInventoryUiInputFresh(o,Date.now(),request.session)||o.frameId<=inventoryUiPauseBefore.frameId||
+                   o.uiObservation.observationStartedAtUnixMs<inventoryUiPauseAdmittedAt)return false;
+                if(!(h.world===true&&actOneInventoryUiWorldEvidence(o.ocr,h))&&
+                   !actOneInventoryUiPauseFallback(o,Date.now(),request.session,inventoryUiPauseBefore,inventoryUiPauseAdmittedAt))return false;
+                inventoryUiPauseAttempted=true;
+                await boundedKey('VK_B',60,o.frameId);return true;
+            }
             if(!actOneWorldInventoryPauseReady(o,Date.now())) return false;
             await boundedKey('VK_B',60);return true;
         },
@@ -8199,7 +8293,8 @@ function createActOneAdapter(sessionId) {
                 try {
                     var mp,regionalObservation=false;
                     if(request&&request.step==='actTwoField'){try{regionalObservation=actTwoRegionalObservationPlan(request,JSON.parse(file.readTextSync('act-two-field-request.json')));}catch(regionalReadError){regionalObservation=false;}}
-                    if(regionalObservation){mapDiagnostic={reason:'Reviewed regional field plan; minimap matching intentionally omitted'};}
+                    if(inventoryUiOnly){mapDiagnostic={reason:'Inventory UI-only v1: map and orientation deliberately omitted',mode:'inventory-ui-only-v1'};}
+                    else if(regionalObservation){mapDiagnostic={reason:'Reviewed regional field plan; minimap matching intentionally omitted'};}
                     else if(request&&request.mission==='questStep'&&['windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaVisualMove','lisaGlide','lisaCloseThreat','lionVisualMove','lionLocalPause'].indexOf(request.step)>=0) {
                         mapDiagnostic={reason:'Root-witnessed uncharted approach; no map coordinate inferred'};
                         // Wait for the complete same-capture field HUD below. A fading
@@ -8241,7 +8336,8 @@ function createActOneAdapter(sessionId) {
                 var interactionObjective=actOneResolveInteractionObjective(request&&request.objective,objectiveRows);
                 var choice = rows.some(function (r) { return r.x > 1000 && r.y > 430 && r.y < 830 && r.text.trim().length > 6; }) || actTwoAmberFinalChoice(rows);
                 var journal = rows.some(function (r) { return /^In Progress$/i.test(r.text.trim()) && r.y < 100; });
-                var bigMap = !pos && !journal && (/Exploration Progress|Starfell Valley/.test(text) || actOneFullMapState(rows));
+                var bigMap = !journal && (inventoryUiOnly ? actOneInventoryUiBigMap(rows) :
+                    !pos && (/Exploration Progress|Starfell Valley/.test(text) || actOneFullMapState(rows)));
                 var acquired = /Obtained New Character/.test(text) && /Click anywhere in the blank area to continue/.test(text) ? rows.filter(function(r) { return ['Amber','Kaeya','Lisa'].indexOf(r.text.trim()) >= 0 && r.x < 500 && r.y > 500 && r.y < 700; }) : [];
                 var tutorialStep = /Press 2 to switch to Amber/i.test(text) && /Use Amber to defeat the airborne/i.test(text) ? 'switchAmber' : null;
                 if(actOneWagnerChoiceTutorial(rows))tutorialStep='wagnerChoice';
@@ -8273,7 +8369,7 @@ function createActOneAdapter(sessionId) {
                 var windriseControlRequest=request&&request.mission==='questStep'&&['windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0&&
                     objectiveRows.some(function(r){return actOneLisaObjective(r.text);});
                 var indoorControlRequest=actTwoIndoorControlCandidate(request,rows,hp,{auto:auto,journal:journal,bigMap:bigMap,choice:choice,dialogueReady:actOneDialogueReady(rows,choice),tutorialStep:tutorialStep},objectiveRows);
-                if((pos||regionalObservation||indoorControlRequest||(request&&request.mission==='questStep'&&/^(falcon|wolf)/.test(request.step))||windriseControlRequest||recoverWolfSafe||recoverWolfFoodDomainRequest)&&hp&&!auto&&!journal&&!bigMap&&!(auto&&choice)&&!tutorialStep&&
+                if((pos||inventoryUiOnly||regionalObservation||indoorControlRequest||(request&&request.mission==='questStep'&&/^(falcon|wolf)/.test(request.step))||windriseControlRequest||recoverWolfSafe||recoverWolfFoodDomainRequest)&&hp&&!auto&&!journal&&!bigMap&&!(auto&&choice)&&!tutorialStep&&
                    (!request||request.mission!=='recover'||recoverWolfSafe||recoverStatuePanelRequest)&&actOneNeedsControlCrop(rows)) {
                     var control0=Date.now(),controlLocal=scaledRows(img,1520,985,390,80);
                     rows=actOneMergeControlCropRows(rows,controlLocal,1520,985);
@@ -8500,7 +8596,7 @@ function createActOneAdapter(sessionId) {
                     if(hud.combatTargetState.target&&hud.enemyBars.filter(b=>b.width>=20).length<=1){hud.globalEnemyBars=hud.enemyBars;hud.enemyBars=[hud.combatTargetState.target];rows.push(hud.combatTargetState.label);}
                 }
                 if(regionalObservation)rows=actTwoMergeLeyLineLevelRows(rows,objectiveRows,hud);
-                    hud.compassAngle=Number(genshin.getCameraOrientation());
+                    if(!inventoryUiOnly)hud.compassAngle=Number(genshin.getCameraOrientation());
                 }
                 if(request&&request.mission==='questStep'&&['lionFieldCombat','lionFieldProbe','lisaStatueRecovery'].indexOf(request.step)>=0)
                     hud.world=actOneLionFieldWorld({session:session,frameId:frame,timestamp:Date.now(),hud:hud,ocr:rows},Date.now(),session,0,request.step==='lisaStatueRecovery');
@@ -8538,6 +8634,12 @@ function createActOneAdapter(sessionId) {
                     mapMs+=Date.now()-chartedMap0;
                     ready();
                 }
+                if(inventoryUiOnly) {
+                    // Classify only the current image; retain no inherited position or camera value.
+                    hud.loading=actOneEnterGameLoading(rows);
+                    hud.unknownHud=actOneEnterGameAuthPrompt(rows)||actOneEnterGameUnknownUi(rows);
+                    hud.world=actOneInventoryUiWorldEvidence(rows,hud);
+                }
                 if(pngPending) {
                     // An observation remains a durable proof: never publish a path until
                     // its write succeeds, and never retry a refused async write synchronously.
@@ -8551,6 +8653,8 @@ function createActOneAdapter(sessionId) {
                     // With overlap, pngWriteMs counts only copy/schedule plus the final wait,
                     // not background encoding time hidden behind recognition.
                     timings: { mapDiagnostic:mapDiagnostic, captureMs: captureMs, ocrMs: ocrMs, ocrFindMultiMs:ocrPrimitiveMs, ocrReadCount:ocrReadCount, fullOcrMs: fullOcrMs, reviveStockOcrMs:reviveStockOcrMs, healthOcrMs: healthOcrMs, objectiveOcrMs: objectiveOcrMs, controlOcrMs:controlOcrMs, cooldownOcrMs:cooldownOcrMs, spikeSurfaceMs:spikeSurfaceMs, levelPanelOcrMs:levelPanelOcrMs, interactionOcrMs:interactionOcrMs, objectiveSource: reusedObjectiveRows ? 'fullFrame' : 'crop', pngWriteMs: pngMs, pngWriteMode:pngWriteMode, pngScheduleMs:pngScheduleMs, pngWaitMs:pngWaitMs, mapMs: mapMs, totalMs: Date.now() - t0 } };
+                if(inventoryUiOnly)lastObservation.uiObservation={version:1,kind:'inventory-ui-only-v1',
+                    mapOmitted:true,orientationOmitted:true,observationStartedAtUnixMs:t0};
                 if(lisaNavigationRequest()&&lisaNavigationInputReady(lastObservation))lisaNavigationState.lastField=lastObservation;
                 return lastObservation;
             } finally {

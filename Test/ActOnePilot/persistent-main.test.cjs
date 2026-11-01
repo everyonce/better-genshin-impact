@@ -156,7 +156,7 @@ test('pause exhaustion retains listener, blocks gameplay, permits observation an
 test('Act II fault clears only after matching recovery result and fresh independent pause proof',async()=>{
  for(const verified of [true,false]){
  const h=await runMain({enableInput:true,observations:['inventory'],requestSequence:[{mission:'questStep',step:'actTwoForgeClose'},{mission:'questStep',step:'actTwoRecover'},{mission:'questStep',step:'actTwoKaeyaTalk'},{mission:'stop'}],
- missionSource:'var ActOneMission={runQuestStep:async function(step){startupSteps.push({step});if(step==="actTwoForgeClose"){var e=new Error("Unknown UI pause exhausted");e.code="PAUSE_PROTECTION_EXHAUSTED";throw e;}return {status:"completed",step:step,pauseVerified:'+verified+'};}};'});
+ missionSource:'var ActOneMission={runQuestStep:async function(step,observation){startupSteps.push({step});if(step==="actTwoForgeClose"){var e=new Error("Unknown UI pause exhausted");e.code="PAUSE_PROTECTION_EXHAUSTED";throw e;}return {status:"completed",step:step,pauseVerified:'+verified+',pauseProof:{verified:'+verified+',session:observation.session,kind:"inventory",sourceFrameId:observation.frameId,pauseFrameId:observation.frameId,timestamp:observation.timestamp}};}};'});
  assert.equal(h.error,null);
  const receipts=[...h.files].filter(([p])=>p.startsWith('receipts/')).map(([,v])=>JSON.parse(v));
  assert.equal(receipts.find(r=>r.id==='request-3').status,verified?'completed':'rejected');

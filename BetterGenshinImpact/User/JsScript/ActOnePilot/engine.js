@@ -74,11 +74,24 @@ var ActOnePilot = (function () {
         if (Object.keys(r).some(function (k) { return allowed.indexOf(k) < 0; })) return 'Unknown request field';
         return null;
     }
+    // A UI-only listener cannot be repurposed for travel, combat or recovery.
+    function inventoryUiRequestAllowed(request) {
+        return !!(request&&(request.mission==='observe'||request.mission==='stop'||
+            request.mission==='questStep'&&['worldInventory','worldInventoryClose'].indexOf(request.step)>=0));
+    }
     function create(api, options) {
+        var inventoryUiOnly=options.inventoryUiOnlyV1===true;
+        function requireUiMode() {
+            if(inventoryUiOnly&&(typeof api.inventoryUiOnlyV1!=='function'||api.inventoryUiOnlyV1()!==true))
+                throw new Error('Inventory UI-only adapter mode changed');
+        }
         var session = options.session, enabled = options.enableInput === true, frame = 0, lastObservedFrame = 0, lastObservedAt = null, seen = Object.create(null), seenOrder = [], stopped = false, busy = false, reports = [], milestones = Object.create(null), activeRequestId = null;
         // The listener has no elapsed-time or idle shutdown. Only an explicit
         // stop or the host cancellation ends it; each input mission stays bounded.
         var previousScene=null;
+        // Main refreshes the adapter per request. Retain only this mode's completed
+        // publication privately so refresh cannot discard or fabricate the B before-frame.
+        var inventoryUiLastObservation=null;
         function state() { return {state:stopped?'stopped':busy?'running':'idle',frameId:frame,activeRequestId:activeRequestId}; }
         function pulse(force) { if(typeof api.heartbeat==='function')api.heartbeat(state(),force===true); }
         function report(req, state, details) {
@@ -111,9 +124,18 @@ var ActOnePilot = (function () {
             api.write('receipt.json', JSON.stringify(row, null, 2));pulse();return row;
         }
         async function observe() {
+            requireUiMode();
             var data = await api.observe(session, frame + 1); frame++;
             lastObservedFrame=frame;lastObservedAt=Number(data.timestamp);
-            var immutable = JSON.parse(JSON.stringify({ session: session, frameId: frame, timestamp: data.timestamp, screenshotPath: data.screenshotPath, ocr: data.ocr || [], map: data.map || null, hud: data.hud || null, timings: data.timings || {} }));
+            var snapshot = { session: session, frameId: frame, timestamp: data.timestamp, screenshotPath: data.screenshotPath, ocr: data.ocr || [], map: data.map || null, hud: data.hud || null, timings: data.timings || {} };
+            if(inventoryUiOnly) {
+                requireUiMode();
+                if(data.map!==null||!data.uiObservation||data.uiObservation.version!==1||
+                   data.uiObservation.kind!=='inventory-ui-only-v1'||data.uiObservation.mapOmitted!==true||
+                   data.uiObservation.orientationOmitted!==true)throw new Error('Inventory UI observation provenance changed');
+                snapshot.uiObservation=data.uiObservation;
+            }
+            var immutable = JSON.parse(JSON.stringify(snapshot));
             var serialized=JSON.stringify(immutable, null, 2);
             if(serialized.length>32768) throw new Error('Observation metadata exceeds the 128 KiB UTF-8 storage reserve');
             api.write('observations/' + session + '/frame-' + String(frame).padStart(4, '0') + '.json', serialized);
@@ -126,12 +148,14 @@ var ActOnePilot = (function () {
             }
             previousScene=scene;
             pulse();
+            if(inventoryUiOnly)inventoryUiLastObservation=JSON.parse(serialized);
             return immutable;
         }
         async function process(req, missionFactory, seedObservation) {
             if (busy) return 'busy';
             if (stopped) return 'stopped';
             var reason = validate(req, session, frame, seen, api.now());
+            if(!reason&&inventoryUiOnly&&!inventoryUiRequestAllowed(req))reason='Inventory UI-only mode rejects unrelated commands';
             if(!reason&&seedObservation!==undefined) {
                 var seededHealth=seedObservation&&seedObservation.hud&&seedObservation.hud.health;
                 var continueSeed=req&&req.mission==='questStep'&&req.step==='wolfContinue';
@@ -148,7 +172,8 @@ var ActOnePilot = (function () {
             busy = true;activeRequestId=req.id;var inputStarted = 0, routeResult = null, missionStarted = api.now();
             try {
                 pulse(true);
-                api.beginMission(req);
+                if(inventoryUiOnly)api.beginMission(req,inventoryUiLastObservation&&JSON.parse(JSON.stringify(inventoryUiLastObservation)));
+                else api.beginMission(req);
                 if(seedObservation!==undefined) {
                     if(typeof api.seedObservation!=='function') throw new Error('Adapter cannot bind a seeded Wolf observation');
                     api.seedObservation(seedObservation);
@@ -267,6 +292,6 @@ var ActOnePilot = (function () {
         }
         return { observe: observe, process: process, stopped: function () { return stopped; }, report: report, getFrame: function () { return frame; },getState:state };
     }
-    return { create: create, validate: validate };
+    return { create: create, validate: validate, inventoryUiRequestAllowed: inventoryUiRequestAllowed };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = ActOnePilot;

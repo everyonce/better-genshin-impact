@@ -1,4 +1,5 @@
 [
   { "name": "enableInput", "type": "checkbox", "label": "Enable supervised input (verified RDP child only)", "default": false },
-  { "name": "autoEnterGame", "type": "checkbox", "label": "Enter the game automatically at pilot startup (disable for account switching)", "default": true }
+  { "name": "autoEnterGame", "type": "checkbox", "label": "Enter the game automatically at pilot startup (disable for account switching)", "default": true },
+  { "name": "inventoryUiOnlyV1", "type": "checkbox", "label": "Inventory UI only (pause/resume, no map localization; disable automatic entry)", "default": false }
 ]

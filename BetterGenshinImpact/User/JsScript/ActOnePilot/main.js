@@ -512,6 +512,10 @@ eval(file.readTextSync('bgi.js'));
             setWolfSafetyFault('the previously verified active trial changed to an ambiguous scene; no input was sent');
     }
     try {
+        var inventoryUiOnly=!!settings&&settings.inventoryUiOnlyV1===true;
+        if(settings&&settings.inventoryUiOnlyV1!==undefined&&typeof settings.inventoryUiOnlyV1!=='boolean')
+            throw new Error('inventoryUiOnlyV1 must be a boolean');
+        if(inventoryUiOnly&&settings.autoEnterGame!==false)throw new Error('Inventory UI-only mode requires autoEnterGame=false');
         dispatcher.clearAllTriggers();
         if (Number(file.captureStorageVersion) !== 1) throw new Error('Act One Pilot requires the bounded capture-storage runtime before starting.');
         if (genshin.isRemoteDesktopSession !== true || !Number.isInteger(Number(genshin.windowsSessionId)) || Number(genshin.windowsSessionId) <= 1) throw new Error('Act One Pilot requires a verified RDP child session above Windows session 1.');
@@ -520,7 +524,7 @@ eval(file.readTextSync('bgi.js'));
         metrics = getGameMetrics(); setGameMetrics(1920, 1080, 1);
         session = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
         heartbeat(true,'starting');
-        adapter = createActOneAdapter(genshin.windowsSessionId);
+        adapter = createActOneAdapter(genshin.windowsSessionId,{inventoryUiOnlyV1:inventoryUiOnly});
         adapter.setHeartbeat(heartbeat);
         var focusStartedAt=Date.now(),focusDeadline=focusStartedAt+5000,focusAttempts=0,focusError=null,focused=false;
         while(focusAttempts<5 && Date.now()<focusDeadline) {
@@ -537,7 +541,7 @@ eval(file.readTextSync('bgi.js'));
             }
         }
         if(!focused) throw new Error('Game focus failed after '+focusAttempts+' bounded attempts: '+String(focusError&&focusError.message||focusError||'startup deadline reached'));
-        runner = ActOnePilot.create(adapter, { session: session, enableInput: settings.enableInput === true });
+        runner = ActOnePilot.create(adapter, { session: session, enableInput: settings.enableInput === true, inventoryUiOnlyV1:inventoryUiOnly });
         if (!file.createDirectory('observations/' + session)) throw new Error('Session output directory unavailable.');
         if (!file.createDirectory('receipts/' + session)) throw new Error('Session receipt directory unavailable.');
         var initialObservation = await runner.observe(),step=startupStep(initialObservation),startupObservations=1,startupDeadline=Date.now()+5000;
@@ -568,10 +572,13 @@ eval(file.readTextSync('bgi.js'));
             if (raw.length > 8192) { runner.report(null, 'rejected', { reason: 'request.json exceeds 8192 characters' }); continue; }
             try {
                 var request = JSON.parse(raw);
+                if(inventoryUiOnly&&!ActOnePilot.inventoryUiRequestAllowed(request)) {
+                    runner.report(request,'rejected',{reason:'Inventory UI-only mode rejects unrelated commands'});continue;
+                }
                 // Between completed missions there are no held keys. Refresh only
                 // trusted package code, preserving the runner's session and nonce state.
                 eval(file.readTextSync('bgi.js'));
-                var refreshed = createActOneAdapter(genshin.windowsSessionId);
+                var refreshed = createActOneAdapter(genshin.windowsSessionId,{inventoryUiOnlyV1:inventoryUiOnly});
                 refreshed.setHeartbeat(heartbeat);
                 Object.keys(refreshed).forEach(function (key) { adapter[key] = refreshed[key]; });
                 eval(file.readTextSync('mission.js'));
@@ -608,7 +615,7 @@ eval(file.readTextSync('bgi.js'));
                 }
                 log.info('Act One Pilot request failed: ' + String(e && e.message || e));
             }
-            finally { if(!failure)try { await protectWolfIdleBoundary(request); } catch (e) { setWolfSafetyFault('automatic pause handling failed: '+String(e&&e.message||e)); } }
+            finally { if(!failure&&!inventoryUiOnly)try { await protectWolfIdleBoundary(request); } catch (e) { setWolfSafetyFault('automatic pause handling failed: '+String(e&&e.message||e)); } }
         }
     } catch(e) {
         failure=String(e&&e.message||e);throw e;

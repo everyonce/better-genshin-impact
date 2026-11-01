@@ -1,0 +1,527 @@
+{
+  "kind": "r65-inventory-ui-regression-observations-v1",
+  "world": {
+    "source": "artifacts\\live\\2026-10-30-endurance\\north-starfell-combat-resume-r65-camera-03\\returned-world.json",
+    "sourceJsonSha256": "9021fc058afa7a5851bee93caa4b6c789b8fa54c8cb17bf5abee9ee504e04ff2",
+    "observation": {
+      "session": "mvxgys4y-f3lryz1bbeh",
+      "frameId": 4,
+      "timestamp": 1793515747209,
+      "ocr": [
+        {
+          "text": "20 ms",
+          "x": 1803,
+          "y": 79,
+          "width": 87,
+          "height": 29
+        },
+        {
+          "text": "Lumina",
+          "x": 1682,
+          "y": 260,
+          "width": 81,
+          "height": 23
+        },
+        {
+          "text": "Amber",
+          "x": 1690,
+          "y": 349,
+          "width": 73,
+          "height": 29
+        },
+        {
+          "text": "Kaeya",
+          "x": 1672,
+          "y": 451,
+          "width": 77,
+          "height": 22
+        },
+        {
+          "text": "Lis",
+          "x": 1724,
+          "y": 536,
+          "width": 31,
+          "height": 17
+        },
+        {
+          "text": "Lv. 20",
+          "x": 748,
+          "y": 1003,
+          "width": 49,
+          "height": 22
+        },
+        {
+          "text": "401",
+          "x": 960,
+          "y": 1007,
+          "width": 41,
+          "height": 14
+        },
+        {
+          "text": "Enter",
+          "x": 42,
+          "y": 1026,
+          "width": 113,
+          "height": 29
+        },
+        {
+          "text": "e",
+          "x": 1684,
+          "y": 1026,
+          "width": 33,
+          "height": 25
+        },
+        {
+          "text": "q",
+          "x": 1802,
+          "y": 1026,
+          "width": 35,
+          "height": 27
+        },
+        {
+          "text": "UID: 693306810",
+          "x": 1684,
+          "y": 1052,
+          "width": 177,
+          "height": 27
+        },
+        {
+          "text": "E",
+          "x": 1692.6666666666667,
+          "y": 1029.6666666666667,
+          "width": 13.666666666666666,
+          "height": 19
+        },
+        {
+          "text": "Q",
+          "x": 1808.3333333333333,
+          "y": 1029,
+          "width": 21.666666666666668,
+          "height": 22.333333333333332
+        }
+      ],
+      "hud": {
+        "foodQuantity": null,
+        "auto": false,
+        "climbing": false,
+        "groundControls": true,
+        "enemyBars": [],
+        "aerialBossVisible": false,
+        "aerialBoss": null,
+        "slimeTarget": null,
+        "tutorialStep": null,
+        "characterAcquired": null,
+        "dialogueReady": false,
+        "choice": false,
+        "journal": false,
+        "bigMap": false,
+        "objectiveChanged": false,
+        "health": {
+          "current": 2211,
+          "max": 4015
+        },
+        "healthOcr": [
+          "2211/4015"
+        ],
+        "healthDiagnostic": {
+          "fullRow": [
+            "401"
+          ],
+          "primary": [
+            "2211/4015"
+          ],
+          "left": [],
+          "right": [],
+          "decision": "primary-scaled-readable"
+        },
+        "healthPct": 0.5506849315068493,
+        "lowHealth": true,
+        "world": true,
+        "interact": false,
+        "objectives": [],
+        "enemyBarDiagnostic": null
+      },
+      "map": {
+        "x": -1266.423828125,
+        "y": 1934.0712890625,
+        "map": "Teyvat",
+        "cameraAngle": 269.5
+      }
+    }
+  },
+  "inventory": {
+    "source": "artifacts\\live\\2026-10-30-endurance\\north-starfell-combat-resume-r65-camera-03\\before.json",
+    "sourceJsonSha256": "e5a2f083699554904462a4afbb41425bf30ef7259dbfbbcba23d6621a725998e",
+    "observation": {
+      "session": "mvxgys4y-f3lryz1bbeh",
+      "frameId": 1,
+      "timestamp": 1793515743575,
+      "ocr": [
+        {
+          "text": "Q ",
+          "x": 486,
+          "y": 22,
+          "width": 119,
+          "height": 50
+        },
+        {
+          "text": "Food",
+          "x": 138,
+          "y": 32,
+          "width": 71,
+          "height": 37
+        },
+        {
+          "text": "E",
+          "x": 1396,
+          "y": 42,
+          "width": 31,
+          "height": 21
+        },
+        {
+          "text": "Inventory capacity 25/2600",
+          "x": 1492,
+          "y": 38,
+          "width": 305,
+          "height": 27
+        },
+        {
+          "text": "Teyvat Fried Egg",
+          "x": 1329,
+          "y": 127,
+          "width": 299,
+          "height": 48
+        },
+        {
+          "text": "Food",
+          "x": 1336,
+          "y": 187,
+          "width": 105,
+          "height": 36
+        },
+        {
+          "text": ". Revives a character and restores",
+          "x": 1337,
+          "y": 433,
+          "width": 433,
+          "height": 42
+        },
+        {
+          "text": "100 HP.",
+          "x": 1336,
+          "y": 469,
+          "width": 97,
+          "height": 28
+        },
+        {
+          "text": "An egg fried on one side. The yolk",
+          "x": 1335,
+          "y": 515,
+          "width": 420,
+          "height": 30
+        },
+        {
+          "text": "flows out nicely when broken. So",
+          "x": 1336,
+          "y": 546,
+          "width": 415,
+          "height": 29
+        },
+        {
+          "text": "satisfying.",
+          "x": 1331,
+          "y": 569,
+          "width": 139,
+          "height": 41
+        },
+        {
+          "text": "Q Source",
+          "x": 1342,
+          "y": 633,
+          "width": 115,
+          "height": 35
+        },
+        {
+          "text": "Obtained by cooking",
+          "x": 1347,
+          "y": 690,
+          "width": 229,
+          "height": 38
+        },
+        {
+          "text": "Use",
+          "x": 1672,
+          "y": 1005,
+          "width": 59,
+          "height": 32
+        },
+        {
+          "text": "UID: 693306810",
+          "x": 1682,
+          "y": 1052,
+          "width": 181,
+          "height": 27
+        }
+      ],
+      "hud": {
+        "foodQuantity": null,
+        "auto": false,
+        "climbing": false,
+        "groundControls": false,
+        "enemyBars": [],
+        "aerialBossVisible": false,
+        "aerialBoss": null,
+        "slimeTarget": null,
+        "tutorialStep": null,
+        "characterAcquired": null,
+        "dialogueReady": false,
+        "choice": false,
+        "journal": false,
+        "bigMap": false,
+        "objectiveChanged": false,
+        "health": null,
+        "healthOcr": [],
+        "healthDiagnostic": {
+          "fullRow": [],
+          "primary": [],
+          "left": [],
+          "right": [],
+          "decision": "health-unresolved"
+        },
+        "healthPct": null,
+        "lowHealth": true,
+        "world": false,
+        "interact": false,
+        "objectives": [],
+        "enemyBarDiagnostic": null
+      },
+      "map": null
+    }
+  },
+  "transitions": [
+    {
+      "source": "artifacts\\release-r65\\BetterGI-English-win-x64\\User\\JsScript\\ActOnePilot\\observations\\mvxgcyjw-t3j1ezb1xi\\frame-0003.json",
+      "sourceJsonSha256": "acddd94f2f6805e20abd8cd9ea9bb0ac9b24548bf6b3f4f0c2abc816d472f511",
+      "observation": {
+        "session": "mvxgcyjw-t3j1ezb1xi",
+        "frameId": 3,
+        "timestamp": 1793514741322,
+        "ocr": [
+          {
+            "text": "Food",
+            "x": 137,
+            "y": 14,
+            "width": 71,
+            "height": 41
+          },
+          {
+            "text": "Q",
+            "x": 492,
+            "y": 20,
+            "width": 41,
+            "height": 33
+          },
+          {
+            "text": "5",
+            "x": 944,
+            "y": 16,
+            "width": 39,
+            "height": 39
+          },
+          {
+            "text": "4",
+            "x": 1036,
+            "y": 24,
+            "width": 43,
+            "height": 29
+          },
+          {
+            "text": "+",
+            "x": 1238,
+            "y": 28,
+            "width": 21,
+            "height": 19
+          },
+          {
+            "text": "Inventory capacity 25/2600",
+            "x": 1489,
+            "y": 19,
+            "width": 311,
+            "height": 33
+          },
+          {
+            "text": "Teyvat Fried Egg",
+            "x": 1333,
+            "y": 124,
+            "width": 293,
+            "height": 50
+          },
+          {
+            "text": "Food",
+            "x": 1340,
+            "y": 191,
+            "width": 97,
+            "height": 28
+          },
+          {
+            "text": "Revives a character and restores",
+            "x": 1339,
+            "y": 435,
+            "width": 431,
+            "height": 40
+          },
+          {
+            "text": "100 HP.",
+            "x": 1336,
+            "y": 469,
+            "width": 97,
+            "height": 28
+          },
+          {
+            "text": "An egg fried on one side. The yolk",
+            "x": 1332,
+            "y": 512,
+            "width": 425,
+            "height": 41
+          },
+          {
+            "text": "flows out nicely when broken.So",
+            "x": 1334,
+            "y": 546,
+            "width": 417,
+            "height": 29
+          },
+          {
+            "text": "satisfying.",
+            "x": 1333,
+            "y": 571,
+            "width": 139,
+            "height": 36
+          },
+          {
+            "text": " Source",
+            "x": 1341,
+            "y": 633,
+            "width": 117,
+            "height": 35
+          },
+          {
+            "text": "Obtained by cooking",
+            "x": 1347,
+            "y": 693,
+            "width": 227,
+            "height": 33
+          },
+          {
+            "text": "Use",
+            "x": 1668,
+            "y": 1006,
+            "width": 65,
+            "height": 44
+          },
+          {
+            "text": "UID: 693306810",
+            "x": 1682,
+            "y": 1050,
+            "width": 181,
+            "height": 29
+          }
+        ],
+        "hud": {
+          "foodQuantity": null,
+          "auto": false,
+          "climbing": false,
+          "groundControls": false,
+          "enemyBars": [],
+          "aerialBossVisible": false,
+          "aerialBoss": null,
+          "slimeTarget": null,
+          "tutorialStep": null,
+          "characterAcquired": null,
+          "dialogueReady": false,
+          "choice": false,
+          "journal": false,
+          "bigMap": false,
+          "objectiveChanged": false,
+          "health": null,
+          "healthOcr": [],
+          "healthDiagnostic": {
+            "fullRow": [],
+            "primary": [],
+            "left": [],
+            "right": [],
+            "decision": "health-unresolved"
+          },
+          "healthPct": null,
+          "lowHealth": true,
+          "world": false,
+          "interact": false,
+          "objectives": [],
+          "enemyBarDiagnostic": null
+        },
+        "map": {
+          "x": -1266.462890625,
+          "y": 1934.078125,
+          "map": "Teyvat",
+          "cameraAngle": 269.5
+        }
+      }
+    },
+    {
+      "source": "artifacts\\release-r65\\BetterGI-English-win-x64\\User\\JsScript\\ActOnePilot\\observations\\mvxgys4y-f3lryz1bbeh\\frame-0003.json",
+      "sourceJsonSha256": "9a2d63a1277d118996fd89a5e085befe27b1f670968e2000d6a10d8d730d8893",
+      "observation": {
+        "session": "mvxgys4y-f3lryz1bbeh",
+        "frameId": 3,
+        "timestamp": 1793515746796,
+        "ocr": [
+          {
+            "text": "UID: 693306810",
+            "x": 1682,
+            "y": 1052,
+            "width": 177,
+            "height": 27
+          }
+        ],
+        "hud": {
+          "foodQuantity": null,
+          "auto": false,
+          "climbing": false,
+          "groundControls": false,
+          "enemyBars": [],
+          "aerialBossVisible": false,
+          "aerialBoss": null,
+          "slimeTarget": null,
+          "tutorialStep": null,
+          "characterAcquired": null,
+          "dialogueReady": false,
+          "choice": false,
+          "journal": false,
+          "bigMap": false,
+          "objectiveChanged": false,
+          "health": null,
+          "healthOcr": [],
+          "healthDiagnostic": {
+            "fullRow": [],
+            "primary": [],
+            "left": [],
+            "right": [],
+            "decision": "health-unresolved"
+          },
+          "healthPct": null,
+          "lowHealth": true,
+          "world": false,
+          "interact": false,
+          "objectives": [],
+          "enemyBarDiagnostic": null
+        },
+        "map": {
+          "x": -1266.42578125,
+          "y": 1934.05859375,
+          "map": "Teyvat",
+          "cameraAngle": 269.5
+        }
+      }
+    }
+  ]
+}

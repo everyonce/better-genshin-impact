@@ -229,6 +229,26 @@ class MapOwnerTest(unittest.TestCase):
         folder,result=self.create_next_handoff(prior,result,game,65)
         return prior,folder,result,game
 
+    def create_r66_successor(self):
+        """Retain the complete R65 chain and give only the new endpoints explicit idle/config evidence."""
+        previous,folder,result,game=self.create_r65_successor()
+        prior=folder/'map-owner-lineage.json'
+        write(prior,owner.replacement(previous,folder))
+        folder,result=self.create_next_handoff(prior,result,game,66)
+        before=json.loads((folder/'before.json').read_bytes())
+        for status in (*before['instances'],result['root'],result['child']):
+            status.update(taskRunning=False,agentStreamRunning=False,serviceOwnsPilot=False)
+        build,_=owner.target_package(66)
+        write(Path(build['targetDirectory'])/'User/config.json',owner.R62_CLEAN_CAPTURE)
+        digest=owner.check_clean_target(build)
+        preflight=json.loads((folder/'preflight.json').read_bytes())
+        preflight['targetConfigSha256']=digest
+        result['replacementEvidence']['existingTargetConfigSha256']=digest
+        write(folder/'before.json',before)
+        write(folder/'preflight.json',preflight)
+        write(folder/'ensure-child.json',result)
+        return prior,folder,result,game
+
     def test_r60_handoff_keeps_the_same_game_and_rejects_stale_source(self):
         """The newly allowed successor still cannot reuse the discovery from before the R60 replacement."""
         prior,folder,result,game=self.create_r60_successor()
@@ -280,8 +300,8 @@ class MapOwnerTest(unittest.TestCase):
         self.assertEqual(receipt['protectedGame'],game)
         self.assertEqual(receipt['priorLineageSha256'],hashlib.sha256(prior.read_bytes()).hexdigest())
 
-    def test_r65_replays_original_root_and_game_but_rejects_the_next_transition(self):
-        """The new R65 handoff preserves exact ancestry and does not grant authority for R66."""
+    def test_r65_replays_original_root_and_game(self):
+        """Historical R65 remains replayable without requiring new endpoint flags in old receipts."""
         prior,folder,result,game=self.create_r65_successor()
         receipt=owner.replacement(prior,folder);path=folder/'map-owner-lineage.json'
         write(path,receipt)
@@ -289,9 +309,142 @@ class MapOwnerTest(unittest.TestCase):
         self.assertEqual(receipt['protectedGame'],game)
         self.assertEqual(receipt['priorLineageSha256'],hashlib.sha256(prior.read_bytes()).hexdigest())
         self.assertEqual(owner.load_map_owner(prior)['root'],self.ids['root'])
-        later,_=self.create_next_handoff(path,result,game,66)
+
+    def test_r66_replays_exact_original_root_and_game_but_rejects_r67(self):
+        """Only the next complete R65-to-R66 transition is admitted, even when an R67 package exists."""
+        prior,folder,result,game=self.create_r66_successor()
+        receipt=owner.replacement(prior,folder)
+        path=folder/'map-owner-lineage.json'
+        write(path,receipt)
+        self.assertEqual(owner.load_map_owner(path),dict(root=self.ids['root'],child=owner.identity(result['child'])))
+        self.assertEqual(receipt['protectedGame'],game)
+        self.assertEqual(receipt['priorLineageSha256'],hashlib.sha256(prior.read_bytes()).hexdigest())
+        self.assertEqual(owner.load_map_owner(prior)['root'],self.ids['root'])
+        later,_=self.create_next_handoff(path,result,game,67)
         with self.assertRaisesRegex(ValueError,'bounded'):owner.replacement(path,later)
-        with self.assertRaisesRegex(ValueError,'Unsupported map release'):owner.target_package(66)
+        with self.assertRaisesRegex(ValueError,'Unsupported map release'):owner.target_package(67)
+
+    def test_r66_rejects_coherently_changed_or_missing_game_lifetime(self):
+        """Fresh reports cannot replace the game already sealed by R65 and its original ancestors."""
+        prior,folder,result,game=self.create_r66_successor()
+        preflight=json.loads((folder/'preflight.json').read_bytes())
+        for field,value in (('startedFileTime',1),('processId',888),('executable','YuanShen.exe'),('windowsSessionId',4)):
+            changed=dict(game,**{field:value})
+            write(folder/'game-before.json',changed)
+            write(folder/'preflight.json',dict(preflight,protectedGame=changed))
+            write(folder/'ensure-child.json',dict(result,protectedGame=changed))
+            with self.subTest(field=field),self.assertRaises(ValueError):
+                owner.replacement(prior,folder)
+        write(folder/'game-before.json',game)
+        write(folder/'preflight.json',preflight)
+        write(folder/'ensure-child.json',dict(result,protectedGame=dict(game,startedFileTime=1)))
+        with self.assertRaisesRegex(ValueError,'game lifetime'):owner.replacement(prior,folder)
+        write(folder/'ensure-child.json',result)
+        (folder/'game-before.json').unlink()
+        with self.assertRaises(FileNotFoundError):owner.replacement(prior,folder)
+
+    def test_r66_rejects_changed_root_stale_source_or_reused_destination(self):
+        """A coherent new root, stale predecessor or reused child identity cannot inherit this handoff."""
+        prior,folder,result,_=self.create_r66_successor()
+        before=json.loads((folder/'before.json').read_bytes())
+        preflight=json.loads((folder/'preflight.json').read_bytes())
+        changed_before,changed_result,changed_preflight=deepcopy(before),deepcopy(result),deepcopy(preflight)
+        for root in (changed_before['instances'][0],changed_result['root']):
+            root.update(processId=10125,instanceNonce='e'*32)
+        for child in (changed_before['instances'][1],changed_result['child']):
+            child['rootProcessId']=10125
+        changed_preflight['source']['root']=owner.identity(changed_result['root'])
+        write(folder/'before.json',changed_before)
+        write(folder/'preflight.json',changed_preflight)
+        write(folder/'ensure-child.json',changed_result)
+        with self.assertRaisesRegex(ValueError,'Original child occupant changed'):owner.replacement(prior,folder)
+        write(folder/'preflight.json',preflight)
+        write(folder/'ensure-child.json',result)
+        for fields in (dict(processId=999),dict(instanceNonce='f'*32)):
+            changed=deepcopy(before);changed['instances'][1].update(fields)
+            write(folder/'before.json',changed)
+            with self.subTest(source=fields),self.assertRaisesRegex(ValueError,'Original child occupant changed'):
+                owner.replacement(prior,folder)
+        write(folder/'before.json',before)
+        old=before['instances'][1]
+        for field in ('processId','instanceNonce'):
+            changed=deepcopy(result)
+            changed['child'][field]=old[field]
+            evidence_key='replacementProcessId' if field=='processId' else 'replacementNonce'
+            changed['replacementEvidence'][evidence_key]=old[field]
+            write(folder/'ensure-child.json',changed)
+            with self.subTest(destination=field),self.assertRaisesRegex(ValueError,'old and new authenticated owners'):
+                owner.replacement(prior,folder)
+
+    def test_r66_requires_explicitly_released_root_and_child_at_both_endpoints(self):
+        """Busy, missing or non-boolean ownership flags cannot qualify either side of the new handoff."""
+        prior,folder,result,game=self.create_r66_successor()
+        before=json.loads((folder/'before.json').read_bytes())
+        missing=object()
+        for document,original in (('before.json',before),('ensure-child.json',result)):
+            for role in ('root','child'):
+                for field in ('taskRunning','agentStreamRunning','serviceOwnsPilot'):
+                    for value in (True,missing):
+                        changed=deepcopy(original)
+                        status=changed['instances'][0 if role=='root' else 1] if document=='before.json' else changed[role]
+                        if value is missing:status.pop(field)
+                        else:status[field]=value
+                        write(folder/document,changed)
+                        with self.subTest(document=document,role=role,field=field,value=value):
+                            with self.assertRaisesRegex(ValueError,'explicitly released'):
+                                owner.replacement(prior,folder)
+                write(folder/document,original)
+        for role,field,value in (('root','serviceOwnsPilot',0),('child','taskRunning','false')):
+            changed=deepcopy(result);changed[role][field]=value
+            write(folder/'ensure-child.json',changed)
+            with self.subTest(role=role,value=value),self.assertRaisesRegex(ValueError,'explicitly released'):
+                owner.replacement(prior,folder)
+        write(folder/'ensure-child.json',result)
+        self.assertEqual(owner.replacement(prior,folder)['protectedGame'],game)
+
+    def test_r66_rejects_skipped_circular_or_rewritten_predecessors(self):
+        """The added depth remains finite and every immediate predecessor is independently replayed."""
+        prior,folder,_,game=self.create_r66_successor()
+        receipt=json.loads(prior.read_bytes())
+        parent=Path(receipt['prior'])
+        parent_receipt=json.loads(parent.read_bytes())
+        write(prior,dict(receipt,prior=str(prior)))
+        with self.assertRaisesRegex(ValueError,'bounded'):owner.replacement(prior,folder)
+        write(prior,receipt)
+        write(parent,dict(parent_receipt,prior=str(prior)))
+        with self.assertRaisesRegex(ValueError,'bounded'):owner.replacement(prior,folder)
+        write(parent,parent_receipt)
+        write(prior,dict(receipt,prior=parent_receipt['prior']))
+        with self.assertRaises(ValueError):owner.replacement(prior,folder)
+        write(prior,receipt)
+        with self.assertRaises(ValueError):owner.replacement(parent,folder)
+        write(parent,dict(parent_receipt,buildSha256='f'*64))
+        with self.assertRaisesRegex(ValueError,'lineage receipt'):owner.replacement(prior,folder)
+        write(parent,parent_receipt)
+        self.assertEqual(owner.replacement(prior,folder)['protectedGame'],game)
+
+    def test_r66_clean_target_requires_only_fresh_english_and_capture_defaults(self):
+        """R66 cannot carry old profile data or substitute language, source retention or readback settings."""
+        _,_,result,_=self.create_r66_successor()
+        build,_=owner.target_package(66)
+        config=Path(result['selectedPackage']['targetDirectory'])/'User/config.json'
+        self.assertEqual(owner.check_clean_target(build),hashlib.sha256(config.read_bytes()).hexdigest())
+        cases=[owner.CLEAN_CAPTURE,dict(owner.R62_CLEAN_CAPTURE,extra=True),
+            dict(owner.R62_CLEAN_CAPTURE,otherConfig={'uiCultureInfoName':'en'}),
+            dict(owner.R62_CLEAN_CAPTURE,otherConfig={'uiCultureInfoName':'zh-CN','gameCultureInfoName':'en'}),
+            dict(owner.R62_CLEAN_CAPTURE,otherConfig={'uiCultureInfoName':'en','gameCultureInfoName':'zh-Hans'})]
+        for field,value in (('captureMode','BitBlt'),('wgcV2ReadbackMode','nonblocking'),
+                ('wgcV2SourceRetention','release-before-readback'),('wgcV2UseCpuConvert',False)):
+            cases.append(dict(owner.R62_CLEAN_CAPTURE,**{field:value}))
+        for changed in cases:
+            write(config,changed)
+            with self.subTest(config=changed),self.assertRaisesRegex(ValueError,'Unexpected target capture settings'):
+                owner.check_clean_target(build)
+
+    def test_r66_source_and_target_witnesses_retain_exact_package_identity(self):
+        """Retiring R65/R66 assets preserves replay but cannot hide changed live, partial or witness bytes."""
+        prior,folder,result,_=self.create_r66_successor()
+        self.check_source_and_target_witnesses(prior,folder,result,(65,66))
 
     def test_r65_rejects_changed_game_busy_owner_circular_or_substituted_parent(self):
         """Neither a matching new report nor the additional release can replace the original lifetime or source pins."""

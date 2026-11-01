@@ -1,5 +1,7 @@
 """Archive-only replay and mutation cases for the explicit paused-review combat protocol."""
 import copy
+import hashlib
+import tempfile
 from contextlib import nullcontext
 import json
 from pathlib import Path
@@ -137,7 +139,7 @@ class PausedReviewAuditTests(unittest.TestCase):
         """Use the actual new wrapper's clock pair; cleanup may be later, but no new dispatch may cross its cap."""
         self.produce()
         pair = self.wrapper['leaseClockPair']
-        started = pair['clientNs'] + 1
+        started = max(pair['clientNs'], self.wrapper['finalPausedReviewAdmission']['admittedAtClientNs']) + 1
         episode = dict(combatTrialGuardState=dict(startedNs=started))
         cutoff = min(pair['effectiveClientDeadlineNs'],
             pair['clientNs'] + self.wrapper['leaseDeadlineMonotonicNs'] - pair['monotonicNs'])
@@ -156,7 +158,8 @@ class PausedReviewAuditTests(unittest.TestCase):
     def test_review_age_uses_the_explicit_qpc_claim_without_mixing_monotonic_origins(self):
         """Independent clock origins remain valid, while a genuinely expired actual review is rejected."""
         self.produce()
-        episode = dict(combatTrialGuardState=dict(startedNs=self.wrapper['leaseClockPair']['clientNs'] + 1))
+        episode = dict(combatTrialGuardState=dict(startedNs=max(self.wrapper['leaseClockPair']['clientNs'],
+            self.wrapper['finalPausedReviewAdmission']['admittedAtClientNs']) + 1))
         shifted = copy.deepcopy(self.wrapper)
         for key in ('startedMonotonicNs', 'deadlineMonotonicNs'):
             shifted['hostClaim'][key] += 500_000_000_000
@@ -273,6 +276,191 @@ class PausedReviewAuditTests(unittest.TestCase):
         self.assertEqual((self.wrapper['modelLoadAttempts'], self.wrapper['modelLoads']), (1, 1))
         self.assertEqual(result['wrapperStatus'], 'failed')
         self.assertFalse(result['trialCompleteVerified'])
+
+
+class HeldClockAuditTests(unittest.TestCase):
+    """Keep source, host, lease and dispatch caps independent of admission ordering."""
+
+    def setUp(self):
+        """Use different QPC and monotonic origins and a source-clipped four-second lease."""
+        self.qpc, self.mono, self.wall = 1_000_000_000_000, 2_000_000_000_000, 3_000_000_000_000
+        self.plan = {
+            'sourceFiles': {'tools/bettergi-agent/combat_paused_file_admission.py': 'a' * 64},
+            'pausedReview': {'chain': {
+                'originalSceneDeadlineClientNs': self.qpc + 64_000_000_000,
+                'reviewedAtUnixNs': self.wall - 10_000_000_000}}}
+        self.wrapper = {
+            'hostClaim': {
+                'startedAtUnixNs': self.wall, 'startedAtClientNs': self.qpc,
+                'startedMonotonicNs': self.mono, 'deadlineMonotonicNs': self.mono + 90_000_000_000},
+            'leaseClockPair': {
+                'monotonicNs': self.mono + 60_000_000_000, 'clientNs': self.qpc + 60_000_000_000,
+                'originalSceneDeadlineClientNs': self.qpc + 64_000_000_000,
+                'effectiveClientDeadlineNs': self.qpc + 64_000_000_000},
+            'leaseDeadlineMonotonicNs': self.mono + 64_000_000_000,
+            'finalPausedReviewAdmission': {'admittedAtClientNs': self.qpc + 60_500_000_000},
+            'pausedImmutableAdmission': {
+                'version': 1, 'kind': 'per-worker-held-immutable-admission-v1',
+                'denyWriteDelete': True, 'checkpointContentHeld': False,
+                'freshHashReadRequired': True, 'consumed': True, 'closed': True, 'closeErrors': [],
+                'maximumFiles': 2304, 'maximumBytes': 384 * 1024 * 1024,
+                'maximumFileBytes': 32 * 1024 * 1024, 'fileCount': 1,
+                'immutableFiles': {'retained-source.py': 'a' * 64},
+                'freshHashBytes': 10, 'freshHashMilliseconds': 450.0}}
+        self.episode = {'combatTrialGuardState': {'startedNs': self.qpc + 61_000_000_000}}
+
+    def verify(self, events=None):
+        """Call the real auditor without altering its inputs or predicates."""
+        return audit.verify_reviewed_episode_clocks(self.plan, self.wrapper, self.episode, events)
+
+    def test_held_admission_after_pair_before_start_passes(self):
+        """A real final read may finish after sampling, while every deadline stays fixed."""
+        self.verify()
+
+    def test_historical_order_remains_unchanged(self):
+        """Old plans cannot adopt the held ordering without the archived source declaration."""
+        self.plan['sourceFiles'] = {}
+        self.wrapper.pop('pausedImmutableAdmission')
+        self.wrapper['finalPausedReviewAdmission']['admittedAtClientNs'] = self.qpc + 59_999_999_999
+        self.verify()
+        self.wrapper['finalPausedReviewAdmission']['admittedAtClientNs'] = self.qpc + 60_000_000_001
+        with self.assertRaisesRegex(ValueError, 'lease widened'):
+            self.verify()
+
+    def test_source_and_witness_cannot_be_removed_independently(self):
+        """Neither an undeclared witness nor a missing new-mode witness can pick an easier order."""
+        held = self.wrapper.pop('pausedImmutableAdmission')
+        with self.assertRaisesRegex(ValueError, 'source declaration'):
+            self.verify()
+        self.wrapper['pausedImmutableAdmission'] = held
+        self.plan['sourceFiles'] = {}
+        with self.assertRaisesRegex(ValueError, 'Historical'):
+            self.verify()
+
+    def test_held_descriptor_and_cleanup_mutations_refuse(self):
+        """A failed, partial or widened held-file phase cannot authorize the new chronology."""
+        original = copy.deepcopy(self.wrapper['pausedImmutableAdmission'])
+        mutations = {
+            'version': True, 'kind': 'unknown-held-mode', 'denyWriteDelete': False,
+            'checkpointContentHeld': True, 'freshHashReadRequired': False,
+            'consumed': False, 'closed': False, 'closeErrors': ['unretired handle'],
+            'maximumFiles': 2305, 'maximumBytes': 384 * 1024 * 1024 + 1,
+            'maximumFileBytes': 32 * 1024 * 1024 + 1, 'fileCount': 2,
+            'immutableFiles': {}, 'freshHashBytes': 0, 'freshHashMilliseconds': float('nan')}
+        for key, value in mutations.items():
+            with self.subTest(key=key):
+                self.wrapper['pausedImmutableAdmission'] = copy.deepcopy(original)
+                self.wrapper['pausedImmutableAdmission'][key] = value
+                with self.assertRaisesRegex(ValueError, 'source declaration'):
+                    self.verify()
+
+    def test_held_admission_cannot_precede_lease_sample(self):
+        """The named held flow must retain its actual sample-then-consume order."""
+        self.wrapper['finalPausedReviewAdmission']['admittedAtClientNs'] = self.qpc + 59_999_999_999
+        with self.assertRaisesRegex(ValueError, 'lease widened'):
+            self.verify()
+
+    def test_admission_must_precede_native_episode_start(self):
+        """Late admission remains invalid even if it still fits the source deadline."""
+        self.wrapper['finalPausedReviewAdmission']['admittedAtClientNs'] = self.qpc + 61_000_000_001
+        with self.assertRaisesRegex(ValueError, 'lease widened'):
+            self.verify()
+
+    def test_native_episode_cannot_start_at_original_source_expiry(self):
+        """The original scene boundary is exclusive for starting the native episode."""
+        self.episode['combatTrialGuardState']['startedNs'] = self.qpc + 64_000_000_000
+        with self.assertRaisesRegex(ValueError, 'lease widened'):
+            self.verify()
+
+    def test_source_cap_cannot_be_extended_one_nanosecond(self):
+        """Isolate the four-second source cap below the five- and ninety-second bounds."""
+        self.wrapper['leaseDeadlineMonotonicNs'] += 1
+        with self.assertRaisesRegex(ValueError, 'lease widened'):
+            self.verify()
+
+    def test_five_second_cap_cannot_be_extended_one_nanosecond(self):
+        """A later scene deadline never turns the five-second ceiling into a renewable budget."""
+        source = self.qpc + 80_000_000_000
+        self.plan['pausedReview']['chain']['originalSceneDeadlineClientNs'] = source
+        self.wrapper['leaseClockPair'].update(originalSceneDeadlineClientNs=source, effectiveClientDeadlineNs=source)
+        self.wrapper['leaseDeadlineMonotonicNs'] = self.mono + 65_000_000_000
+        self.verify()
+        self.wrapper['leaseDeadlineMonotonicNs'] += 1
+        with self.assertRaisesRegex(ValueError, 'lease widened'):
+            self.verify()
+
+    def test_ninety_second_host_cap_remains_independent(self):
+        """An earlier host deadline clips a later scene deadline and a late five-second lease."""
+        source = self.qpc + 150_000_000_000
+        self.plan['pausedReview']['chain']['originalSceneDeadlineClientNs'] = source
+        self.wrapper['leaseClockPair'].update(monotonicNs=self.mono + 89_000_000_000,
+            clientNs=self.qpc + 89_000_000_000, originalSceneDeadlineClientNs=source,
+            effectiveClientDeadlineNs=self.qpc + 90_000_000_000)
+        self.wrapper['finalPausedReviewAdmission']['admittedAtClientNs'] = self.qpc + 89_200_000_000
+        self.episode['combatTrialGuardState']['startedNs'] = self.qpc + 89_500_000_000
+        self.wrapper['leaseDeadlineMonotonicNs'] = self.mono + 90_000_000_000
+        self.verify()
+        self.wrapper['leaseDeadlineMonotonicNs'] += 1
+        with self.assertRaisesRegex(ValueError, 'lease widened'):
+            self.verify()
+
+    def test_original_review_age_is_not_renewed(self):
+        """A source-bounded lease still cannot use an over-age actual review."""
+        self.plan['pausedReview']['chain']['reviewedAtUnixNs'] -= 50_000_000_000
+        with self.assertRaisesRegex(ValueError, 'lease widened'):
+            self.verify()
+
+    def test_dispatch_cutoff_stays_exclusive_while_release_can_be_later(self):
+        """The final safe dispatch and later cleanup are distinct from a late input."""
+        cutoff = self.qpc + 64_000_000_000
+        self.verify([{'type': 'combatTrialDispatch', 'clientTimeNs': cutoff - 1},
+                     {'type': 'combatTrialRelease', 'clientTimeNs': cutoff + 1_000_000}])
+        for timestamp in (self.qpc + 61_000_000_000 - 1, cutoff, cutoff + 1):
+            with self.subTest(timestamp=timestamp), self.assertRaisesRegex(ValueError, 'dispatch exceeded'):
+                self.verify([{'type': 'combatTrialDispatch', 'clientTimeNs': timestamp}])
+
+    def test_sampling_origin_can_change_without_changing_qpc_authority(self):
+        """Do not conflate the worker monotonic deadline with QPC frame/admission clocks."""
+        shift = 500_000_000_000
+        self.wrapper['hostClaim']['startedMonotonicNs'] += shift
+        self.wrapper['hostClaim']['deadlineMonotonicNs'] += shift
+        self.wrapper['leaseClockPair']['monotonicNs'] += shift
+        self.wrapper['leaseDeadlineMonotonicNs'] += shift
+        self.verify()
+
+    def test_unknown_clock_types_refuse(self):
+        """A boolean, absent or nonintegral admission is not an observed clock."""
+        for value in (True, None, self.qpc + 60_500_000_000.5):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, 'lease widened'):
+                self.wrapper['finalPausedReviewAdmission']['admittedAtClientNs'] = value
+                self.verify()
+
+    def test_archived_held_implementation_must_match_replay_source(self):
+        """Resealing a changed helper cannot retain the new-mode interpretation."""
+        names = ('combat_trial.py', 'combat_trial_guard.py', 'stream_client.py', 'native_combat.py',
+                 'model_adapters.py', 'resident_runtime.py', 'episode_split.py', 'combat_pause_probe.py',
+                 'combat_pause_proof.py', 'combat_paused_review_proof.py', 'combat_paused_file_admission.py')
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            archive = root / 'source-snapshot/tools/bettergi-agent'
+            archive.mkdir(parents=True)
+            pins = {}
+            relative_paths = ['tools/bettergi-agent/' + name for name in names]
+            relative_paths.append('tools/quest-pilot/controller-control.py')
+            for relative in relative_paths:
+                raw = (Path(audit.__file__).parents[2] / relative).read_bytes()
+                destination = root / 'source-snapshot' / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(raw)
+                pins[relative] = hashlib.sha256(raw).hexdigest()
+            plan = {'sourceFiles': pins}
+            audit.verify_source_archive(root, plan, prepared=True, reviewed=True)
+            target = archive / 'combat_paused_file_admission.py'
+            raw = target.read_bytes() + b'\n# changed archived implementation\n'
+            target.write_bytes(raw)
+            pins['tools/bettergi-agent/combat_paused_file_admission.py'] = hashlib.sha256(raw).hexdigest()
+            with self.assertRaisesRegex(ValueError, 'Replay implementation differs'):
+                audit.verify_source_archive(root, plan, prepared=True, reviewed=True)
 
 
 if __name__ == '__main__':

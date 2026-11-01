@@ -354,6 +354,19 @@ class CombatTrialTests(unittest.TestCase):
         """Read the final immutable wrapper."""
         return json.loads((self.folder / 'patrol.json').read_bytes())
 
+    def test_legacy_plan_still_uses_complete_shared_evidence_verifier(self):
+        """The reviewed-paused optimization never redirects historical/default plan admission."""
+        self.prepare()
+        with patch.object(trial, 'verify_plan_evidence', wraps=trial.verify_plan_evidence) as common:
+            self.assertEqual(trial.verify_plan(self.plan, self.folder), self.plan['binding'])
+            common.assert_called_once_with(self.plan, self.folder)
+        self.code.write_bytes(b'corrupted legacy source')
+        with patch.object(trial, 'verify_plan_evidence', wraps=trial.verify_plan_evidence) as common:
+            with self.assertRaisesRegex(ValueError, 'Source bytes changed'):
+                trial.verify_plan(self.plan, self.folder)
+            common.assert_called_once_with(self.plan, self.folder)
+        self.assertEqual((self.loads, self.lifecycle.starts, self.episodes), (0, 0, 0))
+
     def test_success_loads_and_starts_once_and_reserves_terminal_diagnostic(self):
         """One prewarm, lease and episode retain source identity, accounting and split."""
         self.prepare()

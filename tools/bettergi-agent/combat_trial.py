@@ -877,8 +877,10 @@ def verify_reviewed_plan(plan, folder):
     link = paused_review.prepared_link(preparation_sha, bundle['readySha256'], bundle['ready']['worker'],
         plan.get('preparedPolicy', {}).get('armRequestId'), preparation['pausedReview']['chain'])
     paused_review.validate_plan(plan, preparation, link)
-    binding = verify_plan_evidence(plan, folder)
-    require(verify_reviewed_preparation(preparation, folder) == binding, 'Paused-review precheck binding changed')
+    # Exact plan/preparation equality above lets this complete fresh replay cover
+    # their shared owner, runtime, sources and review without reading them twice.
+    binding = verify_reviewed_preparation(preparation, folder)
+    require(canonical(binding) == canonical(plan['binding']), 'Paused-review precheck binding changed')
     reviewed_liveness(preparation, bundle['ready']['hostClaim'])
     return binding
 

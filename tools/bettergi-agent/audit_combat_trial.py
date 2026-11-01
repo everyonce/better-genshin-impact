@@ -734,6 +734,9 @@ def verify_source_archive(folder, plan, *, prepared=False, reviewed=False):
         implementations.append('combat_process_identity.py')
     if reviewed:
         implementations.append('combat_paused_review_proof.py')
+        # The held ordering is available only with its exact archived implementation.
+        if 'tools/bettergi-agent/combat_paused_file_admission.py' in plan['sourceFiles']:
+            implementations.append('combat_paused_file_admission.py')
     for name in implementations:
         require(plan['sourceFiles'].get('tools/bettergi-agent/' + name) == digest(bounded_file(Path(__file__).with_name(name))),
                 'Replay implementation differs from the frozen source: ' + name)
@@ -746,11 +749,39 @@ def verify_reviewed_episode_clocks(plan, wrapper, episode, events=None):
     started = (episode.get('combatTrialGuardState') or {}).get('startedNs')
     bound = min(chain['originalSceneDeadlineClientNs'], claim['startedAtClientNs'] + 90_000_000_000)
     review_age = claim['startedAtUnixNs'] - chain['reviewedAtUnixNs'] + started - claim['startedAtClientNs'] if type(started) is int else None
+    held = wrapper.get('pausedImmutableAdmission')
+    held_mode = 'tools/bettergi-agent/combat_paused_file_admission.py' in plan.get('sourceFiles', {})
+    if held_mode:
+        # This worker samples its unchanged lease before the final held-file read.
+        # Require the declared, consumed and retired capability rather than inferring
+        # the new ordering from whichever timestamps happen to fit.
+        require(isinstance(held, dict) and type(held.get('version')) is int and held['version'] == 1
+            and held.get('kind') == 'per-worker-held-immutable-admission-v1'
+            and all(held.get(key) is True for key in ('denyWriteDelete', 'freshHashReadRequired', 'consumed', 'closed'))
+            and held.get('checkpointContentHeld') is False and held.get('closeErrors') == []
+            and (held.get('maximumFiles'), held.get('maximumBytes'), held.get('maximumFileBytes'))
+                == (2304, 384 * 1024 * 1024, 32 * 1024 * 1024)
+            and type(held.get('fileCount')) is int and 0 < held['fileCount'] <= 2304
+            and isinstance(held.get('immutableFiles'), dict) and len(held['immutableFiles']) == held['fileCount']
+            and type(held.get('freshHashBytes')) is int and 0 < held['freshHashBytes'] <= 384 * 1024 * 1024
+            and type(held.get('freshHashMilliseconds')) in (int, float)
+            and math.isfinite(held['freshHashMilliseconds']) and held['freshHashMilliseconds'] >= 0,
+            'Held paused-review admission lacks its consumed and closed source declaration')
+        clock_order = (all(paused_review.positive_clock(value) for value in
+            (pair.get('clientNs'), admission.get('admittedAtClientNs'), started))
+            and pair['clientNs'] <= admission['admittedAtClientNs'] <= started)
+    else:
+        # Historical workers admit before sampling their lease; keep that order exact.
+        require('pausedImmutableAdmission' not in wrapper,
+            'Historical paused-review clocks cannot carry a held-admission witness')
+        clock_order = (all(paused_review.positive_clock(value) for value in
+            (pair.get('clientNs'), admission.get('admittedAtClientNs'), started))
+            and admission['admittedAtClientNs'] <= pair['clientNs'] <= started)
     require(all(paused_review.positive_clock(pair.get(key)) for key in
                 ('monotonicNs', 'clientNs', 'originalSceneDeadlineClientNs', 'effectiveClientDeadlineNs'))
         and pair['originalSceneDeadlineClientNs'] == chain['originalSceneDeadlineClientNs']
         and pair['effectiveClientDeadlineNs'] == bound
-        and paused_review.positive_clock(started) and admission['admittedAtClientNs'] <= pair['clientNs'] <= started < bound
+        and clock_order and started < bound
         and type(review_age) is int and 0 <= review_age <= 120_000_000_000
         and claim['startedMonotonicNs'] <= pair['monotonicNs'] < claim['deadlineMonotonicNs']
         and paused_review.positive_clock(wrapper.get('leaseDeadlineMonotonicNs'))

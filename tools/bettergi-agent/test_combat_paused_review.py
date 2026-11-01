@@ -136,6 +136,162 @@ class PausedReviewTrialTests(unittest.TestCase):
         self.assertIn('finalPausedReviewAdmission', report)
         self.assertTrue((self.folder / 'RESUME-CONSUMED.json').exists())
 
+    def inspect_reviewed_plan_before_resume(self, inspect):
+        """Inspect a genuinely armed fixture while paused, then retire without a resume or listener."""
+        self.capture_and_pause()
+        self.prepare()
+        inspected = []
+        def armed(ready):
+            """Keep every assertion inside the real readiness/arm chain, before held acquisition."""
+            self.arm(ready)
+            inspect(self.plan)
+            inspected.append(True)
+            raise ValueError('inert reviewed-plan inspection finished')
+        self.assertEqual(self.worker(arm=armed), 1, self.report().get('error'))
+        self.assertEqual(inspected, [True], self.report().get('error'))
+        self.assertEqual(self.report()['error'], 'inert reviewed-plan inspection finished')
+        self.assertEqual((self.loads, self.lifecycle.starts, self.episodes), (1, 0, 0))
+        self.assertFalse((self.folder / 'READY-TO-RESUME.json').exists())
+        self.assertTrue(self.report()['cleanupVerified'])
+
+    def assert_reviewed_file_corruption_refused(self, plan, path, *, common=True):
+        """Both shared evidence paths must reject changed bytes, including unchanged JSON meaning."""
+        path = Path(path)
+        raw, stamp = path.read_bytes(), path.stat()
+        try:
+            path.write_bytes(raw + b'\n')
+            verifiers = (trial.verify_plan_evidence, trial.verify_reviewed_plan) if common else (trial.verify_reviewed_plan,)
+            for verify in verifiers:
+                with self.subTest(file=str(path), verifier=verify.__name__):
+                    with self.assertRaises(ValueError):
+                        verify(plan, self.folder)
+        finally:
+            path.write_bytes(raw)
+            os.utime(path, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+
+    def test_reviewed_plan_uses_one_complete_preparation_replay(self):
+        """Only this exact paused format skips duplicate common I/O; its complete verifier still runs."""
+        def inspect(plan):
+            with patch.object(trial, 'verify_reviewed_preparation', wraps=trial.verify_reviewed_preparation) as full, \
+                    patch.object(trial, 'verify_plan_evidence', side_effect=AssertionError('duplicate common replay')) as common:
+                self.assertEqual(trial.verify_reviewed_plan(plan, self.folder), plan['binding'])
+            self.assertEqual(full.call_count, 1)
+            common.assert_not_called()
+        self.inspect_reviewed_plan_before_resume(inspect)
+
+    def test_reviewed_plan_keeps_original_owner_goal_and_checkpoint_refusals(self):
+        """The surviving complete replay retains identity, fixed-goal and checkpoint-stamp admission."""
+        def inspect(plan):
+            for path in (self.owner_file, self.goal, self.checkpoint):
+                self.assert_reviewed_file_corruption_refused(plan, path)
+            foreign = copy.deepcopy(fixtures.OWNER)
+            foreign['child']['processId'] += 1
+            with patch.object(trial, 'load_map_owner', return_value=foreign):
+                for verify in (trial.verify_plan_evidence, trial.verify_reviewed_plan):
+                    with self.subTest(verifier=verify.__name__), self.assertRaisesRegex(ValueError, 'owner evidence changed'):
+                        verify(plan, self.folder)
+        self.inspect_reviewed_plan_before_resume(inspect)
+
+    def test_reviewed_plan_keeps_current_and_archived_runtime_refusals(self):
+        """A changed interpreter or its retained counterpart cannot use the shared preparation proof."""
+        def inspect(plan):
+            for original, archived in plan['workerRuntime']['retained'].items():
+                self.assert_reviewed_file_corruption_refused(plan, original)
+                self.assert_reviewed_file_corruption_refused(plan, archived)
+        self.inspect_reviewed_plan_before_resume(inspect)
+
+    def test_reviewed_plan_keeps_exact_source_bytes_and_census(self):
+        """Current/archive source corruption and an additional importable module remain refusals."""
+        def inspect(plan):
+            for name in ('tools/bettergi-agent/combat_trial.py', 'tools/quest-pilot/controller-control.py'):
+                self.assert_reviewed_file_corruption_refused(plan, self.root / name)
+                self.assert_reviewed_file_corruption_refused(plan, self.folder / 'source-snapshot' / name)
+            extra = self.code.with_name('unexpected_local_import.py')
+            try:
+                extra.write_bytes(b'raise AssertionError("must never be imported")\n')
+                for verify in (trial.verify_plan_evidence, trial.verify_reviewed_plan):
+                    with self.subTest(verifier=verify.__name__), self.assertRaisesRegex(ValueError, 'Source inventory changed'):
+                        verify(plan, self.folder)
+            finally:
+                extra.unlink()
+        self.inspect_reviewed_plan_before_resume(inspect)
+
+    def test_reviewed_plan_keeps_all_original_and_archived_review_evidence(self):
+        """Every separately reviewed image, scene, sidecar, goal and review stays byte-bound."""
+        def inspect(plan):
+            for record in plan['evidence'].values():
+                self.assert_reviewed_file_corruption_refused(plan, record['path'])
+                self.assert_reviewed_file_corruption_refused(plan, record['retained'])
+        self.inspect_reviewed_plan_before_resume(inspect)
+
+    def test_reviewed_plan_keeps_both_pause_proofs_and_capture_chain(self):
+        """The complete preparation still independently replays both historical UI proofs and their chain."""
+        def inspect(plan):
+            for record in (self.preparation['pause'], self.preparation['pausedReview']['baselinePause']):
+                original = str(Path(record['directory']) / 'after.json')
+                self.assert_reviewed_file_corruption_refused(plan, original, common=False)
+                self.assert_reviewed_file_corruption_refused(plan, record['retained'][original], common=False)
+            for record in self.preparation['pausedReview']['records'].values():
+                self.assert_reviewed_file_corruption_refused(plan, record['path'], common=False)
+                self.assert_reviewed_file_corruption_refused(plan, record['retained'], common=False)
+        self.inspect_reviewed_plan_before_resume(inspect)
+
+    def test_reviewed_plan_refuses_substitution_before_shared_replay(self):
+        """The optimization applies only after exact preparation, scope, policy and phase-link equality."""
+        def inspect(plan):
+            replacements = {name: None for name in proof.COMMON_PLAN_FIELDS}
+            replacements.update(version=True, kind='combat-trial-plan-v1', combatScope='single-enemy-v1',
+                maximumEnemyBarCandidates=3, maximumHostSeconds=91, maximumReviewAgeSeconds=121,
+                recordingMaximumBytes=160 * 1024 * 1024 + 1, policy={}, binding={}, evidence={},
+                preparedPolicy={}, pausedReview={})
+            for name, value in replacements.items():
+                changed = copy.deepcopy(plan)
+                changed[name] = value
+                with self.subTest(field=name), \
+                        patch.object(trial, 'verify_reviewed_preparation', side_effect=AssertionError('equality was bypassed')):
+                    with self.assertRaises(ValueError):
+                        trial.verify_reviewed_plan(changed, self.folder)
+        self.inspect_reviewed_plan_before_resume(inspect)
+
+    def test_reviewed_plan_keeps_original_stop_and_scene_deadline(self):
+        """Removing duplicate immutable reads cannot renew the source clock or ignore a current STOP."""
+        def inspect(plan):
+            stop = self.folder / 'STOP'
+            try:
+                stop.write_text('inert stop', encoding='utf-8')
+                with self.assertRaisesRegex(ValueError, 'was stopped'):
+                    trial.verify_reviewed_plan(plan, self.folder)
+            finally:
+                stop.unlink()
+            offset = self.clock_offset
+            try:
+                self.clock_offset = self.preparation['pausedReview']['chain']['originalSceneDeadlineClientNs'] + 1 - self.qpc_ns
+                with self.assertRaisesRegex(ValueError, 'Native reviewed scene is stale or future-dated'):
+                    trial.verify_reviewed_plan(plan, self.folder)
+            finally:
+                self.clock_offset = offset
+        self.inspect_reviewed_plan_before_resume(inspect)
+
+    def test_reviewed_plan_preserves_canonical_binding_types(self):
+        """Python-equal boolean/integer/float substitutions still differ from the exact reviewed binding."""
+        def inspect(plan):
+            mutations = (('goalFrozen', 1), ('retryAllowed', 0), ('maximumOutstandingActions', True))
+            candidates = []
+            for key, value in mutations:
+                changed = copy.deepcopy(plan)
+                changed['binding']['policy'][key] = value
+                candidates.append((key, changed))
+            changed = copy.deepcopy(plan)
+            changed['binding']['inspectedVisibleEnemyCount'] = float(plan['binding']['inspectedVisibleEnemyCount'])
+            candidates.append(('inspectedVisibleEnemyCount', changed))
+            for field, changed in candidates:
+                self.assertEqual(changed['binding'], plan['binding'])
+                self.assertNotEqual(canonical(changed['binding']), canonical(plan['binding']))
+                for verify in (trial.verify_plan_evidence, trial.verify_reviewed_plan):
+                    with self.subTest(field=field, verifier=verify.__name__), self.assertRaises(ValueError):
+                        verify(changed, self.folder)
+        self.inspect_reviewed_plan_before_resume(inspect)
+
     def test_original_baseline_is_not_replaced_by_later_pause_health(self):
         """Normal damage after capture cannot reverse the original-baseline no-increase comparison."""
         self.capture_and_pause(later_pause_health=self.baseline_health - 500)

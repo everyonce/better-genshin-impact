@@ -608,3 +608,21 @@ python tools/bettergi-agent/audit_combat_trial.py --trial $newTrial --output $ne
 ```
 
 `combat_trial.py stop --plan "$newTrial/plan.json"` stops that consumed trial. Its plan cannot be reused. The ordinary RDP worker retains the original sources, review, exact policy RGB, proposals, admissions, terminal receipts and releases. Thermal/telemetry/owner checks stay active during loading; an uncertain start remains unresolved. Any recording loss prevents completion. The replay checks every guard transition and exact source/response joins; three drained pulses establish only the bounded transport trial, not enemy damage or a kill. All completed and failed trial recordings remain diagnostic-only.
+
+### Reviewed encounter approach
+
+`encounter_approach.py` gives the existing native navigator one movement-only approach before a separate combat review. It requires a fresh passive `capture_scout_scene.py --anchor X Y` capture using `mondstadt-combat-scout-v1`; `--inspect-current` images cannot authorize movement. Inspect the actual selected image and a clear surface corridor before creating an `encounter-approach-review-v1` review with the exact `policy()`, owner, image hash, HP/max HP, visible enemy count, two-point route, inspection note, `clearSurfaceCorridor: true`, `fenceOpeningReviewed: true` and `attacksAllowed: false`.
+
+The fixed route is longer than four and no longer than six coordinate units. It has a one-unit dispatch corridor, a ten-second lease including listener setup, at most 80 serial actions, and 50 ms nominal horizons. Actions contain only W or horizontal camera correction. Fresh WGC pose, world, ground-control and green-health evidence are required; a two-percentage-point health loss, stale source, excess candidates, extended target absence, blocked progress or changed ownership stops the attempt. The 150 ms limit is enforced at client dispatch and through the explicit native start deadline. No obstacle recovery, attack or model load occurs in this phase.
+
+Use the base Python selected by the installed runtime:
+
+```powershell
+& $basePython tools/bettergi-agent/encounter_approach.py prepare `
+  --output $newApproach --review $approachReview --scene $freshAnchoredCapture --owner-from $ownerLineage
+& $basePython tools/bettergi-agent/encounter_approach.py verify --plan "$newApproach/plan.json"
+```
+
+After inspecting that sealed plan, `launch --plan "$newApproach/plan.json"` consumes it once and uses the existing ordinary RDP broker. The original image/review expires after 120 seconds, including setup. Creating `STOP` in the attempt directory cancels it. `audit_encounter_approach.py --plan "$newApproach/plan.json" --output $newAudit` checks the retained source, RGB, controller transitions, receipts, deadlines and cleanup offline.
+
+Arrival requires an explicit release and stable fresh endpoint samples. It establishes bounded coordinate progress; physical footing, hardware input delivery, enemy identity, melee range and combat success remain unproven. A new passive image and separate combat review are required afterward. Failed recordings remain failed and diagnostic-only.

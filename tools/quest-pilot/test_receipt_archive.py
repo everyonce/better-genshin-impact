@@ -2,6 +2,8 @@
 import importlib.util
 import json
 import os
+import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -81,6 +83,152 @@ class ReceiptArchiveTests(unittest.TestCase):
     def fingerprints(self, directory):
         return {p.relative_to(directory).as_posix(): subject._digest(p)
                 for p in directory.rglob("*") if p.is_file()}
+
+    @classmethod
+    def actual_native_inventory(cls, ui_only=False):
+        """Use the real JS adapter/engine with synthetic platform boundaries, never a game process."""
+        if not hasattr(cls, "_actual_native_fixtures"):
+            cls._actual_native_fixtures = {}
+        if ui_only not in cls._actual_native_fixtures:
+            checkout = Path(__file__).resolve().parents[2]
+            producer = checkout / "Test" / "ActOnePilot" / "observation-capture-provenance.test.cjs"
+            node = shutil.which("node")
+            if node is None:
+                raise RuntimeError("Node.js is required for the actual observer/archive integration fixture")
+            mode = "--emit-native-inventory-ui" if ui_only else "--emit-native-inventory"
+            completed = subprocess.run([node, str(producer), mode],
+                cwd=checkout, capture_output=True, text=True, encoding="utf-8", timeout=15, check=True)
+            cls._actual_native_fixtures[ui_only] = json.loads(completed.stdout)
+        return json.loads(json.dumps(cls._actual_native_fixtures[ui_only]))
+
+    def retain_actual_native_inventory(self, fixture):
+        """Keep the emitted request/receipt/current/immutable joins in this test's isolated directory."""
+        observed, receipt = fixture["observation"], fixture["receipt"]
+        self.status.update(session=observed["session"], frameId=observed["frameId"])
+        self.put_json(self.root / "request.json", fixture["request"])
+        self.put_json(self.root / "receipts" / receipt["session"] / (receipt["id"] + ".json"), receipt)
+        self.put_json(self.root / "observation.json", observed)
+        frame_path = self.root / "observations" / observed["session"] / f"frame-{observed['frameId']:04d}.json"
+        self.put_json(frame_path, fixture["immutableObservation"])
+        screenshot = self.root / observed["screenshotPath"]
+        screenshot.parent.mkdir(parents=True, exist_ok=True)
+        screenshot.write_bytes(b"synthetic fixture pixels; no native capture or delivery claim")
+        self.write_status()
+
+    def test_actual_native_completed_inventory_archives_with_original_stamp(self):
+        fixture = self.actual_native_inventory()
+        self.retain_actual_native_inventory(fixture)
+        self.assertEqual(fixture["receipt"]["status"], "completed")
+        self.assertNotIn("uiObservation", fixture["observation"])
+        self.assertNotIn("capturedAt", fixture["observation"])
+        active_before = self.fingerprints(self.root / "receipts" / "active")
+        evidence_before = self.fingerprints(self.root / "observations")
+        result = self.run_maintenance()
+        self.assertEqual(result["status"], "archived")
+        stamp = fixture["observation"]["hud"]["captureStamp"]
+        self.assertEqual(result["pauseBoundary"]["originalCaptureAt"], stamp["capturedAt"])
+        self.assertEqual(result["pauseBoundary"]["originalObservationAt"], fixture["observation"]["timestamp"])
+        self.assertEqual(self.fingerprints(self.root / "receipts" / "active"), active_before)
+        self.assertEqual(self.fingerprints(self.root / "observations"), evidence_before)
+
+    def test_actual_native_ui_inventory_requires_matching_original_clocks(self):
+        fixture = self.actual_native_inventory(ui_only=True)
+        observed = fixture["observation"]
+        stamp = observed["hud"]["captureStamp"]
+        self.assertEqual(stamp["capturedAt"], observed["uiObservation"]["observationStartedAtUnixMs"])
+        self.retain_actual_native_inventory(fixture)
+        result = self.run_maintenance()
+        self.assertEqual(result["status"], "archived")
+        self.assertEqual(result["pauseBoundary"]["originalCaptureAt"], stamp["capturedAt"])
+
+    def test_actual_native_ui_contradictory_stamp_defers(self):
+        fixture = self.actual_native_inventory(ui_only=True)
+        fixture["observation"]["hud"]["captureStamp"]["capturedAt"] += 1
+        fixture["immutableObservation"] = json.loads(json.dumps(fixture["observation"]))
+        self.retain_actual_native_inventory(fixture)
+        before = self.fingerprints(self.root / "receipts")
+        self.assertEqual(self.run_maintenance()["status"], "deferred_until_inventory_pause")
+        self.assertEqual(self.fingerprints(self.root / "receipts"), before)
+        self.assertFalse(self.archive.exists())
+
+    def test_actual_native_missing_malformed_or_wrong_capture_join_defers(self):
+        mutations = (
+            lambda row: row["hud"].pop("captureStamp"),
+            lambda row: row["hud"].update(captureStamp=None),
+            lambda row: row["hud"]["captureStamp"].update(session="foreign"),
+            lambda row: row["hud"]["captureStamp"].update(frameId=99),
+            lambda row: row["hud"]["captureStamp"].update(frameId=True),
+            lambda row: row["hud"]["captureStamp"].update(source="publication-time"),
+            lambda row: row["hud"]["captureStamp"].update(capturedAt=True),
+            lambda row: row["hud"]["captureStamp"].update(capturedAt="999000"),
+            lambda row: row["hud"]["captureStamp"].update(capturedAt=999000.0),
+            lambda row: row["hud"]["captureStamp"].update(capturedAt=1),
+            lambda row: row["hud"]["captureStamp"].update(capturedAt=row["timestamp"] + 1),
+        )
+        for index, mutate in enumerate(mutations):
+            with self.subTest(mutation=index):
+                fixture = self.actual_native_inventory()
+                mutate(fixture["observation"])
+                fixture["immutableObservation"] = json.loads(json.dumps(fixture["observation"]))
+                self.retain_actual_native_inventory(fixture)
+                before = self.fingerprints(self.root / "receipts")
+                self.assertEqual(self.run_maintenance()["status"], "deferred_until_inventory_pause")
+                self.assertEqual(self.fingerprints(self.root / "receipts"), before)
+                self.assertFalse(self.archive.exists())
+
+    def test_actual_native_immutable_stamp_mismatch_defers(self):
+        fixture = self.actual_native_inventory()
+        fixture["immutableObservation"]["hud"]["captureStamp"]["capturedAt"] += 1
+        self.retain_actual_native_inventory(fixture)
+        before = self.fingerprints(self.root / "receipts")
+        self.assertEqual(self.run_maintenance()["status"], "deferred_until_inventory_pause")
+        self.assertEqual(self.fingerprints(self.root / "receipts"), before)
+        self.assertFalse(self.archive.exists())
+
+    def test_actual_native_stamp_does_not_make_noninventory_eligible(self):
+        mutations = (
+            lambda row: row["hud"].update(world=True),
+            lambda row: row["hud"].update(health={"current": 100, "max": 100}),
+            lambda row: row["hud"].update(dialogueReady=True),
+            lambda row: row.update(ocr=[item for item in row["ocr"] if item["text"] != "Food"]),
+        )
+        for index, mutate in enumerate(mutations):
+            with self.subTest(mutation=index):
+                fixture = self.actual_native_inventory()
+                mutate(fixture["observation"])
+                fixture["immutableObservation"] = json.loads(json.dumps(fixture["observation"]))
+                self.retain_actual_native_inventory(fixture)
+                before = self.fingerprints(self.root / "receipts")
+                self.assertEqual(self.run_maintenance()["status"], "deferred_until_inventory_pause")
+                self.assertEqual(self.fingerprints(self.root / "receipts"), before)
+                self.assertFalse(self.archive.exists())
+
+    def test_actual_native_caller_defers_after_archive_before_uuid_or_write(self):
+        self.retain_actual_native_inventory(self.actual_native_inventory())
+        spec = importlib.util.spec_from_file_location("native_stamp_archive_command", Path(__file__).with_name("act-one-command.py"))
+        command = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(command)
+        command._receipt_archive_module = subject
+        inventory = subject._inventory(self.root / "receipts")
+        def inventory_pressure(path):
+            count, size, candidates = inventory if (self.root / "receipts" / "closed").exists() else (1, 1, [])
+            return (3000 if count > 1 else count), size, candidates
+        argv = ["candidate", "questStep", "--step", "natlanStoryDainBattle", "--session", "active",
+                "--frame", str(self.status["frameId"]), "--expected-windows-session-id", "2", "--compact"]
+        with patch.object(sys, "argv", argv), patch.object(command, "ROOT", self.root), \
+             patch.object(command, "require_live_controller", return_value=self.status), \
+             patch.object(subject, "_inventory", side_effect=inventory_pressure), \
+             patch.object(command.uuid, "uuid4") as identity, patch.object(command, "atomic") as writing, \
+             patch("builtins.print") as printing:
+            command.main()
+            identity.assert_not_called()
+            writing.assert_not_called()
+            result = json.loads(printing.call_args_list[-1].args[0])
+        self.assertEqual(result["status"], "deferred")
+        self.assertEqual(result["nextAction"], "observe")
+        self.assertFalse(result["requestSubmitted"])
+        self.assertTrue((self.root / "receipts" / "active").exists())
+        self.assertFalse((self.root / "receipts" / "closed").exists())
 
     def native_ui_observation(self):
         """Match engine.observe's serialized fields and bgi's UI-only provenance."""

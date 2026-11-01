@@ -8814,6 +8814,9 @@ function createActOneAdapter(sessionId,options) {
                     pngWaitMs=Date.now()-wait0;pngMs=pngScheduleMs+pngWaitMs;
                     if(!pngResult.saved){var blocked=new Error('PNG write failed: capture storage is blocked'+(pngResult.error?': '+pngResult.error:''));blocked.code='CAPTURE_STORAGE_BLOCKED';throw blocked;}
                 }
+                // Preserve this invocation's capture start through engine HUD serialization.
+                // This is neither compositor acquisition time nor evidence of physical input delivery.
+                hud.captureStamp = { session: session, frameId: frame, capturedAt: t0, source: 'game-capture-start' };
                 lastObservation = { session: session, frameId: frame, timestamp: Date.now(), capturedAt: t0, screenshotPath: png, ocr: rows, map: trackQuest ? null : pos, mapDiagnostic:mapDiagnostic, hud: hud,
                     // ocrMs is a legacy cumulative window and can overlap later PNG/map work on fallback paths.
                     // ocrFindMultiMs times only OCR findMulti calls; it excludes image preparation and postprocessing.

@@ -1,5 +1,6 @@
 """Submit one bounded mission to the BetterGI RDP controller; never replay on timeout."""
 import argparse
+import importlib.util
 import hashlib
 import json
 import math
@@ -395,6 +396,27 @@ def compact_terminal(submitted_id, receipt, observation, screenshot):
     }
 
 
+CALLER_SOURCE_SHA256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+_receipt_archive_module = None
+
+
+def maintain_receipts_for_controller(root, heartbeat):
+    """Archive historical receipts only after owner validation and before a new lease."""
+    global _receipt_archive_module
+    if _receipt_archive_module is None:
+        path = Path(__file__).with_name('receipt_archive.py')
+        spec = importlib.util.spec_from_file_location('act_one_receipt_archive', path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _receipt_archive_module = module
+    archive = root.parents[3] / 'receipt-archives'
+    result = _receipt_archive_module.maintain(
+        root, archive, heartbeat['session'], heartbeat['processId'], heartbeat['windowsSessionId'])
+    result['helperSourceSha256'] = _receipt_archive_module.SOURCE_SHA256
+    result['callerSourceSha256'] = CALLER_SOURCE_SHA256
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('mission', choices=['observe', 'stop', 'keyPress', 'look', 'navigation', 'dialogue', 'combat', 'recover', 'questStep', 'cancel'])
@@ -446,6 +468,29 @@ def main():
                                                        allow_faulted=fault_recovery_command)
     except RuntimeError as exc:
         raise SystemExit(str(exc)) from exc
+    maintenance = None
+    if args.mission != 'stop' and controller_heartbeat.get('state') == 'idle':
+        try:
+            maintenance = maintain_receipts_for_controller(ROOT, controller_heartbeat)
+            if maintenance.get('status') == 'archived':
+                # Recheck the original session/frame after maintenance; do not
+                # renew capture timestamps or mint an ID/lease before this point.
+                observation = read(ROOT / 'observation.json')
+                if observation['session'] != args.session or observation['frameId'] != args.frame:
+                    raise RuntimeError('Session/frame changed during receipt maintenance; inspect the current observation.')
+                controller_heartbeat = require_live_controller(
+                    ROOT, args.session, args.frame, args.expected_windows_session_id,
+                    allow_faulted=fault_recovery_command)
+                print(json.dumps({'receiptMaintenance': maintenance}), flush=True)
+                if args.mission != 'observe':
+                    print(json.dumps({'status': 'deferred', 'session': args.session,
+                                      'frameId': args.frame, 'mission': args.mission,
+                                      'requestSubmitted': False, 'nextAction': 'observe',
+                                      'reason': 'Receipt archival completed. Obtain a fresh observation and decide again; the original action was not submitted.',
+                                      'receiptMaintenance': maintenance}), flush=True)
+                    return
+        except (OSError, ValueError, RuntimeError) as exc:
+            raise SystemExit(f'Receipt maintenance blocked before request creation: {exc}') from exc
     request = dict(session=args.session, expectedFrameId=args.frame,
                    id='mission-' + uuid.uuid4().hex, createdAt=int(time.time() * 1000), mission=args.mission)
     if args.mission == 'keyPress':
@@ -551,6 +596,7 @@ def main():
                 terminal['latestFrameId'] = latest_frame
                 terminal['controllerState'] = settled['controllerState']
                 terminal['controllerQuiescent'] = settled['controllerQuiescent']
+                terminal['receiptMaintenance'] = maintenance
                 print(json.dumps(terminal))
             else:
                 print(json.dumps(receipt))

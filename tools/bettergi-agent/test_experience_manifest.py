@@ -2,6 +2,7 @@
 from pathlib import Path
 import json
 import subprocess
+import shutil
 import tempfile
 import unittest
 
@@ -123,16 +124,21 @@ class ActionProvenanceTests(unittest.TestCase):
 class OriginalVideoCoverageTests(unittest.TestCase):
     """An encoded index cannot stand in for frames missing from the actual video file."""
     def test_real_decoder_requires_exact_frame_count_and_dimensions(self):
+        # Reuse installed tools, matching the recorder tests; never install a decoder for a unit test.
+        ffmpeg = shutil.which('ffmpeg') or ('C:/Programs/ffmpeg.exe' if Path('C:/Programs/ffmpeg.exe').is_file() else None)
+        ffprobe = shutil.which('ffprobe') or ('C:/Programs/ffprobe.exe' if Path('C:/Programs/ffprobe.exe').is_file() else None)
+        if not ffmpeg or not ffprobe:
+            self.skipTest('Existing FFmpeg and FFprobe are required for original-video decoding')
         with tempfile.TemporaryDirectory() as folder:
             path=Path(folder)/'two-frames.mp4'
-            subprocess.run(['C:/Programs/ffmpeg.exe','-nostdin','-v','error','-f','rawvideo','-pixel_format','rgb24',
+            subprocess.run([ffmpeg,'-nostdin','-v','error','-f','rawvideo','-pixel_format','rgb24',
                 '-video_size','192x192','-framerate','12','-i','pipe:0','-c:v','libx264','-threads','1',str(path)],
                 input=b''.join(bytes([value])*(192*192*3) for value in (40,180)),capture_output=True,check=True,timeout=30)
             index=[dict(width=192,height=192,videoPtsSeconds=i/12) for i in range(2)]
-            self.assertEqual(verify_video(path,index)['decodedFrames'],2)
+            self.assertEqual(verify_video(path,index,ffprobe=ffprobe)['decodedFrames'],2)
             with self.assertRaisesRegex(ValueError,'truncated'):
-                verify_video(path,index+[index[0]])
+                verify_video(path,index+[index[0]],ffprobe=ffprobe)
             with self.assertRaisesRegex(ValueError,'coverage'):
-                verify_video(path,[dict(row,width=64,height=64) for row in index])
+                verify_video(path,[dict(row,width=64,height=64) for row in index],ffprobe=ffprobe)
             with self.assertRaisesRegex(ValueError,'timestamps'):
-                verify_video(path,[dict(row,videoPtsSeconds=2) for row in index])
+                verify_video(path,[dict(row,videoPtsSeconds=2) for row in index],ffprobe=ffprobe)

@@ -1,0 +1,13 @@
+# Receipt reliability helpers
+
+receipt_archive.py maintains closed receipt sessions with preserved provenance and bounded native capacity. Its caller integration must run after verified sole-owner admission and before request IDs, timestamps or leases are created. Active/current-request sessions are protected. Long maintenance defers gameplay until a new observation and decision; it does not refresh an old capture timestamp.
+
+Archive admission currently supports native inventoryUiOnlyV1 observations with explicit capture-start provenance, or older observations with a valid same-frame hud.captureStamp. Default full-map observations omit that provenance and refuse archival when maintenance is required; supporting them needs a separately reviewed producer change. Capture times are never inferred from completion times.
+
+Archival can take substantial time. One Windows fixture with mocked native ownership archived 2,191 of 4,095 receipt files in 71.649 seconds; the next call over 1,904 files required no maintenance and took 38.617 milliseconds. These measurements exclude fixture setup and cleanup and are not live gameplay latency results. The caller therefore defers gameplay after archival and requires a new observation and decision.
+
+receipt_rollover.py is an inactive, dependency-injected state machine. It has no live adapter or command-line entry point and cannot perform game lifecycle operations by itself. Its startup counterpart and production adapter are not implemented in this package. Passing its isolated tests does not establish live rollover or latency benefit.
+
+The owner adapter must preserve same-user/PID/Windows-session/process-lifetime/instance-nonce checks and actual request/final receipt provenance. The one-use successor must use the native base-session format. Old requests are suppressed exactly; historical receipts are retained. A delayed restart requires independently verified menu continuity through exit, native triggers and startup, while original capture timestamps remain unchanged. Ordinary input freshness remains at most five seconds. Unknown effects are reconciled before retries.
+
+Run the portable rollover tests from this directory with `python -B -m unittest -v test_receipt_rollover`. Fixtures use synthetic identities and the system temporary directory, or BETTERGI_TEST_TMP when explicitly provided. One bounded child fixture proves OS lock release by exiting itself abruptly; it never touches a game workload. Archive tests use RECEIPT_ARCHIVE_TEST_TMP when provided. Native game services and credentials are not required for these isolated tests.

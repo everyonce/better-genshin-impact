@@ -23,6 +23,36 @@ PROFILE = 'p2p-native-hamming-192-v1'
 SINGLE_SCOPE = 'single-enemy-v1'
 GROUP_SCOPE = 'reviewed-group-up-to-three-v1'
 FOUR_SCOPE = 'reviewed-group-up-to-four-v1'
+# A separately reviewed policy permits one released freshness interruption, never an action retry.
+STALE_RECOVERY_MODE = 'released-source-stale-once-v1'
+STALE_RELEASE_REASON = 'sourceStaleReacquisition'
+
+
+def stale_recovery_policy():
+    """Return the fixed opt-in descriptor without widening any attack or lifetime bound."""
+    return dict(kind=STALE_RECOVERY_MODE, maximumRecoveries=1, confirmationSources=2,
+                postReleaseDelayMs=60, resetsDeadlines=False, reacquisitionResetsHistory=False,
+                existingAcceptanceGapHistoryResetMs=500)
+
+
+def source_stale_recovery_enabled(value):
+    """Require an exact explicit descriptor; null, tunable values and older scopes cannot opt in."""
+    policy = value.get('policy') if isinstance(value, dict) else None
+    require(isinstance(policy, dict), 'Missing combat policy')
+    if 'sourceStaleRecoveryPolicy' not in policy:
+        return False
+    require(combat_scope(value) == FOUR_SCOPE
+            and canonical(policy['sourceStaleRecoveryPolicy']) == canonical(stale_recovery_policy()),
+            'Invalid explicit combat stale-source recovery policy')
+    return True
+
+
+def validated_trial_policy(value):
+    """Join the named scope and optional recovery to every unchanged fixed policy field."""
+    result = trial_policy(combat_scope(value), source_stale_recovery=source_stale_recovery_enabled(value))
+    require(canonical(value.get('policy')) == canonical(result), 'Combat policy differs from its fixed bounds')
+    return result
+
 # Only these named reviewed experiments exist; a request cannot tune a numeric cap.
 SCOPE_MAXIMUMS = MappingProxyType({SINGLE_SCOPE: 1, GROUP_SCOPE: 3, FOUR_SCOPE: 4})
 
@@ -63,7 +93,7 @@ def inspected_count(value, scope):
     return count
 
 
-def trial_policy(scope=SINGLE_SCOPE):
+def trial_policy(scope=SINGLE_SCOPE, *, source_stale_recovery=False):
     """Return a named fixed scope; both earlier policies remain byte-for-byte unchanged."""
     result = dict(version=1, maximumSeconds=5, maximumActions=3, maximumSourceAgeMs=150,
                 minimumHoldMs=33, maximumHoldMs=100, stopTemperatureC=78,
@@ -75,6 +105,10 @@ def trial_policy(scope=SINGLE_SCOPE):
     if scope_fields(scope):
         result.update(version=2, requireSingleEnemyBarCandidate=False, minimumEnemyBarCandidates=1,
                       **scope_fields(scope))
+    require(type(source_stale_recovery) is bool, 'Combat recovery opt-in must be boolean')
+    if source_stale_recovery:
+        require(scope == FOUR_SCOPE, 'Combat stale-source recovery requires the reviewed four-enemy scope')
+        result.update(version=3, sourceStaleRecoveryPolicy=stale_recovery_policy())
     return result
 
 
@@ -105,11 +139,13 @@ def retained(value):
     return repr(value)
 
 
-def sensor_frame(frame):
+def sensor_frame(frame, *, source_stale_recovery=False):
     """Retain source, readiness and HUD proof without copying policy pixels or unrelated telemetry."""
     keys = ('type', 'frameId', 'capturedAtMs', 'sourceWidth', 'sourceHeight', 'sourceFrame',
             'sourceTimestampKind', 'sourceFrameAgeMs', 'serverNowMs', 'droppedReceipts', 'combatEvidence', 'frameWorldReadiness',
             'worldReadiness', 'inputAvailable')
+    if source_stale_recovery:
+        keys += ('receipts', 'executionContext')
     return retained({key: frame[key] for key in keys if key in frame}) if isinstance(frame, dict) else retained(frame)
 
 
@@ -153,7 +189,7 @@ def bind_review(review_bytes, plan_bytes, scene_bytes, sidecar_bytes, image_byte
     visible_count = inspected_count(review, scope)
     require(review.get('kind') == REVIEW_KIND and review.get('sceneLabel') == 'enemy-visible'
             and review.get('attacksAllowed') == ['LBUTTON']
-            and canonical(review.get('policy')) == canonical(trial_policy(scope)), 'Missing separate bounded combat authority')
+            and canonical(review.get('policy')) == canonical(validated_trial_policy(review)), 'Missing separate bounded combat authority')
     note = review.get('inspectionNote')
     require(isinstance(note, str) and 20 <= len(note.strip()) <= 2000, 'Combat review needs an inspection note')
     hp, maximum = review.get('inspectedHealth'), review.get('inspectedMaximumHealth')
@@ -197,7 +233,7 @@ def bind_review(review_bytes, plan_bytes, scene_bytes, sidecar_bytes, image_byte
             and finite(frame.get('sourceFrameAgeMs')) and 0 <= frame['sourceFrameAgeMs'] < 150
             and frame.get('inputAvailable') is True and frame.get('frameWorldReadiness', {}).get('ready') is True,
             'Reviewed combat image lacks fresh world evidence')
-    binding = dict(kind=KIND, policy=trial_policy(scope), owner=owner, inspectedHealth=hp,
+    binding = dict(kind=KIND, policy=validated_trial_policy(review), owner=owner, inspectedHealth=hp,
                    inspectedMaximumHealth=maximum, baselineHealthFraction=hp / maximum,
                    reviewedFrame=sensor_frame(frame), imageName=review['imageName'], **scope_fields(scope))
     if visible_count is not None:
@@ -213,7 +249,7 @@ def validate_binding(binding):
     visible_count = inspected_count(binding, scope)
     maximum_candidates = scope_maximum(scope)
     require(binding.get('kind') == KIND
-            and canonical(binding.get('policy')) == canonical(trial_policy(scope)), 'Invalid combat trial binding')
+            and canonical(binding.get('policy')) == canonical(validated_trial_policy(binding)), 'Invalid combat trial binding')
     validate_owner(binding.get('owner'))
     hp, maximum = binding.get('inspectedHealth'), binding.get('inspectedMaximumHealth')
     require(type(hp) is int and type(maximum) is int and 0 < hp <= maximum
@@ -274,6 +310,8 @@ class CombatTrialGuard:
         self._last_frame_id = 0
         self._world_epoch = None
         self._completed, self._requests = [], set()
+        self._stale_recovery_enabled = source_stale_recovery_enabled(binding)
+        self._stale_recovery = dict(policy=stale_recovery_policy(), used=0, pending=None, completed=[], existingHistoryResets=[])
         self._frames = OrderedDict()
 
     def _identity(self, owner, hello):
@@ -290,13 +328,16 @@ class CombatTrialGuard:
     def snapshot(self):
         """Return detached terminal accounting; completion is not a damage or kill claim."""
         with self.intake_lock:
-            return copy.deepcopy(dict(bindingSha256=self._sha, phase=self._phase, reason=self._reason,
+            result = dict(bindingSha256=self._sha, phase=self._phase, reason=self._reason,
                 armed=self._armed, evidenceReady=self._eligible, startedNs=self._started, deadlineNs=self._deadline,
                 lease=self._hello, acceptedActions=self._accepted, completedActions=len(self._completed),
                 confirmationSources=self._sources, pending=self._pending, completed=self._completed,
                 lastObservation=self._last, lastRelease=self._release, trip=self._trip,
                 trialComplete=self._phase == 'complete', enemyIdentityVerified=False,
-                damageVerified=False, killVerified=False))
+                damageVerified=False, killVerified=False)
+            if self._stale_recovery_enabled:
+                result['sourceStaleRecovery'] = self._stale_recovery
+            return copy.deepcopy(result)
 
     def _event(self, kind, now_ns, **data):
         """Attach the immutable authority digest and current state to replayable evidence."""
@@ -345,11 +386,171 @@ class CombatTrialGuard:
         """Use the first receipt time plus full measured transport cost, never refresh a cached source."""
         return observation['ageAtReceiptMs'] + (now_ns - observation['clientTimeNs']) / 1e6 + observation['roundTripMs']
 
+    def _stale_source_transition(self, frame, now_ns):
+        """Latch one proven, released source-age interruption; never adopt an unexplained epoch."""
+        if not self._stale_recovery_enabled:
+            return
+        current, gate = frame.get('worldReadiness'), frame.get('frameWorldReadiness')
+        if not isinstance(current, dict) or not isinstance(gate, dict):
+            require(self._stale_recovery['pending'] is None, 'Combat reacquisition lost native readiness evidence')
+            return
+        pending = self._stale_recovery['pending']
+        if pending is not None or current.get('reason') == 'world_observation_stale':
+            require(frame.get('receipts') == [], 'Combat stale-source observation contains an unexpected receipt')
+            context = frame.get('executionContext')
+            if context is not None:
+                require(isinstance(context, dict) and context.get('active', 'missing') is None
+                        and (context.get('trackedState') or {}).get('heldKeys') == []
+                        and context.get('telemetryComplete') is True and context.get('evictedEvents') == 0,
+                        'Combat stale-source observation contradicts drained input accounting')
+        if pending is not None:
+            trigger_source = pending['trigger']['frame']['sourceFrame']
+            source = frame.get('sourceFrame') or {}
+            require(source.get('captureEpoch') == trigger_source['captureEpoch']
+                    and (current.get('sourceFrame') or {}).get('captureEpoch') == trigger_source['captureEpoch']
+                    and type(source.get('timestamp100ns')) is int
+                    and source['timestamp100ns'] >= trigger_source['timestamp100ns']
+                    and finite(source.get('freshnessAtMs'))
+                    and source['freshnessAtMs'] >= trigger_source['freshnessAtMs'],
+                    'Combat reacquisition changed its original capture source')
+            expected = (pending['release']['response']['worldReadiness']['epoch'] if pending.get('release')
+                        else pending['trigger']['frame']['worldReadiness']['epoch'])
+            require(current.get('epoch') == expected, 'Combat reacquisition epoch changed without its release')
+            require(type(frame.get('inputAvailable')) is bool, 'Combat reacquisition input availability is unknown')
+            # A later native availability sample can expose focus loss before either readiness snapshot updates.
+            if current.get('ready') is True and gate.get('ready') is True and gate.get('epoch') == expected:
+                require(frame['inputAvailable'], 'Combat reacquisition lost input availability despite positive readiness')
+            # Native confirmation and our own acknowledged release carry no input authority.
+            allowed = ('world_ready', 'world_confirming', 'client_release', 'world_observation_invalidated') if pending.get('release') else (
+                'world_observation_stale', 'world_confirming', 'world_ready')
+            require(current.get('reason') in allowed, 'Combat reacquisition encountered a non-stale interruption')
+            evidence = frame.get('combatEvidence')
+            require(isinstance(evidence, dict) and (evidence.get('state') == 'valid' or (
+                evidence.get('state') == 'unavailable' and evidence.get('reason') == 'world_not_ready'
+                and gate.get('ready') is False and gate.get('reason') in
+                    ('world_confirming', 'client_release', 'world_observation_invalidated')
+                and gate.get('epoch') == expected)), 'Combat reacquisition lost known native HUD evidence')
+            for waiting_gate in (current, gate):
+                if waiting_gate.get('reason') == 'world_observation_invalidated':
+                    require(pending.get('release') is not None, 'Combat invalidation preceded its owned release')
+                    barrier = pending['release']['response']['serverNowMs']
+                    waiting_source = waiting_gate.get('sourceFrame') or {}
+                    require(waiting_gate.get('ready') is False and waiting_gate.get('epoch') == expected
+                            and waiting_source.get('captureEpoch') == trigger_source['captureEpoch']
+                            and finite(waiting_source.get('freshnessAtMs')) and waiting_source['freshnessAtMs'] <= barrier,
+                            'Combat invalidated observation is not from the acknowledged release barrier')
+            return
+        if current.get('reason') != 'world_observation_stale':
+            return
+        # An armed/pending pulse retains the original terminal unavailable-evidence behavior.
+        if self._armed:
+            return
+        require(self._pending is None, 'Combat source-stale interruption has an undrained pulse')
+        require(self._stale_recovery['used'] == 0, 'Combat source-stale reacquisition was already consumed')
+        require(self._phase == 'ready' and 0 < len(self._completed) == self._accepted < 3
+                and self._release is not None and self._last is not None,
+                'Combat source-stale reacquisition requires a fully drained pulse')
+        prior_context = self._release['response'].get('executionContext') or {}
+        prior_tracked = prior_context.get('trackedState') or {}
+        require(prior_context.get('active', 'missing') is None and prior_context.get('telemetryComplete') is True
+                and prior_context.get('evictedEvents') == 0 and prior_tracked.get('heldKeys') == []
+                and prior_tracked.get('releaseOutcome') == 'returned_unverified'
+                and prior_tracked.get('telemetryIncomplete') is False,
+                'Combat prior release does not prove drained software input state')
+        source = frame.get('sourceFrame') or {}
+        prior = self._last['frame']
+        age, now = frame.get('sourceFrameAgeMs'), frame.get('serverNowMs')
+        checked = current.get('checkedAtMs')
+        require(frame.get('frameId') == prior['frameId'] and frame.get('capturedAtMs') == prior['capturedAtMs']
+                and canonical(self._evidence_identity(frame)) == canonical(self._evidence_identity(prior))
+                and frame.get('sourceTimestampKind') == 'wgc_reported_compositor_qpc'
+                and gate.get('ready') is True and gate.get('reason') == 'world_ready'
+                and type(gate.get('epoch')) is int and gate['epoch'] == self._world_epoch and gate.get('sourceFrameId') == frame['frameId']
+                and gate.get('sourceFrame') == source
+                and current.get('ready') is False and frame.get('inputAvailable') is False
+                and type(current.get('epoch')) is int and current['epoch'] == self._world_epoch + 1
+                and current.get('sourceFrameId') == frame['frameId'] and current.get('sourceFrame') == source
+                and all(finite(value) for value in (age, now, checked)) and age > 150
+                and abs(now - source['freshnessAtMs'] - age) <= .01
+                and source['freshnessAtMs'] + 150 < checked <= now,
+                'Combat stale-source trigger differs from the last admitted source')
+        self._stale_recovery['used'] = 1
+        self._stale_recovery['pending'] = dict(trigger=dict(frame=sensor_frame(frame, source_stale_recovery=True), clientTimeNs=now_ns),
+                                               acceptedActions=self._accepted, requested=None, release=None, sources=[])
+        self._phase, self._reason = 'awaitingStaleRelease', 'releasedSourceStale'
+        self._eligible = False
+        self._sources = 0
+
+    def request_stale_release(self, owner, hello, now_ns):
+        """Journal the exact lease/owner check before this one safety release can be sent."""
+        with self.intake_lock:
+            self._live(now_ns)
+            try:
+                require(self._identity(owner, hello) == self._hello, 'Combat reacquisition lease or owner changed')
+                pending = self._stale_recovery['pending'] if self._stale_recovery_enabled else None
+                require(self._phase == 'awaitingStaleRelease' and pending is not None
+                        and pending['requested'] is None and not self._armed and self._pending is None,
+                        'Combat reacquisition release is missing, repeated or out of phase')
+                pending['requested'] = dict(owner=retained(owner), lease=copy.deepcopy(self._hello), clientTimeNs=now_ns)
+            except (ValueError, TypeError, KeyError) as error:
+                self._stop('invalidReacquisitionReleaseRequest', now_ns, validationError=str(error))
+            return self._event('ReacquisitionRequest', now_ns, owner=retained(owner),
+                               lease={key: hello.get(key) for key in ('sessionId', 'ownerEpoch', 'goalVersion')}
+                               if isinstance(hello, dict) else retained(hello))
+
+    def record_existing_history_reset(self, last_accepted_ns, now_ns):
+        """Record the existing 500 ms heuristic without changing its timer or adding a recovery reset."""
+        with self.intake_lock:
+            require(self._stale_recovery_enabled and type(last_accepted_ns) is int
+                    and type(now_ns) is int and now_ns - last_accepted_ns > 500_000_000
+                    and self._completed and self._completed[-1]['admissionClientNs'] <= last_accepted_ns <= now_ns,
+                    'Combat history reset lacks its original acceptance-gap clock')
+            resets = self._stale_recovery['existingHistoryResets']
+            require(not resets or resets[-1]['acceptedActions'] < self._accepted,
+                    'Combat acceptance-gap history reset was repeated')
+            resets.append(dict(lastAcceptedAtClientNs=last_accepted_ns, clientTimeNs=now_ns,
+                acceptedActions=self._accepted, reason='acceptanceGapHistoryReset',
+                afterReacquisition=bool(self._stale_recovery['completed'] and
+                    self._stale_recovery['completed'][-1]['acceptedActions'] == self._accepted)))
+            return self._event('HistoryGapReset', now_ns, lastAcceptedAtClientNs=last_accepted_ns,
+                               reason='acceptanceGapHistoryReset')
+
+    def _validate_stale_release(self, response, now_ns, reason):
+        """Require this requested release's exact epoch, clock, source and empty software input state."""
+        pending = self._stale_recovery['pending']
+        require(pending is not None and pending['requested'] is not None
+                and reason == STALE_RELEASE_REASON and self._phase == 'awaitingStaleRelease'
+                and pending['requested']['clientTimeNs'] <= now_ns,
+                'Combat reacquisition lacks its owned release request')
+        trigger = pending['trigger']['frame']
+        gate, context = response.get('worldReadiness') or {}, response.get('executionContext') or {}
+        source, old_source = gate.get('sourceFrame') or {}, trigger['sourceFrame']
+        tracked = context.get('trackedState') or {}
+        require(gate.get('reason') == 'client_release'
+                and gate.get('epoch') == trigger['worldReadiness']['epoch'] + 1
+                and response['serverNowMs'] >= trigger['serverNowMs']
+                and type(gate.get('sourceFrameId')) is int and gate['sourceFrameId'] >= trigger['frameId']
+                and finite(gate.get('sourceCapturedAtMs'))
+                and trigger['capturedAtMs'] <= gate['sourceCapturedAtMs'] <= response['serverNowMs']
+                and finite(gate.get('checkedAtMs'))
+                and trigger['serverNowMs'] <= gate['checkedAtMs'] <= response['serverNowMs']
+                and source.get('captureEpoch') == old_source['captureEpoch']
+                and type(source.get('timestamp100ns')) is int and source['timestamp100ns'] >= old_source['timestamp100ns']
+                and finite(source.get('freshnessAtMs'))
+                and old_source['freshnessAtMs'] <= source['freshnessAtMs'] <= response['serverNowMs']
+                and response.get('receipts') == [] and type(response.get('droppedReceipts')) is int
+                and response['droppedReceipts'] == 0 and context.get('telemetryComplete') is True
+                and context.get('active', 'missing') is None and tracked.get('heldKeys') == []
+                and tracked.get('telemetryIncomplete') is False and tracked.get('releaseOutcome') == 'returned_unverified'
+                and context.get('evictedEvents') == 0,
+                'Combat reacquisition release source, epoch or input state differs')
+
+
     def observe(self, frame, received_ns, *, round_trip_ms):
         """Latch hazards before publication and return trigger metadata without throwing it away."""
         with self.intake_lock:
             self.tick(received_ns)
-            raw = sensor_frame(frame)
+            raw = sensor_frame(frame, source_stale_recovery=self._stale_recovery_enabled)
             if self._trip is not None or self._phase == 'complete':
                 return self._event('Observation', received_ns, frame=raw, roundTripMs=round_trip_ms)
             self._eligible = False
@@ -365,6 +566,8 @@ class CombatTrialGuard:
                         self._stop(reason, received_ns, frame=raw)
                     elif not evidence['enemyBarCandidates'] and self._target_confirmed:
                         self._stop('targetLost', received_ns, frame=raw)
+                if self._trip is None:
+                    self._stale_source_transition(frame, received_ns)
                 available = evidence is not None and evidence['state'] == 'valid'
                 gate, current = frame.get('frameWorldReadiness'), frame.get('worldReadiness')
                 available = (available and isinstance(gate, dict) and isinstance(current, dict)
@@ -373,6 +576,8 @@ class CombatTrialGuard:
                 age = frame.get('sourceFrameAgeMs')
                 available = available and finite(age) and 0 <= age and age + round_trip_ms < 150
                 if not available:
+                    if self._stale_recovery_enabled and self._stale_recovery['pending'] is not None:
+                        self._stale_recovery['pending']['sources'] = []
                     if self._armed:
                         self._stop('armedEvidenceUnavailable', received_ns, frame=raw)
                     elif self._trip is None:
@@ -391,9 +596,13 @@ class CombatTrialGuard:
                         and gate.get('sourceFrame') == source
                         and (current.get('sourceFrame') or {}).get('captureEpoch') == source['captureEpoch'],
                         'Combat readiness/source join differs')
-                if self._world_epoch is not None:
-                    require(gate['epoch'] == self._world_epoch, 'Combat world epoch changed without acknowledged release')
-                self._world_epoch = gate['epoch']
+                if self._phase == 'awaitingStaleRelease':
+                    require(gate['epoch'] == self._stale_recovery['pending']['trigger']['frame']['worldReadiness']['epoch'],
+                            'Combat epoch changed before the owned reacquisition release')
+                else:
+                    if self._world_epoch is not None:
+                        require(gate['epoch'] == self._world_epoch, 'Combat world epoch changed without acknowledged release')
+                    self._world_epoch = gate['epoch']
                 if self._last is not None:
                     prior = self._last['frame']['sourceFrame']
                     require(source['captureEpoch'] == prior['captureEpoch'] and source['timestamp100ns'] >= prior['timestamp100ns']
@@ -418,7 +627,23 @@ class CombatTrialGuard:
                 target = 1 <= len(evidence['enemyBarCandidates']) <= self._maximum_candidates
                 after_release = self._release is None or source['freshnessAtMs'] >= self._release['response']['serverNowMs'] + 60
                 self._eligible = target and after_release
-                if not target or not after_release:
+                if self._phase == 'awaitingStaleRelease':
+                    self._eligible = False
+                    self._reason = 'awaitingOwnedStaleRelease'
+                elif self._phase == 'awaitingStaleEvidence':
+                    self._eligible = False
+                    pending = self._stale_recovery['pending']
+                    if not target or not after_release:
+                        pending['sources'] = []
+                    elif distinct:
+                        pending['sources'].append(dict(frame=raw, clientTimeNs=received_ns))
+                    self._sources = len(pending['sources'])
+                    if self._sources == 2:
+                        self._stale_recovery['completed'].append(copy.deepcopy(pending))
+                        self._stale_recovery['pending'] = None
+                        self._phase, self._reason = 'ready', 'freshSourceReacquired'
+                        self._eligible = True
+                elif not target or not after_release:
                     self._sources = 0
                     self._reason = 'awaitingFreshTarget' if not target else 'awaitingPostReleaseFrame'
                 elif self._phase == 'awaitingPostFrame' and distinct:
@@ -498,6 +723,8 @@ class CombatTrialGuard:
                 self._stop('invalidActionAdmission', now_ns, response=retained(response), payloadBytes=payload_bytes)
             else:
                 self._accepted += 1
+                if self._stale_recovery_enabled:
+                    self._pending['admissionClientNs'] = now_ns
                 if self._trip is None:
                     self._phase, self._reason = 'awaitingTerminal', 'actionAccepted'
             return self._event('Admission', now_ns, response=retained(response), payloadBytes=payload_bytes)
@@ -546,6 +773,14 @@ class CombatTrialGuard:
                 (self._pending.get('receipt') or {}).get('endedAtMs') if self._pending else None) if finite(item)]
             valid = valid and all(response['serverNowMs'] >= value for value in previous_times)
             valid = valid and (self._world_epoch is None or gate['epoch'] > self._world_epoch)
+            if valid and self._trip is None and (reason == STALE_RELEASE_REASON or self._phase == 'awaitingStaleRelease'):
+                try:
+                    require(self._stale_recovery_enabled, 'Undeclared combat stale-source recovery')
+                    self._validate_stale_release(response, now_ns, reason)
+                except (ValueError, TypeError, KeyError) as error:
+                    self._stop('invalidReacquisitionReleaseAcknowledgement', now_ns,
+                               response=retained(response), validationError=str(error))
+                    valid = False
             if not valid:
                 self._stop('invalidReleaseAcknowledgement', now_ns, response=retained(response), payloadBytes=payload_bytes)
             else:
@@ -556,7 +791,11 @@ class CombatTrialGuard:
                                      clientTimeNs=now_ns, reason=reason)
                 self._sources = 0
                 if self._trip is None:
-                    if self._phase == 'awaitingRelease':
+                    if self._phase == 'awaitingStaleRelease':
+                        self._stale_recovery['pending']['release'] = copy.deepcopy(self._release)
+                        self._stale_recovery['pending']['sources'] = []
+                        self._phase, self._reason = 'awaitingStaleEvidence', 'awaitingPostReleaseSources'
+                    elif self._phase == 'awaitingRelease':
                         self._pending['release'] = copy.deepcopy(self._release)
                         self._phase, self._reason = 'awaitingPostFrame', 'awaitingPostReleaseFrame'
                     elif self._phase == 'awaitingEvidence':

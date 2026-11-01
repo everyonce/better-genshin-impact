@@ -80,7 +80,8 @@ class CombatTrialGuardTests(unittest.TestCase):
     def test_earlier_scope_policies_keep_exact_pre_four_canonical_bytes(self):
         """Pins were measured before adding the fourth-enemy scope, independent of current assembly."""
         expected={SINGLE_SCOPE:'cd0aebd5c96097912bac8ea0874a587de862946535933d4d66750b08befb5e1d',
-            GROUP_SCOPE:'5a69d8c207ef4fb3390bc9cc214b21a6442bb3da27e4996c9ebc7aeb7bbf6f72'}
+            GROUP_SCOPE:'5a69d8c207ef4fb3390bc9cc214b21a6442bb3da27e4996c9ebc7aeb7bbf6f72',
+            FOUR_SCOPE:'8184d519ffe138a290476daf5fcb717ddc9cbc64b84715b74886478a337f1a01'}
         for scope,sha in expected.items():
             self.assertEqual(hashlib.sha256(canonical(trial_policy(scope))).hexdigest(),sha)
 
@@ -580,6 +581,339 @@ class CombatTrialGuardTests(unittest.TestCase):
         event = self.guard.receipt(dict(requestId='foreign'), 2)
         self.assertEqual(event['state']['trip']['reason'], 'invalidActionAdmission')
         self.assertEqual(event['receipt']['requestId'], 'foreign')
+
+
+
+class CombatStaleReacquisitionTests(unittest.TestCase):
+    """Replay the retained 08 interruption; added opt-in/ACK successor authority is explicitly synthetic."""
+
+    @staticmethod
+    def fixture():
+        """Read the portable exact source/receipt projection without ignored workspace dependencies."""
+        return json.loads((Path(__file__).parent / 'testdata/combat-source-stale-08.json').read_bytes())
+
+    def setup_guard(self, *, recovery=True, through=12):
+        """Preserve the failed original binding unless the test explicitly authors the new policy."""
+        self.data = self.fixture()
+        self.authority = copy.deepcopy(self.data['binding'])
+        if recovery:
+            self.authority['policy'] = trial_policy(FOUR_SCOPE, source_stale_recovery=True)
+        self.guard = CombatTrialGuard(self.authority, self.authority['owner'], self.data['hello'], self.data['startedNs'])
+        self.trace = []
+        for row in self.data['events'][:through]:
+            self.apply_original(row, recovery=recovery)
+        return self.guard.snapshot()
+
+    def apply_original(self, row, *, recovery=True):
+        """The historical journal omitted empty receipt envelopes; new-mode tests supply that explicit premise."""
+        now = row['clientTimeNs']
+        kind = row['type']
+        if kind == 'combatTrialObservation':
+            current = copy.deepcopy(row['frame'])
+            if recovery:
+                current.setdefault('receipts', [])
+            event = self.guard.observe(current, now, round_trip_ms=row['roundTripMs'])
+        elif kind == 'combatTrialDispatch':
+            action = row['arguments']
+            event = self.guard.prepare_action(self.guard.snapshot()['lastObservation']['frame'],
+                dict(parseValid=True, steps=action['steps']), action['requestId'], now,
+                owner=self.authority['owner'], hello=self.data['hello'])
+        elif kind == 'combatTrialLocalRefusal':
+            event = self.guard.prepare_action(row['frame'], row['proposal'], row['requestId'], now,
+                owner=self.authority['owner'], hello=self.data['hello'])
+        elif kind == 'combatTrialStop':
+            trigger = row['trigger']
+            event = self.guard.fail(trigger['reason'], now,
+                **{key: value for key, value in trigger.items() if key not in ('reason', 'clientTimeNs')})
+        elif kind == 'combatTrialAdmission':
+            event = self.guard.admission(row['response'], row['payloadBytes'], now)
+        elif kind == 'combatTrialReceipt':
+            event = self.guard.receipt(row['receipt'], now)
+        elif kind == 'combatTrialRelease':
+            event = self.guard.acknowledge_release(row['response'], row['payloadBytes'], now, row['reason'])
+        else:
+            self.fail('Unexpected retained fixture event: ' + kind)
+        self.trace.append(event)
+        return event
+
+    def release(self, mutate=None, *, request=True):
+        """Use the original cleanup ACK as a test response, never relabel the failed live trial."""
+        from combat_trial_guard import STALE_RELEASE_REASON
+        row = copy.deepcopy(self.data['cleanupRelease'])
+        if request:
+            self.trace.append(self.guard.request_stale_release(self.authority['owner'], self.data['hello'],
+                self.trace[-1]['clientTimeNs'] + 1))
+        if mutate:
+            mutate(row)
+        event = self.guard.acknowledge_release(row['response'], row['payloadBytes'], row['clientTimeNs'], STALE_RELEASE_REASON)
+        self.trace.append(event)
+        return event
+
+    def successor(self, index=69, *, offset=61, age=10):
+        """Create clearly synthetic post-ACK sources with the retained healthy native detector shape."""
+        reply = self.data['cleanupRelease']
+        current = copy.deepcopy(self.data['events'][-1]['frame'])
+        old = current['sourceFrame']
+        at = reply['response']['serverNowMs'] + offset
+        source = dict(old, timestamp100ns=old['timestamp100ns'] + round((at - old['freshnessAtMs']) * 10000),
+                      capturedAtMs=at, acquiredAtMs=at + 1, freshnessAtMs=at)
+        current.update(frameId=index, capturedAtMs=at + 1, sourceFrame=source,
+            sourceFrameAgeMs=age, serverNowMs=at + age, receipts=[], inputAvailable=True)
+        for name in ('frameWorldReadiness', 'worldReadiness'):
+            current[name].update(ready=True, epoch=3, reason='world_ready', sourceFrameId=index,
+                sourceCapturedAtMs=current['capturedAtMs'], checkedAtMs=at + age, sourceFrame=copy.deepcopy(source))
+        current['combatEvidence'].update(frameId=index, sourceFrame=copy.deepcopy(source))
+        now = reply['clientTimeNs'] + round((offset + age) * 1e6)
+        return current, now
+
+    def observe_successor(self, index=69, *, offset=61, mutate=None, age=10):
+        """Retain every admission/refusal in the same replayable event order."""
+        current, now = self.successor(index, offset=offset, age=age)
+        if mutate:
+            mutate(current)
+        event = self.guard.observe(current, now, round_trip_ms=.5)
+        self.trace.append(event)
+        return event
+
+    def test_original_08_remains_failed_and_old_snapshots_have_no_new_fields(self):
+        """The real stale66/confirming67/ready68 sequence still fails under its original policy."""
+        self.setup_guard(recovery=False, through=0)
+        for row in self.data['originalTrace']:
+            event = self.apply_original(row, recovery=False)
+            self.assertEqual(hashlib.sha256(canonical(event)).hexdigest(), row['originalEventSha256'])
+        state = self.guard.snapshot()
+        self.assertEqual(state['trip']['reason'], 'invalidNativeEvidence')
+        self.assertEqual(state['trip']['validationError'], 'Combat world epoch changed without acknowledged release')
+        self.assertEqual((state['acceptedActions'], state['completedActions']), (1, 1))
+        self.assertNotIn('sourceStaleRecovery', state)
+
+    def test_exact_08_sequence_requires_owned_release_and_two_distinct_fresh_sources(self):
+        """A confirming/ready epoch cannot authorize another action before the separately journaled ACK."""
+        state = self.setup_guard()
+        self.assertIsNone(state['trip'])
+        self.assertEqual(state['phase'], 'awaitingStaleRelease')
+        self.assertFalse(state['evidenceReady'])
+        deadline = state['deadlineNs']
+        self.assertEqual(self.release()['state']['phase'], 'awaitingStaleEvidence')
+        first = self.observe_successor()
+        self.assertFalse(first['state']['evidenceReady'])
+        current, now = self.successor()
+        repeated = self.guard.observe(current, now + 1, round_trip_ms=.5)
+        self.trace.append(repeated)
+        self.assertEqual(repeated['state']['confirmationSources'], 1)
+        final = self.observe_successor(70, offset=121)['state']
+        self.assertEqual(final['phase'], 'ready')
+        self.assertTrue(final['evidenceReady'])
+        self.assertEqual(final['deadlineNs'], deadline)
+        self.assertEqual((final['acceptedActions'], final['completedActions']), (1, 1))
+        self.assertEqual(final['sourceStaleRecovery']['used'], 1)
+        self.assertEqual(len(final['sourceStaleRecovery']['completed']), 1)
+        from audit_combat_trial import replay_events
+        self.assertEqual(replay_events(self.authority, self.data['hello'], self.trace)['state'], final)
+
+    def test_opt_in_policy_is_exact_and_unavailable_to_older_scopes(self):
+        """The new policy is explicit, fixed and cannot be selected merely by seeing four targets."""
+        from combat_trial_guard import validated_trial_policy
+        parts = group_review_parts(4, 4, scope=FOUR_SCOPE)
+        original = copy.deepcopy(parts[0]['policy'])
+        parts[0]['policy'] = trial_policy(FOUR_SCOPE, source_stale_recovery=True)
+        self.assertEqual(binding(parts)['policy'], parts[0]['policy'])
+        for mutate in (lambda p:p.update(version=2), lambda p:p.pop('sourceStaleRecoveryPolicy'),
+                       lambda p:p['sourceStaleRecoveryPolicy'].update(maximumRecoveries=2),
+                       lambda p:p.update(sourceStaleRecoveryPolicy=None), lambda p:p.update(maximumSeconds=6)):
+            changed = copy.deepcopy(parts)
+            mutate(changed[0]['policy'])
+            with self.subTest(mutate=mutate), self.assertRaises(ValueError):
+                binding(changed)
+        for scope in (SINGLE_SCOPE, GROUP_SCOPE):
+            with self.assertRaises(ValueError):
+                trial_policy(scope, source_stale_recovery=True)
+        self.assertEqual(validated_trial_policy(dict(combatScope=FOUR_SCOPE, maximumEnemyBarCandidates=4,
+            policy=original)), original)
+
+    def test_trigger_requires_exact_same_source_drained_history_and_no_contradiction(self):
+        """Publication races, dropped/foreign receipts and active native state cannot be erased by a later ACK."""
+        mutations = (
+            lambda f:f['worldReadiness'].update(epoch=3),
+            lambda f:f['worldReadiness'].update(sourceFrameId=67),
+            lambda f:f['worldReadiness'].update(sourceFrame=dict(f['sourceFrame'], captureEpoch='foreign')),
+            lambda f:f.update(receipts=[dict(requestId='foreign')]),
+            lambda f:f.update(droppedReceipts=1),
+            lambda f:f.update(executionContext=dict(active=dict(requestId='foreign'), trackedState=dict(heldKeys=[]), telemetryComplete=True, evictedEvents=0)),
+            lambda f:f.update(executionContext=dict(active=None, trackedState=dict(heldKeys=['LBUTTON']), telemetryComplete=True, evictedEvents=0)),
+            lambda f:f['combatEvidence'].update(playerHealthFractionEstimate=.90),
+        )
+        for mutate in mutations:
+            with self.subTest(mutate=mutate):
+                self.setup_guard(through=9)
+                row = copy.deepcopy(self.data['events'][9]); mutate(row['frame'])
+                state = self.apply_original(row)['state']
+                self.assertIsNotNone(state['trip'])
+                self.assertFalse(state['evidenceReady'])
+        self.setup_guard(through=9)
+        row = copy.deepcopy(self.data['events'][9]); row['frame']['worldReadiness']['reason'] = 'game_window_not_foreground'
+        state = self.apply_original(row)['state']
+        self.assertNotEqual(state['phase'], 'awaitingStaleRelease')
+        self.assertFalse(state['evidenceReady'])
+
+    def test_pending_or_armed_gap_cannot_enter_reacquisition(self):
+        """A missing terminal receipt or post-release drain never becomes retry authority."""
+        for through in (4, 5, 6, 7):
+            with self.subTest(through=through):
+                self.setup_guard(through=through)
+                row = copy.deepcopy(self.data['events'][9])
+                state = self.apply_original(row)['state']
+                self.assertIsNotNone(state['trip'])
+                self.assertEqual(state['sourceStaleRecovery']['used'], 0)
+
+    def test_release_requires_request_owner_lease_exact_epoch_and_empty_native_state(self):
+        """All ACK counterexamples stop with no post-release authority, including an omitted request."""
+        changes = (
+            lambda r:r['response'].update(type='stopped'),
+            lambda r:r.update(payloadBytes=1),
+            lambda r:r['response']['worldReadiness'].update(epoch=4),
+            lambda r:r['response']['worldReadiness'].update(sourceFrameId=1),
+            lambda r:r['response']['worldReadiness'].update(sourceCapturedAtMs=r['response']['serverNowMs'] + 1),
+            lambda r:r['response']['worldReadiness'].update(reason='game_window_not_foreground'),
+            lambda r:r['response']['worldReadiness']['sourceFrame'].update(captureEpoch='foreign'),
+            lambda r:r['response'].update(receipts=[dict(requestId='lost')]),
+            lambda r:r['response'].update(droppedReceipts=1),
+            lambda r:r['response']['executionContext'].update(active=dict(requestId='other')),
+            lambda r:r['response']['executionContext']['trackedState'].update(heldKeys=['LBUTTON']),
+            lambda r:r['response']['executionContext']['trackedState'].update(releaseOutcome='failed'),
+            lambda r:r['response']['executionContext'].update(telemetryComplete=False),
+        )
+        for mutate in changes:
+            with self.subTest(mutate=mutate):
+                self.setup_guard()
+                state = self.release(mutate)['state']
+                self.assertIsNotNone(state['trip'])
+                self.assertFalse(state['evidenceReady'])
+        self.setup_guard()
+        self.assertIsNotNone(self.release(request=False)['state']['trip'])
+        for identity in ('owner', 'lease'):
+            self.setup_guard()
+            owner, hello = copy.deepcopy(self.authority['owner']), copy.deepcopy(self.data['hello'])
+            if identity == 'owner': owner['child']['instanceNonce'] = 'foreign'
+            else: hello['sessionId'] = 'foreign'
+            event = self.guard.request_stale_release(owner, hello, self.trace[-1]['clientTimeNs'] + 1)
+            self.assertEqual(event['state']['trip']['reason'], 'invalidReacquisitionReleaseRequest')
+
+    def test_unknown_menu_source_health_and_target_failures_remain_terminal(self):
+        """Only known own-release confirmation may wait; unknown observations are never skipped."""
+        changes = (
+            lambda f:f.pop('worldReadiness'),
+            lambda f:f['worldReadiness'].update(epoch=4),
+            lambda f:f['worldReadiness'].update(reason='menu_open'),
+            lambda f:f['worldReadiness']['sourceFrame'].update(captureEpoch='foreign'),
+            lambda f:f['combatEvidence'].update(state='unavailable', reason='recognition_failed',
+                playerHealthColor='unknown', playerHealthFractionEstimate=None, playerHealthMatchingPixels=0, enemyBarCandidates=[]),
+            lambda f:f['combatEvidence'].update(playerHealthColor='unknown', playerHealthFractionEstimate=None),
+            lambda f:f['combatEvidence'].update(enemyBarCandidates=[]),
+            lambda f:f.update(receipts=[dict(requestId='foreign')]),
+        )
+        for mutate in changes:
+            with self.subTest(mutate=mutate):
+                self.setup_guard(); self.release()
+                state = self.observe_successor(mutate=mutate)['state']
+                self.assertIsNotNone(state['trip'])
+                self.assertFalse(state['evidenceReady'])
+
+    def test_well_formed_unknown_native_evidence_cannot_be_skipped_during_recovery(self):
+        """Reach the pending recovery rule with a valid native unavailable shape, not malformed positive fields."""
+        self.setup_guard(); self.release()
+        def unavailable(current):
+            current['combatEvidence'].update(state='unavailable', reason='recognition_failed',
+                playerHealthColor='unknown', playerHealthFractionEstimate=None, playerHealthMatchingPixels=0, enemyBarCandidates=[])
+        event = self.observe_successor(mutate=unavailable)
+        self.assertEqual(event['state']['trip']['validationError'], 'Combat reacquisition lost known native HUD evidence')
+
+    def test_ack_barrier_and_stale_health_do_not_count_as_fresh_confirmation(self):
+        """Neither an old positive HUD nor the release's in-flight capture satisfies the two-source barrier."""
+        self.setup_guard(); self.release()
+        self.assertEqual(self.observe_successor(offset=59)['state']['confirmationSources'], 0)
+        self.assertEqual(self.observe_successor(70, offset=121, age=151)['state']['confirmationSources'], 0)
+        self.assertFalse(self.guard.snapshot()['evidenceReady'])
+        self.setup_guard(); self.release()
+        current, now = self.successor(offset=0)
+        barrier = self.data['cleanupRelease']['response']['serverNowMs']
+        current['capturedAtMs'] = barrier + 5
+        current['worldReadiness'].update(ready=False, reason='world_observation_invalidated', sourceCapturedAtMs=barrier + 5)
+        current['frameWorldReadiness'] = copy.deepcopy(current['worldReadiness'])
+        current['inputAvailable'] = False
+        current['combatEvidence'].update(state='unavailable', reason='world_not_ready',
+            playerHealthColor='unknown', playerHealthFractionEstimate=None, playerHealthMatchingPixels=0, enemyBarCandidates=[])
+        event = self.guard.observe(current, now, round_trip_ms=.5)
+        self.assertIsNone(event['state']['trip'])
+        self.assertFalse(event['state']['evidenceReady'])
+        current['worldReadiness']['sourceFrame']['freshnessAtMs'] = barrier + 1
+        self.assertIsNotNone(self.guard.observe(current, now + 1, round_trip_ms=.5)['state']['trip'])
+
+    def test_positive_ready_gates_cannot_hide_observed_input_unavailability(self):
+        """The separately sampled native focus/window availability cannot disappear during reacquisition."""
+        for value in (False, None, 0, 'false', 'missing'):
+            with self.subTest(value=value):
+                self.setup_guard(); self.release()
+                def unavailable(current):
+                    if value == 'missing':
+                        current.pop('inputAvailable')
+                    else:
+                        current['inputAvailable'] = value
+                event = self.observe_successor(mutate=unavailable)
+                self.assertEqual(event['state']['trip']['reason'], 'invalidNativeEvidence')
+                self.assertIn('availability', event['state']['trip']['validationError'])
+                self.assertEqual(event['state']['sourceStaleRecovery']['completed'], [])
+
+    def test_frame_specific_confirmation_can_wait_behind_newer_current_readiness(self):
+        """The native capture/resize race has no input authority and cannot count as fresh positive HUD."""
+        self.setup_guard(); self.release()
+        current, now = self.successor()
+        current['frameWorldReadiness'].update(ready=False, reason='world_confirming')
+        current['inputAvailable'] = False
+        current['combatEvidence'].update(state='unavailable', reason='world_not_ready',
+            playerHealthColor='unknown', playerHealthFractionEstimate=None, playerHealthMatchingPixels=0, enemyBarCandidates=[])
+        event = self.guard.observe(current, now, round_trip_ms=.5)
+        self.assertIsNone(event['state']['trip'])
+        self.assertEqual(event['state']['confirmationSources'], 0)
+        self.assertFalse(event['state']['evidenceReady'])
+        current['frameWorldReadiness']['reason'] = 'world_hud_missing'
+        self.assertIsNotNone(self.guard.observe(current, now + 1, round_trip_ms=.5)['state']['trip'])
+
+    def test_second_gap_and_original_deadline_never_renew_authority(self):
+        """One recovery is spent on its first attempt; no source can refresh the original five-second clock."""
+        self.setup_guard(); self.release(); self.observe_successor(); self.observe_successor(70, offset=121)
+        current = copy.deepcopy(self.guard.snapshot()['lastObservation']['frame'])
+        at = current['sourceFrame']['freshnessAtMs']
+        current.update(serverNowMs=at + 160, sourceFrameAgeMs=160, inputAvailable=False)
+        current['worldReadiness'].update(ready=False, epoch=4, reason='world_observation_stale', checkedAtMs=at + 151)
+        event = self.guard.observe(current, self.trace[-1]['clientTimeNs'] + 160_000_000, round_trip_ms=.5)
+        self.assertIsNotNone(event['state']['trip'])
+        self.setup_guard(); deadline = self.guard.snapshot()['deadlineNs']
+        self.guard.tick(deadline)
+        with self.assertRaises(CombatTrialStop):
+            self.release(lambda row: row.update(clientTimeNs=deadline + 1))
+        self.assertEqual(self.guard.snapshot()['trip']['reason'], 'trialDeadline')
+        self.assertEqual(self.guard.snapshot()['deadlineNs'], deadline)
+
+    def test_replay_rejects_missing_request_changed_ack_or_deleted_history_reset(self):
+        """Recovery and the existing history heuristic are explicit independently replayed transitions."""
+        from audit_combat_trial import replay_events
+        self.setup_guard(); self.release(); self.observe_successor(); self.observe_successor(70, offset=121)
+        now = self.trace[-1]['clientTimeNs'] + 1
+        accepted = self.data['events'][4]['clientTimeNs'] + 1
+        self.trace.append(self.guard.record_existing_history_reset(accepted, now))
+        state = replay_events(self.authority, self.data['hello'], self.trace)['state']
+        self.assertTrue(state['sourceStaleRecovery']['existingHistoryResets'][0]['afterReacquisition'])
+        for kind in ('combatTrialReacquisitionRequest', 'combatTrialHistoryGapReset'):
+            changed = [copy.deepcopy(row) for row in self.trace if row['type'] != kind]
+            if kind == 'combatTrialHistoryGapReset':
+                current, after = self.successor(71, offset=181)
+                changed.append(self.guard.observe(current, after, round_trip_ms=.5))
+            with self.subTest(kind=kind), self.assertRaises(ValueError):
+                replay_events(self.authority, self.data['hello'], changed)
+        changed = copy.deepcopy(self.trace)
+        next(row for row in changed if row['type'] == 'combatTrialRelease' and row['reason'] == 'sourceStaleReacquisition')['response']['worldReadiness']['epoch'] = 4
+        with self.assertRaises(ValueError): replay_events(self.authority, self.data['hello'], changed)
 
 
 if __name__ == '__main__':

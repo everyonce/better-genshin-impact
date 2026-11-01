@@ -10,7 +10,7 @@ import json
 import re
 from pathlib import Path
 
-from combat_trial_guard import FOUR_SCOPE, bind_review, canonical, combat_scope, trial_policy
+from combat_trial_guard import FOUR_SCOPE, bind_review, canonical, combat_scope, trial_policy, validated_trial_policy
 
 
 # Distinct names prevent an old post-resume review from acquiring the new ordering.
@@ -208,6 +208,7 @@ def validate_preparation(preparation, folder):
         and isinstance(preparation.get('pausedReview'), dict)
         and positive_clock(preparation.get('createdAtUnixNs')) and positive_clock(preparation.get('createdAtClientNs')),
         'Invalid reviewed zero-input preparation')
+    validated_trial_policy(preparation['reviewedCombat']['binding'])
     return preparation
 
 
@@ -221,7 +222,7 @@ def prepared_link(preparation_sha, prepared_sha, worker, request_id, chain):
 def validate_plan(plan, preparation, link):
     """Require exact preparation equality under a separately named pre-resume plan format."""
     require(version_one(plan) and plan.get('kind') == PLAN_KIND
-        and combat_scope(plan) == FOUR_SCOPE and canonical(plan.get('policy')) == canonical(trial_policy(FOUR_SCOPE))
+        and combat_scope(plan) == FOUR_SCOPE and canonical(plan.get('policy')) == canonical(validated_trial_policy(plan.get('binding')))
         and plan.get('maximumHostSeconds') == 90 and plan.get('maximumReviewAgeSeconds') == 120
         and plan.get('recordingMaximumBytes') == 160 * 1024 * 1024
         and all(canonical(plan.get(name)) == canonical(preparation.get(name)) for name in COMMON_PLAN_FIELDS)

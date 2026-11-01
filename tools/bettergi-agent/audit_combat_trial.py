@@ -7,7 +7,7 @@ import math
 from pathlib import Path
 
 from combat_trial_guard import (CombatTrialGuard, bind_review, canonical, proposal_rejection, sensor_frame, trial_policy,
-                               combat_scope)
+                               combat_scope, validated_trial_policy, source_stale_recovery_enabled)
 from episode_split import read_split
 from native_combat import validate_capability,validate_frame
 import combat_paused_review_proof as paused_review
@@ -95,6 +95,12 @@ def replay_events(binding, hello, events):
             replayed = guard.admission(row['response'], row['payloadBytes'], now)
         elif kind == 'combatTrialReceipt':
             replayed = guard.receipt(row['receipt'], now)
+        elif kind == 'combatTrialReacquisitionRequest':
+            require(source_stale_recovery_enabled(binding), 'Undeclared combat reacquisition journal')
+            replayed = guard.request_stale_release(row['owner'], hello, now)
+        elif kind == 'combatTrialHistoryGapReset':
+            require(source_stale_recovery_enabled(binding), 'Undeclared combat history reset journal')
+            replayed = guard.record_existing_history_reset(row['lastAcceptedAtClientNs'], now)
         elif kind == 'combatTrialRelease':
             replayed = guard.acknowledge_release(row['response'], row['payloadBytes'], now, row['reason'])
         elif kind == 'combatTrialStop':
@@ -164,7 +170,7 @@ def audit_episode(episode, events, frames, recording_folder, binding):
                 and row.get('frame', {}).get('type') == 'frame']
     for row in frames:
         joined = [event for event in observed if event['frame'].get('frameId') == row['frameId']
-                  and canonical(event['frame']) == canonical(sensor_frame(row))
+                  and canonical(event['frame']) == canonical(sensor_frame(row, source_stale_recovery=source_stale_recovery_enabled(binding)))
                   and event['clientTimeNs'] == row.get('clientReceivedNs')
                   and event['roundTripMs'] == row.get('transportRoundTripMs')]
         require(len(joined) == 1, 'Recorded pixels lack their exact original guard intake')
@@ -186,6 +192,11 @@ def audit_episode(episode, events, frames, recording_folder, binding):
                 for row in events if row.get('type') == 'combatTrialRelease']
     require(canonical(episode.get('combatTrialReleases')) == canonical(releases),
             'Native release acknowledgements differ from the complete guard trace')
+    for field, kind in (('combatTrialReacquisitionRequests', 'combatTrialReacquisitionRequest'),
+                        ('combatTrialHistoryGapResets', 'combatTrialHistoryGapReset')):
+        extra = [row for row in events if row.get('type') == kind]
+        require(canonical(episode.get(field, [])) == canonical(extra), 'Combat recovery report differs from its exact journal')
+        require(source_stale_recovery_enabled(binding) or field not in episode, 'Undeclared combat recovery report')
     require(len(dispatches) <= 3 and len(accepted) <= 3, 'Combat action bound exceeded')
     identities = set()
     for row in dispatches:
@@ -884,7 +895,8 @@ def audit_trial(folder):
             and finalization.get('manifestSha256') == artifacts['patrol.json'], 'Combat wrapper identities differ')
     require(plan.get('maximumHostSeconds') == 90 and plan.get('recordingMaximumBytes') == 160 * 1024 * 1024
             and type(plan.get('maximumReviewAgeSeconds')) is int and 0 < plan['maximumReviewAgeSeconds'] <= 120
-            and canonical(plan.get('policy')) == canonical(trial_policy(combat_scope(plan))), 'Combat plan widened its fixed bounds')
+            and canonical(plan.get('policy')) == canonical(validated_trial_policy(plan.get('binding')) if reviewed
+                else trial_policy(combat_scope(plan))), 'Combat plan widened its fixed bounds')
     blobs = []
     for name in ('review', 'plan', 'scene', 'sidecar', 'image', 'goal'):
         reference = plan['evidence'][name]

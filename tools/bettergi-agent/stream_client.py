@@ -371,10 +371,10 @@ def resolve_input_keys(configured, server_keys):
     return keys, set(keys)
 
 
-def recording_frame_metadata(metadata, execution_mode):
+def recording_frame_metadata(metadata, execution_mode, *, retain_execution=False):
     """Avoid repeating the controller's rolling journal in every ordinary recorded frame."""
     result = dict(metadata)
-    if execution_mode == 'off' and 'executionContext' in result:
+    if execution_mode == 'off' and not retain_execution and 'executionContext' in result:
         result.pop('executionContext')
         result['executionContextOmitted'] = True
     return result
@@ -912,13 +912,18 @@ def validate_combat_trial_options(args, policy, control):
         if getattr(control, 'combat_trial_guard', None) is not None:
             raise ValueError('Combat trial authority cannot be removed or reused')
         return None
-    from combat_trial_guard import validate_binding, canonical, combat_scope, SINGLE_SCOPE, scope_maximum
+    from combat_trial_guard import (validate_binding, canonical, combat_scope, SINGLE_SCOPE, scope_maximum,
+                                    source_stale_recovery_enabled)
     validate_binding(binding)
     # The opt-in is frozen by preparation and stamped only after the worker reopens
     # its exact armed review. A candidate count alone cannot widen input authority.
     scope = combat_scope(binding)
     group = scope != SINGLE_SCOPE
     for authority in (args, policy):
+        recovery_stamp = getattr(authority, 'combat_trial_source_stale_recovery_policy', None)
+        expected_recovery = binding['policy'].get('sourceStaleRecoveryPolicy')
+        if canonical(recovery_stamp) != canonical(expected_recovery):
+            raise ValueError('Combat stale-source recovery differs from its separately reviewed policy')
         declared = getattr(authority, 'combat_trial_scope', None)
         maximum = getattr(authority, 'combat_trial_maximum_enemy_candidates', None)
         if (group and (declared != scope or type(maximum) is not int or maximum != scope_maximum(scope))
@@ -986,10 +991,18 @@ class CombatTrialRecorder:
         return result
 
 
-def combat_trial_release(bridge, guard, report, recorder, reason):
+def combat_trial_release(bridge, guard, report, recorder, reason, *, owner=None, hello=None):
     """Serialize release/disarm with intake and retain the exact reply before journal failure."""
-    from combat_trial_guard import retained
+    from combat_trial_guard import retained, STALE_RELEASE_REASON, CombatTrialStop
     with guard.intake_lock:
+        if reason == STALE_RELEASE_REASON:
+            request = guard.request_stale_release(owner, hello, time.perf_counter_ns())
+            report.setdefault('combatTrialReacquisitionRequests', []).append(copy.deepcopy(request))
+            report['combatTrialGuardState'] = request['state']
+            if recorder:
+                recorder.event(request)
+            if request['state']['trip'] is not None:
+                raise CombatTrialStop('Combat reacquisition release request was refused')
         reply, payload = bridge.request('release')
         now = time.perf_counter_ns()
         report.setdefault('combatTrialReleases', []).append(dict(response=retained(reply),
@@ -1691,6 +1704,7 @@ def run_episode(args, policy=None, control=None):
     executed_history = validate_executed_history_options(args, policy, control, require_bound=True)
     combat_binding = validate_combat_trial_options(args, policy, control)
     combat_guard = None
+    combat_source_recovery = bool(combat_binding and 'sourceStaleRecoveryPolicy' in combat_binding['policy'])
     hybrid_observe = validate_hybrid_observe_options(args)
     navigation_profile = validate_navigation_scope_options(args)
     native_combat_enabled = getattr(args,'native_combat_observation',False)
@@ -2113,7 +2127,7 @@ def run_episode(args, policy=None, control=None):
                         report['framesReceived'] += 1
                         if metadata.get('combatEvidence') is not None:
                             report['nativeCombatEvidenceFrames'] += 1
-                        report['combatTrialTriggerRecorded'] = bool(recorder.put(recording_frame_metadata(metadata, execution_mode), pixels))
+                        report['combatTrialTriggerRecorded'] = bool(recorder.put(recording_frame_metadata(metadata, execution_mode, retain_execution=combat_source_recovery), pixels))
                     except Exception as error:
                         report['combatTrialTriggerCaptureError'] = str(error)
                     try:
@@ -2155,7 +2169,7 @@ def run_episode(args, policy=None, control=None):
                             if metadata.get('combatEvidence') is not None:
                                 report['nativeCombatEvidenceFrames'] += 1
                             report['scoutEncounterGuardTriggerRecorded'] = bool(recorder and recorder.put(
-                                recording_frame_metadata(metadata, execution_mode), pixels))
+                                recording_frame_metadata(metadata, execution_mode, retain_execution=combat_source_recovery), pixels))
                         except Exception as error:
                             report['scoutEncounterGuardTriggerCaptureError'] = str(error)
                 except Exception as error:
@@ -2214,7 +2228,7 @@ def run_episode(args, policy=None, control=None):
                 if recorder:
                     # Proposal/receipt events and source/pose clocks remain complete.
                     # Full rolling context is retained only when explicitly requested.
-                    recorder.put(recording_frame_metadata(metadata, execution_mode), pixels)
+                    recorder.put(recording_frame_metadata(metadata, execution_mode, retain_execution=combat_source_recovery), pixels)
                 received_frame_id = metadata['frameId']
 
     # Keep one actual reader failure; strings alone cannot authorize another lease.
@@ -2646,6 +2660,14 @@ def run_episode(args, policy=None, control=None):
                     if state['trialComplete']:
                         report['endReason'] = 'combatTrialComplete'
                         break
+                    if state['phase'] == 'awaitingStaleRelease':
+                        from combat_trial_guard import STALE_RELEASE_REASON
+                        released, _ = combat_trial_release(bridge, combat_guard, report, recorder,
+                            STALE_RELEASE_REASON, owner=args.combat_trial_owner, hello=bridge.hello)
+                        collect_receipts(released)
+                        last_readiness_epoch = released['worldReadiness']['epoch']
+                        latest.clear()
+                        state = combat_guard.snapshot()
                     if state['phase'] == 'awaitingRelease':
                         released, _ = combat_trial_release(bridge, combat_guard, report, recorder, 'completedCombatPulse')
                         collect_receipts(released)
@@ -2671,26 +2693,38 @@ def run_episode(args, policy=None, control=None):
                         hybrid.interrupt('climbRecovery')
                     cadence.advance(time.perf_counter())
                     continue
-            received_at, current_status = server_snapshot
-            if capability.get('requiredForInput') and current_status:
-                gate = current_status.get('worldReadiness', {})
-                epoch = gate.get('epoch')
-                changed = last_readiness_epoch is not None and epoch != last_readiness_epoch
-                last_readiness_epoch = epoch
-                status_fresh = time.perf_counter()-received_at <= .25
-                if changed or gate.get('ready') is not True or current_status.get('inputAvailable') is not True or not status_fresh:
-                    if (awaiting_release_retry and status_fresh and current_status.get('inputAvailable') is True
-                            and hybrid.permit_release_reconfirmation(gate)):
-                        if gate.get('ready') is not True:
-                            cadence.advance(time.perf_counter())
-                            continue
-                    else:
-                        own_release = (status_fresh and hybrid and hybrid.bypass
-                                       and hybrid.bypass.release_wait(hybrid, current_status, 'worldReadiness'))
-                        hold('worldTransition' if changed else gate.get('reason', 'worldNotReady'),
-                             preserve_navigation=own_release)
+            # A repeated stale poll can arrive after the earlier phase check. Only the
+            # already-latched opt-in barrier may wait; generic hold gains no recovery authority.
+            with receive_lock if combat_source_recovery else nullcontext():
+                if combat_source_recovery:
+                    state = combat_guard.tick(time.perf_counter_ns())
+                    report['combatTrialGuardState'] = state
+                    if state['trip'] is not None:
+                        from combat_trial_guard import CombatTrialStop
+                        raise CombatTrialStop('Combat trial stopped: ' + state['trip']['reason'])
+                    if state['phase'] in ('awaitingStaleRelease', 'awaitingStaleEvidence'):
                         cadence.advance(time.perf_counter())
                         continue
+                received_at, current_status = server_snapshot
+                if capability.get('requiredForInput') and current_status:
+                    gate = current_status.get('worldReadiness', {})
+                    epoch = gate.get('epoch')
+                    changed = last_readiness_epoch is not None and epoch != last_readiness_epoch
+                    last_readiness_epoch = epoch
+                    status_fresh = time.perf_counter()-received_at <= .25
+                    if changed or gate.get('ready') is not True or current_status.get('inputAvailable') is not True or not status_fresh:
+                        if (awaiting_release_retry and status_fresh and current_status.get('inputAvailable') is True
+                                and hybrid.permit_release_reconfirmation(gate)):
+                            if gate.get('ready') is not True:
+                                cadence.advance(time.perf_counter())
+                                continue
+                        else:
+                            own_release = (status_fresh and hybrid and hybrid.bypass
+                                           and hybrid.bypass.release_wait(hybrid, current_status, 'worldReadiness'))
+                            hold('worldTransition' if changed else gate.get('reason', 'worldNotReady'),
+                                 preserve_navigation=own_release)
+                            cadence.advance(time.perf_counter())
+                            continue
             item = latest.newer_than(previous)
             if item is None:
                 cadence.advance(time.perf_counter())
@@ -2788,6 +2822,14 @@ def run_episode(args, policy=None, control=None):
                 policy.reset()
                 idle_recovery.interrupt('acceptanceGapHistoryReset')
                 history_gap_reset = True
+                if combat_source_recovery:
+                    # Retain the existing heuristic, including healthy-frame gaps. Recovery itself adds no reset.
+                    with receive_lock:
+                        event = combat_guard.record_existing_history_reset(round(last_accepted_at * 1e9), time.perf_counter_ns())
+                        report.setdefault('combatTrialHistoryGapResets', []).append(copy.deepcopy(event))
+                        report['combatTrialGuardState'] = event['state']
+                        if recorder:
+                            recorder.event(event)
             image = Image.frombytes('RGB', (frame['width'], frame['height']), pixels)
             if progress:
                 # Progress is diagnostic only; restore HUD geometry without changing policy pixels.

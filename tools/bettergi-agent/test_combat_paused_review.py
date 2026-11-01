@@ -81,10 +81,10 @@ class PausedReviewTrialTests(unittest.TestCase):
         review['reviewedAtUnixNs'] = time.time_ns()
         self.evidence['review'].write_bytes(canonical(review))
 
-    def prepare(self, *, claim=True):
+    def prepare(self, *, claim=True, source_stale_recovery=False):
         """Create the reviewed zero-input preparation only after actual paused review."""
         self.preparation = trial.prepare_reviewed_paused(self.folder, self.owner_file,
-            self.capture_folder / 'paired-pause.json', self.evidence)
+            self.capture_folder / 'paired-pause.json', self.evidence, source_stale_recovery=source_stale_recovery)
         self.plan = self.preparation
         if claim:
             client_started = time.perf_counter_ns()
@@ -117,6 +117,77 @@ class PausedReviewTrialTests(unittest.TestCase):
             identity_reader=self.identity, watch_factory=fixtures.FakeWatch, reviewed_paused=True,
             prepared_callback=arm or self.arm, reviewed_resume_callback=resume or self.resume,
             pause_probe=self.probe, **kwargs)
+
+    def test_stale_recovery_requires_the_explicit_cli_or_api_selection(self):
+        """Neither a new review alone nor a flag on an old review silently changes the selected policy."""
+        from combat_trial_guard import trial_policy
+        self.capture_and_pause()
+        with self.assertRaisesRegex(ValueError, 'explicitly selected'):
+            self.prepare(source_stale_recovery=True)
+        self.assertFalse(self.folder.exists())
+        review = json.loads(self.evidence['review'].read_bytes())
+        review['policy'] = trial_policy(FOUR_SCOPE, source_stale_recovery=True)
+        self.evidence['review'].write_bytes(canonical(review))
+        with self.assertRaisesRegex(ValueError, 'explicitly selected'):
+            self.prepare()
+        self.assertFalse(self.folder.exists())
+        argv = ['prepare-reviewed-paused', '--directory', str(self.folder), '--owner-from', str(self.owner_file),
+                '--paired-pause', str(self.capture_folder / 'paired-pause.json'), '--source-stale-recovery']
+        for name, value in self.evidence.items():
+            argv += ['--native-plan' if name == 'plan' else '--native-scene' if name == 'scene' else '--' + name, str(value)]
+        with patch.object(trial, 'prepare_reviewed_paused', return_value=dict(runId='a' * 32)) as prepare:
+            self.assertEqual(trial.main(argv), 0)
+            self.assertIs(prepare.call_args.kwargs['source_stale_recovery'], True)
+        self.assertEqual((self.loads, self.lifecycle.starts, self.episodes), (0, 0, 0))
+
+    def test_stale_recovery_is_bound_through_reviewed_preparation_and_worker(self):
+        """The new recovery is reviewed while paused and stamped only after the exact ARM is verified."""
+        from combat_trial_guard import trial_policy
+        self.capture_and_pause()
+        review = json.loads(self.evidence['review'].read_bytes())
+        review['policy'] = trial_policy(FOUR_SCOPE, source_stale_recovery=True)
+        self.evidence['review'].write_bytes(canonical(review))
+        self.prepare(source_stale_recovery=True)
+        self.assertEqual(self.worker(), 0, self.report().get('error'))
+        policy = self.plan['binding']['policy']
+        self.assertEqual(self.plan['policy'], policy)
+        self.assertEqual(self.preparation['reviewedCombat']['binding']['policy'], policy)
+        self.assertEqual(self.last_episode_args.combat_trial_source_stale_recovery_policy, policy['sourceStaleRecoveryPolicy'])
+        self.assertEqual(self.last_policy.combat_trial_source_stale_recovery_policy, policy['sourceStaleRecoveryPolicy'])
+        self.assertFalse(hasattr(self.last_args, 'combat_trial_source_stale_recovery_policy'))
+        self.assertEqual((self.loads, self.lifecycle.starts, self.episodes), (1, 1, 1))
+
+    def test_stale_recovery_substitution_and_legacy_entry_refuse_before_input(self):
+        """A new descriptor cannot be inserted/removed across preparation, ARM, plan or direct-launch scope."""
+        from combat_trial_guard import trial_policy
+        self.capture_and_pause()
+        review = json.loads(self.evidence['review'].read_bytes())
+        review['policy'] = trial_policy(FOUR_SCOPE, source_stale_recovery=True)
+        self.evidence['review'].write_bytes(canonical(review))
+        legacy_folder = self.live / 'legacy-recovery-refused'
+        with self.assertRaisesRegex(ValueError, 'reviewed-paused preparation'):
+            trial.prepare(legacy_folder, self.owner_file, self.evidence, scope=FOUR_SCOPE)
+        self.assertFalse(legacy_folder.exists())
+        self.prepare(source_stale_recovery=True)
+        def inspect(ready):
+            """Use the real worker ARM, then corrupt only in-memory candidate authority."""
+            self.arm(ready)
+            for field in ('policy', 'binding'):
+                changed = copy.deepcopy(self.plan)
+                target = changed['binding']['policy'] if field == 'binding' else changed['policy']
+                target.pop('sourceStaleRecoveryPolicy')
+                with self.subTest(field=field), self.assertRaises(ValueError):
+                    trial.verify_reviewed_plan(changed, self.folder)
+            changed = copy.deepcopy(self.plan)
+            changed['kind'] = 'combat-trial-plan-v1'
+            with self.assertRaisesRegex(ValueError, 'reviewed-paused plan'):
+                trial.episode_arguments(changed)
+            raise ValueError('inert recovery-substitution check finished')
+        self.assertEqual(self.worker(arm=inspect), 1)
+        self.assertEqual(self.report()['error'], 'inert recovery-substitution check finished')
+        self.assertEqual((self.loads, self.lifecycle.starts, self.episodes), (1, 0, 0))
+        self.assertTrue(self.report()['cleanupVerified'])
+
 
     def test_review_then_model_then_precheck_then_resume_keeps_original_native_binding(self):
         """A pre-resume image is admitted only by this complete new chain and the unchanged live policy."""

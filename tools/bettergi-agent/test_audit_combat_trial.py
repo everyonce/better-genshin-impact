@@ -631,5 +631,70 @@ class CombatPreparedAuditTests(unittest.TestCase):
             self.audit()
 
 
+
+class CombatStaleReacquisitionAuditTests(unittest.TestCase):
+    """Join the new recovery journal to exact retained RGB and report fields without a native listener."""
+
+    def setUp(self):
+        """Use actual08 source/receipt shapes and separately labeled synthetic opt-in successor sources."""
+        from test_combat_trial_guard import CombatStaleReacquisitionTests
+        helper = CombatStaleReacquisitionTests()
+        helper.setup_guard(); helper.release(); helper.observe_successor(); helper.observe_successor(70, offset=121)
+        now = helper.trace[-1]['clientTimeNs'] + 1
+        helper.trace.append(helper.guard.record_existing_history_reset(helper.data['events'][4]['clientTimeNs'] + 1, now))
+        helper.trace.append(helper.guard.fail('trialEndedBeforeDrain', now + 1))
+        self.events, self.binding = helper.trace, helper.authority
+        marker = next(row for row in self.events if row['type'] == 'combatTrialDispatch')
+        admitted = next(row['response'] for row in self.events if row['type'] == 'combatTrialAdmission')
+        receipt = next(row['receipt'] for row in self.events if row['type'] == 'combatTrialReceipt')
+        self.episode = dict(status='failed', hello=helper.data['hello'],
+            nativeCombatObservation=copy.deepcopy(helper.data['hello']['combatObservation']), combatTrialGuard=self.binding,
+            combatTrialGuardState=helper.guard.snapshot(), acceptedInputActions=1,
+            receipts=[receipt], combatTrialReceiptEnvelopes=[dict(receipts=[receipt], droppedReceipts=0)],
+            decisions=[dict(proposal(), rawPolicySteps=proposal(50)['steps'], frameId=marker['arguments']['frameId'],
+                acceptance=admitted, combatTrialGuard=marker, controllerResampling='explicit-bounded-key-hold; mouse applied once')],
+            combatTrialReleases=[{key: row[key] for key in ('response', 'payloadBytes', 'clientTimeNs', 'reason')}
+                for row in self.events if row['type'] == 'combatTrialRelease'],
+            combatTrialReacquisitionRequests=[row for row in self.events if row['type'] == 'combatTrialReacquisitionRequest'],
+            combatTrialHistoryGapResets=[row for row in self.events if row['type'] == 'combatTrialHistoryGapReset'])
+        self.temp = tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
+        self.folder, self.frames = Path(self.temp.name), []
+        seen = set()
+        for event in self.events:
+            if event['type'] != 'combatTrialObservation' or event['frame']['frameId'] in seen:
+                continue
+            row = copy.deepcopy(event['frame']); seen.add(row['frameId']); index = len(self.frames)
+            row.update(width=192, height=192, videoFrameIndex=index,
+                       clientReceivedNs=event['clientTimeNs'], transportRoundTripMs=event['roundTripMs'])
+            row['policyRgb'] = write_policy_rgb(self.folder, index, row, bytes([index]) * (192 * 192 * 3))
+            self.frames.append(row)
+
+    def audit(self):
+        """Run the complete episode/source/report replay entry, not only the new guard methods."""
+        return audit_episode(self.episode, self.events, self.frames, self.folder, self.binding)
+
+    def test_recovery_report_and_history_reset_are_fully_replayed_without_promoting_failure(self):
+        """A verified recovery trace is independent of the eventual failed trial result."""
+        report = self.audit()
+        self.assertTrue(report['terminalStateFullyReplayed'])
+        self.assertFalse(report['trialCompleteVerified'])
+        self.assertEqual(report['acceptedProposalJoins'], 1)
+        self.assertEqual(report['replay']['state']['sourceStaleRecovery']['used'], 1)
+
+    def test_missing_or_substituted_recovery_report_cannot_match_the_original_journal(self):
+        """Resealing an outer report cannot hide an omitted release request, history reset or receipt."""
+        for field in ('combatTrialReacquisitionRequests', 'combatTrialHistoryGapResets', 'combatTrialReleases', 'receipts'):
+            original = self.episode[field]
+            self.episode[field] = []
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                self.audit()
+            self.episode[field] = original
+
+    def test_removing_the_opt_in_cannot_replay_new_events_as_historical_authority(self):
+        """Old four-enemy semantics still reject the actual unexplained epoch change."""
+        self.binding['policy'] = trial_policy(FOUR_SCOPE)
+        with self.assertRaises(ValueError): self.audit()
+
+
 if __name__ == '__main__':
     unittest.main()

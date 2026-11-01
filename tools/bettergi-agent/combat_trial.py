@@ -30,7 +30,7 @@ import combat_paused_review_proof as paused_review
 import combat_paused_file_admission as file_admission
 from combat_trial_guard import (bind_review, canonical, proposal_rejection, trial_policy,
                                SINGLE_SCOPE, GROUP_SCOPE, FOUR_SCOPE, SCOPE_MAXIMUMS,
-                               combat_scope, scope_fields, scope_maximum)
+                               combat_scope, scope_fields, scope_maximum, source_stale_recovery_enabled)
 from episode_split import reserve_split, read_split
 from map_owner import load_map_owner
 from policy_rgb_archive import RGB192_BYTES
@@ -260,6 +260,7 @@ def prepare(folder, owner_file, evidence, *, maximum_review_age=MAX_REVIEW_AGE_S
     blobs = {name: read_bytes(path) for name, path in paths.items()}
     require(digest(blobs['goal']) == GOAL_SHA256, 'The installed fixed combat goal differs')
     binding = bind_review(*(blobs[name] for name in EVIDENCE_NAMES))
+    require(not source_stale_recovery_enabled(binding), 'Stale-source recovery requires reviewed-paused preparation')
     require(combat_scope(binding) == scope and (_prepared is None
             or combat_scope(_prepared['preparation']) == scope), 'Review differs from the explicitly selected combat scope')
     require(binding['owner'] == owner, 'Review differs from the original sealed owner')
@@ -508,7 +509,7 @@ def retain_records(folder, paths, *, image=False):
     return result
 
 
-def prepare_reviewed_paused(folder, owner_file, paired_pause_path, evidence):
+def prepare_reviewed_paused(folder, owner_file, paired_pause_path, evidence, *, source_stale_recovery=False):
     """Prepare only after actual paused review; the future worker's 90-second clock has not started."""
     folder = local_path(folder, root=LIVE, existing=False)
     require(not folder.exists(), 'Reviewed preparation requires a fresh directory')
@@ -529,6 +530,8 @@ def prepare_reviewed_paused(folder, owner_file, paired_pause_path, evidence):
     blobs = {name: read_bytes(path) for name, path in paths.items()}
     require(digest(blobs['goal']) == GOAL_SHA256, 'Fixed reviewed combat goal changed')
     binding, chain = paused_review.bind_reviewed_pause(blobs, record_blobs, owner, baseline_proof, pause_proof)
+    require(type(source_stale_recovery) is bool and source_stale_recovery_enabled(binding) == source_stale_recovery,
+            'Recovery opt-in differs from explicitly selected reviewed-paused mode')
     recent_review(binding, paused_review.document(blobs['review']), MAX_REVIEW_AGE_SECONDS)
     resources = installed_resources()
     for name, value in resources.items():
@@ -901,7 +904,7 @@ def arm_reviewed_paused(preparation_path):
         plan = {name: copy.deepcopy(preparation[name]) for name in paused_review.COMMON_PLAN_FIELDS}
         plan.update(version=1, kind=paused_review.PLAN_KIND, createdAtUnixNs=time.time_ns(),
             maximumReviewAgeSeconds=MAX_REVIEW_AGE_SECONDS, maximumHostSeconds=HOST_SECONDS, recordingMaximumBytes=MAX_RECORD_BYTES,
-            policy=trial_policy(FOUR_SCOPE), binding=copy.deepcopy(preparation['reviewedCombat']['binding']),
+            policy=copy.deepcopy(preparation['reviewedCombat']['binding']['policy']), binding=copy.deepcopy(preparation['reviewedCombat']['binding']),
             evidence=copy.deepcopy(preparation['reviewedCombat']['evidence']), pausedReview=copy.deepcopy(preparation['pausedReview']),
             preparedPolicy=paused_review.prepared_link(bundle['preparationSha256'], bundle['readySha256'], ready['worker'],
                                                        request_id, preparation['pausedReview']['chain']))
@@ -1074,6 +1077,9 @@ def episode_arguments(plan):
     if 'binding' in plan:
         args.combat_trial_binding = copy.deepcopy(plan['binding'])
         args.combat_trial_owner = copy.deepcopy(plan['owner'])
+        if source_stale_recovery_enabled(plan['binding']):
+            require(plan.get('kind') == paused_review.PLAN_KIND, 'Stale-source recovery requires the reviewed-paused plan')
+            args.combat_trial_source_stale_recovery_policy = copy.deepcopy(plan['binding']['policy']['sourceStaleRecoveryPolicy'])
         if combat_scope(plan) != SINGLE_SCOPE:
             args.combat_trial_scope = combat_scope(plan)
             args.combat_trial_maximum_enemy_candidates = scope_maximum(combat_scope(plan))
@@ -1510,6 +1516,8 @@ def run_worker(plan_path, *, lifecycle=None, loader=None, episode=None, identity
         # This stamp is minted only after the original goal survived both sides
         # of loading; the stream checks it again before opening its pipe.
         policy.combat_trial_goal_sha256 = plan['binding']['goalSha256']
+        if source_stale_recovery_enabled(plan['binding']):
+            policy.combat_trial_source_stale_recovery_policy = copy.deepcopy(plan['binding']['policy']['sourceStaleRecoveryPolicy'])
         if combat_scope(plan) != SINGLE_SCOPE:
             policy.combat_trial_scope = combat_scope(plan)
             policy.combat_trial_maximum_enemy_candidates = scope_maximum(combat_scope(plan))
@@ -1848,6 +1856,8 @@ def main(argv=None):
     reviewed_parser.add_argument('--directory', type=Path, required=True)
     reviewed_parser.add_argument('--owner-from', type=Path, required=True)
     reviewed_parser.add_argument('--paired-pause', type=Path, required=True)
+    reviewed_parser.add_argument('--source-stale-recovery', action='store_true',
+        help='Require the separately reviewed fixed released-source-stale-once-v1 policy; never renew deadlines')
     for name in EVIDENCE_NAMES[:-1]:
         reviewed_parser.add_argument('--' + ('native-plan' if name == 'plan' else 'native-scene' if name == 'scene' else name),
                                      dest=name, type=Path, required=True)
@@ -1898,7 +1908,7 @@ def main(argv=None):
         return 0
     if args.command == 'prepare-reviewed-paused':
         value = prepare_reviewed_paused(args.directory, args.owner_from, args.paired_pause,
-            {name: getattr(args, name) for name in EVIDENCE_NAMES[:-1]})
+            {name: getattr(args, name) for name in EVIDENCE_NAMES[:-1]}, source_stale_recovery=args.source_stale_recovery)
         print(json.dumps(dict(preparation=str(args.directory / 'preparation.json'), runId=value['runId'], inputEnabled=False)))
         return 0
     if args.command == 'arm-reviewed-paused':

@@ -533,5 +533,245 @@ class CombatTrialStreamTests(unittest.TestCase):
             self.assertEqual(bridge.actions, [])
 
 
+
+class StaleRecoveryBridge(TrialBridge):
+    """Publish one optional repeated-source interruption after the first fully drained attack."""
+
+    def __init__(self, *, interrupt=False, bad_ack=False):
+        """Keep one ordinary clock/lease and a bounded, deterministic source freeze."""
+        super().__init__()
+        self.interrupt, self.bad_ack = interrupt, bad_ack
+        self.last_frame, self.frozen_frame = None, None
+        self.stale_sent, self.reacquired = False, False
+        self.first_accepted_at = None
+
+    def request(self, command, **arguments):
+        """Retain actual loop calls; repeated old pixels still expose native readiness changes."""
+        if command == 'frame' and self.frozen_frame is not None and not self.reacquired:
+            self.commands.append(command)
+            now = self.now()
+            row = copy.deepcopy(self.frozen_frame)
+            row.update(serverNowMs=now, sourceFrameAgeMs=now - row['sourceFrame']['freshnessAtMs'], receipts=[])
+            if row['sourceFrameAgeMs'] > 150:
+                if not self.stale_sent:
+                    self.epoch += 1
+                    self.stale_sent = True
+                row['worldReadiness'].update(ready=False, epoch=self.epoch, reason='world_observation_stale',
+                    checkedAtMs=now)
+                row['inputAvailable'] = False
+            return row, self.pixels
+        reply, pixels = super().request(command, **arguments)
+        if command == 'action' and self.first_accepted_at is None:
+            self.first_accepted_at = time.perf_counter()
+        if command == 'release':
+            if self.stale_sent and not self.reacquired:
+                self.reacquired = True
+                if self.bad_ack:
+                    reply['worldReadiness']['epoch'] += 1
+            prior = self.last_frame or frame()
+            reply['worldReadiness'].update(reason='client_release', sourceFrameId=prior['frameId'],
+                sourceFrame=copy.deepcopy(prior['sourceFrame']), sourceCapturedAtMs=prior['capturedAtMs'],
+                checkedAtMs=reply['serverNowMs'])
+            reply['executionContext'] = dict(telemetryComplete=True, active=None, evictedEvents=0,
+                trackedState=dict(heldKeys=[], executionUncertain=True, releaseOutcome='returned_unverified', telemetryIncomplete=False))
+        if command == 'frame':
+            for name in ('frameWorldReadiness', 'worldReadiness'):
+                reply[name].update(reason='world_ready' if reply[name]['ready'] else 'world_confirming',
+                    sourceCapturedAtMs=reply['capturedAtMs'], checkedAtMs=reply['serverNowMs'])
+            if 'combatEvidence' not in reply:
+                evidence = frame(reply['frameId'], reply['sourceFrame']['freshnessAtMs'])['combatEvidence']
+                evidence.update(state='unavailable', reason='world_not_ready', playerHealthColor='unknown',
+                    playerHealthFractionEstimate=None, playerHealthMatchingPixels=0, enemyBarCandidates=[])
+                reply['combatEvidence'] = evidence
+            self.last_frame = copy.deepcopy(reply)
+            if (self.interrupt and self.completed and self.last_release is not None
+                    and self.now() >= self.last_release + 80 and self.frozen_frame is None):
+                self.frozen_frame = copy.deepcopy(reply)
+        return reply, pixels
+
+
+class GapPolicy(TrialPolicy):
+    """Refuse mixed/empty proposals until one ordinary acceptance gap exceeds 500 ms."""
+
+    def __init__(self, bridge):
+        """Count the unchanged reset operation without creating a model/history implementation."""
+        super().__init__()
+        self.bridge = bridge
+        self.resets = 0
+
+    def predict(self, image, size, **kwargs):
+        """Only pure attacks outside the fixed first-gap window remain eligible."""
+        row = super().predict(image, size, **kwargs)
+        if self.bridge.first_accepted_at is not None and time.perf_counter() - self.bridge.first_accepted_at < .85:
+            row['steps'][0]['keys'] = ['W', 'LBUTTON']
+        return row
+
+    def reset(self):
+        """Observe the production heuristic instead of changing or suppressing it."""
+        self.resets += 1
+
+
+class CombatStaleRecoveryStreamTests(unittest.TestCase):
+    """Run the actual reader, policy, release and action paths with a synthetic native bridge."""
+
+    arguments = CombatTrialStreamTests.arguments
+    run_inert = CombatTrialStreamTests.run_inert
+
+    def recovery_arguments(self, folder, policy, *, enabled=True):
+        """Stamp both armed arguments and the separately loaded policy from one explicit review."""
+        from combat_trial_guard import trial_policy
+        args = self.arguments(folder, seconds=2.5)
+        parts = group_review_parts(4, 4, scope=FOUR_SCOPE)
+        parts[0]['policy'] = trial_policy(FOUR_SCOPE, source_stale_recovery=enabled)
+        args.combat_trial_binding = binding(parts)
+        for authority in (args, policy):
+            authority.combat_trial_scope = FOUR_SCOPE
+            authority.combat_trial_maximum_enemy_candidates = 4
+            if enabled:
+                authority.combat_trial_source_stale_recovery_policy = copy.deepcopy(parts[0]['policy']['sourceStaleRecoveryPolicy'])
+        return args
+
+    def test_real_loop_reacquisition_and_healthy_gaps_keep_the_existing_history_reset(self):
+        """A repeated stale source is never skipped; recovery adds no reset or new action budget."""
+        from audit_combat_trial import replay_events
+        for enabled, interrupt in ((True, True), (True, False), (False, False)):
+            with self.subTest(enabled=enabled, interrupt=interrupt), tempfile.TemporaryDirectory() as folder:
+                bridge, recorder = StaleRecoveryBridge(interrupt=interrupt), CapturingRecorder()
+                policy = GapPolicy(bridge)
+                args = self.recovery_arguments(folder, policy, enabled=enabled)
+                result = self.run_inert(folder, bridge, policy, recorder, args=args)
+                report = json.loads((Path(folder) / 'run.json').read_bytes())
+                self.assertEqual(result, 0, report.get('error'))
+                self.assertEqual(len(bridge.actions), 3)
+                self.assertEqual(policy.feedback.count(True), 3)
+                self.assertEqual(policy.resets, 1)
+                final = replay_events(args.combat_trial_binding, bridge.hello, recorder.events)['state']
+                self.assertEqual(final, report['combatTrialGuardState'])
+                self.assertEqual(final['deadlineNs'] - final['startedNs'], 5_000_000_000)
+                if enabled:
+                    self.assertEqual(len(report['combatTrialHistoryGapResets']), 1)
+                    state = final['sourceStaleRecovery']
+                    self.assertEqual(state['used'], int(interrupt))
+                    self.assertEqual(state['existingHistoryResets'][0]['afterReacquisition'], interrupt)
+                    requests = report.get('combatTrialReacquisitionRequests', [])
+                    self.assertEqual(len(requests), int(interrupt))
+                    if interrupt:
+                        completed = state['completed'][0]
+                        self.assertEqual(len(completed['sources']), 2)
+                        self.assertTrue(completed['release']['response']['executionContext']['trackedState']['executionUncertain'])
+                else:
+                    self.assertNotIn('sourceStaleRecovery', final)
+                    self.assertNotIn('combatTrialHistoryGapResets', report)
+                self.assertEqual(bridge.commands[-1], 'stop')
+
+    def test_repeated_stale_poll_between_phase_check_and_generic_gate_only_waits(self):
+        """Inject the reader transition exactly after main releases its first guard-phase lock."""
+        import combat_trial_guard as guard_module
+        main_thread = threading.get_ident()
+        original_init = guard_module.CombatTrialGuard.__init__
+        observed = []
+        with tempfile.TemporaryDirectory() as folder:
+            bridge, recorder = StaleRecoveryBridge(), CapturingRecorder()
+            policy = GapPolicy(bridge)
+            args = self.recovery_arguments(folder, policy)
+
+            class ExitInjectionLock:
+                """Release the real lock before allowing the actual polling thread to latch the stale source."""
+                def __init__(self, lock, guard):
+                    self.lock, self.guard, self.depth = lock, guard, threading.local()
+                    self.fired = False
+
+                def acquire(self, *values, **kwargs):
+                    result = self.lock.acquire(*values, **kwargs)
+                    if result:
+                        self.depth.value = getattr(self.depth, 'value', 0) + 1
+                    return result
+
+                def release(self):
+                    self.depth.value -= 1
+                    self.lock.release()
+                    if (not self.fired and threading.get_ident() == main_thread and self.depth.value == 0
+                            and self.guard._phase == 'ready' and self.guard._accepted == 1
+                            and len(self.guard._completed) == 1):
+                        self.fired = True
+                        bridge.frozen_frame = copy.deepcopy(bridge.last_frame)
+                        deadline = time.monotonic() + 1
+                        while self.guard._phase != 'awaitingStaleRelease' and time.monotonic() < deadline:
+                            time.sleep(.005)
+                        observed.append(self.guard._phase)
+
+                def __enter__(self):
+                    self.acquire()
+                    return self
+
+                def __exit__(self, *_error):
+                    self.release()
+
+            def install(guard, *values, **kwargs):
+                """Instrument only this inert guard instance, leaving production lock behavior unchanged."""
+                original_init(guard, *values, **kwargs)
+                guard.intake_lock = ExitInjectionLock(guard.intake_lock, guard)
+
+            with patch.object(guard_module.CombatTrialGuard, '__init__', install):
+                result = self.run_inert(folder, bridge, policy, recorder, args=args)
+            report = json.loads((Path(folder) / 'run.json').read_bytes())
+            self.assertEqual(observed, ['awaitingStaleRelease'])
+            self.assertEqual(result, 0, report.get('error'))
+            self.assertEqual(len(bridge.actions), 3)
+            self.assertEqual(report['combatTrialGuardState']['sourceStaleRecovery']['used'], 1)
+
+    def test_lost_reacquisition_reply_preserves_error_and_never_retries_input(self):
+        """Native release may have happened, but an unreadable ACK cannot create renewed authority."""
+        class LostReleaseBridge(StaleRecoveryBridge):
+            def request(self, command, **arguments):
+                lose = command == 'release' and self.stale_sent and not self.reacquired
+                result = super().request(command, **arguments)
+                if lose:
+                    raise OSError('inert lost recovery acknowledgement')
+                return result
+        with tempfile.TemporaryDirectory() as folder:
+            bridge, recorder = LostReleaseBridge(interrupt=True), CapturingRecorder()
+            policy = GapPolicy(bridge); args = self.recovery_arguments(folder, policy)
+            with self.assertRaisesRegex(OSError, 'lost recovery acknowledgement'):
+                self.run_inert(folder, bridge, policy, recorder, args=args)
+            report = json.loads((Path(folder) / 'run.json').read_bytes())
+            self.assertEqual(len(bridge.actions), 1)
+            self.assertEqual(len(report['combatTrialReacquisitionRequests']), 1)
+            self.assertEqual(report['error'], 'inert lost recovery acknowledgement')
+            self.assertEqual(report['combatTrialGuardState']['sourceStaleRecovery']['completed'], [])
+            self.assertEqual(report['stop']['type'], 'stopped')
+            self.assertEqual(bridge.commands[-1], 'stop')
+            self.assertTrue(any(row['reason'] == 'combatTrialTeardown' for row in report['combatTrialReleases']))
+
+    def test_wrong_reacquisition_ack_stops_without_replaying_first_attack(self):
+        """A foreign epoch cannot reach inference/action after the safety release."""
+        with tempfile.TemporaryDirectory() as folder:
+            bridge, recorder = StaleRecoveryBridge(interrupt=True, bad_ack=True), CapturingRecorder()
+            policy = GapPolicy(bridge)
+            args = self.recovery_arguments(folder, policy)
+            with self.assertRaisesRegex(RuntimeError, 'release was not acknowledged'):
+                self.run_inert(folder, bridge, policy, recorder, args=args)
+            report = json.loads((Path(folder) / 'run.json').read_bytes())
+            self.assertEqual(len(bridge.actions), 1)
+            self.assertEqual(report['combatTrialGuardState']['trip']['reason'], 'invalidReacquisitionReleaseAcknowledgement')
+            self.assertEqual(bridge.commands[-1], 'stop')
+
+    def test_recovery_requires_matching_argument_and_loaded_policy_stamps_before_pipe(self):
+        """A raw candidate count or a substituted/omitted mode cannot enable this reviewed-only path."""
+        for target, mutation in (('args', 'omit'), ('policy', 'omit'), ('args', 'widen')):
+            with self.subTest(target=target, mutation=mutation), tempfile.TemporaryDirectory() as folder:
+                bridge, recorder = StaleRecoveryBridge(), CapturingRecorder()
+                policy = GapPolicy(bridge)
+                args = self.recovery_arguments(folder, policy)
+                authority = args if target == 'args' else policy
+                if mutation == 'omit':
+                    del authority.combat_trial_source_stale_recovery_policy
+                else:
+                    authority.combat_trial_source_stale_recovery_policy['maximumRecoveries'] = 2
+                with self.assertRaisesRegex(ValueError, 'separately reviewed policy'):
+                    self.run_inert(folder, bridge, policy, recorder, args=args)
+                self.assertEqual(bridge.commands, [])
+
+
 if __name__ == '__main__':
     unittest.main()

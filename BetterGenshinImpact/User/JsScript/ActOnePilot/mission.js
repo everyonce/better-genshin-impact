@@ -604,6 +604,8 @@ var ActOneMission = (function () {
             }
             return {status:'stopped',step:name,entryAttempted:true,frameId:after.frameId,reason:'Entrance pressed once; inspect interior before movement',questComplete:false};
         });
+        // Opening the Blessing panel is separate from offering or healing.
+        if(name==='statueBlessingOpen')return api.runStatueBlessingOpen(observation,observe);
         if(name==='actTwoStatueHeal')return api.runActTwoStatue(observation,observe);
         if(name==='actTwoRecover'){
             if(observation&&observation.hud&&!observation.hud.world&&!observation.hud.health&&(observation.ocr||[]).some(function(r){return r.text==='Statue of The Seven'&&r.y>=830&&r.y<=910;})&&(observation.ocr||[]).some(function(r){return String(r.text).replace(/[^0-9]/g,'')==='693306810'&&r.x>1600&&r.y>1020;})){

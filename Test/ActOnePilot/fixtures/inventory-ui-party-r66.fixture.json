@@ -1,0 +1,148 @@
+{
+  "session": "mvxpacax-d05v1vs59em",
+  "frameId": 1,
+  "timestamp": 1793529719695,
+  "screenshotPath": "observations/mvxpacax-d05v1vs59em/frame-0001.png",
+  "ocr": [
+    {
+      "text": "Lumina",
+      "x": 1682,
+      "y": 260,
+      "width": 79,
+      "height": 23
+    },
+    {
+      "text": "Ambe",
+      "x": 1690,
+      "y": 351,
+      "width": 65,
+      "height": 23
+    },
+    {
+      "text": "2211/ 4015",
+      "x": 914,
+      "y": 1003,
+      "width": 97,
+      "height": 20
+    },
+    {
+      "text": "Enter",
+      "x": 41,
+      "y": 1025,
+      "width": 112,
+      "height": 30
+    },
+    {
+      "text": "e",
+      "x": 1680,
+      "y": 1026,
+      "width": 37,
+      "height": 25
+    },
+    {
+      "text": "q",
+      "x": 1802,
+      "y": 1028,
+      "width": 35,
+      "height": 25
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1678,
+      "y": 1052,
+      "width": 183,
+      "height": 27
+    },
+    {
+      "text": "E",
+      "x": 1692,
+      "y": 1029.3333333333333,
+      "width": 14.333333333333334,
+      "height": 19.333333333333332
+    },
+    {
+      "text": "Q",
+      "x": 1809.3333333333333,
+      "y": 1028.6666666666667,
+      "width": 20.666666666666668,
+      "height": 22.666666666666668
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 2211,
+      "max": 4015
+    },
+    "healthOcr": [
+      "2211/ 4015"
+    ],
+    "healthDiagnostic": {
+      "fullRow": [
+        "2211/ 4015"
+      ],
+      "primary": [
+        "2211/4015"
+      ],
+      "left": [],
+      "right": [],
+      "decision": "primary-scaled-confirmed"
+    },
+    "healthPct": 0.5506849315068493,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [],
+    "enemyBarDiagnostic": null,
+    "loading": false,
+    "unknownHud": false
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Inventory UI-only v1: map and orientation deliberately omitted",
+      "mode": "inventory-ui-only-v1"
+    },
+    "captureMs": 5,
+    "ocrMs": 306,
+    "ocrFindMultiMs": 299,
+    "ocrReadCount": 4,
+    "fullOcrMs": 198,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 35,
+    "objectiveOcrMs": 18,
+    "controlOcrMs": 53,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 4,
+    "pngWriteMode": "overlapped",
+    "pngScheduleMs": 3,
+    "pngWaitMs": 1,
+    "mapMs": 0,
+    "totalMs": 325
+  },
+  "uiObservation": {
+    "version": 1,
+    "kind": "inventory-ui-only-v1",
+    "mapOmitted": true,
+    "orientationOmitted": true,
+    "observationStartedAtUnixMs": 1793529719370
+  }
+}

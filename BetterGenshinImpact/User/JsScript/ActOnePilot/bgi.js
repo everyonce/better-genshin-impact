@@ -334,6 +334,48 @@ function actOneStatuePanelRecoveryReady(o,now,session) {
     return Number.isFinite(amount)&&amount>0&&amount<=10000&&[r.x,r.y,r.width,r.height].every(Number.isFinite)&&
         r.x>=1380&&r.x<=1420&&r.y>=580&&r.y<=630&&r.width>=450&&r.width<=530&&r.height>=20&&r.height<=50;
 }
+// Open only the explicitly recognized Blessing choice from this captured Statue dialogue.
+// UID must be positively visible here; an earlier world/account witness grants no authority.
+function actOneStatueBlessingChoiceTarget(o,now,session) {
+    var h=o&&o.hud,rows=o&&o.ocr;
+    if(!o||typeof session!=='string'||!session||o.session!==session||
+       !Number.isInteger(o.frameId)||o.frameId<1||!Number.isFinite(now)||
+       !Number.isFinite(o.capturedAt)||!Number.isFinite(o.timestamp)||o.capturedAt<=0||
+       o.timestamp<o.capturedAt||now<o.timestamp||now-o.capturedAt>1000||
+       o.screenshotPath!=='observations/'+session+'/frame-'+String(o.frameId).padStart(4,'0')+'.png'||
+       o.map!==null||!h||h.world!==false||h.health!==null||h.auto!==true||h.choice!==true||
+       h.dialogueReady!==false||h.journal!==false||h.bigMap!==false||h.climbing!==false||
+       h.loading===true||h.unknownHud===true||!Array.isArray(rows)||
+       rows.some(function(r){return !r||typeof r.text!=='string'||
+           ![r.x,r.y,r.width,r.height].every(Number.isFinite)||r.width<=0||r.height<=0;}))return null;
+    var diagnostics=[o.mapDiagnostic,o.timings&&o.timings.mapDiagnostic];
+    if(Object.prototype.hasOwnProperty.call(o,'uiObservation')||
+       diagnostics.some(function(d){return d&&typeof d.mode==='string'&&d.mode.indexOf('inventory-ui-only')===0;}))return null;
+    function text(r){return r.text.trim();}
+    function box(r,x0,x1,y0,y1,w0,w1,h0,h1) {
+        return r.x>=x0&&r.x<=x1&&r.y>=y0&&r.y<=y1&&
+            r.width>=w0&&r.width<=w1&&r.height>=h0&&r.height<=h1;
+    }
+    var identities=rows.filter(function(r){return /^UID\b/i.test(text(r))||
+        /^\d{9}$/.test(text(r))&&r.x>=1600&&r.y>=1030;});
+    if(identities.length!==1||!/^UID:\s*693306810$/.test(text(identities[0]))||
+       !box(identities[0],1600,1850,1030,1065,120,260,15,40)||
+       identities[0].x+identities[0].width>1915||identities[0].y+identities[0].height>1080)return null;
+    var speakers=rows.filter(function(r){return text(r)==='Statue of The Seven';}),
+        autos=rows.filter(function(r){return text(r)==='Auto';}),
+        blessings=rows.filter(function(r){return text(r)==="Statue's Blessing";});
+    if(speakers.length!==1||!box(speakers[0],730,1050,825,910,180,450,20,55)||
+       autos.length!==1||!box(autos[0],0,180,0,80,30,150,15,45)||
+       blessings.length!==1||!box(blessings[0],1100,1600,400,850,120,420,20,60)||
+       blessings[0].x+blessings[0].width>1840||blessings[0].y+blessings[0].height>880||
+       rows.some(function(r){return /^(?:Offer(?: All)?|Required Anemoculus|Owned|Statue's Rewards)$/.test(text(r))||
+           /^Anemoculus \d+\/\d+$/.test(text(r))||/^Current Stamina Limit:/.test(text(r));}))return null;
+    function retained(r){return {text:r.text,x:r.x,y:r.y,width:r.width,height:r.height};}
+    return {x:Math.round(blessings[0].x+blessings[0].width/2),
+        y:Math.round(blessings[0].y+blessings[0].height/2),choice:retained(blessings[0]),
+        speaker:retained(speakers[0]),auto:retained(autos[0]),uid:retained(identities[0])};
+}
+
 function actOneLisaLockedTemplePanel(o,now,session){
     if(!o||o.session!==session||!Number.isFinite(o.timestamp)||now<o.timestamp||now-o.timestamp>1000||
        !o.hud||o.hud.world||o.hud.health||o.hud.auto||o.hud.dialogueReady||!Array.isArray(o.ocr))return false;
@@ -1318,6 +1360,46 @@ function actOneInventoryUiWorldEvidence(rows,hud) {
         'primary-scaled-readable','independent-halves-fallback'].indexOf(hud.healthDiagnostic.decision)>=0));
 }
 // A newly omitted localization result cannot waive the existing 1000ms UI gate.
+// UI-only observations may repair names only from this one enlarged strip of the same capture.
+// This is label evidence, not a party-health, active-slot or input-authority inference.
+var actOneInventoryUiPartyStrip={x:1640,y:240,width:140,height:350,scale:3};
+function actOneInventoryUiPartyCropNeeded(rows,hud) {
+    if(!Array.isArray(rows)||!hud||hud.groundControls!==true||hud.climbing!==false||hud.auto!==false||
+       hud.journal!==false||hud.bigMap!==false||hud.dialogueReady!==false||hud.choice!==false||
+       hud.loading||hud.unknownHud||hud.tutorialStep||hud.characterAcquired||
+       !actOneGroundControlEvidence(rows)||!actTwoOriginalAccount(rows)||actOneInventoryUiBigMap(rows)||
+       actOneInventoryUiUnknown(rows)||actOneEnterGameLoading(rows))return false;
+    var hp=hud.health;
+    if(!hp||!Number.isFinite(hp.current)||!Number.isFinite(hp.max)||hp.current<=0||hp.max<=0||hp.current>hp.max)return false;
+    var labels={};
+    rows.forEach(function(r){
+        if(r&&[r.x,r.y,r.width,r.height].every(Number.isFinite)&&r.width>0&&r.height>0&&
+           r.x>=1550&&r.x<=1810&&r.y>=240&&r.y<=650&&/^(Lumina|Traveler|Amber|Kaeya|Lisa)$/.test(String(r.text||'').trim()))
+            labels[String(r.text).trim()]=true;
+    });
+    return Object.keys(labels).length<4;
+}
+function actOneMergeInventoryUiPartyRows(fullRows,cropRows) {
+    // Preserve the raw full-frame rows. Never expand a partial name or count duplicate OCR as another anchor.
+    var strip=actOneInventoryUiPartyStrip,merged=fullRows.slice(),added=[],candidates={};
+    if(!Array.isArray(cropRows)||cropRows.length>32)throw new Error('UI-only party-label crop exceeded its row bound');
+    cropRows.forEach(function(r){
+        if(!r||!/^(Lumina|Traveler|Amber|Kaeya|Lisa)$/.test(String(r.text||'').trim())||
+           ![r.x,r.y,r.width,r.height].every(Number.isFinite)||r.width<=0||r.height<=0||r.x<0||r.y<0||
+           r.x+r.width>strip.width*strip.scale||r.y+r.height>strip.height*strip.scale)return;
+        var name=String(r.text).trim();
+        if(!candidates[name])candidates[name]=[];
+        candidates[name].push({text:name,x:strip.x+r.x/strip.scale,y:strip.y+r.y/strip.scale,
+            width:r.width/strip.scale,height:r.height/strip.scale});
+    });
+    Object.keys(candidates).forEach(function(name){
+        var alreadyRead=fullRows.some(function(r){return r&&String(r.text||'').trim()===name&&
+            [r.x,r.y,r.width,r.height].every(Number.isFinite)&&r.width>0&&r.height>0&&
+            r.x>=1550&&r.x<=1810&&r.y>=240&&r.y<=650;});
+        if(!alreadyRead&&candidates[name].length===1){merged.push(candidates[name][0]);added.push(candidates[name][0]);}
+    });
+    return {rows:merged,addedRows:added};
+}
 function actOneInventoryUiInputFresh(o,now,session) {
     var mode=o&&o.uiObservation;
     return !!(o&&o.session===session&&Number.isInteger(o.frameId)&&o.frameId>0&&o.map===null&&
@@ -4546,6 +4628,64 @@ function createActOneAdapter(sessionId,options) {
             events.push({type:supply?'actTwoResupply':'actTwoToast',action:target.action,cost:target.cost||null,frameId:initial.frameId,startedAt:Date.now()});click(target.x,target.y);await sleep(650);var after=await observe(),result={status:'stopped',action:target.action,frameId:after.frameId,questComplete:false};
             if(target.action==='close'){for(var poll=0;poll<5&&!after.hud.world&&!after.hud.dialogueReady&&!after.hud.choice;poll++){await sleep(300);after=await observe();}return this.finishActTwoDialogue(initial,observe,result);}return result;
         },
+        runStatueBlessingOpen: async function(initial,observe){
+            // This dedicated command cannot enter any offering, interaction, healing or pause fallback.
+            checkStop();ready();
+            if(inventoryUiOnly||!request||request.mission!=='questStep'||request.step!=='statueBlessingOpen')
+                throw new Error('Dedicated non-inventory Statue Blessing request required');
+            var source=lastObservation;
+            function sameSource(){
+                return source&&lastObservation===source&&initial&&source.session===initial.session&&
+                    source.frameId===initial.frameId&&source.timestamp===initial.timestamp&&
+                    source.screenshotPath===initial.screenshotPath;
+            }
+            if(!sameSource()||!actOneStatueBlessingChoiceTarget(source,Date.now(),request.session))
+                throw new Error('Fresh exact Statue dialogue, unique Blessing choice and visible original UID required');
+            checkStop();ready();
+            var started=Date.now(),target=sameSource()&&actOneStatueBlessingChoiceTarget(source,started,request.session);
+            if(!target)throw new Error('Statue Blessing source changed or expired before the click');
+            // Retain the exact raw capture identity and click attempt before the native call can fail.
+            var event={type:'statueBlessingOpen',requestId:request.id,frameId:source.frameId,
+                source:{session:source.session,frameId:source.frameId,capturedAt:source.capturedAt,
+                    timestamp:source.timestamp,screenshotPath:source.screenshotPath},
+                clockKind:'legacy_capture_request_wall_time',target:target,startedAt:started,
+                outcome:'started',observedFrameIds:[],physicalInputDeliveryVerified:false};
+            events.push(event);
+            try{
+                click(target.x,target.y);
+                event.outcome='returned_unverified';
+            }catch(error){
+                event.outcome='threw';event.error=String(error&&error.message||error);throw error;
+            }finally{
+                event.finishedAt=Date.now();
+            }
+            if(event.finishedAt<event.startedAt)throw new Error('Statue Blessing click clock moved backwards');
+            var deadline=event.finishedAt+3000,current=null,lastFrame=source.frameId,
+                result={status:'stopped',step:'statueBlessingOpen',action:'openBlessingPanel',clicks:1,
+                    sourceFrameId:source.frameId,panelReady:false,healingAttempted:false,offeringAttempted:false,
+                    questComplete:false,physicalInputDeliveryVerified:false};
+            // These are passive observations only. The existing strict panel predicate remains unchanged.
+            for(var poll=0;poll<6;poll++){
+                checkStop();
+                await sleep(poll===0?350:250);
+                checkStop();
+                if(Date.now()>deadline)break;
+                current=await observe();
+                if(!current||current.session!==request.session||!Number.isInteger(current.frameId)||
+                   current.frameId<=lastFrame||!Number.isFinite(current.timestamp)||
+                   current.timestamp<=event.finishedAt)throw new Error('Statue Blessing result source is not a fresh later frame');
+                lastFrame=current.frameId;event.observedFrameIds.push(current.frameId);result.frameId=current.frameId;
+                if(Date.now()>deadline)break;
+                if(actOneStatuePanelRecoveryReady(current,Date.now(),request.session)){
+                    event.panelConfirmedFrameId=current.frameId;
+                    result.status='completed';result.panelReady=true;result.panelFrameId=current.frameId;
+                    return result;
+                }
+            }
+            result.reason='Blessing clicked once; existing panel-ready proof not established within the passive bound';
+            return result;
+        },
+
         runActTwoStatue: async function(initial,observe){
             checkStop();ready();
             if(!initial||initial.session!==request.session||!Number.isFinite(initial.timestamp)||Date.now()<initial.timestamp||Date.now()-initial.timestamp>1000||!actTwoOriginalAccount(initial.ocr)||initial.hud.world||initial.hud.health)throw new Error('Fresh original-account Statue dialogue required');
@@ -8294,6 +8434,10 @@ function createActOneAdapter(sessionId,options) {
                     var mp,regionalObservation=false;
                     if(request&&request.step==='actTwoField'){try{regionalObservation=actTwoRegionalObservationPlan(request,JSON.parse(file.readTextSync('act-two-field-request.json')));}catch(regionalReadError){regionalObservation=false;}}
                     if(inventoryUiOnly){mapDiagnostic={reason:'Inventory UI-only v1: map and orientation deliberately omitted',mode:'inventory-ui-only-v1'};}
+                    else if(request&&request.mission==='questStep'&&request.step==='statueBlessingOpen') {
+                        // This command admits only same-capture dialogue/panel OCR, never map coordinates.
+                        mapDiagnostic={reason:'Statue Blessing dialogue: map and orientation deliberately omitted',mode:'statue-blessing-dialogue-v1'};
+                    }
                     else if(regionalObservation){mapDiagnostic={reason:'Reviewed regional field plan; minimap matching intentionally omitted'};}
                     else if(request&&request.mission==='questStep'&&['windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaVisualMove','lisaGlide','lisaCloseThreat','lionVisualMove','lionLocalPause'].indexOf(request.step)>=0) {
                         mapDiagnostic={reason:'Root-witnessed uncharted approach; no map coordinate inferred'};
@@ -8634,10 +8778,24 @@ function createActOneAdapter(sessionId,options) {
                     mapMs+=Date.now()-chartedMap0;
                     ready();
                 }
+                var inventoryPartyOcrMs=0;
                 if(inventoryUiOnly) {
                     // Classify only the current image; retain no inherited position or camera value.
                     hud.loading=actOneEnterGameLoading(rows);
                     hud.unknownHud=actOneEnterGameAuthPrompt(rows)||actOneEnterGameUnknownUi(rows);
+                    if(actOneInventoryUiPartyCropNeeded(rows,hud)) {
+                        // One bounded OCR call uses img, never another capture or a previous party roster.
+                        var partyStarted=Date.now(),partyStrip=actOneInventoryUiPartyStrip;
+                        var inventoryPartyRows=scaledRows(img,partyStrip.x,partyStrip.y,partyStrip.width,partyStrip.height);
+                        var inventoryPartyMerge=actOneMergeInventoryUiPartyRows(rows,inventoryPartyRows);
+                        rows=inventoryPartyMerge.rows;
+                        var partyFinished=Date.now();inventoryPartyOcrMs=partyFinished-partyStarted;
+                        hud.partyNameOcr={version:1,kind:'scaled-same-capture-party-strip-v1',session:session,frameId:frame,
+                            observationStartedAtUnixMs:t0,startedAtUnixMs:partyStarted,finishedAtUnixMs:partyFinished,
+                            region:{x:partyStrip.x,y:partyStrip.y,width:partyStrip.width,height:partyStrip.height},scale:partyStrip.scale,
+                            rawRows:inventoryPartyRows,addedRows:inventoryPartyMerge.addedRows};
+                        ocrMs=Date.now()-o0;
+                    }
                     hud.world=actOneInventoryUiWorldEvidence(rows,hud);
                 }
                 if(pngPending) {
@@ -8653,8 +8811,12 @@ function createActOneAdapter(sessionId,options) {
                     // With overlap, pngWriteMs counts only copy/schedule plus the final wait,
                     // not background encoding time hidden behind recognition.
                     timings: { mapDiagnostic:mapDiagnostic, captureMs: captureMs, ocrMs: ocrMs, ocrFindMultiMs:ocrPrimitiveMs, ocrReadCount:ocrReadCount, fullOcrMs: fullOcrMs, reviveStockOcrMs:reviveStockOcrMs, healthOcrMs: healthOcrMs, objectiveOcrMs: objectiveOcrMs, controlOcrMs:controlOcrMs, cooldownOcrMs:cooldownOcrMs, spikeSurfaceMs:spikeSurfaceMs, levelPanelOcrMs:levelPanelOcrMs, interactionOcrMs:interactionOcrMs, objectiveSource: reusedObjectiveRows ? 'fullFrame' : 'crop', pngWriteMs: pngMs, pngWriteMode:pngWriteMode, pngScheduleMs:pngScheduleMs, pngWaitMs:pngWaitMs, mapMs: mapMs, totalMs: Date.now() - t0 } };
-                if(inventoryUiOnly)lastObservation.uiObservation={version:1,kind:'inventory-ui-only-v1',
-                    mapOmitted:true,orientationOmitted:true,observationStartedAtUnixMs:t0};
+                if(inventoryUiOnly) {
+                    lastObservation.uiObservation={version:1,kind:'inventory-ui-only-v1',
+                        mapOmitted:true,orientationOmitted:true,observationStartedAtUnixMs:t0};
+                    // Wall-clock OCR duration is diagnostic; the unchanged freshness gate uses t0.
+                    lastObservation.timings.partyNameOcrMs=inventoryPartyOcrMs;
+                }
                 if(lisaNavigationRequest()&&lisaNavigationInputReady(lastObservation))lisaNavigationState.lastField=lastObservation;
                 return lastObservation;
             } finally {

@@ -249,6 +249,72 @@ class MapOwnerTest(unittest.TestCase):
         write(folder/'ensure-child.json',result)
         return prior,folder,result,game
 
+    def create_r67_successor(self):
+        """Seal R66 and prepare exactly its next fresh English, explicitly released successor."""
+        previous,folder,result,game=self.create_r66_successor()
+        prior=folder/'map-owner-lineage.json'
+        write(prior,owner.replacement(previous,folder))
+        folder,result=self.create_next_handoff(prior,result,game,67)
+        build,_=owner.target_package(67)
+        write(Path(build['targetDirectory'])/'User/config.json',owner.R62_CLEAN_CAPTURE)
+        digest=owner.check_clean_target(build)
+        preflight=json.loads((folder/'preflight.json').read_bytes())
+        preflight['targetConfigSha256']=digest
+        result['replacementEvidence']['existingTargetConfigSha256']=digest
+        write(folder/'preflight.json',preflight)
+        write(folder/'ensure-child.json',result)
+        return prior,folder,result,game
+
+    def test_r67_replays_exact_original_root_and_game_but_rejects_r68(self):
+        """Only one new finite handoff is permitted, even with a fabricated later package present."""
+        prior,folder,result,game=self.create_r67_successor()
+        receipt=owner.replacement(prior,folder);path=folder/'map-owner-lineage.json'
+        write(path,receipt)
+        self.assertEqual(owner.load_map_owner(path),dict(root=self.ids['root'],child=owner.identity(result['child'])))
+        self.assertEqual(receipt['protectedGame'],game)
+        self.assertEqual(receipt['priorLineageSha256'],hashlib.sha256(prior.read_bytes()).hexdigest())
+        later,_=self.create_next_handoff(path,result,game,68)
+        with self.assertRaisesRegex(ValueError,'bounded'):owner.replacement(path,later)
+        with self.assertRaisesRegex(ValueError,'Unsupported map release'):owner.target_package(68)
+
+    def assert_r67_retains(self,regression):
+        """Replay an unchanged adversarial contract on the actual additional predecessor depth."""
+        fixture=self.create_r67_successor()
+        with patch.object(self,'create_r66_successor',return_value=fixture):regression()
+
+    def test_r67_rejects_changed_or_missing_game_lifetime(self):
+        """Coherently changed reports still cannot replace the original Genshin lifetime."""
+        self.assert_r67_retains(self.test_r66_rejects_coherently_changed_or_missing_game_lifetime)
+
+    def test_r67_rejects_changed_root_stale_source_or_reused_destination(self):
+        """The source and destination must retain distinct exact authenticated identities."""
+        self.assert_r67_retains(self.test_r66_rejects_changed_root_stale_source_or_reused_destination)
+
+    def test_r67_requires_explicit_idle_at_both_endpoints(self):
+        """Missing, active and non-boolean ownership cannot qualify either owner."""
+        self.assert_r67_retains(self.test_r66_requires_explicitly_released_root_and_child_at_both_endpoints)
+
+    def test_r67_rejects_skipped_circular_or_rewritten_predecessors(self):
+        """The one extra hop must still replay each exact original immutable report."""
+        self.assert_r67_retains(self.test_r66_rejects_skipped_circular_or_rewritten_predecessors)
+
+    def test_r67_clean_target_requires_fresh_english_defaults(self):
+        """Only the same clean capture and English schema may enter the new child."""
+        _,_,result,_=self.create_r67_successor();build,_=owner.target_package(67)
+        config=Path(result['selectedPackage']['targetDirectory'])/'User/config.json'
+        self.assertEqual(owner.check_clean_target(build),hashlib.sha256(config.read_bytes()).hexdigest())
+        for changed in (owner.CLEAN_CAPTURE,dict(owner.R62_CLEAN_CAPTURE,extra=True),
+                dict(owner.R62_CLEAN_CAPTURE,otherConfig={'uiCultureInfoName':'en','gameCultureInfoName':'zh-Hans'}),
+                dict(owner.R62_CLEAN_CAPTURE,wgcV2ReadbackMode='nonblocking')):
+            write(config,changed)
+            with self.subTest(config=changed),self.assertRaisesRegex(ValueError,'Unexpected target capture settings'):
+                owner.check_clean_target(build)
+
+    def test_r67_source_and_target_witnesses_preserve_replay(self):
+        """Removed complete runtimes retain identity evidence; damaged live or witness bytes still refuse."""
+        prior,folder,result,_=self.create_r67_successor()
+        self.check_source_and_target_witnesses(prior,folder,result,(66,67))
+
     def test_r60_handoff_keeps_the_same_game_and_rejects_stale_source(self):
         """The newly allowed successor still cannot reuse the discovery from before the R60 replacement."""
         prior,folder,result,game=self.create_r60_successor()
@@ -310,8 +376,8 @@ class MapOwnerTest(unittest.TestCase):
         self.assertEqual(receipt['priorLineageSha256'],hashlib.sha256(prior.read_bytes()).hexdigest())
         self.assertEqual(owner.load_map_owner(prior)['root'],self.ids['root'])
 
-    def test_r66_replays_exact_original_root_and_game_but_rejects_r67(self):
-        """Only the next complete R65-to-R66 transition is admitted, even when an R67 package exists."""
+    def test_r66_replays_exact_original_root_and_game(self):
+        """The historical R66 transition keeps its original exact root and game identity."""
         prior,folder,result,game=self.create_r66_successor()
         receipt=owner.replacement(prior,folder)
         path=folder/'map-owner-lineage.json'
@@ -320,9 +386,6 @@ class MapOwnerTest(unittest.TestCase):
         self.assertEqual(receipt['protectedGame'],game)
         self.assertEqual(receipt['priorLineageSha256'],hashlib.sha256(prior.read_bytes()).hexdigest())
         self.assertEqual(owner.load_map_owner(prior)['root'],self.ids['root'])
-        later,_=self.create_next_handoff(path,result,game,67)
-        with self.assertRaisesRegex(ValueError,'bounded'):owner.replacement(path,later)
-        with self.assertRaisesRegex(ValueError,'Unsupported map release'):owner.target_package(67)
 
     def test_r66_rejects_coherently_changed_or_missing_game_lifetime(self):
         """Fresh reports cannot replace the game already sealed by R65 and its original ancestors."""

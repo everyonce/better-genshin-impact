@@ -25,13 +25,24 @@ def digest(raw):
     return hashlib.sha256(raw).hexdigest()
 
 
-def bounded_file(path, maximum=16 * 1024 * 1024):
+def bounded_file(path, maximum=16 * 1024 * 1024, *, source_sha256=None):
     """Read one explicitly named artifact with a finite memory bound."""
     path = Path(path)
-    require(path.is_file() and 0 < path.stat().st_size <= maximum, 'Missing or oversized artifact: ' + str(path))
+    # Only the declared source inventory may contain an empty Python module.
+    # Structured records and pixels keep the original nonempty contract.
+    if source_sha256 is not None:
+        require(path.suffix == '.py' and isinstance(source_sha256, str)
+                and len(source_sha256) == 64 and all(c in '0123456789abcdef' for c in source_sha256),
+                'Invalid declared Python source pin')
+    allow_empty = source_sha256 == digest(b'')
+    require(path.is_file() and (0 if allow_empty else 1) <= path.stat().st_size <= maximum,
+            'Missing or oversized artifact: ' + str(path))
     with path.open('rb') as stream:
         raw = stream.read(maximum + 1)
     require(len(raw) <= maximum, 'Artifact grew beyond its bound')
+    require(bool(raw) or allow_empty, 'Artifact became empty while reading')
+    if source_sha256 is not None:
+        require(digest(raw) == source_sha256, 'Frozen combat source changed: ' + str(path))
     return raw
 
 
@@ -507,7 +518,7 @@ def audit_trial(folder):
     require(all('tools/bettergi-agent/' + name in plan['sourceFiles'] for name in required_sources),
             'Frozen combat source inventory is incomplete')
     for name, sha in plan['sourceFiles'].items():
-        raw = bounded_file(local_artifact(folder, Path('source-snapshot') / name))
+        raw = bounded_file(local_artifact(folder, Path('source-snapshot') / name), source_sha256=sha)
         require(digest(raw) == sha, 'Frozen combat source changed: ' + name)
     # Replay uses the implementation that actually produced this trial. A later
     # incompatible guard must be audited from its preserved source snapshot.

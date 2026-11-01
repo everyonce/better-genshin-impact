@@ -251,6 +251,52 @@ class CombatTrialStreamTests(unittest.TestCase):
                 self.assertEqual(report['acceptedInputActions'], 0)
                 self.assertIn('release', bridge.commands)
 
+    def test_zero_attack_episode_retains_terminal_stop_before_release(self):
+        """Replay the real no-eligible-proposal loop without inventing its terminal transition."""
+        from audit_combat_trial import replay_events
+        with tempfile.TemporaryDirectory() as folder:
+            proposed = proposal()
+            proposed['steps'][0]['keys'] = []
+            bridge, recorder = TrialBridge(), CapturingRecorder()
+            self.assertEqual(self.run_inert(folder, bridge, TrialPolicy(proposed=proposed), recorder, seconds=.12), 1)
+            report = json.loads((Path(folder) / 'run.json').read_bytes())
+            stops = [row for row in recorder.events if row['type'] == 'combatTrialStop']
+            self.assertEqual(len(stops), 1)
+            self.assertEqual(stops[0], report['combatTrialTerminalStop'])
+            self.assertEqual(stops[0]['trigger']['reason'], 'trialEndedBeforeDrain')
+            self.assertLess(recorder.events.index(stops[0]), next(i for i,row in enumerate(recorder.events)
+                if row['type'] == 'combatTrialRelease'))
+            replay = replay_events(report['combatTrialGuard'], report['hello'], recorder.events)
+            self.assertEqual(replay['state'], report['combatTrialGuardState'])
+            self.assertFalse(replay['state']['trialComplete'])
+            self.assertEqual(bridge.actions, [])
+            with self.assertRaises(ValueError):
+                replay_events(report['combatTrialGuard'], report['hello'],
+                              [row for row in recorder.events if row['type'] != 'combatTrialStop'])
+
+    def test_terminal_stop_journal_failure_still_releases_and_closes(self):
+        """A failed new Stop write cannot interrupt the originally required release/stop cleanup."""
+        class FailedStopRecorder(CapturingRecorder):
+            """Refuse only the newly emitted terminal transition."""
+            def event(self, row):
+                """Leave all prior evidence intact while modelling a failed Stop journal write."""
+                if row['type'] == 'combatTrialStop':
+                    raise RuntimeError('synthetic terminal Stop write failed')
+                return super().event(row)
+        with tempfile.TemporaryDirectory() as folder:
+            proposed = proposal()
+            proposed['steps'][0]['keys'] = []
+            bridge = TrialBridge()
+            with self.assertRaisesRegex(RuntimeError, 'terminal Stop write failed'):
+                self.run_inert(folder, bridge, TrialPolicy(proposed=proposed), FailedStopRecorder(), seconds=.12)
+            report = json.loads((Path(folder) / 'run.json').read_bytes())
+            self.assertEqual(report['status'], 'failed')
+            self.assertEqual(report['combatTrialTerminalStop']['trigger']['reason'], 'trialEndedBeforeDrain')
+            self.assertIn('Stop write failed', report['combatTrialStopJournalError'])
+            self.assertEqual(bridge.commands[-2:], ['release', 'stop'])
+            bridge.handle.close.assert_called_once()
+            self.assertEqual(bridge.actions, [])
+
     def test_new_health_hazard_during_inference_preserves_rgb_and_prevents_action(self):
         with tempfile.TemporaryDirectory() as folder:
             entered = threading.Event()

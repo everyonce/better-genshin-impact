@@ -3150,13 +3150,23 @@ def run_episode(args, policy=None, control=None):
             with receive_lock:
                 state = combat_guard.snapshot()
                 if not state['trialComplete'] and state['trip'] is None:
-                    report['combatTrialGuardState'] = combat_guard.fail('trialEndedBeforeDrain', time.perf_counter_ns())['state']
+                    # Replay must see this exact state transition before Release.
+                    # A failed journal must still leave the unconditional release reachable.
+                    terminal_stop = combat_guard.fail('trialEndedBeforeDrain', time.perf_counter_ns())
+                    report['combatTrialGuardState'] = terminal_stop['state']
+                    report['combatTrialTerminalStop'] = terminal_stop
+                    try:
+                        if recorder and not recorder.error:
+                            recorder.event(terminal_stop)
+                    except Exception as error:
+                        stop_failure = error
+                        report['combatTrialStopJournalError'] = str(error)
                 try:
                     released, _ = combat_trial_release(bridge, combat_guard, report,
                         recorder if recorder and not recorder.error else None, 'combatTrialTeardown')
                     collect_receipts(released)
                 except Exception as error:
-                    stop_failure = error
+                    stop_failure = stop_failure or error
                     report['combatTrialReleaseError'] = str(error)
                     report['combatTrialGuardState'] = combat_guard.fail('terminalReleaseFailure', time.perf_counter_ns(), error=str(error))['state']
         producer.join(timeout=3)

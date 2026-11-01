@@ -6,7 +6,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from audit_combat_trial import audit_episode, replay_events, verify_retirement, verify_temperatures, verify_preparation_chain
+from audit_combat_trial import audit_episode, replay_events, verify_retirement, verify_temperatures, verify_preparation_chain, bounded_file, digest
 from combat_trial_guard import CombatTrialGuard, GROUP_SCOPE, FOUR_SCOPE, scope_fields, trial_policy,scope_maximum
 from policy_rgb_archive import write_policy_rgb
 from test_combat_trial_guard import HELLO, OWNER, binding, frame, proposal,review_parts,group_review_parts
@@ -95,6 +95,32 @@ class CombatTrialAuditTests(unittest.TestCase):
     def audit(self):
         """Run the same pure episode audit used for retained native trials."""
         return audit_episode(self.episode, self.events, self.frames, self.folder, self.binding)
+
+    def test_empty_python_source_requires_its_exact_declared_hash(self):
+        """A real empty package initializer is source evidence, never an empty structured artifact."""
+        path = self.folder / '__init__.py'
+        path.write_bytes(b'')
+        self.assertEqual(bounded_file(path, source_sha256=digest(b'')), b'')
+        for pin in (None, digest(b'original module'), 'invalid'):
+            with self.subTest(pin=pin), self.assertRaises(ValueError):
+                bounded_file(path, source_sha256=pin)
+        path.write_bytes(b'substituted')
+        with self.assertRaisesRegex(ValueError, 'source changed'):
+            bounded_file(path, source_sha256=digest(b''))
+        path.unlink()
+        with self.assertRaises(ValueError):
+            bounded_file(path, source_sha256=digest(b''))
+
+    def test_empty_json_and_image_cannot_inherit_source_exception(self):
+        """The source-only exception cannot authorize absent review records or pixels."""
+        for name in ('review.json', 'image.png'):
+            path = self.folder / name
+            path.write_bytes(b'')
+            with self.subTest(name=name):
+                with self.assertRaises(ValueError):
+                    bounded_file(path)
+                with self.assertRaisesRegex(ValueError, 'Python source pin'):
+                    bounded_file(path, source_sha256=digest(b''))
 
     def test_complete_trace_replays_three_drained_pulses(self):
         """A full drain verifies transport without claiming enemy damage or a kill."""

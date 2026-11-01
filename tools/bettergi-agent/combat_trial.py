@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import stat
 import sys
 import time
 from types import SimpleNamespace
@@ -44,7 +45,9 @@ HOST_SECONDS = 90
 MAX_REVIEW_AGE_SECONDS = 120
 MAX_RECORD_BYTES = 160 * 1024 * 1024
 EVIDENCE_NAMES = ('review', 'plan', 'scene', 'sidecar', 'image', 'goal')
-PREPARATION_KIND = 'combat-trial-paused-preparation-v1'
+LEGACY_PREPARATION_KIND = 'combat-trial-paused-preparation-v1'
+PREPARATION_KIND = 'combat-trial-paused-preparation-v2'
+LOADING_PAUSE_VERIFICATION = 'native-input-disabled-inventory-probe-v1'
 MAX_PAUSE_PROOF_AGE_SECONDS = 30
 PREPARATION_MARKERS = ('preparation.json', 'prepared.json', 'RESUME-REQUESTED.json', 'RESUMED.json',
                        'ARM-REQUESTED.json', 'ARM.json', 'ARM-CONSUMED.json', 'pause-evidence', 'resume-evidence')
@@ -84,8 +87,14 @@ def read_bytes(path, maximum=16 * 1024 * 1024, *, allow_empty=False):
     """Bound one read; only source manifests may retain an empty Python package file."""
     path = local_path(path)
     with path.open('rb') as stream:
-        raw = stream.read(maximum + 1)
-    require((allow_empty or len(raw) > 0) and len(raw) <= maximum, 'Evidence exceeds its bounded size')
+        info = os.fstat(stream.fileno())
+        require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1
+            and (allow_empty or info.st_size > 0) and info.st_size <= maximum,
+            'Evidence is linked, nonregular or exceeds its bounded size')
+        # The safety ceiling is not an allocation size. One extra byte beyond
+        # the observed length still detects growth and retains truncation refusal.
+        raw = stream.read(info.st_size + 1)
+    require(len(raw) == info.st_size, 'Evidence changed size while reading')
     return raw
 
 
@@ -191,6 +200,41 @@ def installed_resources():
         checkpoint=str(CHECKPOINT.resolve()), modelSource=str(MODEL_SOURCE.resolve()), goal=str(GOAL.resolve()))
 
 
+def retain_worker_runtime(folder, resources):
+    """Archive the exact planned interpreter/venv contract before launching its worker."""
+    from combat_process_identity import runtime_contract
+    contract = runtime_contract(resources, reader=None)
+    archive = folder / 'python-runtime'
+    archive.mkdir(exist_ok=False)
+    retained = {}
+    for index, (name, expected) in enumerate(sorted(contract['files'].items())):
+        raw = read_bytes(name, 4 * 1024 * 1024)
+        require(digest(raw) == expected, 'Python runtime changed during archival')
+        target = archive / (str(index).zfill(2) + '-' + Path(name).name)
+        target.write_bytes(raw)
+        retained[name] = str(target)
+    return dict(contract=contract, retained=retained)
+
+
+def verify_worker_runtime(record, resources, folder, *, originals=True):
+    """Rebuild the pinned direct/venv descriptor from exact archived configuration bytes."""
+    from combat_process_identity import runtime_contract
+    require(isinstance(record, dict) and set(record) == {'contract', 'retained'}
+        and set(record['retained']) == set(record['contract']['files']), 'Python runtime archive is incomplete')
+    def reader(path):
+        """Keep original and retained interpreter bytes joined without broad filesystem reads."""
+        name = str(path)
+        require(name in record['retained'], 'Python runtime introduced an unpinned file')
+        raw = read_bytes(local_path(record['retained'][name], root=folder / 'python-runtime'), 4 * 1024 * 1024)
+        require(digest(raw) == record['contract']['files'][name]
+            and (not originals or raw == read_bytes(name, 4 * 1024 * 1024)), 'Python runtime bytes changed')
+        return raw
+    reader.venv = record['contract'].get('kind') == 'windows-venv-redirector-v1'
+    actual = runtime_contract(resources, reader)
+    require(actual == record['contract'], 'Python runtime descriptor changed')
+    return actual
+
+
 def prepare(folder, owner_file, evidence, *, maximum_review_age=MAX_REVIEW_AGE_SECONDS, _prepared=None,
             scope=SINGLE_SCOPE):
     """Freeze a separately authored visual review, its originals and the installed source."""
@@ -231,6 +275,10 @@ def prepare(folder, owner_file, evidence, *, maximum_review_age=MAX_REVIEW_AGE_S
         evidence=records, resources=resources, checkpointSha256=runtime.OPEN_P2P_SHA256,
         checkpointStamp=file_stamp(CHECKPOINT), sourceFiles=snapshot_sources(folder) if _prepared is None else copy.deepcopy(_prepared['preparation']['sourceFiles']))
     plan.update(scope_fields(scope))
+    if _prepared is None:
+        plan['workerRuntime'] = retain_worker_runtime(folder, resources)
+    elif 'workerRuntime' in _prepared['preparation']:
+        plan['workerRuntime'] = copy.deepcopy(_prepared['preparation']['workerRuntime'])
     if _prepared is not None:
         plan['preparedPolicy'] = prepared_link(_prepared)
     verify_sources(folder, plan['sourceFiles'])
@@ -285,8 +333,8 @@ def prepare_paused(folder, owner_file, pause_from, *, scope=SINGLE_SCOPE):
     owner = load_map_owner(owner_file)
     witness = inspect_transition(pause_from, owner, 'pause', root=ROOT)
     checked = time.time_ns()
-    require(0 <= checked - witness['terminalTimestampUnixMs'] * 1_000_000 <= MAX_PAUSE_PROOF_AGE_SECONDS * 1_000_000_000,
-            'Inventory pause witness is stale or future-dated')
+    require(0 <= checked - witness['terminalTimestampUnixMs'] * 1_000_000,
+            'Historical inventory pause witness is future-dated')
     require(witness['cleanupAcknowledgedAtUnixNs'] <= checked, 'Inventory pause cleanup is future-dated')
     resources = installed_resources()
     for name, value in resources.items():
@@ -295,13 +343,15 @@ def prepare_paused(folder, owner_file, pause_from, *, scope=SINGLE_SCOPE):
     require(digest(read_bytes(GOAL)) == GOAL_SHA256 and file_sha(CHECKPOINT) == runtime.OPEN_P2P_SHA256,
             'Prepared model or combat goal differs')
     folder.mkdir(parents=True, exist_ok=False)
-    preparation = dict(version=1, kind=PREPARATION_KIND, runId=uuid.uuid4().hex, directory=str(folder),
+    preparation = dict(version=2, kind=PREPARATION_KIND, runId=uuid.uuid4().hex, directory=str(folder),
         createdAtUnixNs=checked, owner=owner, ownerFile=str(owner_file), ownerSha256=digest(read_bytes(owner_file)),
         inputEnabled=False, attacksAllowed=False, maximumHostSeconds=HOST_SECONDS,
         maximumPauseProofAgeSeconds=MAX_PAUSE_PROOF_AGE_SECONDS, modelConfiguration=model_settings(),
         goalSha256=GOAL_SHA256, resources=resources, checkpointSha256=runtime.OPEN_P2P_SHA256,
         checkpointStamp=file_stamp(CHECKPOINT), sourceFiles=snapshot_sources(folder),
-        pause=retain_ui_proof(folder, pause_from, owner, 'pause'))
+        pause=retain_ui_proof(folder, pause_from, owner, 'pause'),
+        loadingPauseVerification=LOADING_PAUSE_VERIFICATION,
+        workerRuntime=retain_worker_runtime(folder, resources))
     preparation.update(declared_scope)
     verify_preparation(preparation, folder, recent_pause=True)
     exclusive_json(folder / 'preparation.json', preparation)
@@ -314,7 +364,11 @@ def load_preparation(path):
     value, sha = document(path, 2 * 1024 * 1024)
     combat_scope(value)
     require(path.name == 'preparation.json' and value.get('directory') == str(path.parent)
-        and value.get('version') == 1 and value.get('kind') == PREPARATION_KIND
+        and ((value.get('version') == 1 and value.get('kind') == LEGACY_PREPARATION_KIND
+              and 'loadingPauseVerification' not in value)
+             or (value.get('version') == 2 and value.get('kind') == PREPARATION_KIND
+                 and value.get('loadingPauseVerification') == LOADING_PAUSE_VERIFICATION
+                 and isinstance(value.get('workerRuntime'), dict)))
         and isinstance(value.get('runId'), str) and re.fullmatch('[a-f0-9]{32}', value['runId'])
         and value.get('inputEnabled') is False and value.get('attacksAllowed') is False
         and value.get('maximumHostSeconds') == HOST_SECONDS
@@ -335,7 +389,12 @@ def verify_preparation(preparation, folder, *, recent_pause=False, originals=Tru
         and file_stamp(CHECKPOINT) == preparation['checkpointStamp']
         and digest(read_bytes(GOAL)) == preparation['goalSha256'] == GOAL_SHA256, 'Prepared model or goal changed')
     proof = verify_ui_proof(preparation['pause'], preparation['owner'], 'pause', folder, originals=originals)
-    if recent_pause:
+    if 'workerRuntime' in preparation:
+        verify_worker_runtime(preparation['workerRuntime'], preparation['resources'], folder, originals=originals)
+    else:
+        require(not (folder / 'python-runtime').exists() and not (folder / 'python-runtime').is_symlink(),
+                'Undeclared Python runtime archive cannot select historical preparation')
+    if recent_pause and preparation.get('kind') == LEGACY_PREPARATION_KIND:
         require(0 <= time.time_ns() - proof['terminalTimestampUnixMs'] * 1_000_000 <= MAX_PAUSE_PROOF_AGE_SECONDS * 1_000_000_000,
                 'Inventory pause is no longer recent enough for loading')
     verify_sources(folder, preparation['sourceFiles'])
@@ -424,6 +483,7 @@ def verify_prepared_plan(plan, folder, *, originals=True):
         and plan['runId'] == preparation['runId'] and plan['owner'] == preparation['owner']
         and plan['ownerFile'] == preparation['ownerFile'] and plan['ownerSha256'] == preparation['ownerSha256']
         and plan['sourceFiles'] == preparation['sourceFiles'] and plan['resources'] == preparation['resources']
+        and plan.get('workerRuntime') == preparation.get('workerRuntime')
         and plan['checkpointStamp'] == preparation['checkpointStamp']
         and plan['checkpointSha256'] == preparation['checkpointSha256']
         and plan['binding']['goalSha256'] == preparation['goalSha256']
@@ -495,6 +555,11 @@ def verify_plan(plan, folder):
     require(plan['owner'] == load_map_owner(plan['ownerFile'])
         and digest(read_bytes(plan['ownerFile'])) == plan['ownerSha256'], 'Original owner evidence changed')
     resources = plan['resources']
+    if 'workerRuntime' in plan:
+        verify_worker_runtime(plan['workerRuntime'], resources, folder)
+    else:
+        require(not (folder / 'python-runtime').exists() and not (folder / 'python-runtime').is_symlink(),
+                'Undeclared Python runtime archive cannot select historical plan')
     expected = dict(gpuPython=GPU_PYTHON, checkpoint=CHECKPOINT, modelSource=MODEL_SOURCE, goal=GOAL)
     require(all(resources.get(key) == str(path.resolve()) for key, path in expected.items()), 'Installed model/runtime paths changed')
     require(plan['checkpointSha256'] == runtime.OPEN_P2P_SHA256
@@ -521,14 +586,26 @@ def verify_plan(plan, folder):
     return binding
 
 
-def ordinary_identity(session):
+def ordinary_identity(session, contract=None):
     """Record the worker's native token and reject elevated or non-RDP execution."""
     runtime.control_module()
-    from child_runner import require_ordinary_rdp, windows_identity
+    from child_runner import require_ordinary_rdp, windows_identity, process_identity
     identity = windows_identity()
     require_ordinary_rdp(identity, session)
     require(identity['integrityRid'] == 8192, 'Combat worker requires the ordinary medium-integrity token')
-    return dict(identity, processId=os.getpid(), parentProcessId=os.getppid())
+    result = dict(identity, processId=os.getpid(), parentProcessId=os.getppid())
+    if contract is not None:
+        from combat_process_identity import worker_ancestry
+        chain = worker_ancestry(contract, os.getpid(), os.getppid(), process_identity)
+        if chain is not None:
+            result['launchAncestry'] = chain
+            result['processIdentity'] = chain[0]
+        else:
+            current = process_identity(os.getpid())
+            require(current['parentProcessId'] == os.getppid() and current['windowsSessionId'] == session
+                and Path(current['executable']) == Path(contract['executable']), 'Direct worker image/session changed')
+            result['processIdentity'] = current
+    return result
 
 
 def require_idle(lifecycle, owner):
@@ -582,7 +659,7 @@ def episode_arguments(plan):
             args.combat_trial_scope = combat_scope(plan)
             args.combat_trial_maximum_enemy_candidates = scope_maximum(combat_scope(plan))
     else:
-        require(plan.get('kind') == PREPARATION_KIND and plan.get('inputEnabled') is False,
+        require(plan.get('kind') in (PREPARATION_KIND, LEGACY_PREPARATION_KIND) and plan.get('inputEnabled') is False,
                 'Only a zero-input preparation may load without combat authority')
         args.enable_input, args.input_keys, args.max_input_actions = False, '', 0
     args.expected_process_id = plan['owner']['child']['processId']
@@ -728,7 +805,7 @@ def terminal_outcome(episode, binding):
 
 
 def run_worker(plan_path, *, lifecycle=None, loader=None, episode=None, identity_reader=None, watch_factory=None,
-               paused_preparation=False, prepared_callback=None):
+               paused_preparation=False, prepared_callback=None, pause_probe=None):
     """Own one prewarm/start/episode attempt and preserve every terminal failure without retry."""
     plan, plan_sha = (load_preparation if paused_preparation else load_plan)(plan_path)
     preparation, preparation_sha = (copy.deepcopy(plan), plan_sha) if paused_preparation else (None, None)
@@ -751,19 +828,24 @@ def run_worker(plan_path, *, lifecycle=None, loader=None, episode=None, identity
     control = watch = policy = None
     native_error = None
     try:
-        report['worker'] = (identity_reader or ordinary_identity)(plan['owner']['child']['windowsSessionId'])
+        contract = (plan.get('workerRuntime') or {}).get('contract')
+        report['worker'] = (identity_reader or (lambda session: ordinary_identity(session, contract)))(
+            plan['owner']['child']['windowsSessionId'])
         identity = report['worker']
         require(identity['windowsSessionId'] == plan['owner']['child']['windowsSessionId']
             and identity['remoteDesktop'] is True and identity['elevated'] is False and identity['integrityRid'] == 8192
             and identity['processId'] == os.getpid() and identity['parentProcessId'] == os.getppid(),
             'Worker is not the original ordinary RDP session')
+        # Initialize only after native token/ancestry admission, but before any
+        # fallible source/pause validation so a zero-start failure can prove idle.
+        lifecycle = lifecycle or runtime.control_module()
+        require_idle(lifecycle, plan['owner'])
         if paused_preparation:
             require(not any((folder / name).exists() for name in ('prepared.json', 'RESUMED.json', 'ARM.json',
                 'ARM-CONSUMED.json', 'ARM-REQUESTED.json', 'RESUME-REQUESTED.json')), 'Preparation was armed before worker admission')
             verify_preparation(plan, folder, recent_pause=True)
         else:
             verify_plan(plan, folder)
-        lifecycle = lifecycle or runtime.control_module()
         require_idle(lifecycle, plan['owner'])
         control = runtime.ResidentControl(folder / 'patrol.json.control.json', folder / 'patrol.json.status.json',
                                           plan['runId'], frozen_goal=True)
@@ -774,12 +856,30 @@ def run_worker(plan_path, *, lifecycle=None, loader=None, episode=None, identity
         watch.check()
         exact_control(control, plan['runId'])
         args = episode_arguments(plan)
+        loading_pause = preparation['pause'] if paused_preparation else None
+        if paused_preparation and preparation.get('kind') == PREPARATION_KIND:
+            from combat_pause_probe import probe_inventory
+            report['phase'] = 'checkingPausedInventory'
+            report['inventoryVerificationStartedAtUnixNs'] = time.time_ns()
+            loading_pause = (pause_probe or probe_inventory)(preparation, folder, lifecycle, watch, control)
+            proof = verify_ui_proof(loading_pause, plan['owner'], 'verify', folder)
+            probe_plan, _ = document(Path(loading_pause['directory']) / 'plan.json')
+            require(probe_plan.get('runId') == plan['runId'] and probe_plan.get('preparationSha256') == preparation_sha
+                and proof['sourceFiles'] == preparation['pause']['proof']['sourceFiles']
+                and proof['terminalTimestampUnixMs'] >= report['inventoryVerificationStartedAtUnixNs'] // 1_000_000
+                and proof['cleanupAcknowledgedAtUnixNs'] <= time.time_ns(),
+                'Passive loading proof changed preparation or installed sources')
+            require_idle(lifecycle, plan['owner'])
+            watch.check()
+            exact_control(control, plan['runId'])
         report['phase'] = 'loading'
         if paused_preparation:
             loading_started = time.time_ns()
-            require(0 <= loading_started - preparation['pause']['proof']['terminalTimestampUnixMs'] * 1_000_000
+            require(0 <= loading_started - loading_pause['proof']['terminalTimestampUnixMs'] * 1_000_000
                 <= MAX_PAUSE_PROOF_AGE_SECONDS * 1_000_000_000, 'Inventory pause expired before model loading')
             report['modelPreparation'] = dict(startedAtUnixNs=loading_started, inputEnabled=False)
+            if preparation.get('kind') == PREPARATION_KIND:
+                report['modelPreparation']['inventoryProbe'] = loading_pause
         control.publish(state='loading', worker=identity, modelLoads=0, modelLoadAttempts=1)
         report['modelLoadAttempts'] = 1
         began = time.perf_counter_ns()
@@ -838,6 +938,21 @@ def run_worker(plan_path, *, lifecycle=None, loader=None, episode=None, identity
     finally:
         # Never call stop_agent here: its public API identifies the child but not
         # a particular lease. run_episode alone drains its own authenticated pipe.
+        probe_result = folder / 'loading-pause-probe/result.json'
+        expected_probe = (report.get('modelPreparation') or {}).get('inventoryProbe')
+        if probe_result.exists():
+            try:
+                probe_report, probe_sha = document(probe_result)
+                report.update(inventoryProbeResult=probe_report, inventoryProbeResultSha256=probe_sha)
+                if expected_probe is not None:
+                    require(probe_sha == expected_probe['proof']['files'].get(str(probe_result)),
+                            'Original passive inventory result changed after loading')
+                if probe_report.get('cleanupError') or probe_report.get('pilotStartOutcome') == 'unresolved':
+                    report['inventoryProbeCleanupError'] = probe_report.get('cleanupError') or 'Unresolved passive pilot start'
+            except BaseException as error:
+                report['inventoryProbeCleanupError'] = str(error) or type(error).__name__
+        elif expected_probe is not None:
+            report['inventoryProbeCleanupError'] = 'Original passive inventory result missing at retirement'
         try:
             path = folder / 'native-episode.json'
             if path.exists():
@@ -864,6 +979,8 @@ def run_worker(plan_path, *, lifecycle=None, loader=None, episode=None, identity
             if lifecycle is not None:
                 report['cleanupVerified'] = await_idle(lifecycle, plan['owner'])
                 report['ownerIdleMinimizedAfter'] = True
+                root_after, child_after = require_idle(lifecycle, plan['owner'])
+                exclusive_json(folder / 'worker-owner-after.json', dict(root=root_after, child=child_after))
         except BaseException as error:
             report.update(status='unresolved', cleanupError=str(error) or type(error).__name__)
         for resource in (watch, control):
@@ -892,6 +1009,7 @@ def run_worker(plan_path, *, lifecycle=None, loader=None, episode=None, identity
         except BaseException as error:
             report.update(status='failed', accountingError=str(error) or type(error).__name__)
         if (report['nativeStartOutcome'] == 'unresolved' or report.get('cleanupError') or report.get('monitorCleanupError')
+                or report.get('inventoryProbeCleanupError')
                 or report['nativeStartAttempted'] and report['nativeEpisode'] is None):
             report['status'] = 'unresolved'
         report.update(phase='terminal', finishedAtUnixNs=time.time_ns())
@@ -988,11 +1106,14 @@ def launch(plan_path, *, lifecycle=None, watch_factory=None, paused_preparation=
         worker_claim, _ = document(folder / 'WORKER-CONSUMED.json', 4096)
         require(terminal.get('runId') == plan['runId']
             and terminal.get('preparationSha256' if paused_preparation else 'planSha256') == plan_sha
-            and terminal.get('worker', {}).get('parentProcessId') == broker.get('runnerProcessId')
             and worker_claim == dict(runId=plan['runId'], planSha256=plan_sha,
                 processId=terminal['worker']['processId'], parentProcessId=terminal['worker']['parentProcessId'])
             and finish.get('status') == 'completed' and finish.get('manifestSha256') == terminal_sha
             and read_split(folder, plan['runId']) == finish.get('datasetSplit'), 'Terminal worker/accounting identity differs')
+        from combat_process_identity import verify_worker_broker
+        verify_worker_broker(terminal['worker'], broker, (plan.get('workerRuntime') or {}).get('contract'))
+        require(terminal.get('cleanupVerified') is True and terminal.get('ownerIdleMinimizedAfter') is True,
+                'Terminal worker did not verify original idle ownership')
         require_idle(lifecycle, plan['owner'])
         result.update(status=terminal['status'], terminalManifestSha256=terminal_sha,
                       worker=terminal['worker'], ownerIdleMinimizedAfter=True)

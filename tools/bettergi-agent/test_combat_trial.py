@@ -20,7 +20,7 @@ def ui_transition_fixture(test, operation, suffix=''):
     """Retain a complete synthetic native UI run without calling its platform implementation."""
     from PIL import Image
     from combat_pause_proof import CORE_REVISIONS, revision
-    folder = test.live / (operation + '-native' + suffix)
+    folder = test.folder / 'loading-pause-probe' if operation == 'verify' else test.live / (operation + '-native' + suffix)
     folder.mkdir()
     app = test.root / 'artifacts/release/BetterGI-English-win-x64'
     pilot = app / 'User/JsScript/ActOnePilot'
@@ -34,7 +34,7 @@ def ui_transition_fixture(test, operation, suffix=''):
         target.write_bytes(raw)
         sources[name], revisions[name] = trial.digest(raw), revision(raw)
     group = dict(index=1, projects=[dict(folderName='ActOnePilot', type='Javascript', runNum=1,
-        jsScriptSettingsObject=dict(enableInput=True, autoEnterGame=False))],
+        jsScriptSettingsObject=dict(enableInput=operation != 'verify', autoEnterGame=False))],
         config=dict(pathingConfig={key: False for key in ('enabled', 'autoPickEnabled', 'autoSkipEnabled',
             'autoRunEnabled', 'autoFightEnabled', 'jsScriptUseEnabled', 'soloTaskUseFightEnabled')}))
     (folder / 'group.json').write_bytes(canonical(group))
@@ -43,11 +43,15 @@ def ui_transition_fixture(test, operation, suffix=''):
         modelLoaded=False, autoEnterGame=False, walkingAllowed=False, attacksAllowed=False)
     if operation == 'resume':
         plan.update(allowedPilotOperations=['observe', 'worldInventoryClose'], maximumInventoryCloseRequests=1)
+    elif operation == 'verify':
+        plan.update(kind='combat-loading-inventory-probe-v1', runId=test.preparation['runId'],
+            preparationSha256=trial.digest(test.plan_path.read_bytes()), inputEnabled=False,
+            allowedPilotOperations=['observe'], maximumObservationRequests=1)
     (folder / 'plan.json').write_bytes(canonical(plan))
     session, now = 'inert-' + operation + suffix, time.time_ns() // 1_000_000 - 300
     rows = []
-    for frame_id, label, paused, stamp in ((1, 'before', operation == 'resume', now),
-            (3 if operation == 'pause' else 4, 'after', operation == 'pause', now + 150)):
+    for frame_id, label, paused, stamp in ((1, 'before', operation in ('resume', 'verify'), now),
+            (3 if operation in ('pause', 'verify') else 4, 'after', operation in ('pause', 'verify'), now + 150)):
         image = io.BytesIO()
         Image.new('RGB', (1920, 1080), (frame_id, 0, 0)).save(image, 'PNG')
         raw_image = image.getvalue()
@@ -91,6 +95,10 @@ def ui_transition_fixture(test, operation, suffix=''):
     result.update(pausedInventory=True) if operation == 'pause' else result.update(worldVisible=True)
     receipt = dict(session=session, id=request['id'], mission='questStep', status='completed', timestamp=now + 151,
         frameId=3 if operation == 'pause' else 4, details=dict(result=result, inputEvents=events))
+    if operation == 'verify':
+        request.pop('step')
+        request['mission'] = 'observe'
+        receipt.update(mission='observe', frameId=3, details=dict(inputEvents=events[:1]))
     for kind, value in (('request', request), ('receipt', receipt)):
         (folder / (request['id'] + '.' + kind + '.json')).write_bytes(canonical(value))
     flags = dict(taskRunning=False, agentStreamRunning=False, serviceOwnsPilot=False)
@@ -105,6 +113,9 @@ def ui_transition_fixture(test, operation, suffix=''):
             for name, offset in (('startPilot', -10), ('stopPilot', 200))], requests=[dict(request=request, receipt=receipt)])
     if operation == 'pause':
         report.update(pauseVerified=True, pauseFrameId=3)
+    elif operation == 'verify':
+        report.update(inventoryVerified=True, pauseFrameId=3, inputEnabled=False,
+                      pilotStartAttempted=True, pilotStartOutcome='confirmed')
     (folder / 'result.json').write_bytes(canonical(report))
     return folder
 
@@ -156,7 +167,9 @@ class FakeLifecycle:
         code = self.runner()
         return dict(windowsSessionId=3, remoteDesktop=True, elevated=False, integrityRid=8192,
             timedOut=False, outputIncomplete=False, success=code == 0, returnCode=code,
-            runnerProcessId=os.getppid(), stdout='', stderr='', timeoutSeconds=timeout)
+            runnerProcessId=os.getppid(), commandProcessId=os.getpid(), commandIdentity=dict(processId=os.getpid(),
+                parentProcessId=os.getppid(), windowsSessionId=3, startedFileTime=1, executable=command[0]),
+            stdout='', stderr='', timeoutSeconds=timeout)
 
 
 class FakeWatch:
@@ -197,6 +210,7 @@ class CombatTrialTests(unittest.TestCase):
         self.gpu = self.agent / 'envs/gamescaling/Scripts/python.exe'
         self.code = self.root / 'tools/bettergi-agent/combat_trial.py'
         for path in (self.goal, self.checkpoint, self.gpu, self.code, self.model_source / 'model.py',
+                     self.root / 'tools/bettergi-agent/combat_pause_probe.py',
                      self.root / 'tools/rdp-automation/rdp_control.py', self.root / 'runner.exe',
                      self.root / 'ffmpeg.exe', self.root / 'nvidia-smi.exe'):
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -271,8 +285,13 @@ class CombatTrialTests(unittest.TestCase):
 
     def identity(self, session):
         """Return ordinary-token fixture metadata, never the machine's native session."""
-        return dict(processId=os.getpid(), parentProcessId=os.getppid(), windowsSessionId=session,
-                    remoteDesktop=True, elevated=False, integrityRid=8192)
+        value = dict(processId=os.getpid(), parentProcessId=os.getppid(), windowsSessionId=session,
+                    remoteDesktop=True, elevated=False, integrityRid=8192,
+                    processIdentity=dict(processId=os.getpid(), parentProcessId=os.getppid(), windowsSessionId=session,
+                        startedFileTime=1, executable=str(self.gpu)))
+        if getattr(self, 'preparation', {}).get('kind') == trial.LEGACY_PREPARATION_KIND:
+            value.pop('processIdentity')
+        return value
 
     def loader(self, args):
         """Return metadata for a prepared synthetic policy without importing Torch or CUDA."""
@@ -456,6 +475,33 @@ class CombatTrialTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Source bytes changed'):
             trial.verify_plan(self.plan, self.folder)
 
+    def test_bounded_reader_uses_observed_size_and_refuses_growth_or_truncation(self):
+        """The small-file optimization never allocates the ceiling or admits changing lengths."""
+        target = self.live / 'bounded.bin'
+        target.write_bytes(b'original')
+        actual = target.stat()
+        class Stream:
+            """Expose a controlled held-file length and record the exact read allocation."""
+            def __init__(self, raw):
+                self.raw, self.requests = raw, []
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def fileno(self):
+                return 99
+            def read(self, size):
+                self.requests.append(size)
+                return self.raw[:size]
+        for raw in (b'original', b'original+', b'short'):
+            stream = Stream(raw)
+            with patch.object(Path, 'open', return_value=stream), patch.object(trial.os, 'fstat', return_value=actual):
+                if raw == b'original':
+                    self.assertEqual(trial.read_bytes(target), raw)
+                else:
+                    with self.assertRaisesRegex(ValueError, 'changed size'):
+                        trial.read_bytes(target)
+            self.assertEqual(stream.requests, [len(b'original') + 1])
     def test_source_edit_during_prewarm_prevents_the_only_start(self):
         """The post-load source check catches code changes while the GPU would be loading."""
         self.prepare()
@@ -790,10 +836,22 @@ class CombatPreparedTrialTests(unittest.TestCase):
             active.start()
             self.addCleanup(active.stop)
 
-    def begin(self, *, claim=True, scope=SINGLE_SCOPE):
+    def begin(self, *, claim=True, scope=SINGLE_SCOPE, legacy=False):
         """Freeze an actual-shaped positive pause without an encounter or attack plan."""
         self.pause_folder = ui_transition_fixture(self, 'pause')
         self.preparation = trial.prepare_paused(self.folder, self.owner_file, self.pause_folder, scope=scope)
+        if legacy:
+            # Reproduce the old schema, whose original pause remains the sole
+            # loading witness and therefore retains its strict thirty-second age.
+            self.preparation.update(version=1, kind=trial.LEGACY_PREPARATION_KIND)
+            self.preparation.pop('loadingPauseVerification')
+            archived_runtime = self.preparation.pop('workerRuntime')
+            for value in archived_runtime['retained'].values():
+                target = Path(value)
+                self.assertTrue(target.is_relative_to(self.folder / 'python-runtime'))
+                target.unlink()
+            (self.folder / 'python-runtime').rmdir()
+            (self.folder / 'preparation.json').write_bytes(canonical(self.preparation))
         self.plan = self.preparation
         self.plan_path = self.folder / 'preparation.json'
         if claim:
@@ -806,7 +864,15 @@ class CombatPreparedTrialTests(unittest.TestCase):
         """Run the production waiting loop with no native, process or GPU implementation."""
         return trial.run_worker(self.plan_path, lifecycle=self.lifecycle, loader=self.loader, episode=self.episode,
             identity_reader=self.identity, watch_factory=kwargs.pop('watch_factory', FakeWatch),
-            paused_preparation=True, prepared_callback=callback, **kwargs)
+            paused_preparation=True, prepared_callback=callback, pause_probe=kwargs.pop('pause_probe', self.probe), **kwargs)
+
+    def probe(self, preparation, folder, lifecycle, watch, control):
+        """Produce actual-shaped input-disabled native proof after the expensive loader admission checks."""
+        watch.check()
+        trial.exact_control(control, preparation['runId'])
+        self.clock_offset += 500_000_000
+        source = ui_transition_fixture(self, 'verify')
+        return trial.retain_ui_proof(folder, source, preparation['owner'], 'verify')
 
     def resume(self):
         """Retain one post-readiness Escape proof and establish its independent QPC floor."""
@@ -1117,15 +1183,19 @@ class CombatPreparedTrialTests(unittest.TestCase):
         self.assertIn('review is stale', self.report()['error'])
 
     def test_pause_witness_must_still_be_recent_when_loading_starts(self):
-        """A delayed launch cannot start a cold load against a stale inventory snapshot."""
+        """An expired fresh verification still prevents a cold load, despite historical provenance."""
         self.begin()
-        self.clock_offset += 31_000_000_000
-        self.assertEqual(self.worker(), 1)
+        def stale(*args):
+            """Advance only after the new passive proof was captured and retained."""
+            result = self.probe(*args)
+            self.clock_offset += 31_000_000_000
+            return result
+        self.assertEqual(self.worker(pause_probe=stale), 1)
         self.assertEqual((self.loads, self.lifecycle.starts), (0, 0))
-        self.assertIn('no longer recent', self.report()['error'])
+        self.assertIn('expired before model loading', self.report()['error'])
 
     def test_checkpoint_validation_cannot_age_the_pause_past_model_admission(self):
-        """A slow read-only checkpoint hash does not extend the positive-pause loading gate."""
+        """The new positive inventory verification follows the expensive hash, without widening freshness."""
         self.begin()
         expected = trial.runtime.OPEN_P2P_SHA256
         def slow_hash(path):
@@ -1133,9 +1203,80 @@ class CombatPreparedTrialTests(unittest.TestCase):
             self.clock_offset += 31_000_000_000
             return expected
         with patch.object(trial, 'file_sha', slow_hash):
-            self.assertEqual(self.worker(), 1)
-        self.assertEqual((self.loads, self.lifecycle.starts, self.report()['modelLoadAttempts']), (0, 0, 0))
-        self.assertIn('expired before model loading', self.report()['error'])
+            self.assertEqual(self.worker(lambda ready: trial.request_stop(self.folder, self.preparation, 'testStop')), 1)
+        self.assertEqual((self.loads, self.lifecycle.starts, self.report()['modelLoadAttempts']), (1, 0, 1))
+        loading = self.report()['modelPreparation']
+        age = loading['startedAtUnixNs'] - loading['inventoryProbe']['proof']['terminalTimestampUnixMs'] * 1_000_000
+        self.assertLess(age, 30_000_000_000)
+
+    def test_old_pause_is_historical_only_and_new_probe_is_mandatory(self):
+        """Preparation no longer needs another Escape/B cycle merely to refresh a timestamp."""
+        self.pause_folder = ui_transition_fixture(self, 'pause')
+        self.clock_offset += 600_000_000_000
+        self.preparation = trial.prepare_paused(self.folder, self.owner_file, self.pause_folder)
+        self.plan, self.plan_path = self.preparation, self.folder / 'preparation.json'
+        now = time.monotonic_ns()
+        trial.exclusive_json(self.folder / 'CONSUMED.json', dict(runId=self.plan['runId'], planSha256=trial.digest(self.plan_path.read_bytes()),
+            startedMonotonicNs=now, startedAtUnixNs=time.time_ns(), deadlineMonotonicNs=now + 90_000_000_000))
+        def refuse(*args):
+            """No current inventory proof means no model load or combat listener."""
+            raise ValueError('current inventory absent')
+        self.assertEqual(self.worker(pause_probe=refuse), 1)
+        self.assertEqual((self.loads, self.lifecycle.starts), (0, 0))
+        self.assertTrue(self.report()['cleanupVerified'])
+
+    def test_legacy_pause_retains_original_thirty_second_loading_refusal(self):
+        """Version one cannot inherit version two's passive refresh authority by omission."""
+        self.begin(legacy=True)
+        self.clock_offset += 31_000_000_000
+        self.assertEqual(self.worker(), 1)
+        self.assertEqual((self.loads, self.lifecycle.starts), (0, 0))
+        self.assertIn('no longer recent', self.report()['error'])
+        self.assertFalse((self.folder / 'verify-evidence').exists())
+
+    def test_legacy_prepared_load_and_replay_remain_supported_without_probe(self):
+        """A genuinely fresh version-one pause can still execute its original one-shot handoff."""
+        self.begin(legacy=True)
+        self.assertEqual(self.worker(self.arm), 0)
+        self.assertNotIn('inventoryProbe', self.report()['modelPreparation'])
+        self.assertFalse((self.folder / 'verify-evidence').exists())
+
+    def test_early_validation_failure_initializes_read_only_cleanup(self):
+        """The production no-injected-lifecycle path proves idle even before creating control state."""
+        self.begin()
+        self.goal.write_bytes(b'changed before admission')
+        with patch.object(trial.runtime, 'control_module', return_value=self.lifecycle):
+            code = trial.run_worker(self.plan_path, identity_reader=self.identity, loader=self.loader,
+                episode=self.episode, paused_preparation=True, watch_factory=FakeWatch, pause_probe=self.probe)
+        self.assertEqual(code, 1)
+        self.assertEqual((self.loads, self.lifecycle.starts, self.report()['nativeStartAttempted']), (0, 0, False))
+        self.assertTrue(self.report()['cleanupVerified'])
+        self.assertTrue((self.folder / 'worker-owner-after.json').is_file())
+
+    def test_changed_final_probe_result_preserves_unresolved_recording(self):
+        """A later episode cannot complete while its original loading/cleanup evidence contradicts itself."""
+        self.begin()
+        def change(native):
+            """Simulate a terminal report mutation after the original successful passive proof."""
+            path = self.folder / 'loading-pause-probe/result.json'
+            value = json.loads(path.read_bytes())
+            value['status'] = 'failed'
+            path.write_bytes(canonical(value))
+        self.episode_action = change
+        self.assertEqual(self.worker(self.arm), 1)
+        self.assertEqual(self.report()['status'], 'unresolved')
+        self.assertIn('changed after loading', self.report()['inventoryProbeCleanupError'])
+        self.assertTrue((self.folder / 'native-episode.json').is_file())
+        self.assertTrue(self.report()['cleanupVerified'])
+
+    def test_missing_final_probe_result_never_relabels_completion(self):
+        """Removing the original terminal UI result preserves the episode but fails the wrapper."""
+        self.begin()
+        self.episode_action = lambda native: (self.folder / 'loading-pause-probe/result.json').unlink()
+        self.assertEqual(self.worker(self.arm), 1)
+        self.assertEqual(self.report()['status'], 'unresolved')
+        self.assertIn('missing at retirement', self.report()['inventoryProbeCleanupError'])
+        self.assertTrue((self.folder / 'native-episode.json').is_file())
 
     def test_stop_during_final_source_validation_prevents_listener_creation(self):
         """Long artifact verification cannot hide STOP between arm consumption and native start."""

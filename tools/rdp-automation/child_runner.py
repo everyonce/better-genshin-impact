@@ -132,6 +132,51 @@ def require_ordinary_rdp(identity, expected_session):
         raise RuntimeError('The runner refuses an elevated or high-integrity token.')
 
 
+def process_identity(process_id):
+    """Read one live process's image, creation time, session and immediate OS parent."""
+    if os.name != 'nt' or type(process_id) is not int or process_id <= 0:
+        raise RuntimeError('An exact live Windows process is required.')
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    native = ctypes.WinDLL('ntdll')
+    kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel.OpenProcess.restype = wintypes.HANDLE
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel.QueryFullProcessImageNameW.argtypes = [wintypes.HANDLE, wintypes.DWORD,
+        wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)]
+    kernel.ProcessIdToSessionId.argtypes = [wintypes.DWORD, ctypes.POINTER(wintypes.DWORD)]
+    kernel.GetProcessTimes.argtypes = [wintypes.HANDLE] + [ctypes.POINTER(wintypes.FILETIME)] * 4
+    class BasicInformation(ctypes.Structure):
+        """The native basic-process layout exposes the inherited immediate parent PID."""
+        _fields_ = [('exitStatus', ctypes.c_void_p), ('peb', ctypes.c_void_p),
+            ('affinity', ctypes.c_void_p), ('priority', ctypes.c_void_p),
+            ('processId', ctypes.c_size_t), ('parentProcessId', ctypes.c_size_t)]
+    native.NtQueryInformationProcess.argtypes = [wintypes.HANDLE, wintypes.ULONG,
+        ctypes.c_void_p, wintypes.ULONG, ctypes.POINTER(wintypes.ULONG)]
+    native.NtQueryInformationProcess.restype = wintypes.LONG
+    handle = kernel.OpenProcess(0x1000, False, process_id)
+    if not handle:
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        image, count = ctypes.create_unicode_buffer(32768), wintypes.DWORD(32768)
+        session = wintypes.DWORD()
+        times = [wintypes.FILETIME() for _ in range(4)]
+        basic, returned = BasicInformation(), wintypes.ULONG()
+        if (not kernel.QueryFullProcessImageNameW(handle, 0, image, ctypes.byref(count))
+                or not kernel.ProcessIdToSessionId(process_id, ctypes.byref(session))
+                or not kernel.GetProcessTimes(handle, *(ctypes.byref(value) for value in times))):
+            raise ctypes.WinError(ctypes.get_last_error())
+        status = native.NtQueryInformationProcess(handle, 0, ctypes.byref(basic), ctypes.sizeof(basic), ctypes.byref(returned))
+        if status < 0 or returned.value != ctypes.sizeof(basic) or basic.processId != process_id:
+            raise RuntimeError('The live process ancestry query was incomplete.')
+        created = times[0].dwLowDateTime | times[0].dwHighDateTime << 32
+        if not created or times[1].dwLowDateTime or times[1].dwHighDateTime:
+            raise RuntimeError('The identified process is no longer alive.')
+        return dict(processId=process_id, parentProcessId=int(basic.parentProcessId),
+            windowsSessionId=session.value, executable=str(Path(image.value).resolve()), startedFileTime=created)
+    finally:
+        kernel.CloseHandle(handle)
+
+
 class CommandJob:
     """Own a Windows Job Object so timeout/exit also closes the command's descendants."""
     def __init__(self):
@@ -251,6 +296,13 @@ def execute(job, *, identity_reader=windows_identity):
         process = subprocess.Popen(job['argv'], cwd=job['workingDirectory'], shell=False,
                                    stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                    creationflags=subprocess.CREATE_NO_WINDOW | 0x4, startupinfo=startup)
+        # Capture the exact suspended command before it can create a Windows
+        # venv redirector child. This is provenance, not a descendant allowlist.
+        command_identity = process_identity(process.pid)
+        if (command_identity['parentProcessId'] != os.getpid()
+                or command_identity['windowsSessionId'] != job['windowsSessionId']
+                or Path(command_identity['executable']) != Path(job['argv'][0]).resolve()):
+            raise RuntimeError('The suspended command identity differs from its pinned job.')
         for sink, stream in zip(output, (process.stdout, process.stderr)):
             thread = threading.Thread(target=sink.drain, args=(stream,), daemon=True)
             thread.start()
@@ -269,6 +321,7 @@ def execute(job, *, identity_reader=windows_identity):
         for thread in threads:
             thread.join(timeout=5)
     return {'success': process.returncode == 0 and not timed_out,
+            'commandProcessId': process.pid, 'commandIdentity': command_identity,
             'returnCode': process.returncode, 'timedOut': timed_out,
             'elapsedMs': round((time.monotonic() - started) * 1000, 3), **identity,
             'stdout': output[0].data.decode('utf-8', errors='replace'),

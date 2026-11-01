@@ -511,6 +511,64 @@ class CombatPreparedAuditTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.audit()
 
+    def test_fresh_loading_probe_requires_its_original_pixels_and_receipt(self):
+        """A historical pause cannot repair any missing or substituted new passive evidence."""
+        record = self.document('prepared.json')['modelPreparation']['inventoryProbe']
+        for suffix in ('after.png', '.receipt.json', 'owner-after-stop.json'):
+            with self.subTest(suffix=suffix):
+                target = next(Path(value) for name, value in record['retained'].items() if name.endswith(suffix))
+                original = target.read_bytes()
+                target.write_bytes(original + b'changed')
+                try:
+                    with self.assertRaises(ValueError):
+                        self.audit()
+                finally:
+                    target.write_bytes(original)
+
+    def test_loading_probe_cannot_be_removed_or_substituted_from_another_preparation(self):
+        """Version two has no fallback to old timestamps when its no-input handoff is absent."""
+        for mutation in ('missing', 'foreign'):
+            with self.subTest(mutation=mutation):
+                ready = self.document('prepared.json')
+                if mutation == 'missing':
+                    ready['modelPreparation'].pop('inventoryProbe')
+                else:
+                    ready['modelPreparation']['inventoryProbe'] = self.document('preparation.json')['pause']
+                wrapper = copy.deepcopy(self.wrapper)
+                wrapper['modelPreparation'] = ready['modelPreparation']
+                def documents(name):
+                    """Expose the contradictory readiness phase without touching original source evidence."""
+                    return ready if name == 'prepared.json' else self.document(name)
+                with self.assertRaises(ValueError):
+                    verify_preparation_chain(self.folder, self.plan, wrapper, documents)
+
+    def test_runtime_archive_remnants_cannot_select_old_replay(self):
+        """An omitted or null runtime declaration cannot discard the original archived witness."""
+        from audit_combat_trial import verify_python_runtime
+        for null in (False, True):
+            plan = copy.deepcopy(self.plan)
+            plan.pop('workerRuntime')
+            if null:
+                plan['workerRuntime'] = None
+            with self.assertRaisesRegex(ValueError, 'Undeclared Python runtime'):
+                verify_python_runtime(self.folder, plan)
+
+    def test_terminal_probe_cleanup_or_result_substitution_cannot_complete(self):
+        """Successful loading evidence never overrides a contradictory final retained probe result."""
+        for mutation in ('error', 'result', 'hash', 'missing'):
+            with self.subTest(mutation=mutation):
+                wrapper = copy.deepcopy(self.wrapper)
+                if mutation == 'error':
+                    wrapper['inventoryProbeCleanupError'] = 'lost terminal proof'
+                elif mutation == 'result':
+                    wrapper['inventoryProbeResult']['inventoryVerified'] = False
+                elif mutation == 'hash':
+                    wrapper['inventoryProbeResultSha256'] = '0' * 64
+                else:
+                    wrapper.pop('inventoryProbeResult')
+                with self.assertRaisesRegex(ValueError, 'Terminal passive inventory'):
+                    verify_preparation_chain(self.folder, self.plan, wrapper, self.document)
+
     def test_ready_worker_and_arm_claim_changes_are_rejected(self):
         """Each phase is bound to the same actual ordinary process and one immutable claim."""
         for name, field in (('prepared.json', 'worker'), ('ARM.json', 'worker'), ('ARM-CONSUMED.json', 'worker')):

@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 import uuid
@@ -15,6 +16,57 @@ import child_runner as runner
 
 
 class RunnerTests(unittest.TestCase):
+    def test_suspended_command_identity_is_retained_before_any_resume(self):
+        """Capture the exact original Popen PID/creation identity before a redirector can spawn."""
+        ordinary = dict(windowsSessionId=3, remoteDesktop=True, elevated=False, integrityRid=8192)
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory).resolve() / 'python.exe'
+            executable.write_bytes(b'inert')
+            calls = []
+            identity = dict(processId=222, parentProcessId=os.getpid(), windowsSessionId=3,
+                executable=str(executable), startedFileTime=12345)
+            process = SimpleNamespace(pid=222, returncode=0, stdout=io.BufferedReader(io.BytesIO(b'ok')),
+                stderr=io.BufferedReader(io.BytesIO()), wait=lambda **kwargs: 0, poll=lambda: 0,
+                kill=lambda: calls.append('kill'))
+            def read(pid):
+                """The exact suspended process is the only native identity queried."""
+                self.assertEqual(pid, 222)
+                calls.append('identity')
+                return identity
+            def resume(value):
+                """The command cannot run before its original identity was retained."""
+                self.assertEqual(calls, ['identity'])
+                self.assertIs(value, process)
+                calls.append('resume')
+            owner = SimpleNamespace(assign_and_resume=resume, close=lambda: calls.append('close'))
+            job = dict(windowsSessionId=3, maxOutputBytes=1024, argv=[str(executable)],
+                workingDirectory=directory, timeoutSeconds=5)
+            with patch.object(runner, 'process_identity', side_effect=read), \
+                    patch.object(runner, 'CommandJob', return_value=owner), \
+                    patch.object(runner.subprocess, 'Popen', return_value=process):
+                result = runner.execute(job, identity_reader=lambda: ordinary)
+            self.assertEqual(calls, ['identity', 'resume', 'close'])
+            self.assertEqual(result['commandProcessId'], 222)
+            self.assertEqual(result['commandIdentity'], identity)
+            self.assertTrue(result['success'])
+
+    def test_changed_suspended_parent_never_resumes(self):
+        """A contradictory original command witness fails before any child code can execute."""
+        ordinary = dict(windowsSessionId=3, remoteDesktop=True, elevated=False, integrityRid=8192)
+        cleanup = []
+        process = SimpleNamespace(pid=222, returncode=None, stdout=io.BufferedReader(io.BytesIO()),
+            stderr=io.BufferedReader(io.BytesIO()), wait=lambda **kwargs: cleanup.append('wait'),
+            poll=lambda: None, kill=lambda: cleanup.append('kill'))
+        owner = SimpleNamespace(assign_and_resume=lambda value: self.fail('unexpected resume'), close=lambda: None)
+        with patch.object(runner, 'CommandJob', return_value=owner), \
+                patch.object(runner.subprocess, 'Popen', return_value=process), \
+                patch.object(runner, 'process_identity', return_value=dict(processId=222, parentProcessId=os.getpid() + 1,
+                    windowsSessionId=3, executable=str(Path('python.exe').resolve()), startedFileTime=1)):
+            with self.assertRaisesRegex(RuntimeError, 'suspended command identity'):
+                runner.execute(dict(windowsSessionId=3, maxOutputBytes=1024, argv=[str(Path('python.exe').resolve())],
+                    workingDirectory=str(Path.cwd()), timeoutSeconds=5), identity_reader=lambda: ordinary)
+        self.assertEqual(cleanup, ['kill', 'wait'])
+
     def test_console_wrong_session_and_elevated_tokens_are_rejected(self):
         ordinary = {'windowsSessionId': 3, 'remoteDesktop': True, 'elevated': False, 'integrityRid': 0x2000}
         runner.require_ordinary_rdp(ordinary, 3)
@@ -69,6 +121,12 @@ class RunnerTests(unittest.TestCase):
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                    creationflags=subprocess.CREATE_NO_WINDOW | 0x4)
         try:
+            identity = runner.process_identity(process.pid)
+            self.assertEqual(identity['processId'], process.pid)
+            self.assertEqual(identity['parentProcessId'], os.getpid())
+            self.assertEqual(identity['windowsSessionId'], runner.windows_identity()['windowsSessionId'])
+            self.assertEqual(Path(identity['executable']), Path(sys.executable))
+            self.assertGreater(identity['startedFileTime'], 0)
             owner.assign_and_resume(process)
             stdout, stderr = process.communicate(timeout=5)
             self.assertEqual(process.returncode, 0)

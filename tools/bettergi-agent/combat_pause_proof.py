@@ -3,8 +3,10 @@ import hashlib
 import io
 import json
 import math
+import os
 from pathlib import Path
 import re
+import stat
 
 
 CORE_REVISIONS = frozenset(('main.js', 'engine.js', 'bgi.js', 'mission.js', 'combat.js', 'recovery.js'))
@@ -60,7 +62,7 @@ def inspect_transition(folder, owner, operation, *, root, read_file=None):
     A supplied reader supports replay from an immutable archive. Legacy UI times
     remain wall-clock diagnostics; this function makes no physical-delivery claim.
     """
-    require(operation in ('pause', 'resume'), 'Unknown inventory transition')
+    require(operation in ('pause', 'resume', 'verify'), 'Unknown inventory transition')
     root, folder = Path(root).resolve(), Path(folder).absolute()
     require(folder == folder.resolve() and folder.is_relative_to(root / 'artifacts'), 'UI proof is outside artifacts')
     files = {}
@@ -72,7 +74,11 @@ def inspect_transition(folder, owner, operation, *, root, read_file=None):
             raw = read_file(path)
         else:
             with path.open('rb') as stream:
-                raw = stream.read(16 * 1024 * 1024 + 1)
+                info = os.fstat(stream.fileno())
+                require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1
+                    and 0 < info.st_size <= 16 * 1024 * 1024, 'Invalid bounded UI evidence')
+                raw = stream.read(info.st_size + 1)
+            require(len(raw) == info.st_size, 'UI evidence changed size while reading')
         require(type(raw) is bytes and 0 < len(raw) <= 16 * 1024 * 1024, 'Invalid bounded UI evidence')
         sha = hashlib.sha256(raw).hexdigest()
         require(str(path) not in files or files[str(path)] == sha, 'UI evidence changed during validation')
@@ -131,7 +137,15 @@ def inspect_transition(folder, owner, operation, *, root, read_file=None):
     projects = group.get('projects')
     require(isinstance(projects, list) and len(projects) == 1 and projects[0].get('folderName') == 'ActOnePilot'
         and projects[0].get('type') == 'Javascript' and projects[0].get('runNum') == 1
-        and projects[0].get('jsScriptSettingsObject') == dict(enableInput=True, autoEnterGame=False), 'UI group authority changed')
+        and projects[0].get('jsScriptSettingsObject') == dict(enableInput=operation != 'verify', autoEnterGame=False),
+        'UI group authority changed')
+    if operation == 'verify':
+        require(plan.get('allowedPilotOperations') == ['observe']
+            and type(plan.get('maximumObservationRequests')) is int and plan['maximumObservationRequests'] == 1
+            and plan.get('inputEnabled') is False, 'Passive inventory verification acquired input authority')
+        require(pathing.get('autoEatEnabled', False) is False
+            and group.get('config', {}).get('enableShellConfig', False) is False,
+            'Passive inventory group enabled unrelated automation')
     controls = report.get('controls')
     require(isinstance(controls, list) and [row.get('command') for row in controls] == ['startPilot', 'stopPilot'],
             'UI lifecycle was repeated or not retired')
@@ -242,9 +256,17 @@ def inspect_transition(folder, owner, operation, *, root, read_file=None):
         transition = dict(requestId=identifier, requestCreatedAtUnixMs=request['createdAt'],
             inputFinishedAtUnixMs=key['finishedAt'], receiptAtUnixMs=receipt['timestamp'],
             requestSourceFrameId=before['frameId'], inputSourceFrameId=input_frame_id)
-    require(transition is not None and controls[1]['receivedAtUnixNs'] >= last_receipt * 1_000_000, 'UI cleanup preceded its terminal receipt')
+    require((transition is not None if operation != 'verify' else transition is None and len(requests) == 1
+        and requests[0]['request']['mission'] == 'observe')
+        and controls[1]['receivedAtUnixNs'] >= last_receipt * 1_000_000, 'UI cleanup preceded its terminal receipt')
     terminal = by_frame[max(by_frame)]
-    if operation == 'pause':
+    if operation == 'verify':
+        require(report.get('inventoryVerified') is True and report.get('inputEnabled') is False
+            and report.get('pilotStartAttempted') is True and report.get('pilotStartOutcome') == 'confirmed'
+            and len(observations) == 2 and all(inventory_visible(value) for value in by_frame.values())
+            and report.get('pauseFrameId') == terminal['frameId'] and inventory_visible(terminal),
+            'Terminal passive inventory verification is not positive')
+    elif operation == 'pause':
         require(report.get('pauseVerified') is True and report.get('pauseFrameId') == terminal['frameId']
             and inventory_visible(terminal), 'Terminal inventory pause is not positive')
     else:
@@ -253,7 +275,8 @@ def inspect_transition(folder, owner, operation, *, root, read_file=None):
             and type(plan.get('maximumInventoryCloseRequests')) is int and plan['maximumInventoryCloseRequests'] == 1)
         require((legacy_close_only or dedicated_close_only)
             and terminal.get('hud', {}).get('world') is True, 'Resume did not return a positively observed world')
-    return dict(version=1, kind='native-inventory-transition-proof-v1', operation=operation, owner=owner,
+    return dict(version=1, kind='native-inventory-observation-proof-v1' if operation == 'verify'
+        else 'native-inventory-transition-proof-v1', operation=operation, owner=owner,
         scriptSession=session, terminalFrameId=terminal['frameId'], terminalTimestampUnixMs=terminal['timestamp'],
         cleanupAcknowledgedAtUnixNs=controls[1]['receivedAtUnixNs'], sourceFiles=sources, transition=transition,
         files=files, physicalInputDeliveryVerified=False)

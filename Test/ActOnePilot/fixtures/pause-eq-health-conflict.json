@@ -1,0 +1,2597 @@
+{
+  "provenance": {
+    "kind": "retained-legacy-observation-excerpts",
+    "originalControllerSha256": "9cc52d8effc6a650c1139e4f3967a9c7a35dc3eec46d7c38324919cd39aaf3f7",
+    "note": "Portable OCR/HUD excerpts from the failed R64 Windrise teleport pause and subsequent protected inventory. Original full JSON hashes are attribution only; tests do not read artifacts or claim pixel/OCR replay. Unknown health and unverified arrival remain unknown. Equal conflict HUD/session fields are stored once."
+  },
+  "conflictSession": "mvxd18f1-v4foc7vjubl",
+  "conflictHud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [
+        "211 /4015"
+      ],
+      "primary": [
+        "2211/4015"
+      ],
+      "left": [
+        "22117"
+      ],
+      "right": [
+        "4015"
+      ],
+      "decision": "conflict-halves-disagree-or-missing"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [],
+    "enemyBarDiagnostic": null
+  },
+  "conflictFrames": [
+    {
+      "source": {
+        "path": "artifacts/live/2026-10-30-endurance/r64-windrise-map-escape-pause11-01/native-frames/frame-0008.json",
+        "sha256": "6921efc1dcea77cd4e3628e7a4338d44a0447a9e4d3c134a5991623d8b05e516"
+      },
+      "frameId": 8,
+      "timestamp": 1793509158548,
+      "map": {
+        "x": -1266.43359375,
+        "y": 1934.078125,
+        "map": "Teyvat",
+        "cameraAngle": 269.5
+      },
+      "ocr": [
+        {
+          "text": "Adventure",
+          "x": 904,
+          "y": 0,
+          "width": 117,
+          "height": 29
+        },
+        {
+          "text": "Rank",
+          "x": 928,
+          "y": 26,
+          "width": 63,
+          "height": 31
+        },
+        {
+          "text": "10",
+          "x": 934,
+          "y": 58,
+          "width": 51,
+          "height": 42
+        },
+        {
+          "text": "25 ms",
+          "x": 1802,
+          "y": 83,
+          "width": 91,
+          "height": 23
+        },
+        {
+          "text": "Windrise",
+          "x": 847,
+          "y": 189,
+          "width": 227,
+          "height": 60
+        },
+        {
+          "text": "Lumina",
+          "x": 1682,
+          "y": 260,
+          "width": 81,
+          "height": 23
+        },
+        {
+          "text": "Amber",
+          "x": 1686,
+          "y": 345,
+          "width": 79,
+          "height": 36
+        },
+        {
+          "text": "2",
+          "x": 1856,
+          "y": 354,
+          "width": 27,
+          "height": 24
+        },
+        {
+          "text": "Kaeya",
+          "x": 1672,
+          "y": 451,
+          "width": 77,
+          "height": 22
+        },
+        {
+          "text": "Lv. 20",
+          "x": 748,
+          "y": 1003,
+          "width": 49,
+          "height": 22
+        },
+        {
+          "text": "211 /4015",
+          "x": 922,
+          "y": 1003,
+          "width": 83,
+          "height": 20
+        },
+        {
+          "text": "Enter",
+          "x": 42,
+          "y": 1026,
+          "width": 113,
+          "height": 29
+        },
+        {
+          "text": "e",
+          "x": 1684,
+          "y": 1026,
+          "width": 33,
+          "height": 25
+        },
+        {
+          "text": "q",
+          "x": 1802,
+          "y": 1026,
+          "width": 35,
+          "height": 27
+        },
+        {
+          "text": "UID: 693306810",
+          "x": 1684,
+          "y": 1052,
+          "width": 177,
+          "height": 27
+        }
+      ]
+    },
+    {
+      "source": {
+        "path": "artifacts/live/2026-10-30-endurance/r64-windrise-map-escape-pause11-01/native-frames/frame-0009.json",
+        "sha256": "f4f963d91dd88f99389bd85e5c165d4506bdbd86575466fb73da3d927dbc1226"
+      },
+      "frameId": 9,
+      "timestamp": 1793509159301,
+      "map": {
+        "x": -1266.43359375,
+        "y": 1934.078125,
+        "map": "Teyvat",
+        "cameraAngle": 269.5
+      },
+      "ocr": [
+        {
+          "text": "22 ms",
+          "x": 1799,
+          "y": 78,
+          "width": 95,
+          "height": 29
+        },
+        {
+          "text": "Lumina",
+          "x": 1682,
+          "y": 260,
+          "width": 81,
+          "height": 23
+        },
+        {
+          "text": "Amber",
+          "x": 1690,
+          "y": 349,
+          "width": 73,
+          "height": 29
+        },
+        {
+          "text": "2",
+          "x": 1860,
+          "y": 357,
+          "width": 21,
+          "height": 17
+        },
+        {
+          "text": "Kaeya",
+          "x": 1672,
+          "y": 451,
+          "width": 77,
+          "height": 22
+        },
+        {
+          "text": "IS",
+          "x": 1732,
+          "y": 536,
+          "width": 23,
+          "height": 15
+        },
+        {
+          "text": "Lv. 20",
+          "x": 748,
+          "y": 1003,
+          "width": 49,
+          "height": 22
+        },
+        {
+          "text": "211 /4015",
+          "x": 922,
+          "y": 1003,
+          "width": 83,
+          "height": 20
+        },
+        {
+          "text": "Enter",
+          "x": 40,
+          "y": 1022,
+          "width": 117,
+          "height": 35
+        },
+        {
+          "text": "e",
+          "x": 1684,
+          "y": 1026,
+          "width": 33,
+          "height": 25
+        },
+        {
+          "text": "q",
+          "x": 1802,
+          "y": 1026,
+          "width": 35,
+          "height": 27
+        },
+        {
+          "text": "UID: 693306810",
+          "x": 1684,
+          "y": 1052,
+          "width": 177,
+          "height": 27
+        }
+      ]
+    },
+    {
+      "source": {
+        "path": "artifacts/live/2026-10-30-endurance/r64-windrise-map-escape-pause11-01/native-frames/frame-0010.json",
+        "sha256": "b48731f075aa5bca720d16eb6d388dbfbe18521bd0fd2e7955e768003db1fffb"
+      },
+      "frameId": 10,
+      "timestamp": 1793509160062,
+      "map": {
+        "x": -1266.421875,
+        "y": 1934.0703125,
+        "map": "Teyvat",
+        "cameraAngle": 269.5
+      },
+      "ocr": [
+        {
+          "text": "25 ms",
+          "x": 1802,
+          "y": 83,
+          "width": 91,
+          "height": 23
+        },
+        {
+          "text": "Lumina",
+          "x": 1682,
+          "y": 260,
+          "width": 81,
+          "height": 23
+        },
+        {
+          "text": "Amber",
+          "x": 1690,
+          "y": 349,
+          "width": 73,
+          "height": 29
+        },
+        {
+          "text": "2",
+          "x": 1860,
+          "y": 357,
+          "width": 21,
+          "height": 17
+        },
+        {
+          "text": "Kaeya",
+          "x": 1672,
+          "y": 451,
+          "width": 75,
+          "height": 22
+        },
+        {
+          "text": "is",
+          "x": 1728,
+          "y": 536,
+          "width": 27,
+          "height": 15
+        },
+        {
+          "text": "Lv. 20",
+          "x": 748,
+          "y": 1003,
+          "width": 49,
+          "height": 22
+        },
+        {
+          "text": "211 /4015",
+          "x": 922,
+          "y": 1003,
+          "width": 83,
+          "height": 20
+        },
+        {
+          "text": "Enter",
+          "x": 40,
+          "y": 1022,
+          "width": 117,
+          "height": 35
+        },
+        {
+          "text": "e",
+          "x": 1684,
+          "y": 1026,
+          "width": 33,
+          "height": 25
+        },
+        {
+          "text": "q",
+          "x": 1802,
+          "y": 1026,
+          "width": 35,
+          "height": 27
+        },
+        {
+          "text": "UID: 693306810",
+          "x": 1684,
+          "y": 1052,
+          "width": 177,
+          "height": 27
+        }
+      ]
+    },
+    {
+      "source": {
+        "path": "artifacts/live/2026-10-30-endurance/r64-windrise-map-escape-pause11-01/native-frames/frame-0011.json",
+        "sha256": "ce4cf3e8ce61b4476fb52662b3ae87fc4206daaee977b0e4e3d0efb43993c338"
+      },
+      "frameId": 11,
+      "timestamp": 1793509160804,
+      "map": {
+        "x": -1266.43359375,
+        "y": 1934.078125,
+        "map": "Teyvat",
+        "cameraAngle": 269.5
+      },
+      "ocr": [
+        {
+          "text": "25 ms",
+          "x": 1802,
+          "y": 83,
+          "width": 91,
+          "height": 23
+        },
+        {
+          "text": "Lumina",
+          "x": 1682,
+          "y": 260,
+          "width": 81,
+          "height": 23
+        },
+        {
+          "text": "Amber",
+          "x": 1690,
+          "y": 349,
+          "width": 73,
+          "height": 29
+        },
+        {
+          "text": "2",
+          "x": 1860,
+          "y": 357,
+          "width": 21,
+          "height": 17
+        },
+        {
+          "text": "Kaeya",
+          "x": 1672,
+          "y": 451,
+          "width": 77,
+          "height": 22
+        },
+        {
+          "text": "Lv. 20",
+          "x": 748,
+          "y": 1003,
+          "width": 49,
+          "height": 22
+        },
+        {
+          "text": "211 /4015",
+          "x": 922,
+          "y": 1003,
+          "width": 83,
+          "height": 20
+        },
+        {
+          "text": "Enter",
+          "x": 40,
+          "y": 1022,
+          "width": 117,
+          "height": 35
+        },
+        {
+          "text": "e",
+          "x": 1684,
+          "y": 1026,
+          "width": 33,
+          "height": 25
+        },
+        {
+          "text": "q",
+          "x": 1802,
+          "y": 1026,
+          "width": 35,
+          "height": 27
+        },
+        {
+          "text": "UID: 693306810",
+          "x": 1684,
+          "y": 1052,
+          "width": 177,
+          "height": 27
+        }
+      ]
+    },
+    {
+      "source": {
+        "path": "artifacts/live/2026-10-30-endurance/r64-windrise-map-escape-pause11-01/native-frames/frame-0012.json",
+        "sha256": "3efcac7a91515bff1b8eac2824649640730ae171b3c01712b52880ffbe18aadd"
+      },
+      "frameId": 12,
+      "timestamp": 1793509161533,
+      "map": {
+        "x": -1266.43359375,
+        "y": 1934.078125,
+        "map": "Teyvat",
+        "cameraAngle": 269.5
+      },
+      "ocr": [
+        {
+          "text": "25 ms",
+          "x": 1802,
+          "y": 83,
+          "width": 91,
+          "height": 23
+        },
+        {
+          "text": "Lumina",
+          "x": 1682,
+          "y": 260,
+          "width": 81,
+          "height": 23
+        },
+        {
+          "text": "Amber",
+          "x": 1690,
+          "y": 349,
+          "width": 73,
+          "height": 29
+        },
+        {
+          "text": "2",
+          "x": 1860,
+          "y": 357,
+          "width": 21,
+          "height": 17
+        },
+        {
+          "text": "Kaeya",
+          "x": 1672,
+          "y": 451,
+          "width": 77,
+          "height": 22
+        },
+        {
+          "text": "IS",
+          "x": 1728,
+          "y": 536,
+          "width": 27,
+          "height": 15
+        },
+        {
+          "text": "Lv. 20",
+          "x": 748,
+          "y": 1003,
+          "width": 49,
+          "height": 22
+        },
+        {
+          "text": "211 /4015",
+          "x": 922,
+          "y": 1003,
+          "width": 83,
+          "height": 20
+        },
+        {
+          "text": "Enter",
+          "x": 40,
+          "y": 1022,
+          "width": 117,
+          "height": 35
+        },
+        {
+          "text": "e",
+          "x": 1684,
+          "y": 1026,
+          "width": 33,
+          "height": 25
+        },
+        {
+          "text": "q",
+          "x": 1802,
+          "y": 1026,
+          "width": 35,
+          "height": 27
+        },
+        {
+          "text": "UID: 693306810",
+          "x": 1684,
+          "y": 1052,
+          "width": 177,
+          "height": 27
+        }
+      ]
+    },
+    {
+      "source": {
+        "path": "artifacts/live/2026-10-30-endurance/r64-windrise-map-escape-pause11-01/native-frames/frame-0013.json",
+        "sha256": "1f30da8f6ce7d347761aefa0105bb546d141d0366ff178e49d606f3c9ced5b04"
+      },
+      "frameId": 13,
+      "timestamp": 1793509162272,
+      "map": {
+        "x": -1266.435546875,
+        "y": 1934.080078125,
+        "map": "Teyvat",
+        "cameraAngle": 269.5
+      },
+      "ocr": [
+        {
+          "text": "25 ms",
+          "x": 1802,
+          "y": 83,
+          "width": 91,
+          "height": 23
+        },
+        {
+          "text": "Lumina",
+          "x": 1682,
+          "y": 260,
+          "width": 81,
+          "height": 23
+        },
+        {
+          "text": "Amber",
+          "x": 1690,
+          "y": 349,
+          "width": 73,
+          "height": 29
+        },
+        {
+          "text": "2",
+          "x": 1860,
+          "y": 357,
+          "width": 21,
+          "height": 17
+        },
+        {
+          "text": "Kaeya",
+          "x": 1672,
+          "y": 451,
+          "width": 75,
+          "height": 22
+        },
+        {
+          "text": "is",
+          "x": 1728,
+          "y": 536,
+          "width": 27,
+          "height": 15
+        },
+        {
+          "text": "Lv. 20",
+          "x": 748,
+          "y": 1003,
+          "width": 49,
+          "height": 22
+        },
+        {
+          "text": "211 /4015",
+          "x": 922,
+          "y": 1003,
+          "width": 83,
+          "height": 20
+        },
+        {
+          "text": "Enter",
+          "x": 40,
+          "y": 1022,
+          "width": 117,
+          "height": 35
+        },
+        {
+          "text": "e",
+          "x": 1684,
+          "y": 1026,
+          "width": 33,
+          "height": 25
+        },
+        {
+          "text": "q",
+          "x": 1802,
+          "y": 1026,
+          "width": 35,
+          "height": 27
+        },
+        {
+          "text": "UID: 693306810",
+          "x": 1684,
+          "y": 1052,
+          "width": 177,
+          "height": 27
+        }
+      ]
+    },
+    {
+      "source": {
+        "path": "artifacts/live/2026-10-30-endurance/r64-windrise-map-escape-pause11-01/native-frames/frame-0014.json",
+        "sha256": "41192a36b233d2a68c1f57327cca3b5dc4453cad72d1e1911f0c2f56b2c809b2"
+      },
+      "frameId": 14,
+      "timestamp": 1793509163003,
+      "map": {
+        "x": -1266.43359375,
+        "y": 1934.078125,
+        "map": "Teyvat",
+        "cameraAngle": 269.5
+      },
+      "ocr": [
+        {
+          "text": "18 ms",
+          "x": 1801,
+          "y": 78,
+          "width": 91,
+          "height": 29
+        },
+        {
+          "text": "Lumina",
+          "x": 1682,
+          "y": 260,
+          "width": 81,
+          "height": 23
+        },
+        {
+          "text": "Amber",
+          "x": 1690,
+          "y": 349,
+          "width": 73,
+          "height": 29
+        },
+        {
+          "text": "2",
+          "x": 1860,
+          "y": 357,
+          "width": 21,
+          "height": 17
+        },
+        {
+          "text": "Kaeya",
+          "x": 1672,
+          "y": 451,
+          "width": 77,
+          "height": 22
+        },
+        {
+          "text": "Lv. 20",
+          "x": 748,
+          "y": 1003,
+          "width": 49,
+          "height": 22
+        },
+        {
+          "text": "211 /4015",
+          "x": 922,
+          "y": 1003,
+          "width": 83,
+          "height": 20
+        },
+        {
+          "text": "Enter",
+          "x": 40,
+          "y": 1022,
+          "width": 117,
+          "height": 35
+        },
+        {
+          "text": "e",
+          "x": 1684,
+          "y": 1026,
+          "width": 33,
+          "height": 25
+        },
+        {
+          "text": "q",
+          "x": 1802,
+          "y": 1026,
+          "width": 35,
+          "height": 27
+        },
+        {
+          "text": "UID: 693306810",
+          "x": 1684,
+          "y": 1052,
+          "width": 177,
+          "height": 27
+        }
+      ]
+    },
+    {
+      "source": {
+        "path": "artifacts/live/2026-10-30-endurance/r64-windrise-map-escape-pause11-01/native-frames/frame-0015.json",
+        "sha256": "bba2b7aad20ca8eafca96156c6e014ba78d337fee20b953668f5b93ef4e1140b"
+      },
+      "frameId": 15,
+      "timestamp": 1793509163728,
+      "map": {
+        "x": -1266.43359375,
+        "y": 1934.078125,
+        "map": "Teyvat",
+        "cameraAngle": 269.5
+      },
+      "ocr": [
+        {
+          "text": "20 ms",
+          "x": 1802,
+          "y": 83,
+          "width": 91,
+          "height": 23
+        },
+        {
+          "text": "Lumina",
+          "x": 1682,
+          "y": 260,
+          "width": 81,
+          "height": 23
+        },
+        {
+          "text": "Amber",
+          "x": 1690,
+          "y": 349,
+          "width": 73,
+          "height": 29
+        },
+        {
+          "text": "2",
+          "x": 1860,
+          "y": 357,
+          "width": 21,
+          "height": 17
+        },
+        {
+          "text": "Kaeya",
+          "x": 1672,
+          "y": 451,
+          "width": 77,
+          "height": 22
+        },
+        {
+          "text": "is",
+          "x": 1726,
+          "y": 536,
+          "width": 29,
+          "height": 15
+        },
+        {
+          "text": "Lv. 20",
+          "x": 748,
+          "y": 1003,
+          "width": 49,
+          "height": 22
+        },
+        {
+          "text": "211 /4015",
+          "x": 922,
+          "y": 1003,
+          "width": 83,
+          "height": 20
+        },
+        {
+          "text": "Enter",
+          "x": 40,
+          "y": 1022,
+          "width": 117,
+          "height": 35
+        },
+        {
+          "text": "e",
+          "x": 1684,
+          "y": 1026,
+          "width": 33,
+          "height": 25
+        },
+        {
+          "text": "q",
+          "x": 1802,
+          "y": 1026,
+          "width": 35,
+          "height": 27
+        },
+        {
+          "text": "UID: 693306810",
+          "x": 1684,
+          "y": 1052,
+          "width": 177,
+          "height": 27
+        }
+      ]
+    },
+    {
+      "source": {
+        "path": "artifacts/live/2026-10-30-endurance/r64-windrise-map-escape-pause11-01/native-frames/frame-0016.json",
+        "sha256": "a05dce941fcdaa686cead07ebf6fe80a49443c4901f1e53c575a2f19fff437d3"
+      },
+      "frameId": 16,
+      "timestamp": 1793509164089,
+      "map": {
+        "x": -1266.44140625,
+        "y": 1934.083984375,
+        "map": "Teyvat",
+        "cameraAngle": 269.5
+      },
+      "ocr": [
+        {
+          "text": "20 ms",
+          "x": 1802,
+          "y": 83,
+          "width": 91,
+          "height": 23
+        },
+        {
+          "text": "Lumina",
+          "x": 1682,
+          "y": 260,
+          "width": 81,
+          "height": 23
+        },
+        {
+          "text": "Amber",
+          "x": 1690,
+          "y": 349,
+          "width": 73,
+          "height": 29
+        },
+        {
+          "text": "2",
+          "x": 1860,
+          "y": 357,
+          "width": 21,
+          "height": 17
+        },
+        {
+          "text": "Kaeya",
+          "x": 1672,
+          "y": 451,
+          "width": 77,
+          "height": 22
+        },
+        {
+          "text": "Lis",
+          "x": 1726,
+          "y": 536,
+          "width": 29,
+          "height": 15
+        },
+        {
+          "text": "Lv. 20",
+          "x": 748,
+          "y": 1003,
+          "width": 49,
+          "height": 22
+        },
+        {
+          "text": "211 /4015",
+          "x": 922,
+          "y": 1003,
+          "width": 83,
+          "height": 20
+        },
+        {
+          "text": "Enter",
+          "x": 40,
+          "y": 1022,
+          "width": 117,
+          "height": 35
+        },
+        {
+          "text": "e",
+          "x": 1684,
+          "y": 1026,
+          "width": 33,
+          "height": 25
+        },
+        {
+          "text": "q",
+          "x": 1802,
+          "y": 1026,
+          "width": 35,
+          "height": 27
+        },
+        {
+          "text": "UID: 693306810",
+          "x": 1684,
+          "y": 1052,
+          "width": 177,
+          "height": 27
+        }
+      ]
+    },
+    {
+      "source": {
+        "path": "artifacts/live/2026-10-30-endurance/r64-windrise-map-escape-pause11-01/native-frames/frame-0017.json",
+        "sha256": "d4fd7b90cfa9bc338cf31cb3d9b4675abf248a35c54be5762caa32c637052bad"
+      },
+      "frameId": 17,
+      "timestamp": 1793509164706,
+      "map": {
+        "x": -1266.43359375,
+        "y": 1934.078125,
+        "map": "Teyvat",
+        "cameraAngle": 269.5
+      },
+      "ocr": [
+        {
+          "text": "18 ms",
+          "x": 1801,
+          "y": 78,
+          "width": 91,
+          "height": 29
+        },
+        {
+          "text": "Lumina",
+          "x": 1682,
+          "y": 260,
+          "width": 81,
+          "height": 23
+        },
+        {
+          "text": "Amber",
+          "x": 1690,
+          "y": 349,
+          "width": 73,
+          "height": 29
+        },
+        {
+          "text": "2",
+          "x": 1860,
+          "y": 357,
+          "width": 21,
+          "height": 17
+        },
+        {
+          "text": "Kaeya",
+          "x": 1672,
+          "y": 451,
+          "width": 77,
+          "height": 22
+        },
+        {
+          "text": "Lis",
+          "x": 1726,
+          "y": 536,
+          "width": 29,
+          "height": 15
+        },
+        {
+          "text": "Lv. 20",
+          "x": 748,
+          "y": 1003,
+          "width": 49,
+          "height": 22
+        },
+        {
+          "text": "211 /4015",
+          "x": 922,
+          "y": 1003,
+          "width": 83,
+          "height": 20
+        },
+        {
+          "text": "Enter",
+          "x": 40,
+          "y": 1022,
+          "width": 117,
+          "height": 35
+        },
+        {
+          "text": "e",
+          "x": 1684,
+          "y": 1026,
+          "width": 33,
+          "height": 25
+        },
+        {
+          "text": "q",
+          "x": 1802,
+          "y": 1026,
+          "width": 35,
+          "height": 27
+        },
+        {
+          "text": "UID: 693306810",
+          "x": 1684,
+          "y": 1052,
+          "width": 177,
+          "height": 27
+        }
+      ]
+    },
+    {
+      "source": {
+        "path": "artifacts/live/2026-10-30-endurance/r64-windrise-map-escape-pause11-01/native-frames/frame-0018.json",
+        "sha256": "0fb2c7f84622b94d64656aab4b9bce2cc7931152535c2f98541bbf782d4a793b"
+      },
+      "frameId": 18,
+      "timestamp": 1793509165322,
+      "map": {
+        "x": -1266.43359375,
+        "y": 1934.078125,
+        "map": "Teyvat",
+        "cameraAngle": 269.5
+      },
+      "ocr": [
+        {
+          "text": "18 ms",
+          "x": 1801,
+          "y": 78,
+          "width": 91,
+          "height": 29
+        },
+        {
+          "text": "Lumina",
+          "x": 1682,
+          "y": 260,
+          "width": 81,
+          "height": 23
+        },
+        {
+          "text": "Amber",
+          "x": 1690,
+          "y": 349,
+          "width": 73,
+          "height": 29
+        },
+        {
+          "text": "2",
+          "x": 1860,
+          "y": 357,
+          "width": 21,
+          "height": 17
+        },
+        {
+          "text": "Kaeya",
+          "x": 1672,
+          "y": 451,
+          "width": 77,
+          "height": 22
+        },
+        {
+          "text": "IS",
+          "x": 1728,
+          "y": 536,
+          "width": 27,
+          "height": 15
+        },
+        {
+          "text": "Lv. 20",
+          "x": 748,
+          "y": 1003,
+          "width": 49,
+          "height": 22
+        },
+        {
+          "text": "211 /4015",
+          "x": 922,
+          "y": 1003,
+          "width": 83,
+          "height": 20
+        },
+        {
+          "text": "Enter",
+          "x": 40,
+          "y": 1022,
+          "width": 117,
+          "height": 35
+        },
+        {
+          "text": "e",
+          "x": 1684,
+          "y": 1026,
+          "width": 33,
+          "height": 25
+        },
+        {
+          "text": "q",
+          "x": 1802,
+          "y": 1026,
+          "width": 35,
+          "height": 27
+        },
+        {
+          "text": "UID: 693306810",
+          "x": 1684,
+          "y": 1052,
+          "width": 177,
+          "height": 27
+        }
+      ]
+    },
+    {
+      "source": {
+        "path": "artifacts/live/2026-10-30-endurance/r64-windrise-map-escape-pause11-01/native-frames/frame-0019.json",
+        "sha256": "2a4663113e54fb5b817a5309e1b8cab7ecd8431c5ad6c26e9c98621a667063cb"
+      },
+      "frameId": 19,
+      "timestamp": 1793509165923,
+      "map": {
+        "x": -1266.4375,
+        "y": 1934.08203125,
+        "map": "Teyvat",
+        "cameraAngle": 269.5
+      },
+      "ocr": [
+        {
+          "text": "22 ms",
+          "x": 1799,
+          "y": 79,
+          "width": 93,
+          "height": 28
+        },
+        {
+          "text": "Lumina",
+          "x": 1682,
+          "y": 260,
+          "width": 81,
+          "height": 23
+        },
+        {
+          "text": "Amber",
+          "x": 1690,
+          "y": 349,
+          "width": 73,
+          "height": 29
+        },
+        {
+          "text": "2",
+          "x": 1860,
+          "y": 357,
+          "width": 21,
+          "height": 17
+        },
+        {
+          "text": "Kaeya",
+          "x": 1672,
+          "y": 451,
+          "width": 77,
+          "height": 22
+        },
+        {
+          "text": "Lv. 20",
+          "x": 748,
+          "y": 1003,
+          "width": 49,
+          "height": 22
+        },
+        {
+          "text": "211 /4015",
+          "x": 922,
+          "y": 1003,
+          "width": 83,
+          "height": 20
+        },
+        {
+          "text": "Enter",
+          "x": 40,
+          "y": 1022,
+          "width": 117,
+          "height": 35
+        },
+        {
+          "text": "e",
+          "x": 1684,
+          "y": 1026,
+          "width": 33,
+          "height": 25
+        },
+        {
+          "text": "q",
+          "x": 1802,
+          "y": 1026,
+          "width": 35,
+          "height": 27
+        },
+        {
+          "text": "UID: 693306810",
+          "x": 1684,
+          "y": 1052,
+          "width": 177,
+          "height": 27
+        }
+      ]
+    },
+    {
+      "source": {
+        "path": "artifacts/live/2026-10-30-endurance/r64-windrise-map-escape-pause11-01/native-frames/frame-0020.json",
+        "sha256": "3af4bd6f4faf80196a79bab60dba6ee3f75840a833ac0dc4a3c63d392d8bb92a"
+      },
+      "frameId": 20,
+      "timestamp": 1793509166530,
+      "map": {
+        "x": -1266.43359375,
+        "y": 1934.078125,
+        "map": "Teyvat",
+        "cameraAngle": 269.5
+      },
+      "ocr": [
+        {
+          "text": "22 ms",
+          "x": 1801,
+          "y": 78,
+          "width": 91,
+          "height": 29
+        },
+        {
+          "text": "Lumina",
+          "x": 1682,
+          "y": 260,
+          "width": 81,
+          "height": 23
+        },
+        {
+          "text": "Amber",
+          "x": 1690,
+          "y": 349,
+          "width": 73,
+          "height": 29
+        },
+        {
+          "text": "2",
+          "x": 1860,
+          "y": 357,
+          "width": 21,
+          "height": 17
+        },
+        {
+          "text": "Kaeya",
+          "x": 1672,
+          "y": 451,
+          "width": 77,
+          "height": 22
+        },
+        {
+          "text": "is",
+          "x": 1728,
+          "y": 536,
+          "width": 27,
+          "height": 15
+        },
+        {
+          "text": "Lv. 20",
+          "x": 748,
+          "y": 1003,
+          "width": 49,
+          "height": 22
+        },
+        {
+          "text": "211 /4015",
+          "x": 922,
+          "y": 1003,
+          "width": 83,
+          "height": 20
+        },
+        {
+          "text": "Enter",
+          "x": 40,
+          "y": 1022,
+          "width": 117,
+          "height": 35
+        },
+        {
+          "text": "e",
+          "x": 1684,
+          "y": 1026,
+          "width": 33,
+          "height": 25
+        },
+        {
+          "text": "q",
+          "x": 1802,
+          "y": 1026,
+          "width": 35,
+          "height": 27
+        },
+        {
+          "text": "UID: 693306810",
+          "x": 1684,
+          "y": 1052,
+          "width": 177,
+          "height": 27
+        }
+      ]
+    },
+    {
+      "source": {
+        "path": "artifacts/live/2026-10-30-endurance/r64-windrise-map-escape-pause11-01/native-frames/frame-0021.json",
+        "sha256": "fd0855c114f7394675dff992c3b3f6b2c751e74159e304870bbe7daf35320608"
+      },
+      "frameId": 21,
+      "timestamp": 1793509167144,
+      "map": {
+        "x": -1266.43359375,
+        "y": 1934.078125,
+        "map": "Teyvat",
+        "cameraAngle": 269.5
+      },
+      "ocr": [
+        {
+          "text": "23 ms",
+          "x": 1799,
+          "y": 78,
+          "width": 95,
+          "height": 29
+        },
+        {
+          "text": "Lumina",
+          "x": 1682,
+          "y": 260,
+          "width": 81,
+          "height": 23
+        },
+        {
+          "text": "Amber",
+          "x": 1690,
+          "y": 349,
+          "width": 73,
+          "height": 29
+        },
+        {
+          "text": "2",
+          "x": 1860,
+          "y": 357,
+          "width": 21,
+          "height": 17
+        },
+        {
+          "text": "Kaeya",
+          "x": 1672,
+          "y": 451,
+          "width": 77,
+          "height": 22
+        },
+        {
+          "text": "Lv. 20",
+          "x": 748,
+          "y": 1003,
+          "width": 49,
+          "height": 22
+        },
+        {
+          "text": "211 /4015",
+          "x": 922,
+          "y": 1003,
+          "width": 83,
+          "height": 20
+        },
+        {
+          "text": "Enter",
+          "x": 40,
+          "y": 1022,
+          "width": 117,
+          "height": 35
+        },
+        {
+          "text": "e",
+          "x": 1684,
+          "y": 1026,
+          "width": 33,
+          "height": 25
+        },
+        {
+          "text": "q",
+          "x": 1802,
+          "y": 1026,
+          "width": 35,
+          "height": 27
+        },
+        {
+          "text": "UID: 693306810",
+          "x": 1684,
+          "y": 1052,
+          "width": 177,
+          "height": 27
+        }
+      ]
+    },
+    {
+      "source": {
+        "path": "artifacts/live/2026-10-30-endurance/r64-windrise-map-escape-pause11-01/native-frames/frame-0022.json",
+        "sha256": "3cdb15fd7fb77c2d3c0a19dc04fa788123e61209f2565d6f49cd45386d02f695"
+      },
+      "frameId": 22,
+      "timestamp": 1793509167758,
+      "map": {
+        "x": -1266.43359375,
+        "y": 1934.078125,
+        "map": "Teyvat",
+        "cameraAngle": 269.5
+      },
+      "ocr": [
+        {
+          "text": "33 ms",
+          "x": 1801,
+          "y": 78,
+          "width": 93,
+          "height": 29
+        },
+        {
+          "text": "Lumina",
+          "x": 1682,
+          "y": 260,
+          "width": 81,
+          "height": 23
+        },
+        {
+          "text": "Amber",
+          "x": 1690,
+          "y": 349,
+          "width": 73,
+          "height": 29
+        },
+        {
+          "text": "2",
+          "x": 1860,
+          "y": 357,
+          "width": 21,
+          "height": 17
+        },
+        {
+          "text": "Kaeya",
+          "x": 1672,
+          "y": 451,
+          "width": 77,
+          "height": 22
+        },
+        {
+          "text": "is",
+          "x": 1728,
+          "y": 536,
+          "width": 27,
+          "height": 15
+        },
+        {
+          "text": "Lv. 20",
+          "x": 748,
+          "y": 1003,
+          "width": 49,
+          "height": 22
+        },
+        {
+          "text": "211 /4015",
+          "x": 922,
+          "y": 1003,
+          "width": 83,
+          "height": 20
+        },
+        {
+          "text": "Enter",
+          "x": 40,
+          "y": 1022,
+          "width": 117,
+          "height": 35
+        },
+        {
+          "text": "e",
+          "x": 1684,
+          "y": 1026,
+          "width": 33,
+          "height": 25
+        },
+        {
+          "text": "q",
+          "x": 1802,
+          "y": 1026,
+          "width": 35,
+          "height": 27
+        },
+        {
+          "text": "UID: 693306810",
+          "x": 1684,
+          "y": 1052,
+          "width": 177,
+          "height": 27
+        }
+      ]
+    },
+    {
+      "source": {
+        "path": "artifacts/live/2026-10-30-endurance/r64-windrise-map-escape-pause11-01/native-frames/frame-0023.json",
+        "sha256": "670e35943977f558e0018ebdcfd543f8d4416f54c1f940205435091aaf58af88"
+      },
+      "frameId": 23,
+      "timestamp": 1793509168385,
+      "map": {
+        "x": -1266.43359375,
+        "y": 1934.078125,
+        "map": "Teyvat",
+        "cameraAngle": 269.5
+      },
+      "ocr": [
+        {
+          "text": "33 ms",
+          "x": 1801,
+          "y": 78,
+          "width": 93,
+          "height": 29
+        },
+        {
+          "text": "Lumina",
+          "x": 1682,
+          "y": 260,
+          "width": 81,
+          "height": 23
+        },
+        {
+          "text": "Amber",
+          "x": 1690,
+          "y": 349,
+          "width": 73,
+          "height": 29
+        },
+        {
+          "text": "2",
+          "x": 1860,
+          "y": 357,
+          "width": 21,
+          "height": 17
+        },
+        {
+          "text": "Kaeya",
+          "x": 1672,
+          "y": 451,
+          "width": 77,
+          "height": 22
+        },
+        {
+          "text": "is",
+          "x": 1728,
+          "y": 536,
+          "width": 27,
+          "height": 15
+        },
+        {
+          "text": "Lv. 20",
+          "x": 748,
+          "y": 1003,
+          "width": 49,
+          "height": 22
+        },
+        {
+          "text": "211 /4015",
+          "x": 922,
+          "y": 1003,
+          "width": 83,
+          "height": 20
+        },
+        {
+          "text": "Enter",
+          "x": 42,
+          "y": 1026,
+          "width": 113,
+          "height": 29
+        },
+        {
+          "text": "e",
+          "x": 1684,
+          "y": 1026,
+          "width": 33,
+          "height": 25
+        },
+        {
+          "text": "q",
+          "x": 1802,
+          "y": 1026,
+          "width": 35,
+          "height": 27
+        },
+        {
+          "text": "UID: 693306810",
+          "x": 1684,
+          "y": 1052,
+          "width": 177,
+          "height": 27
+        }
+      ]
+    },
+    {
+      "source": {
+        "path": "artifacts/live/2026-10-30-endurance/r64-windrise-map-escape-pause11-01/native-frames/frame-0024.json",
+        "sha256": "cf8ec8e6b42faab4af66c4d1105c920d79e27db6198520148a142f61a6501b5f"
+      },
+      "frameId": 24,
+      "timestamp": 1793509169817,
+      "map": {
+        "x": -1266.43359375,
+        "y": 1934.078125,
+        "map": "Teyvat",
+        "cameraAngle": 269.5
+      },
+      "ocr": [
+        {
+          "text": "35 ms",
+          "x": 1804,
+          "y": 83,
+          "width": 89,
+          "height": 23
+        },
+        {
+          "text": "Lumina",
+          "x": 1682,
+          "y": 260,
+          "width": 81,
+          "height": 23
+        },
+        {
+          "text": "Amber",
+          "x": 1690,
+          "y": 349,
+          "width": 73,
+          "height": 29
+        },
+        {
+          "text": "2",
+          "x": 1860,
+          "y": 357,
+          "width": 21,
+          "height": 17
+        },
+        {
+          "text": "Kaeya",
+          "x": 1672,
+          "y": 451,
+          "width": 77,
+          "height": 22
+        },
+        {
+          "text": "IS",
+          "x": 1728,
+          "y": 536,
+          "width": 27,
+          "height": 15
+        },
+        {
+          "text": "Lv. 20",
+          "x": 748,
+          "y": 1003,
+          "width": 49,
+          "height": 22
+        },
+        {
+          "text": "211 /4015",
+          "x": 922,
+          "y": 1003,
+          "width": 83,
+          "height": 20
+        },
+        {
+          "text": "Enter",
+          "x": 42,
+          "y": 1026,
+          "width": 113,
+          "height": 29
+        },
+        {
+          "text": "e",
+          "x": 1684,
+          "y": 1026,
+          "width": 33,
+          "height": 25
+        },
+        {
+          "text": "q",
+          "x": 1802,
+          "y": 1026,
+          "width": 35,
+          "height": 27
+        },
+        {
+          "text": "UID: 693306810",
+          "x": 1684,
+          "y": 1052,
+          "width": 177,
+          "height": 27
+        }
+      ]
+    },
+    {
+      "source": {
+        "path": "artifacts/live/2026-10-30-endurance/r64-windrise-map-escape-pause11-01/native-frames/frame-0025.json",
+        "sha256": "82ddc26597b60829910e942be68bfb908eddda18c5fd9bf036f0fcd62b8008a3"
+      },
+      "frameId": 25,
+      "timestamp": 1793509171285,
+      "map": {
+        "x": -1266.43359375,
+        "y": 1934.078125,
+        "map": "Teyvat",
+        "cameraAngle": 269.5
+      },
+      "ocr": [
+        {
+          "text": "35 ms",
+          "x": 1804,
+          "y": 83,
+          "width": 87,
+          "height": 23
+        },
+        {
+          "text": "Lumina",
+          "x": 1682,
+          "y": 260,
+          "width": 81,
+          "height": 23
+        },
+        {
+          "text": "Amber",
+          "x": 1686,
+          "y": 345,
+          "width": 79,
+          "height": 36
+        },
+        {
+          "text": "2",
+          "x": 1860,
+          "y": 357,
+          "width": 21,
+          "height": 17
+        },
+        {
+          "text": "Kaeya",
+          "x": 1672,
+          "y": 451,
+          "width": 77,
+          "height": 22
+        },
+        {
+          "text": "Lv. 20",
+          "x": 748,
+          "y": 1003,
+          "width": 49,
+          "height": 22
+        },
+        {
+          "text": "211 /4015",
+          "x": 922,
+          "y": 1003,
+          "width": 83,
+          "height": 20
+        },
+        {
+          "text": "Enter",
+          "x": 42,
+          "y": 1026,
+          "width": 113,
+          "height": 29
+        },
+        {
+          "text": "e",
+          "x": 1684,
+          "y": 1026,
+          "width": 33,
+          "height": 25
+        },
+        {
+          "text": "q",
+          "x": 1802,
+          "y": 1026,
+          "width": 35,
+          "height": 27
+        },
+        {
+          "text": "UID: 693306810",
+          "x": 1684,
+          "y": 1052,
+          "width": 177,
+          "height": 27
+        }
+      ]
+    },
+    {
+      "source": {
+        "path": "artifacts/live/2026-10-30-endurance/r64-windrise-map-escape-pause11-01/native-frames/frame-0026.json",
+        "sha256": "7a552893af4b5089220946acc7b6463d2db5b5871771cdd9380269a96043677c"
+      },
+      "frameId": 26,
+      "timestamp": 1793509172838,
+      "map": {
+        "x": -1266.43359375,
+        "y": 1934.078125,
+        "map": "Teyvat",
+        "cameraAngle": 269.5
+      },
+      "ocr": [
+        {
+          "text": " 40 ms",
+          "x": 1801,
+          "y": 78,
+          "width": 93,
+          "height": 29
+        },
+        {
+          "text": "Lumina",
+          "x": 1682,
+          "y": 260,
+          "width": 81,
+          "height": 23
+        },
+        {
+          "text": "Amber",
+          "x": 1690,
+          "y": 349,
+          "width": 73,
+          "height": 29
+        },
+        {
+          "text": "2",
+          "x": 1860,
+          "y": 357,
+          "width": 21,
+          "height": 17
+        },
+        {
+          "text": "Kaeya",
+          "x": 1672,
+          "y": 451,
+          "width": 77,
+          "height": 22
+        },
+        {
+          "text": "Lis",
+          "x": 1726,
+          "y": 536,
+          "width": 29,
+          "height": 15
+        },
+        {
+          "text": "Lv. 20",
+          "x": 748,
+          "y": 1003,
+          "width": 49,
+          "height": 22
+        },
+        {
+          "text": "211 /4015",
+          "x": 922,
+          "y": 1003,
+          "width": 83,
+          "height": 20
+        },
+        {
+          "text": "Enter",
+          "x": 40,
+          "y": 1022,
+          "width": 117,
+          "height": 35
+        },
+        {
+          "text": "e",
+          "x": 1684,
+          "y": 1026,
+          "width": 33,
+          "height": 25
+        },
+        {
+          "text": "q",
+          "x": 1802,
+          "y": 1026,
+          "width": 35,
+          "height": 27
+        },
+        {
+          "text": "UID: 693306810",
+          "x": 1684,
+          "y": 1052,
+          "width": 177,
+          "height": 27
+        }
+      ]
+    },
+    {
+      "source": {
+        "path": "artifacts/live/2026-10-30-endurance/r64-windrise-map-escape-pause11-01/native-frames/frame-0027.json",
+        "sha256": "5407af26b74207c7b9d14a4d71e00a629855b82d67d13eb9a07d0361f302d9d7"
+      },
+      "frameId": 27,
+      "timestamp": 1793509174299,
+      "map": {
+        "x": -1266.435546875,
+        "y": 1934.080078125,
+        "map": "Teyvat",
+        "cameraAngle": 269.5
+      },
+      "ocr": [
+        {
+          "text": " 24 ms",
+          "x": 1804,
+          "y": 83,
+          "width": 89,
+          "height": 23
+        },
+        {
+          "text": "Lumina",
+          "x": 1682,
+          "y": 260,
+          "width": 81,
+          "height": 23
+        },
+        {
+          "text": "Amber",
+          "x": 1690,
+          "y": 349,
+          "width": 73,
+          "height": 29
+        },
+        {
+          "text": "2",
+          "x": 1860,
+          "y": 357,
+          "width": 21,
+          "height": 17
+        },
+        {
+          "text": "Kaeya",
+          "x": 1672,
+          "y": 451,
+          "width": 77,
+          "height": 22
+        },
+        {
+          "text": "IS",
+          "x": 1728,
+          "y": 536,
+          "width": 27,
+          "height": 15
+        },
+        {
+          "text": "Lv. 20",
+          "x": 748,
+          "y": 1003,
+          "width": 49,
+          "height": 22
+        },
+        {
+          "text": "211 /4015",
+          "x": 922,
+          "y": 1003,
+          "width": 83,
+          "height": 20
+        },
+        {
+          "text": "Enter",
+          "x": 40,
+          "y": 1022,
+          "width": 117,
+          "height": 35
+        },
+        {
+          "text": "e",
+          "x": 1684,
+          "y": 1026,
+          "width": 33,
+          "height": 25
+        },
+        {
+          "text": "q",
+          "x": 1802,
+          "y": 1026,
+          "width": 35,
+          "height": 27
+        },
+        {
+          "text": "UID: 693306810",
+          "x": 1684,
+          "y": 1052,
+          "width": 177,
+          "height": 27
+        }
+      ]
+    },
+    {
+      "source": {
+        "path": "artifacts/live/2026-10-30-endurance/r64-windrise-map-escape-pause11-01/native-frames/frame-0028.json",
+        "sha256": "6af7f8955943ea8a415b6b1c2a39340fd084e95f329a7ae85dab926089e7df08"
+      },
+      "frameId": 28,
+      "timestamp": 1793509175825,
+      "map": {
+        "x": -1266.43359375,
+        "y": 1934.078125,
+        "map": "Teyvat",
+        "cameraAngle": 269.5
+      },
+      "ocr": [
+        {
+          "text": "21 ms",
+          "x": 1804,
+          "y": 83,
+          "width": 87,
+          "height": 23
+        },
+        {
+          "text": "Lumina",
+          "x": 1682,
+          "y": 260,
+          "width": 81,
+          "height": 23
+        },
+        {
+          "text": "Amber",
+          "x": 1686,
+          "y": 345,
+          "width": 79,
+          "height": 36
+        },
+        {
+          "text": "2",
+          "x": 1860,
+          "y": 357,
+          "width": 21,
+          "height": 17
+        },
+        {
+          "text": "Kaeya",
+          "x": 1672,
+          "y": 451,
+          "width": 77,
+          "height": 22
+        },
+        {
+          "text": "Lv. 20",
+          "x": 748,
+          "y": 1003,
+          "width": 49,
+          "height": 22
+        },
+        {
+          "text": "211 /4015",
+          "x": 922,
+          "y": 1003,
+          "width": 83,
+          "height": 20
+        },
+        {
+          "text": "Enter",
+          "x": 42,
+          "y": 1026,
+          "width": 113,
+          "height": 29
+        },
+        {
+          "text": "e",
+          "x": 1684,
+          "y": 1026,
+          "width": 33,
+          "height": 25
+        },
+        {
+          "text": "q",
+          "x": 1802,
+          "y": 1026,
+          "width": 35,
+          "height": 27
+        },
+        {
+          "text": "UID: 693306810",
+          "x": 1684,
+          "y": 1052,
+          "width": 177,
+          "height": 27
+        }
+      ]
+    }
+  ],
+  "map": {
+    "source": {
+      "path": "artifacts/live/2026-10-30-endurance/r64-windrise-map-escape-pause11-01/native-frames/frame-0007.json",
+      "sha256": "e5f4763e30f88201f9828e082ae010b9f28a295982b9aaa94e1162a40e977f62"
+    },
+    "session": "mvxd18f1-v4foc7vjubl",
+    "frameId": 7,
+    "timestamp": 1793509146600,
+    "map": null,
+    "hud": {
+      "foodQuantity": null,
+      "auto": false,
+      "climbing": false,
+      "groundControls": false,
+      "enemyBars": [],
+      "aerialBossVisible": false,
+      "aerialBoss": null,
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": true,
+      "objectiveChanged": false,
+      "health": null,
+      "healthOcr": [],
+      "healthDiagnostic": {
+        "fullRow": [],
+        "primary": [],
+        "left": [],
+        "right": [],
+        "decision": "health-unresolved"
+      },
+      "healthPct": null,
+      "lowHealth": true,
+      "world": false,
+      "interact": false,
+      "objectives": [
+        "Mondstadt"
+      ],
+      "enemyBarDiagnostic": null
+    },
+    "ocr": [
+      {
+        "text": "Cider Lake",
+        "x": 507,
+        "y": 5,
+        "width": 158,
+        "height": 40
+      },
+      {
+        "text": " 200/200 ",
+        "x": 1580,
+        "y": 30,
+        "width": 205,
+        "height": 40
+      },
+      {
+        "text": "Starfell",
+        "x": 1036,
+        "y": 79,
+        "width": 113,
+        "height": 29
+      },
+      {
+        "text": "Starsnatch Cliff",
+        "x": 1424,
+        "y": 122,
+        "width": 241,
+        "height": 43
+      },
+      {
+        "text": "Adventure Rank",
+        "x": 75,
+        "y": 146,
+        "width": 181,
+        "height": 32
+      },
+      {
+        "text": "Unknown",
+        "x": 1293,
+        "y": 146,
+        "width": 121,
+        "height": 37
+      },
+      {
+        "text": "Rewards",
+        "x": 80,
+        "y": 177,
+        "width": 97,
+        "height": 23
+      },
+      {
+        "text": "Whispering Woods",
+        "x": 782,
+        "y": 222,
+        "width": 267,
+        "height": 35
+      },
+      {
+        "text": "Mondstadt",
+        "x": 482,
+        "y": 278,
+        "width": 157,
+        "height": 29
+      },
+      {
+        "text": "Thousand Winds",
+        "x": 1417,
+        "y": 363,
+        "width": 245,
+        "height": 41
+      },
+      {
+        "text": "Temple",
+        "x": 1486,
+        "y": 403,
+        "width": 117,
+        "height": 35
+      },
+      {
+        "text": "Windrise",
+        "x": 971,
+        "y": 724,
+        "width": 129,
+        "height": 41
+      },
+      {
+        "text": "Falcon Coast",
+        "x": 1556,
+        "y": 961,
+        "width": 187,
+        "height": 29
+      },
+      {
+        "text": "Unknown",
+        "x": 330,
+        "y": 999,
+        "width": 113,
+        "height": 28
+      },
+      {
+        "text": "Starfell Valley",
+        "x": 1592,
+        "y": 993,
+        "width": 199,
+        "height": 28
+      },
+      {
+        "text": "Unknown",
+        "x": 577,
+        "y": 1015,
+        "width": 119,
+        "height": 40
+      },
+      {
+        "text": "Exploration Progress: 16%",
+        "x": 1506,
+        "y": 1024,
+        "width": 287,
+        "height": 29
+      },
+      {
+        "text": "Elemental Trial",
+        "x": 1129,
+        "y": 1036,
+        "width": 219,
+        "height": 37
+      },
+      {
+        "text": "UID: 693306810",
+        "x": 1680,
+        "y": 1052,
+        "width": 183,
+        "height": 27
+      }
+    ]
+  },
+  "inventory": {
+    "source": {
+      "path": "artifacts/live/2026-10-30-endurance/north-starfell-encounter-pause-r64-12/opened-inventory.json",
+      "sha256": "ed44d61888768290faf8ebe45b026ab554cf06bab9ff8b0c38e647bf78d72552"
+    },
+    "session": "mvxd48wi-rkm2vwewbm",
+    "frameId": 5,
+    "timestamp": 1793509284611,
+    "map": null,
+    "hud": {
+      "foodQuantity": null,
+      "auto": false,
+      "climbing": false,
+      "groundControls": false,
+      "enemyBars": [],
+      "aerialBossVisible": false,
+      "aerialBoss": null,
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": null,
+      "healthOcr": [],
+      "healthDiagnostic": {
+        "fullRow": [],
+        "primary": [],
+        "left": [],
+        "right": [],
+        "decision": "health-unresolved"
+      },
+      "healthPct": null,
+      "lowHealth": true,
+      "world": false,
+      "interact": false,
+      "objectives": [],
+      "enemyBarDiagnostic": null
+    },
+    "ocr": [
+      {
+        "text": "Food",
+        "x": 138,
+        "y": 32,
+        "width": 71,
+        "height": 37
+      },
+      {
+        "text": "Q 5",
+        "x": 488,
+        "y": 26,
+        "width": 115,
+        "height": 44
+      },
+      {
+        "text": "E",
+        "x": 1396,
+        "y": 42,
+        "width": 27,
+        "height": 17
+      },
+      {
+        "text": "Inventory capacity 25/2600",
+        "x": 1492,
+        "y": 38,
+        "width": 305,
+        "height": 27
+      },
+      {
+        "text": "Teyvat Fried Egg",
+        "x": 1329,
+        "y": 127,
+        "width": 297,
+        "height": 47
+      },
+      {
+        "text": "Food",
+        "x": 1336,
+        "y": 187,
+        "width": 105,
+        "height": 36
+      },
+      {
+        "text": ": Revives a character and restores",
+        "x": 1339,
+        "y": 436,
+        "width": 429,
+        "height": 34
+      },
+      {
+        "text": "100 HP.",
+        "x": 1336,
+        "y": 469,
+        "width": 97,
+        "height": 28
+      },
+      {
+        "text": "An egg fried on one side. The yolk",
+        "x": 1335,
+        "y": 515,
+        "width": 420,
+        "height": 30
+      },
+      {
+        "text": "flows out nicely when broken. So",
+        "x": 1336,
+        "y": 546,
+        "width": 415,
+        "height": 29
+      },
+      {
+        "text": "satisfying.",
+        "x": 1331,
+        "y": 569,
+        "width": 139,
+        "height": 41
+      },
+      {
+        "text": "Q Source",
+        "x": 1342,
+        "y": 633,
+        "width": 115,
+        "height": 35
+      },
+      {
+        "text": "Obtained by cooking",
+        "x": 1349,
+        "y": 691,
+        "width": 227,
+        "height": 38
+      },
+      {
+        "text": "Use",
+        "x": 1672,
+        "y": 1005,
+        "width": 59,
+        "height": 32
+      },
+      {
+        "text": "UID: 693306810",
+        "x": 1682,
+        "y": 1052,
+        "width": 181,
+        "height": 27
+      }
+    ]
+  },
+  "readableWorld": {
+    "source": {
+      "path": "artifacts/live/2026-10-30-endurance/north-starfell-encounter-pause-r64-12/before.json",
+      "sha256": "4c69ea0b523774c718cf83705f870e719dd22642deb445b17c735b510e18140a"
+    },
+    "session": "mvxd48wi-rkm2vwewbm",
+    "frameId": 1,
+    "timestamp": 1793509281250,
+    "map": {
+      "x": -1266.4375,
+      "y": 1934.08203125,
+      "map": "Teyvat",
+      "cameraAngle": 269.5
+    },
+    "hud": {
+      "foodQuantity": null,
+      "auto": false,
+      "climbing": false,
+      "groundControls": true,
+      "enemyBars": [],
+      "aerialBossVisible": false,
+      "aerialBoss": null,
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": {
+        "current": 2211,
+        "max": 4015
+      },
+      "healthOcr": [
+        "2211/4015"
+      ],
+      "healthDiagnostic": {
+        "fullRow": [],
+        "primary": [
+          "2211/4015"
+        ],
+        "left": [],
+        "right": [],
+        "decision": "primary-scaled-readable"
+      },
+      "healthPct": 0.5506849315068493,
+      "lowHealth": true,
+      "world": true,
+      "interact": false,
+      "objectives": [],
+      "enemyBarDiagnostic": null
+    },
+    "ocr": [
+      {
+        "text": "Lumina",
+        "x": 1682,
+        "y": 260,
+        "width": 81,
+        "height": 23
+      },
+      {
+        "text": "Amber",
+        "x": 1690,
+        "y": 349,
+        "width": 73,
+        "height": 29
+      },
+      {
+        "text": "2",
+        "x": 1860,
+        "y": 357,
+        "width": 21,
+        "height": 17
+      },
+      {
+        "text": "Kaeya",
+        "x": 1671,
+        "y": 447,
+        "width": 72,
+        "height": 30
+      },
+      {
+        "text": "Lisa",
+        "x": 1724,
+        "y": 536,
+        "width": 31,
+        "height": 15
+      },
+      {
+        "text": "Lv. 20",
+        "x": 748,
+        "y": 1003,
+        "width": 49,
+        "height": 22
+      },
+      {
+        "text": "Enter",
+        "x": 40,
+        "y": 1022,
+        "width": 117,
+        "height": 35
+      },
+      {
+        "text": "e",
+        "x": 1684,
+        "y": 1026,
+        "width": 35,
+        "height": 25
+      },
+      {
+        "text": "q",
+        "x": 1802,
+        "y": 1026,
+        "width": 37,
+        "height": 27
+      },
+      {
+        "text": "UID: 693306810",
+        "x": 1684,
+        "y": 1052,
+        "width": 177,
+        "height": 27
+      },
+      {
+        "text": "E",
+        "x": 1692.6666666666667,
+        "y": 1030,
+        "width": 13.666666666666666,
+        "height": 18.333333333333332
+      },
+      {
+        "text": "Q",
+        "x": 1808.3333333333333,
+        "y": 1029,
+        "width": 21.666666666666668,
+        "height": 22.333333333333332
+      }
+    ]
+  }
+}

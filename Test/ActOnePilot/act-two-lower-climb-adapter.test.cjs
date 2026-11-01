@@ -20,4 +20,14 @@ test('adapter consumes permit before one unpause and protects final review bound
 test('invalid or unwritable permit cannot cause input',async()=>{for(const o of [{invalid:true},{writeFailure:true}]){const h=harness(o);await assert.rejects(h.run());assert.equal(h.counts().inputs.length,0);}});
 test('cancellation, focus loss and chain failure release and invoke final pause protection',async()=>{for(const o of [{cancel:true},{focusFailure:true},{runFailure:true}]){const h=harness(o),r=await h.run();assert(r.error);assert.equal(h.counts().pauses,1);assert(h.counts().releases);assert(h.counts().inputs.length<=1);}});
 test('mission dispatch calls only the local lower-climb adapter',async()=>{const mission=require(path.join(root,'mission.js'));let calls=0;const observe=()=>{};const result=await mission.runQuestStep('actTwoLowerClimb', {}, {runActTwoLowerClimb:async()=>{calls++;return 'local';}}, observe);assert.equal(result,'local');assert.equal(calls,1);});
-test('new step includes same-frame stamina recognition, revision inputs and bounded pause policy',()=>{assert(source.includes("['actTwoField','actTwoLowerClimb'].indexOf(request.step)>=0&&climbing"));assert(source.includes("if(value.mission==='questStep'&&value.step==='actTwoLowerClimb')names.push('act-two-lower-climb.js','act-two-field.js','climb-stamina.js','world-inventory.js','local-pause.js');"));assert(source.includes("'actTwoHideoutAerial','actTwoLowerClimb']"));});
+test('new step includes same-frame stamina recognition, revision inputs and bounded pause policy',()=>{
+ // Other explicit climb recipes may share the same sensor; verify this step's
+ // actual membership and conditions instead of freezing an obsolete two-item list.
+ const sensor=source.match(/if\(request&&(\[[^\n]+\])\.indexOf\(request\.step\)>=0&&climbing\)\{var staminaReader=/);
+ assert(sensor,'Same-frame climbing sensor must stay explicitly gated');
+ const admitted=vm.runInNewContext(sensor[1]);
+ assert(admitted.includes('actTwoLowerClimb'));assert(!admitted.includes('unreviewedClimb'));
+ assert(source.includes("if(value.mission==='questStep'&&value.step==='actTwoLowerClimb')names.push('act-two-lower-climb.js','act-two-field.js','climb-stamina.js','world-inventory.js','local-pause.js');"));
+ const lower=source.slice(start,source.indexOf('        runActTwoBoundedMount:',start));
+ assert(lower.includes('return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error,'));
+});

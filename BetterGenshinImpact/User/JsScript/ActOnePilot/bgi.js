@@ -400,6 +400,20 @@ function actTwoHideoutPauseOnly(o) {
         rows.filter(function(r){return r.text==='Lv. 17'&&r.x>730&&r.x<800&&r.y>990&&r.y<1030;}).length===1&&
         rows.filter(function(r){return /^(?:UID)?[: ]*693306810$/.test(r.text)&&r.x>1600&&r.y>1030;}).length===1);
 }
+function actOneLocalPauseEqPair(rows) {
+    // These original-account keycaps establish only pause HUD evidence. Keep
+    // lowercase OCR out of the shared ground/world/health recognition paths.
+    if(!Array.isArray(rows)||!actTwoOriginalAccount(rows))return false;
+    var keys=rows.filter(function(r){
+        return r&&/^[EQ]$/i.test(String(r.text||'').trim())&&
+            ['x','y','width','height'].every(function(k){return Number.isFinite(r[k]);})&&
+            r.x>=1640&&r.x<=1850&&r.y>=995&&r.y<=1045&&
+            r.width>=10&&r.width<=60&&r.height>=10&&r.height<=45;
+    });
+    var e=keys.filter(function(r){return String(r.text).trim().toUpperCase()==='E'&&r.x<=1745;});
+    var q=keys.filter(function(r){return String(r.text).trim().toUpperCase()==='Q'&&r.x>=1760;});
+    return keys.length===2&&e.length===1&&q.length===1&&q[0].x-e[0].x>=50&&Math.abs(e[0].y-q[0].y)<=12;
+}
 function actOneLocalPauseInputReady(o,now,session) {
     if(!o||o.session!==session||!Number.isInteger(o.frameId)||!Number.isFinite(o.timestamp)||!Number.isFinite(now)||
        now<o.timestamp||now-o.timestamp>1000||!o.hud||!Array.isArray(o.ocr)||actOneLocalPauseProof(o,now,session))return false;
@@ -411,7 +425,7 @@ function actOneLocalPauseInputReady(o,now,session) {
     // Pausing needs recognizable live-game HUD evidence, not combat readiness.
     // A missing objective, slot number, HP reading, or E/Q label must not block it.
     var party=rows.some(function(r){return /^(Lumina|Traveler|Amber|Kaeya|Lisa)$/.test(String(r.text||'').trim())&&r.x>=1550&&r.x<=1810&&r.y>=280&&r.y<=650;});
-    var controls=rows.some(function(r){return /^(R|E|Q)$/.test(String(r.text||'').trim())&&r.x>=1520&&r.x<=1810&&r.y>=985&&r.y<=1045;});
+    var controls=rows.some(function(r){return /^(R|E|Q)$/.test(String(r.text||'').trim())&&r.x>=1520&&r.x<=1810&&r.y>=985&&r.y<=1045;})||actOneLocalPauseEqPair(rows);
     // Climbing replaces attack controls with X/Space. These paired controls
     // permit only pausing, including when the health crop is unresolved.
     controls=controls||(h.climbing===true&&

@@ -1,11 +1,15 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs');
 const source=fs.readFileSync('BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js','utf8');
 const body=source.slice(source.indexOf('nativeCombat:async function(o){',source.indexOf('runActTwoField: async function')),source.indexOf('key:async function(k,ms,o){safe(o);',source.indexOf('runActTwoField: async function'))).trim().replace(/,$/,'');
+// The extracted adapter now consumes the shared profile and freeze/lock predicates.
+// Use their real implementations while keeping the native combat boundary inert.
+const profileBody=source.slice(source.indexOf('function actTwoRegionalCombatProfile('),source.indexOf('function actTwoEncounterDispatch(')).trim();
+assert(profileBody.startsWith('function actTwoRegionalCombatProfile('));
 async function exercise(probe,hp,sampleHp,phaseReact=false,charging=true){
  let calls=[],released=0;
  const p={nativeCombat:true,enemyLevel:13,regionWitness:{},nativeAvatar:'Kaeya',shieldProbe:probe,shieldReviewed:probe,phaseReact};
  const observation={frameId:1,hud:{health:{current:hp,max:4015},groundControls:true,combatTargetState:{phase:charging?'charging-shield':'unknown'}},ocr:[]};
- const guard={nativeHealth:()=>true,combatTargets:()=>[{}],leyLine:()=>true};
+ const guard={...require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-field.js'),nativeHealth:()=>true,combatTargets:()=>[{}],leyLine:()=>true};
  const nativeSource=fs.readFileSync('BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-native-combat.js','utf8');
  const file={readTextSync:()=>nativeSource.replace('function leyLineProfile(p){','function leyLineProfile(p){')};
  const ng=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-native-combat.js');
@@ -14,8 +18,9 @@ async function exercise(probe,hp,sampleHp,phaseReact=false,charging=true){
  let param;function AutoFightParam(name){param=this;this.name=name;this.FinishDetectConfig={};}
  const api=eval('({'+body+'})');
  const safe=()=>{},witness={},events=[],actTwoRegionalCombatStrategy=()=> 'ordinary',release=()=>released++,keyUp=()=>{},leftButtonUp=()=>{},rightButtonUp=()=>{},checkStop=()=>{},ready=()=>{},sleep=async()=>{},observe=async()=>({...observation,hud:{...observation.hud,health:{current:sampleHp,max:4015}}}),actTwoOriginalAccount=()=>true,dispatcher={};
+ const actTwoRegionalCombatProfile=eval('('+profileBody+')');
  try{return {value:await api.nativeCombat(observation),calls,released};}finally{ng.chunk=original;}
 }
-test('actual adapter uses two-second probe and85percent sampled floor',async()=>{const r=await exercise(true,4015,4015);assert.deepEqual(r.calls,[{seconds:2,strategy:'English Whopperflower Shield Probe',deadline:3000,sample:750}]);assert.equal(r.released,1);await assert.rejects(exercise(true,4015,3300),/sampled health/);await assert.rejects(exercise(true,3300,3300),/below85/);});
+test('actual adapter uses two-second probe and85percent sampled floor',async()=>{const r=await exercise(true,4015,4015);assert.deepEqual(r.calls,[{seconds:2,strategy:'English Whopperflower Shield Probe',deadline:3000,sample:750}]);assert.equal(r.released,1);await assert.rejects(exercise(true,4015,3300),/sampled health/);await assert.rejects(exercise(true,3300,3300),/entry health below profile floor/);});
 test('ordinary adapter retains its proven six-second strategy',async()=>{const r=await exercise(false,3500,3000);assert.deepEqual(r.calls,[{seconds:6,strategy:'ordinary',deadline:8000,sample:2500}]);});
 test('local phase response uses the same2second85percent profile and rejects unknown phase before native input',async()=>{const r=await exercise(false,4015,4015,true);assert.deepEqual(r.calls,[{seconds:2,strategy:'English Whopperflower Shield Probe',deadline:3000,sample:750}]);await assert.rejects(exercise(false,4015,3300,true),/sampled health/);await assert.rejects(exercise(false,4015,4015,true,false),/positive charging shield/);});

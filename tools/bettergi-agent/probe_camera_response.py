@@ -12,7 +12,7 @@ import uuid
 from hybrid_navigation import HybridNavigation
 from hybrid_routes import PATROL_STATIONS
 from navigation_idle_recovery import fresh_frame
-from navigation_profiles import COURTYARD_PROFILE, NAVIGATION_PROFILES, allows_pose_scope
+from navigation_profiles import COURTYARD_PROFILE, LOCALIZATION_PROFILES, allows_pose_scope
 from observation_profiles import P2P_NATIVE, verify_frame, verify_hello
 from observation_timing import observation_timestamp
 from resident_runtime import atomic_json, control_module, require_current_rdp, verify_bridge_identity
@@ -64,7 +64,7 @@ def qualified(row, profile=COURTYARD_PROFILE):
 class Experiment:
     """Own a single synchronous bridge, track every observed frame and admit just one outstanding pulse."""
     def __init__(self, bridge, report, *, station=STATION, profile=COURTYARD_PROFILE, seconds=65, stop_check=None):
-        require(profile in NAVIGATION_PROFILES and len(station) == 2
+        require(profile in LOCALIZATION_PROFILES and len(station) == 2
                 and all(type(v) in (int, float) and math.isfinite(v) for v in station)
                 and type(seconds) in (int, float) and 0 < seconds <= 65, 'Invalid bounded camera scope')
         self.bridge, self.report = bridge, report

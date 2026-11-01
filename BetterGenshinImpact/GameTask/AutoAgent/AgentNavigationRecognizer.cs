@@ -54,6 +54,8 @@ internal sealed class AgentNavigationRecognizer : IDisposable
                 (float)AgentNavigationProfile.ScoutAnchorX, (float)AgentNavigationProfile.ScoutAnchorY)),
             AgentNavigationProfile.MondstadtNorthCombatScout => _map.ConvertGenshinMapCoordinatesToImageCoordinates(new Point2f(
                 (float)AgentNavigationProfile.NorthScoutAnchorX, (float)AgentNavigationProfile.NorthScoutAnchorY)),
+            AgentNavigationProfile.WindriseStatueRecovery => _map.ConvertGenshinMapCoordinatesToImageCoordinates(new Point2f(
+                (float)AgentNavigationProfile.WindriseAnchorX, (float)AgentNavigationProfile.WindriseAnchorY)),
             _ => start
         };
         var endpoint = _map.ConvertGenshinMapCoordinatesToImageCoordinates(
@@ -109,6 +111,18 @@ internal sealed class AgentNavigationRecognizer : IDisposable
             bounds = new { minX = AgentNavigationProfile.NorthScoutMinimumX, maxX = AgentNavigationProfile.NorthScoutMaximumX,
                 minY = AgentNavigationProfile.NorthScoutMinimumY, maxY = AgentNavigationProfile.NorthScoutMaximumY },
             searchAnchor = new { x = AgentNavigationProfile.NorthScoutAnchorX, y = AgentNavigationProfile.NorthScoutAnchorY },
+            localOnly = true, minimumPositionConfidence = .99, minimumYawConfidence = .2,
+            maxWidth = 1920, maxHeight = 1080, normalIsGroundedProof = false
+        },
+        AgentNavigationProfile.WindriseStatueRecovery => new
+        {
+            version = 1, profileId, sameFrame = true, readOnly = true,
+            start = new { x = NavigationBaselineTask.StartX, y = NavigationBaselineTask.StartY },
+            end = new { x = NavigationBaselineTask.EndX, y = NavigationBaselineTask.EndY },
+            allowedLayerIds = new[] { "MapBack_2" },
+            bounds = new { minX = AgentNavigationProfile.WindriseMinimumX, maxX = AgentNavigationProfile.WindriseMaximumX,
+                minY = AgentNavigationProfile.WindriseMinimumY, maxY = AgentNavigationProfile.WindriseMaximumY },
+            searchAnchor = new { x = AgentNavigationProfile.WindriseAnchorX, y = AgentNavigationProfile.WindriseAnchorY },
             localOnly = true, minimumPositionConfidence = .99, minimumYawConfidence = .2,
             maxWidth = 1920, maxHeight = 1080, normalIsGroundedProof = false
         },

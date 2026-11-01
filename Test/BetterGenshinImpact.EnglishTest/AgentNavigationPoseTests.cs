@@ -13,6 +13,67 @@ namespace BetterGenshinImpact.EnglishTest;
 /// <summary>Native guidance cannot promote weak matches or reuse pose fields on an unavailable frame.</summary>
 public sealed class AgentNavigationPoseTests
 {
+    /// <summary>Windrise remains a separate MapBack_2-only geofence with unchanged native confidence limits.</summary>
+    [Theory]
+    [InlineData(-1272, 1922, .99, .2, "MapBack_2", true)]
+    [InlineData(-1272, 1940, .99, .2, "MapBack_2", true)]
+    [InlineData(-1260, 1922, .99, .2, "MapBack_2", true)]
+    [InlineData(-1260, 1940, .99, .2, "MapBack_2", true)]
+    [InlineData(-1266.435546875, 1934.080078125, .999, .8, "MapBack_2", true)]
+    [InlineData(-1265.917, 1928.381, .999, .8, "MapBack_2", true)]
+    [InlineData(-1272.01, 1931, .999, .8, "MapBack_2", false)]
+    [InlineData(-1259.99, 1931, .999, .8, "MapBack_2", false)]
+    [InlineData(-1266, 1921.99, .999, .8, "MapBack_2", false)]
+    [InlineData(-1266, 1940.01, .999, .8, "MapBack_2", false)]
+    [InlineData(-1266, 1931, .989, .8, "MapBack_2", false)]
+    [InlineData(-1266, 1931, .999, .199, "MapBack_2", false)]
+    [InlineData(-1266, 1931, 1.001, .8, "MapBack_2", false)]
+    [InlineData(-1266, 1931, .999, 1.001, "MapBack_2", false)]
+    [InlineData(-1266, 1931, .999, .8, "City_102", false)]
+    [InlineData(-1266, 1931, .999, .8, "MapBack_1", false)]
+    [InlineData(-1266, 1931, .999, .8, null, false)]
+    [InlineData(double.NaN, 1931, .999, .8, "MapBack_2", false)]
+    [InlineData(-1266, double.PositiveInfinity, .999, .8, "MapBack_2", false)]
+    public void WindriseScopeRequiresExactSurfaceBoundsAndConfidence(double x, double y, double position,
+        double yaw, string? layer, bool accepted)
+    {
+        Assert.Equal(accepted, AgentNavigationPose.IsQualified(x, y, 15, position, yaw, layer,
+            AgentNavigationProfile.WindriseStatueRecovery));
+    }
+
+    /// <summary>The fixed Windrise anchor changes perception only; old scopes cannot be substituted at the new spawn.</summary>
+    [Fact]
+    public void WindriseCapabilityIsExplicitLocalReadOnlyAndKeepsOldContracts()
+    {
+        const string profile = AgentNavigationProfile.WindriseStatueRecovery;
+        Assert.Equal("windrise-statue-recovery-v1", profile);
+        Assert.True(AgentNavigationProfile.IsSupported(profile));
+        Assert.False(AgentNavigationProfile.IsSupported(profile + " "));
+        Assert.False(AgentNavigationProfile.IsSupported(profile.ToUpperInvariant()));
+        var wire = JObject.FromObject(AgentNavigationRecognizer.GetCapability(profile));
+        var original = JObject.FromObject(AgentNavigationRecognizer.Capability);
+        Assert.Equal(profile, wire["profileId"]!.Value<string>());
+        Assert.Equal(new[] { "MapBack_2" }, wire["allowedLayerIds"]!.Values<string>());
+        Assert.Equal(-1272, wire["bounds"]!["minX"]!.Value<double>());
+        Assert.Equal(-1260, wire["bounds"]!["maxX"]!.Value<double>());
+        Assert.Equal(1922, wire["bounds"]!["minY"]!.Value<double>());
+        Assert.Equal(1940, wire["bounds"]!["maxY"]!.Value<double>());
+        Assert.Equal(-1266, wire["searchAnchor"]!["x"]!.Value<double>());
+        Assert.Equal(1931, wire["searchAnchor"]!["y"]!.Value<double>());
+        Assert.True(wire["localOnly"]!.Value<bool>());
+        Assert.True(wire["sameFrame"]!.Value<bool>());
+        Assert.True(wire["readOnly"]!.Value<bool>());
+        Assert.False(wire["normalIsGroundedProof"]!.Value<bool>());
+        Assert.Equal(.99, wire["minimumPositionConfidence"]!.Value<double>());
+        Assert.Equal(.2, wire["minimumYawConfidence"]!.Value<double>());
+        Assert.True(JToken.DeepEquals(original["start"], wire["start"]));
+        Assert.True(JToken.DeepEquals(original["end"], wire["end"]));
+        foreach (var old in new[] { null, AgentNavigationProfile.Courtyard, AgentNavigationProfile.MondstadtSurface,
+            AgentNavigationProfile.MondstadtCombatScout, AgentNavigationProfile.MondstadtNorthCombatScout })
+            Assert.False(AgentNavigationPose.IsQualified(-1266.435546875, 1934.080078125, 269.5, .999, .8,
+                "MapBack_2", old));
+    }
+
     /// <summary>The separately named northern scope keeps finite coordinates, exact layers and the original confidence gates.</summary>
     [Theory]
     [InlineData(-1500, 2430, .99, .2, "MapBack_2", true)]
@@ -105,7 +166,8 @@ public sealed class AgentNavigationPoseTests
         var helloMethod = typeof(AgentStreamSession).GetMethod("CreateHello", BindingFlags.NonPublic | BindingFlags.Instance)!;
         var hello = JObject.FromObject(helloMethod.Invoke(session, [false])!);
         Assert.Equal(new[] { AgentNavigationProfile.Courtyard, AgentNavigationProfile.MondstadtSurface,
-            AgentNavigationProfile.MondstadtCombatScout, AgentNavigationProfile.MondstadtNorthCombatScout },
+            AgentNavigationProfile.MondstadtCombatScout, AgentNavigationProfile.MondstadtNorthCombatScout,
+            AgentNavigationProfile.WindriseStatueRecovery },
             hello["navigationProfiles"]!.Values<string>());
         Assert.False(hello["inputEnabled"]!.Value<bool>());
         Assert.True(JToken.DeepEquals(JObject.FromObject(AgentNavigationRecognizer.Capability), hello["navigationGuidance"]));

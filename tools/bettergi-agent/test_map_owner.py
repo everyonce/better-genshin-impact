@@ -221,6 +221,14 @@ class MapOwnerTest(unittest.TestCase):
         folder,result=self.create_next_handoff(prior,result,game,64)
         return prior,folder,result,game
 
+    def create_r65_successor(self):
+        """Seal the original R64 owner before preparing only its explicitly supported R65 successor."""
+        previous,folder,result,game=self.create_r64_successor()
+        prior=folder/'map-owner-lineage.json'
+        write(prior,owner.replacement(previous,folder))
+        folder,result=self.create_next_handoff(prior,result,game,65)
+        return prior,folder,result,game
+
     def test_r60_handoff_keeps_the_same_game_and_rejects_stale_source(self):
         """The newly allowed successor still cannot reuse the discovery from before the R60 replacement."""
         prior,folder,result,game=self.create_r60_successor()
@@ -262,8 +270,8 @@ class MapOwnerTest(unittest.TestCase):
         self.assertEqual(owner.load_map_owner(path),dict(root=self.ids['root'],child=owner.identity(result['child'])))
         self.assertEqual(receipt['protectedGame'],game)
         self.assertEqual(receipt['priorLineageSha256'],hashlib.sha256(prior.read_bytes()).hexdigest())
-    def test_r64_replays_original_root_and_game_but_rejects_an_eighth_transition(self):
-        """R64 extends the exact original lineage once; it grants no authority for R65."""
+    def test_r64_replays_original_root_and_game(self):
+        """The historical R64 receipt remains independently replayable after the finite next extension."""
         prior,folder,result,game=self.create_r64_successor()
         receipt=owner.replacement(prior,folder)
         path=folder/'map-owner-lineage.json'
@@ -271,9 +279,52 @@ class MapOwnerTest(unittest.TestCase):
         self.assertEqual(owner.load_map_owner(path),dict(root=self.ids['root'],child=owner.identity(result['child'])))
         self.assertEqual(receipt['protectedGame'],game)
         self.assertEqual(receipt['priorLineageSha256'],hashlib.sha256(prior.read_bytes()).hexdigest())
-        later,_=self.create_next_handoff(path,result,game,65)
+
+    def test_r65_replays_original_root_and_game_but_rejects_the_next_transition(self):
+        """The new R65 handoff preserves exact ancestry and does not grant authority for R66."""
+        prior,folder,result,game=self.create_r65_successor()
+        receipt=owner.replacement(prior,folder);path=folder/'map-owner-lineage.json'
+        write(path,receipt)
+        self.assertEqual(owner.load_map_owner(path),dict(root=self.ids['root'],child=owner.identity(result['child'])))
+        self.assertEqual(receipt['protectedGame'],game)
+        self.assertEqual(receipt['priorLineageSha256'],hashlib.sha256(prior.read_bytes()).hexdigest())
+        self.assertEqual(owner.load_map_owner(prior)['root'],self.ids['root'])
+        later,_=self.create_next_handoff(path,result,game,66)
         with self.assertRaisesRegex(ValueError,'bounded'):owner.replacement(path,later)
-        with self.assertRaisesRegex(ValueError,'Unsupported map release'):owner.target_package(65)
+        with self.assertRaisesRegex(ValueError,'Unsupported map release'):owner.target_package(66)
+
+    def test_r65_rejects_changed_game_busy_owner_circular_or_substituted_parent(self):
+        """Neither a matching new report nor the additional release can replace the original lifetime or source pins."""
+        prior,folder,result,game=self.create_r65_successor()
+        before=json.loads((folder/'before.json').read_bytes())
+        original_receipt=json.loads(prior.read_bytes())
+        for field,value in (('startedFileTime',1),('processId',888),('executable','YuanShen.exe')):
+            write(folder/'game-before.json',dict(game,**{field:value}))
+            with self.subTest(field=field),self.assertRaisesRegex(ValueError,'sealed R64 game lifetime'):
+                owner.replacement(prior,folder)
+        write(folder/'game-before.json',game)
+        for mutation in (dict(serviceOwnsPilot=True),dict(taskRunning=True),dict(agentStreamRunning=True),
+                         dict(instanceNonce='f'*32),dict(processId=999)):
+            changed=deepcopy(before);changed['instances'][1].update(mutation)
+            write(folder/'before.json',changed)
+            with self.subTest(mutation=mutation),self.assertRaises(ValueError):owner.replacement(prior,folder)
+        write(folder/'before.json',before)
+        for mutation in (dict(prior=str(prior)),dict(buildSha256='f'*64),dict(priorLineageSha256='e'*64)):
+            write(prior,dict(original_receipt,**mutation))
+            with self.subTest(mutation=mutation),self.assertRaises(ValueError):owner.replacement(prior,folder)
+        write(prior,original_receipt)
+        self.assertEqual(owner.replacement(prior,folder)['protectedGame'],game)
+
+    def test_r65_clean_target_preserves_exact_english_capture_defaults(self):
+        """The new package cannot import mutable old settings or change either English culture."""
+        _,_,result,_=self.create_r65_successor();build,_=owner.target_package(65)
+        config=Path(result['selectedPackage']['targetDirectory'])/'User/config.json'
+        write(config,owner.R62_CLEAN_CAPTURE)
+        self.assertEqual(owner.check_clean_target(build),hashlib.sha256(config.read_bytes()).hexdigest())
+        for changed in (owner.CLEAN_CAPTURE,dict(owner.R62_CLEAN_CAPTURE,extra=True),
+                        dict(owner.R62_CLEAN_CAPTURE,otherConfig=dict(uiCultureInfoName='en',gameCultureInfoName='zh-Hans'))):
+            write(config,changed)
+            with self.assertRaisesRegex(ValueError,'Unexpected target capture settings'):owner.check_clean_target(build)
 
     def test_r64_retains_the_sealed_game_and_rejects_busy_or_circular_predecessors(self):
         """The added transition cannot replace a different game, an active child or its own predecessor."""

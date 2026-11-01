@@ -11,6 +11,8 @@ public static class AgentNavigationProfile
     public const string MondstadtCombatScout = "mondstadt-combat-scout-v1";
     /// <summary>Separate read-only local scope from the camp through the northern Statue and tracked encounter area.</summary>
     public const string MondstadtNorthCombatScout = "mondstadt-north-combat-scout-v1";
+    /// <summary>Separate read-only perception scope around the Windrise Statue and its verified teleport spawn.</summary>
+    public const string WindriseStatueRecovery = "windrise-statue-recovery-v1";
     /// <summary>Minimum numeric world X inside the original anchor's local search area.</summary>
     public const double MinimumX = -1100;
     /// <summary>Maximum numeric world X inside the original anchor's local search area.</summary>
@@ -43,10 +45,22 @@ public static class AgentNavigationProfile
     public const double NorthScoutAnchorX = -1315;
     /// <summary>Fixed northern search center is selected by profile, never supplied by the caller.</summary>
     public const double NorthScoutAnchorY = 2645;
+    /// <summary>Western numerical edge of the tightly bounded Windrise Statue area.</summary>
+    public const double WindriseMinimumX = -1272;
+    /// <summary>Eastern numerical edge of the tightly bounded Windrise Statue area.</summary>
+    public const double WindriseMaximumX = -1260;
+    /// <summary>Southern numerical edge enclosing the Statue and verified spawn only.</summary>
+    public const double WindriseMinimumY = 1922;
+    /// <summary>Northern numerical edge enclosing the Statue and verified spawn only.</summary>
+    public const double WindriseMaximumY = 1940;
+    /// <summary>Fixed local matching anchor; callers cannot supply another center.</summary>
+    public const double WindriseAnchorX = -1266;
+    /// <summary>Fixed local matching anchor between the Statue and verified spawn.</summary>
+    public const double WindriseAnchorY = 1931;
 
     /// <summary>Omission preserves the original contract; arbitrary scope names are never accepted.</summary>
     public static bool IsSupported(string? profileId) => profileId is null or Courtyard or MondstadtSurface
-        or MondstadtCombatScout or MondstadtNorthCombatScout;
+        or MondstadtCombatScout or MondstadtNorthCombatScout or WindriseStatueRecovery;
 
     /// <summary>Constrain the named layer and location independently of the numerical confidence checks.</summary>
     public static bool AllowsPosition(string? profileId, double x, double y, string? layerId) => profileId switch
@@ -59,6 +73,9 @@ public static class AgentNavigationProfile
         MondstadtNorthCombatScout => layerId is "City_102" or "MapBack_2"
             && x is >= NorthScoutMinimumX and <= NorthScoutMaximumX
             && y is >= NorthScoutMinimumY and <= NorthScoutMaximumY,
+        WindriseStatueRecovery => layerId == "MapBack_2"
+            && x is >= WindriseMinimumX and <= WindriseMaximumX
+            && y is >= WindriseMinimumY and <= WindriseMaximumY,
         _ => false
     };
 }

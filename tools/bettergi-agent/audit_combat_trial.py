@@ -10,6 +10,7 @@ from combat_trial_guard import (CombatTrialGuard, bind_review, canonical, propos
                                combat_scope)
 from episode_split import read_split
 from native_combat import validate_capability,validate_frame
+import combat_paused_review_proof as paused_review
 from policy_rgb_archive import (JOURNAL_NAMES, RECORDING_FORMAT, read_policy_rgb, read_recording_jsonl,
                                 recording_journal_path, recording_metadata)
 
@@ -276,18 +277,20 @@ def verify_python_runtime(folder, plan):
     return actual
 
 
-def verify_retirement(plan, wrapper, host, broker, claim, worker_claim, manifest_sha):
+def verify_retirement(plan, wrapper, host, broker, claim, worker_claim, manifest_sha, *, preparation_only=False):
     """Require the one consumed worker and its ordinary RDP broker to agree on retirement."""
-    run_id, owner = plan['runId'], plan['binding']['owner']
+    run_id = plan['runId']
+    owner = plan['owner'] if preparation_only else plan['binding']['owner']
     require(host.get('runId') == run_id and host.get('planSha256') == wrapper['planSha256']
             and host.get('launchAttempts') == 1 and host.get('terminalManifestSha256') == manifest_sha
             and canonical(host.get('broker')) == canonical(broker)
             and canonical(host.get('hostClaim')) == canonical(claim) == canonical(wrapper.get('hostClaim')),
             'Host did not retire the exact consumed combat plan')
     worker = wrapper.get('worker', {})
-    consumed_sha = wrapper.get('preparationSha256') if 'preparedPolicy' in plan else wrapper['planSha256']
-    if 'preparedPolicy' in plan:
-        require(host.get('preparationSha256') == consumed_sha == plan['preparedPolicy']['preparationSha256'],
+    consumed_sha = wrapper.get('preparationSha256') if preparation_only or 'preparedPolicy' in plan else wrapper['planSha256']
+    if preparation_only or 'preparedPolicy' in plan:
+        linked_sha = consumed_sha if preparation_only else plan['preparedPolicy']['preparationSha256']
+        require(host.get('preparationSha256') == consumed_sha == linked_sha,
                 'Host lost the original paused preparation claim')
     require(claim.get('runId') == worker_claim.get('runId') == run_id
             and claim.get('planSha256') == worker_claim.get('planSha256') == consumed_sha
@@ -309,8 +312,241 @@ def verify_retirement(plan, wrapper, host, broker, claim, worker_claim, manifest
                 'Completed wrapper conflicts with host supervision')
 
 
+def replay_reviewed_ui(folder, record, owner, operation, *, prefix=None):
+    """Replay one new-protocol UI phase using its exact archive, never today's installed files."""
+    from combat_pause_proof import inspect_transition
+    root = next((path.parent for path in folder.parents if path.name == 'artifacts'), None)
+    require(root is not None, 'Paused-review evidence lost its artifact namespace')
+    archive = folder / (prefix or (operation + '-evidence'))
+    require(isinstance(record, dict) and set(record) == {'directory', 'proof', 'retained'}
+        and set(record['retained']) == set(record['proof']['files']), 'Incomplete archived paused-review UI proof')
+    def reader(path):
+        """Resolve only a pinned original to a bounded retained byte sequence."""
+        name = str(path)
+        require(name in record['retained'], 'Paused-review UI introduced an unretained dependency')
+        retained = local_artifact(folder, record['retained'][name])
+        require(retained.is_relative_to(archive), 'Paused-review UI archive escaped its phase')
+        raw = bounded_file(retained)
+        require(digest(raw) == record['proof']['files'][name], 'Archived paused-review UI evidence changed')
+        return raw
+    actual = inspect_transition(record['directory'], owner, operation, root=root, read_file=reader)
+    require(actual == record['proof'], 'Archived paused-review UI proof no longer replays')
+    return actual
+
+
+def reviewed_archive_bytes(folder, records, prefix, expected_names):
+    """Read the exact separately submitted review or capture metadata without original-file access."""
+    require(isinstance(records, dict) and set(records) == set(expected_names), 'Incomplete paused-review record archive')
+    result = {}
+    for name, record in records.items():
+        require(isinstance(record, dict) and set(record) == {'path', 'retained', 'sha256'}, 'Changed paused-review reference')
+        target = local_artifact(folder, record['retained'])
+        require(target.is_relative_to(folder / prefix), 'Paused-review reference escaped its archive')
+        raw = bounded_file(target)
+        require(digest(raw) == record['sha256'], 'Retained paused-review bytes changed: ' + name)
+        result[name] = raw
+    return result
+
+
+def verify_reviewed_preparation_chain(folder, plan, wrapper, document, *, require_admission=True):
+    """Replay only established new-protocol phases; an unfinished failed worker never acquires authority."""
+    preparation, claim, worker_claim = (document(name) for name in
+        ('preparation.json', 'CONSUMED.json', 'WORKER-CONSUMED.json'))
+    paused_review.validate_preparation(preparation, folder)
+    prep_sha = digest(bounded_file(folder / 'preparation.json'))
+    owner, worker, run_id = preparation['owner'], wrapper.get('worker'), preparation['runId']
+    require(wrapper.get('kind') == paused_review.WRAPPER_KIND and wrapper.get('inputEnabledBeforeArm') is False
+        and wrapper.get('runId') == run_id and wrapper.get('owner') == owner
+        and wrapper.get('preparationSha256') == prep_sha
+        and combat_scope(wrapper) == combat_scope(preparation), 'Reviewed preparation changed its consumed wrapper')
+    archive = preparation['pausedReview']
+    require(paused_review.version_one(archive) and archive.get('kind') == 'combat-reviewed-pause-binding-v1',
+            'Reviewed pause binding changed format')
+    baseline = replay_reviewed_ui(folder, archive['baselinePause'], owner, 'pause', prefix='baseline-pause/pause-evidence')
+    pair = replay_reviewed_ui(folder, preparation['pause'], owner, 'pause')
+    evidence = preparation['reviewedCombat']['evidence']
+    blobs = reviewed_archive_bytes(folder, evidence, 'review-evidence', ('review', 'plan', 'scene', 'sidecar', 'image', 'goal'))
+    records = reviewed_archive_bytes(folder, archive['records'], 'paused-review-evidence', paused_review.RECORD_NAMES)
+    binding, chain = paused_review.bind_reviewed_pause(blobs, records, owner, baseline, pair)
+    paused_review.validate_review_paths(evidence, records)
+    capture_request, capture = (paused_review.document(records[name]) for name in ('captureRequest', 'capture'))
+    require(binding == preparation['reviewedCombat']['binding'] and chain == archive['chain']
+        and digest(blobs['goal']) == preparation['goalSha256'] == binding['goalSha256']
+        and evidence['goal']['path'] == preparation['resources']['goal']
+        and capture_request['ownerFile'] == preparation['ownerFile']
+        and capture_request['ownerSha256'] == preparation['ownerSha256'], 'Reviewed preparation rebound original evidence')
+    require(claim == wrapper.get('hostClaim') and claim.get('runId') == run_id and claim.get('planSha256') == prep_sha
+        and worker_claim == dict(runId=run_id, planSha256=prep_sha, processId=worker['processId'],
+                                 parentProcessId=worker['parentProcessId'])
+        and all(paused_review.positive_clock(claim.get(key)) for key in
+                ('startedAtUnixNs', 'startedAtClientNs', 'startedMonotonicNs', 'deadlineMonotonicNs'))
+        and claim['deadlineMonotonicNs'] - claim['startedMonotonicNs'] == 90_000_000_000
+        and chain['reviewedAtUnixNs'] <= preparation['createdAtUnixNs'] <= claim['startedAtUnixNs']
+        and capture['completedAtClientNs'] <= preparation['createdAtClientNs'] <= claim['startedAtClientNs']
+            < chain['originalSceneDeadlineClientNs'], 'Original review or worker clock changed before loading')
+    verify_python_runtime(folder, preparation)
+    result = dict(kind='paused-review-chain-audit-v1', preparationSha256=prep_sha, lastVerifiedPhase='reviewedPaused',
+        originalSceneDeadlineClientNs=chain['originalSceneDeadlineClientNs'], originalHostClaim=claim,
+        finalAdmissionVerified=False, inputEnabledBeforeArm=False)
+
+    def missing(phase, later):
+        """A legitimately unfinished failed phase cannot fabricate later readiness or input authority."""
+        require(not require_admission and wrapper.get('nativeStartAttempted') is False,
+                'Missing required paused-review phase: ' + phase)
+        require(not any((folder / name).exists() for name in later), 'Paused-review phases are out of order: ' + phase)
+        result['lastVerifiedPhase'] = phase
+        return result
+
+    loading = wrapper.get('modelPreparation')
+    attempts, loads, duration = (wrapper.get(name) for name in ('modelLoadAttempts', 'modelLoads', 'modelLoadSeconds'))
+    require(type(attempts) is int and attempts in (0, 1) and type(loads) is int and 0 <= loads <= attempts
+        and type(duration) in (int, float) and math.isfinite(duration) and duration >= 0,
+        'Paused model load accounting changed')
+    if loading is None:
+        require(attempts == loads == duration == 0, 'Absent paused model preparation claimed a load')
+    if loading is not None:
+        require(isinstance(loading, dict) and loading.get('inputEnabled') is False
+            and paused_review.positive_clock(loading.get('startedAtUnixNs')), 'Unqualified paused model preparation')
+        loading_pause = replay_reviewed_ui(folder, loading.get('inventoryProbe'), owner, 'verify')
+        record = loading['inventoryProbe']
+        require(Path(record['directory']) == folder / 'loading-pause-probe'
+            and loading_pause['sourceFiles'] == pair['sourceFiles']
+            and loading_pause['terminalTimestampUnixMs'] * 1_000_000 >= claim['startedAtUnixNs']
+            and loading_pause['cleanupAcknowledgedAtUnixNs'] <= loading['startedAtUnixNs']
+            and 0 <= loading['startedAtUnixNs'] - loading_pause['terminalTimestampUnixMs'] * 1_000_000 <= 30_000_000_000,
+            'Paused model load lost its fresh positive inventory probe')
+        probe_plan_name, probe_result_name = str(folder / 'loading-pause-probe/plan.json'), str(folder / 'loading-pause-probe/result.json')
+        probe_plan = paused_review.document(bounded_file(local_artifact(folder, record['retained'][probe_plan_name])))
+        probe_raw = bounded_file(local_artifact(folder, record['retained'][probe_result_name]))
+        require(probe_plan.get('kind') == 'combat-loading-inventory-probe-v1' and probe_plan.get('runId') == run_id
+            and probe_plan.get('preparationSha256') == prep_sha and probe_raw == bounded_file(local_artifact(folder, probe_result_name))
+            and digest(probe_raw) == wrapper.get('inventoryProbeResultSha256')
+            and paused_review.document(probe_raw) == wrapper.get('inventoryProbeResult')
+            and 'inventoryProbeCleanupError' not in wrapper, 'Loading probe changed its exact preparation or retirement')
+        if attempts == 0:
+            require(loads == duration == 0 and 'finishedAtUnixNs' not in loading and 'modelLoadSeconds' not in loading,
+                    'Unattempted paused model load claimed completion')
+        else:
+            require(paused_review.positive_clock(loading.get('finishedAtUnixNs'))
+                and loading['startedAtUnixNs'] <= loading['finishedAtUnixNs'] <= wrapper['finishedAtUnixNs']
+                and type(loading.get('modelLoadSeconds')) in (int, float)
+                and math.isfinite(loading['modelLoadSeconds']) and loading['modelLoadSeconds'] == duration,
+                'Paused model load duration or chronology changed')
+    if not (folder / 'prepared.json').exists():
+        return missing('reviewedPaused' if loading is None else 'modelLoadIntent' if attempts == 0 else 'modelLoadAttempt',
+            ('plan.json', 'ARM-REQUESTED.json', 'ARM.json', 'ARM-CONSUMED.json', 'READY-TO-RESUME.json',
+             'RESUME-REQUESTED.json', 'RESUMED.json', 'RESUME-CONSUMED.json', 'FINAL-ADMISSION.json'))
+    ready = document('prepared.json')
+    ready_sha = digest(bounded_file(folder / 'prepared.json'))
+    require(paused_review.version_one(ready) and ready.get('kind') == 'combat-prepared-policy-v1'
+        and ready.get('state') == 'preparedPaused' and ready.get('inputEnabled') is False
+        and ready.get('runId') == run_id and ready.get('preparationSha256') == prep_sha
+        and ready.get('worker') == worker and ready.get('owner') == owner and ready.get('hostClaim') == claim
+        and ready.get('modelLoads') == wrapper.get('modelLoads') == wrapper.get('modelLoadAttempts') == 1
+        and ready.get('modelPreparation') == loading and loading is not None
+        and ready.get('policyMetadata') == wrapper.get('policyMetadata')
+        and ready.get('goalSha256') == preparation['goalSha256']
+        and ready.get('sourceFilesSha256') == digest(canonical(preparation['sourceFiles']))
+        and ready.get('modelConfigurationSha256') == digest(canonical(preparation['modelConfiguration']))
+        and combat_scope(ready) == combat_scope(preparation), 'Actual paused model readiness changed')
+    require(all(paused_review.positive_clock(value) for value in
+                (loading.get('finishedAtUnixNs'), ready.get('preparedAtUnixNs'), ready.get('preparedAtClientNs')))
+        and claim['startedAtUnixNs'] <= loading['startedAtUnixNs'] <= loading['finishedAtUnixNs'] <= ready['preparedAtUnixNs']
+        and claim['startedAtClientNs'] <= ready['preparedAtClientNs']
+            < min(chain['originalSceneDeadlineClientNs'], claim['startedAtClientNs'] + 90_000_000_000)
+        and loading.get('modelLoadSeconds') == wrapper.get('modelLoadSeconds')
+        and type(loading['modelLoadSeconds']) in (int, float) and math.isfinite(loading['modelLoadSeconds'])
+        and loading['modelLoadSeconds'] >= 0, 'Model readiness changed original loading chronology')
+    result.update(preparedSha256=ready_sha, lastVerifiedPhase='preparedPaused')
+    if plan is None:
+        return missing('preparedPaused', ('ARM.json', 'ARM-CONSUMED.json', 'READY-TO-RESUME.json',
+            'RESUME-REQUESTED.json', 'RESUMED.json', 'RESUME-CONSUMED.json', 'FINAL-ADMISSION.json'))
+    plan_sha = digest(bounded_file(folder / 'plan.json'))
+    arm_request = document('ARM-REQUESTED.json')
+    request_id = arm_request.get('requestId')
+    require(isinstance(request_id, str) and len(request_id) == 32 and all(c in '0123456789abcdef' for c in request_id),
+            'Paused ARM request identity changed')
+    link = paused_review.prepared_link(prep_sha, ready_sha, worker, request_id, chain)
+    paused_review.validate_plan(plan, preparation, link)
+    require(arm_request == dict(runId=run_id, requestId=request_id, preparationSha256=prep_sha, preparedSha256=ready_sha),
+            'Paused ARM request lost its actual worker')
+    if not (folder / 'ARM.json').exists():
+        return missing('preparedPlanOnly', ('ARM-CONSUMED.json', 'READY-TO-RESUME.json', 'RESUME-REQUESTED.json',
+                                          'RESUMED.json', 'RESUME-CONSUMED.json', 'FINAL-ADMISSION.json'))
+    arm = document('ARM.json')
+    arm_sha = digest(bounded_file(folder / 'ARM.json'))
+    require(paused_review.version_one(arm) and arm == dict(version=1, kind=paused_review.ARM_KIND, runId=run_id,
+        requestId=request_id, preparationSha256=prep_sha, preparedSha256=ready_sha, worker=worker,
+        planSha256=plan_sha, inputEnabled=False, createdAtUnixNs=arm.get('createdAtUnixNs'), createdAtClientNs=arm.get('createdAtClientNs'))
+        and paused_review.positive_clock(arm.get('createdAtUnixNs')) and paused_review.positive_clock(arm.get('createdAtClientNs'))
+        and ready['preparedAtUnixNs'] <= arm['createdAtUnixNs'] <= wrapper['finishedAtUnixNs']
+        and ready['preparedAtClientNs'] <= arm['createdAtClientNs']
+            < min(chain['originalSceneDeadlineClientNs'], claim['startedAtClientNs'] + 90_000_000_000),
+        'Paused ARM changed its exact plan or chronology')
+    result.update(armSha256=arm_sha, lastVerifiedPhase='pausedArmPublished')
+    if not (folder / 'ARM-CONSUMED.json').exists():
+        return missing('pausedArmPublished', ('READY-TO-RESUME.json', 'RESUME-REQUESTED.json', 'RESUMED.json',
+                                            'RESUME-CONSUMED.json', 'FINAL-ADMISSION.json'))
+    consumed = document('ARM-CONSUMED.json')
+    require(consumed == dict(runId=run_id, armSha256=arm_sha, preparationSha256=prep_sha, preparedSha256=ready_sha, worker=worker),
+            'Paused ARM consumption changed')
+    if not (folder / 'READY-TO-RESUME.json').exists():
+        return missing('pausedArmConsumed', ('RESUME-REQUESTED.json', 'RESUMED.json', 'RESUME-CONSUMED.json', 'FINAL-ADMISSION.json'))
+    require(wrapper.get('planSha256') == plan_sha and wrapper.get('preparedPolicy') == link and wrapper.get('armSha256') == arm_sha,
+            'Worker precheck lost its consumed paused plan')
+    prechecked, inputs = document('READY-TO-RESUME.json'), document('prechecked-inputs.json')
+    prechecked_sha = digest(bounded_file(folder / 'READY-TO-RESUME.json'))
+    paused_review.validate_precheck(prechecked, plan, plan_sha, prep_sha, ready_sha, arm_sha, worker, claim)
+    metadata = {name: dict(path=str(folder / name), sha256=digest(bounded_file(local_artifact(folder, name))))
+                for name in paused_review.PRECHECK_METADATA_NAMES}
+    expected_inputs = paused_review.prechecked_inputs(preparation, plan, loading, metadata)
+    require(inputs == expected_inputs and digest(canonical(inputs)) == prechecked['verifiedInputsSha256']
+        and arm['createdAtUnixNs'] <= prechecked['checkedAtUnixNs'] <= wrapper['finishedAtUnixNs']
+        and arm['createdAtClientNs'] <= prechecked['checkedAtClientNs'], 'Paused precheck changed inputs or chronology')
+    result.update(precheckedSha256=prechecked_sha, lastVerifiedPhase='precheckedPaused')
+    if not (folder / 'RESUMED.json').exists():
+        return missing('precheckedPaused', ('RESUME-CONSUMED.json', 'FINAL-ADMISSION.json'))
+    resumed = document('RESUMED.json')
+    resumed_sha = digest(bounded_file(folder / 'RESUMED.json'))
+    require(bounded_file(folder / 'resume-candidate.json') == bounded_file(folder / 'RESUMED.json')
+        and document('RESUME-REQUESTED.json') == dict(runId=run_id, precheckedSha256=prechecked_sha,
+                                                     resumeDirectory=resumed['resume']['directory']),
+        'Final resume candidate or publication changed')
+    resume = replay_reviewed_ui(folder, resumed['resume'], owner, 'resume')
+    paused_review.validate_final_resume(resumed, resume, prechecked, prechecked_sha, plan, preparation, worker)
+    require(resumed['resumedAtUnixNs'] <= wrapper['finishedAtUnixNs'], 'Final resume postdates worker retirement')
+    result.update(resumedSha256=resumed_sha, lastVerifiedPhase='finalResumePublished')
+    if not (folder / 'RESUME-CONSUMED.json').exists():
+        return missing('finalResumePublished', ('FINAL-ADMISSION.json',))
+    require(document('RESUME-CONSUMED.json') == dict(runId=run_id, resumedSha256=resumed_sha,
+        precheckedSha256=prechecked_sha, planSha256=plan_sha, worker=worker), 'Final resume consumption changed')
+    if not (folder / 'FINAL-ADMISSION.json').exists():
+        return missing('finalResumeConsumed', ())
+    admission = document('FINAL-ADMISSION.json')
+    require(admission == wrapper.get('finalPausedReviewAdmission')
+        and admission == dict(version=1, kind='combat-paused-review-final-admission-v1', runId=run_id,
+            precheckedSha256=prechecked_sha, resumedSha256=resumed_sha, planSha256=plan_sha, worker=worker,
+            verifiedInputsSha256=prechecked['verifiedInputsSha256'], sourceFilesSha256=digest(canonical(plan['sourceFiles'])),
+            admittedAtUnixNs=admission.get('admittedAtUnixNs'), admittedAtClientNs=admission.get('admittedAtClientNs'))
+        and all(paused_review.positive_clock(admission.get(name)) for name in ('admittedAtUnixNs', 'admittedAtClientNs'))
+        and resumed['resumedAtUnixNs'] <= admission['admittedAtUnixNs'] <= wrapper['finishedAtUnixNs']
+        and resumed['resumedAtClientNs'] <= admission['admittedAtClientNs']
+            < min(chain['originalSceneDeadlineClientNs'], claim['startedAtClientNs'] + 90_000_000_000)
+        and 0 <= admission['admittedAtUnixNs'] - resume['terminalTimestampUnixMs'] * 1_000_000 <= 30_000_000_000,
+        'Final admission changed the validated source/worker or original clocks')
+    result.update(lastVerifiedPhase='finalAdmission', finalAdmissionVerified=True,
+                  admissionSha256=digest(bounded_file(folder / 'FINAL-ADMISSION.json')))
+    return result
+
+
 def verify_preparation_chain(folder, plan, wrapper, document):
     """Replay paused loading and the one post-resume arm independently of runtime admission."""
+    if plan.get('kind') == paused_review.PLAN_KIND:
+        return verify_reviewed_preparation_chain(folder, plan, wrapper, document)
+    require('pausedReview' not in plan and not any((folder / name).exists() for name in
+        ('baseline-pause', 'paused-review-evidence', 'READY-TO-RESUME.json', 'prechecked-inputs.json',
+         'RESUME-CONSUMED.json', 'FINAL-ADMISSION.json', 'resume-candidate.json')),
+        'Legacy combat format retains undeclared paused-review phases')
     names = ('preparation.json', 'prepared.json', 'RESUME-REQUESTED.json', 'RESUMED.json',
              'ARM-REQUESTED.json', 'ARM.json', 'ARM-CONSUMED.json', 'pause-evidence', 'resume-evidence',
              'loading-pause-probe', 'verify-evidence')
@@ -478,6 +714,119 @@ def verify_temperatures(samples, finished_ns):
     return max(temperatures)
 
 
+def verify_source_archive(folder, plan, *, prepared=False, reviewed=False):
+    """Check only the historical declared snapshot, adding new dependencies solely for the new format."""
+    required = ('combat_trial.py', 'combat_trial_guard.py', 'stream_client.py', 'native_combat.py',
+                'model_adapters.py', 'resident_runtime.py', 'episode_split.py')
+    require(all('tools/bettergi-agent/' + name in plan['sourceFiles'] for name in required),
+            'Frozen combat source inventory is incomplete')
+    if reviewed:
+        require(all(name in plan['sourceFiles'] for name in ('tools/bettergi-agent/combat_paused_review_proof.py',
+            'tools/bettergi-agent/combat_pause_probe.py', 'tools/quest-pilot/controller-control.py')),
+            'Paused-review source closure is incomplete')
+    for name, sha in plan['sourceFiles'].items():
+        raw = bounded_file(local_artifact(folder, Path('source-snapshot') / name), source_sha256=sha)
+        require(digest(raw) == sha, 'Frozen combat source changed: ' + name)
+    implementations = ['combat_trial_guard.py', 'native_combat.py']
+    if prepared:
+        implementations.append('combat_pause_proof.py')
+    if 'workerRuntime' in plan:
+        implementations.append('combat_process_identity.py')
+    if reviewed:
+        implementations.append('combat_paused_review_proof.py')
+    for name in implementations:
+        require(plan['sourceFiles'].get('tools/bettergi-agent/' + name) == digest(bounded_file(Path(__file__).with_name(name))),
+                'Replay implementation differs from the frozen source: ' + name)
+
+
+def verify_reviewed_episode_clocks(plan, wrapper, episode, events=None):
+    """The new source and original worker budgets also bound admission after the final resume."""
+    admission, pair = wrapper.get('finalPausedReviewAdmission') or {}, wrapper.get('leaseClockPair') or {}
+    claim, chain = wrapper['hostClaim'], plan['pausedReview']['chain']
+    started = (episode.get('combatTrialGuardState') or {}).get('startedNs')
+    bound = min(chain['originalSceneDeadlineClientNs'], claim['startedAtClientNs'] + 90_000_000_000)
+    review_age = claim['startedAtUnixNs'] - chain['reviewedAtUnixNs'] + started - claim['startedAtClientNs'] if type(started) is int else None
+    require(all(paused_review.positive_clock(pair.get(key)) for key in
+                ('monotonicNs', 'clientNs', 'originalSceneDeadlineClientNs', 'effectiveClientDeadlineNs'))
+        and pair['originalSceneDeadlineClientNs'] == chain['originalSceneDeadlineClientNs']
+        and pair['effectiveClientDeadlineNs'] == bound
+        and paused_review.positive_clock(started) and admission['admittedAtClientNs'] <= pair['clientNs'] <= started < bound
+        and type(review_age) is int and 0 <= review_age <= 120_000_000_000
+        and claim['startedMonotonicNs'] <= pair['monotonicNs'] < claim['deadlineMonotonicNs']
+        and paused_review.positive_clock(wrapper.get('leaseDeadlineMonotonicNs'))
+        and pair['monotonicNs'] < wrapper['leaseDeadlineMonotonicNs'] <= min(claim['deadlineMonotonicNs'],
+            pair['monotonicNs'] + 5_000_000_000, pair['monotonicNs'] + bound - pair['clientNs']),
+        'Paused-review lease widened its source, worker or five-second budget')
+    if events is not None:
+        # Receipts and cleanup may arrive later; every actual dispatch must still fit the original lease.
+        cutoff = min(bound, pair['clientNs'] + wrapper['leaseDeadlineMonotonicNs'] - pair['monotonicNs'])
+        require(all(paused_review.positive_clock(event.get('clientTimeNs')) and started <= event['clientTimeNs'] < cutoff
+            for event in events if event.get('type') == 'combatTrialDispatch'),
+            'Paused-review dispatch exceeded its original source, worker or five-second lease')
+
+
+def verify_reviewed_worker_owner(owner, observed):
+    """Replay the actual final owner snapshot rather than treating cleanup summary booleans as proof."""
+    require(isinstance(observed, dict) and set(observed) == {'root', 'child'}
+        and all(isinstance(observed[role], dict) for role in ('root', 'child')), 'Missing final paused-review owner evidence')
+    for role in ('root', 'child'):
+        status = observed[role]
+        require(all(type(status.get(key)) is type(value) and status[key] == value for key, value in owner[role].items()),
+                'Final paused-review owner identity changed')
+        require(all(status.get(key) is False for key in ('taskRunning', 'agentStreamRunning', 'serviceOwnsPilot')),
+                'Final paused-review owner retained busy or unknown task ownership')
+    root, child = observed['root'], observed['child']
+    require(root.get('instanceType') == 'Primary' and child.get('instanceType') == 'ChildSession'
+        and root.get('uiStatus') == 'current' and root.get('childWindowMinimized') is True
+        and type(root.get('childConnectedState')) is int and root['childConnectedState'] == 1
+        and type(root.get('childSessionId')) is int and root['childSessionId'] == owner['child']['windowsSessionId']
+        and root['windowsSessionId'] != child['windowsSessionId']
+        and type(child.get('rootProcessId')) is int and child['rootProcessId'] == owner['root']['processId']
+        and child.get('runtimeRunning') is True and child.get('automationState') == 'game_ready'
+        and child.get('pilotState') in ('idle', 'completed', 'failed', 'cancelled', 'stopped', 'faulted'),
+        'Final paused-review owner lost the original minimized idle session')
+
+
+def audit_reviewed_without_listener(folder, wrapper, finalization, document, artifacts):
+    """Qualify a retired failed worker's zero attack-listener accounting without inventing a native episode."""
+    preparation = document('preparation.json')
+    plan = document('plan.json') if (folder / 'plan.json').exists() else None
+    verify_reviewed_worker_owner(preparation['owner'], document('worker-owner-after.json'))
+    require(wrapper.get('status') == 'failed' and isinstance(wrapper.get('error'), str) and wrapper['error']
+        and wrapper.get('nativeStartAttempted') is False and wrapper.get('nativeStartOutcome') == 'notAttempted'
+        and wrapper.get('episodeCalls') == 0 and wrapper.get('nativeEpisode') is None and wrapper.get('nativeEpisodeSha256') is None
+        and wrapper.get('combatTrialGuardState') is None and wrapper.get('terminalGuardState') is None
+        and wrapper.get('cleanupVerified') is True and wrapper.get('ownerIdleMinimizedAfter') is True
+        and not (folder / 'native-episode.json').exists()
+        and wrapper.get('recordedBytes') == 0 and wrapper.get('recordedBytesComplete') is True,
+        'Unstarted paused-review worker has unresolved input, cleanup or recording accounting')
+    require(not (folder / 'recording').exists() or (folder / 'recording').is_dir()
+        and not any((folder / 'recording').iterdir()), 'Unstarted worker retains unexpected attack recordings')
+    if wrapper.get('preparedPolicy') is None:
+        require(wrapper.get('planSha256') == digest(bounded_file(folder / 'preparation.json')) and wrapper.get('armSha256') is None,
+                'Unarmed worker changed its original preparation claim')
+    else:
+        require(plan is not None and wrapper.get('planSha256') == digest(bounded_file(folder / 'plan.json')),
+                'Armed worker lost its exact plan')
+    chain = verify_reviewed_preparation_chain(folder, plan, wrapper, document, require_admission=False)
+    verify_source_archive(folder, preparation, prepared=True, reviewed=True)
+    require(finalization.get('runId') == wrapper['runId'] == preparation['runId']
+        and finalization.get('manifestSha256') == artifacts['patrol.json'] and finalization.get('status') == 'completed',
+        'Unstarted worker terminal accounting changed')
+    split = read_split(folder, wrapper['runId'])
+    require(split is not None and split['split'] == 'diagnostic' and split == finalization.get('datasetSplit'),
+            'Unstarted worker lost its diagnostic split')
+    host, broker, claim, worker_claim = (document(name) for name in
+        ('result.json', 'broker.json', 'CONSUMED.json', 'WORKER-CONSUMED.json'))
+    verify_retirement(preparation, wrapper, host, broker, claim, worker_claim, artifacts['patrol.json'], preparation_only=True)
+    require(all(wrapper.get(key) is False for key in ('combatSuccess', 'enemyIdentityVerified', 'damageVerified', 'killVerified')),
+            'Unstarted worker claimed a combat outcome')
+    return dict(status='completed', runId=wrapper['runId'], wrapperStatus='failed', artifactSha256=artifacts,
+        pausedPreparation=chain, attackListenerNeverStartedVerified=True, verifiedRgbFrames=0, guardedDispatches=0,
+        acceptedProposalJoins=0, trialCompleteVerified=False, verifiedRecordedBytes=0,
+        combatSuccess=False, enemyIdentityVerified=False, damageVerified=False, killVerified=False)
+
+
 def audit_trial(folder):
     """Verify a retired wrapper and its original frozen review before replaying the native episode."""
     folder = Path(folder).resolve()
@@ -491,9 +840,14 @@ def audit_trial(folder):
         require(isinstance(value, dict), 'Expected a combat artifact object')
         return value
 
-    plan, wrapper, finalization = (document(name) for name in ('plan.json', 'patrol.json', 'finalization.json'))
-    require(plan.get('kind') == 'combat-trial-plan-v1' and wrapper.get('kind') in
-            ('combat-trial-wrapper-v1', 'combat-trial-prepared-wrapper-v1')
+    wrapper, finalization = (document(name) for name in ('patrol.json', 'finalization.json'))
+    if wrapper.get('kind') == paused_review.WRAPPER_KIND and wrapper.get('nativeStartAttempted') is False:
+        return audit_reviewed_without_listener(folder, wrapper, finalization, document, artifacts)
+    plan = document('plan.json')
+    reviewed = plan.get('kind') == paused_review.PLAN_KIND
+    require((reviewed and wrapper.get('kind') == paused_review.WRAPPER_KIND
+            or plan.get('kind') == 'combat-trial-plan-v1' and wrapper.get('kind') in
+                ('combat-trial-wrapper-v1', 'combat-trial-prepared-wrapper-v1'))
             and wrapper['runId'] == plan['runId'] == finalization['runId']
             and wrapper['planSha256'] == artifacts['plan.json']
             and finalization.get('manifestSha256') == artifacts['patrol.json'], 'Combat wrapper identities differ')
@@ -512,33 +866,19 @@ def audit_trial(folder):
             and combat_scope(binding) == combat_scope(plan) == combat_scope(wrapper)
             and canonical(binding['owner']) == canonical(wrapper.get('owner')), 'Frozen combat review does not reproduce its binding')
     prepared = verify_preparation_chain(folder, plan, wrapper, document)
+    if reviewed:
+        verify_reviewed_worker_owner(plan['owner'], document('worker-owner-after.json'))
     verify_python_runtime(folder, plan)
-    required_sources = ('combat_trial.py', 'combat_trial_guard.py', 'stream_client.py', 'native_combat.py',
-                        'model_adapters.py', 'resident_runtime.py', 'episode_split.py')
-    require(all('tools/bettergi-agent/' + name in plan['sourceFiles'] for name in required_sources),
-            'Frozen combat source inventory is incomplete')
-    for name, sha in plan['sourceFiles'].items():
-        raw = bounded_file(local_artifact(folder, Path('source-snapshot') / name), source_sha256=sha)
-        require(digest(raw) == sha, 'Frozen combat source changed: ' + name)
-    # Replay uses the implementation that actually produced this trial. A later
-    # incompatible guard must be audited from its preserved source snapshot.
-    for name in ('combat_trial_guard.py', 'native_combat.py'):
-        key = 'tools/bettergi-agent/' + name
-        require(plan['sourceFiles'].get(key) == digest(bounded_file(Path(__file__).with_name(name))),
-                'Replay implementation differs from the frozen source: ' + name)
-    if prepared is not None:
-        require(plan['sourceFiles'].get('tools/bettergi-agent/combat_pause_proof.py') ==
-            digest(bounded_file(Path(__file__).with_name('combat_pause_proof.py'))),
-            'Inventory proof replay implementation differs from the frozen source')
-    if 'workerRuntime' in plan:
-        require(plan['sourceFiles'].get('tools/bettergi-agent/combat_process_identity.py') ==
-            digest(bounded_file(Path(__file__).with_name('combat_process_identity.py'))),
-            'Python process replay implementation differs from the frozen source')
+    verify_source_archive(folder, plan, prepared=prepared is not None, reviewed=reviewed)
     episode = document('native-episode.json')
     require(artifacts['native-episode.json'] == wrapper.get('nativeEpisodeSha256')
             and canonical(episode) == canonical(wrapper.get('nativeEpisode')), 'Wrapper substituted its native episode')
+    if reviewed:
+        verify_reviewed_episode_clocks(plan, wrapper, episode)
     events, events_sha = json_lines(folder / 'recording/events.jsonl')
     frames, frames_sha = json_lines(folder / 'recording/frames.jsonl')
+    if reviewed:
+        verify_reviewed_episode_clocks(plan, wrapper, episode, events)
     for name in ('events.jsonl','frames.jsonl'):
         path = recording_journal_path(folder/'recording',name)
         artifacts[str(path.relative_to(folder)).replace('\\','/')] = digest(bounded_file(path,160*1024*1024))
@@ -590,8 +930,10 @@ def audit_trial(folder):
         started = episode['combatTrialGuardState']['startedNs']
         reviewed = json.loads(blobs[0])['reviewedAtUnixNs']
         limit = plan['maximumReviewAgeSeconds'] * 1_000_000_000
+        # The new format retains its own QPC claim origin; historical formats keep their original replay rule.
+        claim_clock = claim['startedAtClientNs'] if plan.get('kind') == paused_review.PLAN_KIND else claim['startedMonotonicNs']
         require(0 <= started - binding['reviewedFrame']['sourceFrame']['timestamp100ns'] * 100 <= limit
-                and 0 <= claim['startedAtUnixNs'] - reviewed + started - claim['startedMonotonicNs'] <= limit,
+                and 0 <= claim['startedAtUnixNs'] - reviewed + started - claim_clock <= limit,
                 'Combat review was stale when the native lease began')
         temperatures = []
         for name in ('gpu.jsonl', 'host-supervision/gpu.jsonl'):

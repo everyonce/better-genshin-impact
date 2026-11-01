@@ -212,6 +212,7 @@ class CombatTrialTests(unittest.TestCase):
         for path in (self.goal, self.checkpoint, self.gpu, self.code, self.model_source / 'model.py',
                      self.root / 'tools/bettergi-agent/combat_pause_probe.py',
                      self.root / 'tools/rdp-automation/rdp_control.py', self.root / 'runner.exe',
+                     self.root / 'tools/quest-pilot/controller-control.py',
                      self.root / 'ffmpeg.exe', self.root / 'nvidia-smi.exe'):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b'inert fixture')

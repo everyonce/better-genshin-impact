@@ -27,6 +27,7 @@ import resident_runtime as runtime
 import run_rdp_patrol as patrol
 import stream_client as client
 import combat_paused_review_proof as paused_review
+import combat_paused_file_admission as file_admission
 from combat_trial_guard import (bind_review, canonical, proposal_rejection, trial_policy,
                                SINGLE_SCOPE, GROUP_SCOPE, FOUR_SCOPE, SCOPE_MAXIMUMS,
                                combat_scope, scope_fields, scope_maximum)
@@ -151,14 +152,16 @@ def file_stamp(path):
     return [stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns]
 
 
-def source_paths():
+def source_paths(*, names_only=False):
     """Enumerate only Python code in the agent, its broker and installed model source."""
     paths = list((ROOT / 'tools/bettergi-agent').glob('*.py'))
     paths += list((ROOT / 'tools/rdp-automation').glob('*.py'))
     # rdp_control dynamically executes this exact local transport; it is not a package import.
     paths.append(ROOT / 'tools/quest-pilot/controller-control.py')
     paths += list(MODEL_SOURCE.rglob('*.py'))
-    return sorted(local_path(path, root=ROOT) for path in paths if '__pycache__' not in path.parts)
+    # Only an already-held admission uses the name census; ordinary callers retain full path validation.
+    return sorted((path.absolute() if names_only else local_path(path, root=ROOT))
+        for path in paths if '__pycache__' not in path.parts)
 
 
 def snapshot_sources(folder):
@@ -1175,78 +1178,118 @@ def await_reviewed_arm(preparation, preparation_sha, policy, identity, claim, co
         time.sleep(patrol.CONTROL_POLL_SECONDS)
 
 
+def prepare_immutable_admission(folder, preparation, plan, prechecked, expected, identity, claim, report):
+    """Finish all existing immutable validation while paused, then retain one worker's read-only handles."""
+    verify_sources(folder, plan['sourceFiles'])
+    contract = verify_worker_runtime(plan['workerRuntime'], plan['resources'], folder)
+    owner, owner_pins, packages = file_admission.owner_inputs(plan['ownerFile'], ROOT / 'artifacts', load_map_owner)
+    require(owner == plan['owner'] and owner_pins[str(Path(plan['ownerFile']).absolute())] == plan['ownerSha256'],
+        'Paused immutable owner differs from the reviewed plan')
+    pins, empty_sources = dict(owner_pins), set()
+    def add(path, pin, *, empty=False):
+        """Join only already-validated originals/archives; no mutable status/control file is included."""
+        path = str(Path(path).absolute())
+        require(path not in pins or pins[path] == pin, 'Conflicting paused immutable source')
+        pins[path] = pin
+        if empty:
+            empty_sources.add(path)
+    for name, pin in plan['sourceFiles'].items():
+        add(ROOT / name, pin, empty=True)
+        add(folder / 'source-snapshot' / name, pin, empty=True)
+    for name, pin in contract['files'].items():
+        add(name, pin)
+        add(plan['workerRuntime']['retained'][name], pin)
+    for name, pin in expected.items():
+        add(name, pin)
+    add(GOAL, plan['binding']['goalSha256'])
+    require(plan['binding']['goalSha256'] == GOAL_SHA256 and file_stamp(CHECKPOINT) == plan['checkpointStamp'],
+        'Paused goal or checkpoint stamp changed')
+    context = lambda: dict(plan=plan, prechecked=prechecked, expected=expected, worker=identity, hostClaim=claim)
+    census = lambda: sorted(path.relative_to(ROOT).as_posix() for path in source_paths(names_only=True))
+    held = file_admission.PausedAdmission(context(), pins, empty_sources, census,
+        sorted(plan['sourceFiles']), packages, report)
+    try:
+        # Replaying under the acquired locks closes the collection-to-validation interval.
+        require(load_map_owner(plan['ownerFile']) == plan['owner'], 'Held original owner no longer replays')
+        return held, context
+    except BaseException as error:
+        errors = held.close()
+        if errors:
+            raise file_admission.HandleCleanupError(error, errors) from error
+        raise
+
+
 def await_reviewed_resume(preparation, preparation_sha, plan, plan_sha, arm_sha, identity, claim, control, watch,
-                          lifecycle, model_preparation, callback=None):
+                          lifecycle, model_preparation, callback=None, *, immutable_report=None):
     """Hold a private completed precheck until one fresh qualified final resume passes all final checks."""
     folder = Path(preparation['directory'])
-    reviewed_liveness(preparation, claim, control=control, watch=watch, minimum_remaining=5)
-    bundle = ready_reviewed_preparation(folder / 'preparation.json', require_waiting=False)
-    require(bundle['preparationSha256'] == preparation_sha and bundle['ready']['worker'] == identity,
-            'Worker changed before final paused precheck')
-    expected = prechecked_input_manifest(folder, preparation, plan, model_preparation)
-    reviewed_liveness(preparation, claim, control=control, watch=watch, minimum_remaining=5)
-    prechecked = dict(version=1, kind=paused_review.PRECHECK_KIND, runId=plan['runId'], planSha256=plan_sha,
-        preparationSha256=preparation_sha, preparedSha256=bundle['readySha256'], armSha256=arm_sha,
-        worker=identity, owner=plan['owner'], hostClaim=claim, inputEnabled=False, listenerCreated=False,
-        originalSceneDeadlineClientNs=preparation['pausedReview']['chain']['originalSceneDeadlineClientNs'],
-        verifiedInputsSha256=digest(canonical(expected)), checkedAtUnixNs=time.time_ns(), checkedAtClientNs=time.perf_counter_ns())
-    paused_review.validate_precheck(prechecked, plan, plan_sha, preparation_sha, bundle['readySha256'], arm_sha, identity, claim)
-    expected_file_sha = exclusive_json(folder / 'prechecked-inputs.json', expected)
-    prechecked_sha = publish_once(folder / 'READY-TO-RESUME.json', prechecked)
-    capability = paused_review.PrecheckedAdmission(plan, prechecked, prechecked_sha, expected)
-    control.publish(state='precheckedPaused', inputEnabled=False, worker=identity, modelLoads=1,
-        precheckedSha256=prechecked_sha, preparedSha256=bundle['readySha256'])
-    while True:
-        reviewed_liveness(preparation, claim, control=control, watch=watch)
-        status, _ = read_waiting_status(folder, claim, preparation['runId'], after_arm=True)
-        reviewed_liveness(preparation, claim, control=control, watch=watch)
-        require(status.get('worker') == identity and status.get('runId') == preparation['runId'], 'Paused readiness status changed owner')
-        if status.get('state') == 'precheckedPaused' and status.get('precheckedSha256') == prechecked_sha:
-            break
-        require(status.get('state') == 'preparedPaused', 'Unexpected transition before final paused readiness')
-        time.sleep(patrol.CONTROL_POLL_SECONDS)
-    if callback is not None:
-        callback(copy.deepcopy(prechecked))
-    while True:
-        reviewed_liveness(preparation, claim, control=control, watch=watch)
-        require(digest(read_bytes(folder / 'READY-TO-RESUME.json')) == prechecked_sha
-            and digest(read_bytes(folder / 'prechecked-inputs.json')) == expected_file_sha,
-            'Private paused precheck record changed while waiting')
-        if (folder / 'RESUMED.json').exists():
-            resumed, resumed_sha = document(folder / 'RESUMED.json')
-            # Consume before fallible final validation: an invalid/unknown resume never retries.
-            exclusive_json(folder / 'RESUME-CONSUMED.json', dict(runId=plan['runId'], resumedSha256=resumed_sha,
-                precheckedSha256=prechecked_sha, planSha256=plan_sha, worker=identity))
-            request, _ = document(folder / 'RESUME-REQUESTED.json')
-            require(request == dict(runId=plan['runId'], precheckedSha256=prechecked_sha,
-                resumeDirectory=resumed.get('resume', {}).get('directory')), 'Final resume request was substituted')
-            require(read_bytes(folder / 'resume-candidate.json') == read_bytes(folder / 'RESUMED.json'),
-                    'Final resume candidate changed before publication')
-            proof = verify_ui_proof(resumed['resume'], plan['owner'], 'resume', folder)
-            paused_review.validate_final_resume(resumed, proof, prechecked, prechecked_sha, plan, preparation, identity,
-                                                time.time_ns(), time.perf_counter_ns())
-            # Every source is freshly checked once here. Only already-replayed immutable semantics are reused.
-            verify_sources(folder, plan['sourceFiles'])
-            verify_worker_runtime(plan['workerRuntime'], plan['resources'], folder)
-            require(plan['owner'] == load_map_owner(plan['ownerFile']) and digest(read_bytes(plan['ownerFile'])) == plan['ownerSha256']
-                and digest(read_bytes(GOAL)) == plan['binding']['goalSha256'] == GOAL_SHA256
-                and file_stamp(CHECKPOINT) == plan['checkpointStamp'], 'Final reviewed execution inputs changed')
-            actual = {name: digest(read_bytes(local_path(name, root=ROOT / 'artifacts'))) for name in capability.expected_inputs}
-            capability.compare(actual)
-            require(plan == capability.plan, 'In-memory reviewed authority changed after precheck')
-            require(digest(read_bytes(folder / 'READY-TO-RESUME.json')) == capability.prechecked_sha,
-                    'Final ready-to-resume identity changed')
-            require_idle(lifecycle, plan['owner'])
+    held = None
+    try:
+        reviewed_liveness(preparation, claim, control=control, watch=watch, minimum_remaining=5)
+        bundle = ready_reviewed_preparation(folder / 'preparation.json', require_waiting=False)
+        require(bundle['preparationSha256'] == preparation_sha and bundle['ready']['worker'] == identity,
+                'Worker changed before final paused precheck')
+        expected = prechecked_input_manifest(folder, preparation, plan, model_preparation)
+        reviewed_liveness(preparation, claim, control=control, watch=watch, minimum_remaining=5)
+        prechecked = dict(version=1, kind=paused_review.PRECHECK_KIND, runId=plan['runId'], planSha256=plan_sha,
+            preparationSha256=preparation_sha, preparedSha256=bundle['readySha256'], armSha256=arm_sha,
+            worker=identity, owner=plan['owner'], hostClaim=claim, inputEnabled=False, listenerCreated=False,
+            originalSceneDeadlineClientNs=preparation['pausedReview']['chain']['originalSceneDeadlineClientNs'],
+            verifiedInputsSha256=digest(canonical(expected)), checkedAtUnixNs=time.time_ns(), checkedAtClientNs=time.perf_counter_ns())
+        paused_review.validate_precheck(prechecked, plan, plan_sha, preparation_sha, bundle['readySha256'], arm_sha, identity, claim)
+        require(isinstance(immutable_report, dict), 'Missing private immutable admission report')
+        held, held_context = prepare_immutable_admission(folder, preparation, plan, prechecked, expected,
+            identity, claim, immutable_report)
+        reviewed_liveness(preparation, claim, control=control, watch=watch, minimum_remaining=5)
+        expected_file_sha = exclusive_json(folder / 'prechecked-inputs.json', expected)
+        prechecked_sha = publish_once(folder / 'READY-TO-RESUME.json', prechecked)
+        capability = paused_review.PrecheckedAdmission(plan, prechecked, prechecked_sha, expected)
+        control.publish(state='precheckedPaused', inputEnabled=False, worker=identity, modelLoads=1,
+            precheckedSha256=prechecked_sha, preparedSha256=bundle['readySha256'])
+        while True:
             reviewed_liveness(preparation, claim, control=control, watch=watch)
-            capability.consume()
-            admission = dict(version=1, kind='combat-paused-review-final-admission-v1', runId=plan['runId'],
-                precheckedSha256=prechecked_sha, resumedSha256=resumed_sha, planSha256=plan_sha, worker=identity,
-                verifiedInputsSha256=digest(canonical(actual)), sourceFilesSha256=digest(canonical(plan['sourceFiles'])),
-                admittedAtUnixNs=time.time_ns(), admittedAtClientNs=time.perf_counter_ns())
-            exclusive_json(folder / 'FINAL-ADMISSION.json', admission)
+            status, _ = read_waiting_status(folder, claim, preparation['runId'], after_arm=True)
             reviewed_liveness(preparation, claim, control=control, watch=watch)
-            return admission
-        time.sleep(patrol.CONTROL_POLL_SECONDS)
+            require(status.get('worker') == identity and status.get('runId') == preparation['runId'], 'Paused readiness status changed owner')
+            if status.get('state') == 'precheckedPaused' and status.get('precheckedSha256') == prechecked_sha:
+                break
+            require(status.get('state') == 'preparedPaused', 'Unexpected transition before final paused readiness')
+            time.sleep(patrol.CONTROL_POLL_SECONDS)
+        if callback is not None:
+            callback(copy.deepcopy(prechecked))
+        while True:
+            reviewed_liveness(preparation, claim, control=control, watch=watch)
+            require(digest(read_bytes(folder / 'READY-TO-RESUME.json')) == prechecked_sha
+                and digest(read_bytes(folder / 'prechecked-inputs.json')) == expected_file_sha,
+                'Private paused precheck record changed while waiting')
+            if (folder / 'RESUMED.json').exists():
+                resumed, resumed_sha = document(folder / 'RESUMED.json')
+                # Consume before fallible final validation: an invalid/unknown resume never retries.
+                exclusive_json(folder / 'RESUME-CONSUMED.json', dict(runId=plan['runId'], resumedSha256=resumed_sha,
+                    precheckedSha256=prechecked_sha, planSha256=plan_sha, worker=identity))
+                request, _ = document(folder / 'RESUME-REQUESTED.json')
+                require(request == dict(runId=plan['runId'], precheckedSha256=prechecked_sha,
+                    resumeDirectory=resumed.get('resume', {}).get('directory')), 'Final resume request was substituted')
+                require(read_bytes(folder / 'resume-candidate.json') == read_bytes(folder / 'RESUMED.json'),
+                        'Final resume candidate changed before publication')
+                proof = verify_ui_proof(resumed['resume'], plan['owner'], 'resume', folder)
+                paused_review.validate_final_resume(resumed, proof, prechecked, prechecked_sha, plan, preparation, identity,
+                                                    time.time_ns(), time.perf_counter_ns())
+                # Newly produced final-resume evidence still receives its complete original replay above.
+                # Pre-existing source/archive/ancestry bytes are rehashed through held handles immediately before start.
+                require(plan == capability.plan, 'In-memory reviewed authority changed after precheck')
+                require(digest(read_bytes(folder / 'READY-TO-RESUME.json')) == capability.prechecked_sha,
+                        'Final ready-to-resume identity changed')
+                require_idle(lifecycle, plan['owner'])
+                reviewed_liveness(preparation, claim, control=control, watch=watch)
+                return dict(prechecked=prechecked, precheckedSha256=prechecked_sha, resumed=resumed,
+                    resumedSha256=resumed_sha, proof=proof, capability=capability, held=held, context=held_context)
+            time.sleep(patrol.CONTROL_POLL_SECONDS)
+    except BaseException as error:
+        errors = held.close() if held is not None else []
+        if errors:
+            raise file_admission.HandleCleanupError(error, errors) from error
+        raise
 
 
 def validate_loaded_policy(policy):
@@ -1353,6 +1396,7 @@ def run_worker(plan_path, *, lifecycle=None, loader=None, episode=None, identity
                       preparedPolicy=None, armSha256=None, inputEnabledBeforeArm=False)
     report.update(scope_fields(combat_scope(plan)))
     control = watch = policy = None
+    held_resume = None
     native_error = None
     try:
         contract = (plan.get('workerRuntime') or {}).get('contract')
@@ -1464,8 +1508,10 @@ def run_worker(plan_path, *, lifecycle=None, loader=None, episode=None, identity
         exact_control(control, plan['runId'])
         if reviewed_paused:
             report['phase'] = 'precheckedPaused'
-            report['finalPausedReviewAdmission'] = await_reviewed_resume(preparation, preparation_sha, plan, plan_sha,
-                arm_sha, identity, claim, control, watch, lifecycle, report['modelPreparation'], reviewed_resume_callback)
+            report['pausedImmutableAdmission'] = {}
+            held_resume = await_reviewed_resume(preparation, preparation_sha, plan, plan_sha,
+                arm_sha, identity, claim, control, watch, lifecycle, report['modelPreparation'], reviewed_resume_callback,
+                immutable_report=report['pausedImmutableAdmission'])
             _, child = require_idle(lifecycle, plan['owner'])
             reviewed_liveness(preparation, claim, control=control, watch=watch)
         # Include listener creation in the five-second lease budget, and never
@@ -1490,6 +1536,32 @@ def run_worker(plan_path, *, lifecycle=None, loader=None, episode=None, identity
             # Status publication can block: keep a STOP or original-budget expiry from becoming a native start.
             reviewed_liveness(preparation, claim, control=control, watch=watch)
             require(time.monotonic_ns() < report['leaseDeadlineMonotonicNs'], 'Reviewed lease expired before native start')
+            require(held_resume is not None, 'Missing private final-resume admission')
+            final = held_resume
+            actual = final['held'].consume(final['context'], report['pausedImmutableAdmission'],
+                lambda: reviewed_liveness(preparation, claim, control=control, watch=watch))
+            by_path = {Path(name): pin for name, pin in actual.items()}
+            actual_inputs = {name: by_path[Path(name)] for name in final['capability'].expected_inputs}
+            final['capability'].compare(actual_inputs)
+            require(plan == final['capability'].plan
+                and digest(read_bytes(folder / 'READY-TO-RESUME.json')) == final['capability'].prechecked_sha
+                and file_stamp(CHECKPOINT) == plan['checkpointStamp'], 'Final private authority or checkpoint stamp changed')
+            paused_review.validate_final_resume(final['resumed'], final['proof'], final['prechecked'],
+                final['precheckedSha256'], plan, preparation, identity, time.time_ns(), time.perf_counter_ns())
+            # Owner/control are mutable: keep their fresh checks after the held-file read.
+            _, child = require_idle(lifecycle, plan['owner'])
+            reviewed_liveness(preparation, claim, control=control, watch=watch)
+            require(time.monotonic_ns() < report['leaseDeadlineMonotonicNs'], 'Reviewed lease expired during immutable admission')
+            final['capability'].consume()
+            admission = dict(version=1, kind='combat-paused-review-final-admission-v1', runId=plan['runId'],
+                precheckedSha256=final['precheckedSha256'], resumedSha256=final['resumedSha256'],
+                planSha256=plan_sha, worker=identity, verifiedInputsSha256=digest(canonical(actual_inputs)),
+                sourceFilesSha256=digest(canonical(plan['sourceFiles'])),
+                admittedAtUnixNs=time.time_ns(), admittedAtClientNs=time.perf_counter_ns())
+            exclusive_json(folder / 'FINAL-ADMISSION.json', admission)
+            report['finalPausedReviewAdmission'] = admission
+            reviewed_liveness(preparation, claim, control=control, watch=watch)
+            require(time.monotonic_ns() < report['leaseDeadlineMonotonicNs'], 'Reviewed lease expired after admission publication')
             report.update(nativeStartAttempted=True, nativeStartOutcome='unresolved')
         started = lifecycle.start_agent(child, 5, enable_input=True, observation_profile=args.observation_profile)
         require({key: started[key] for key in ('processId', 'windowsSessionId', 'instanceNonce')} == plan['owner']['child'],
@@ -1500,6 +1572,8 @@ def run_worker(plan_path, *, lifecycle=None, loader=None, episode=None, identity
     except BaseException as error:
         native_error = error
         report['error'] = str(error) or type(error).__name__
+        if isinstance(error, file_admission.HandleCleanupError):
+            report['immutableHandleCleanupError'] = '; '.join(error.cleanup_errors)
     finally:
         # Never call stop_agent here: its public API identifies the child but not
         # a particular lease. run_episode alone drains its own authenticated pipe.
@@ -1573,7 +1647,15 @@ def run_worker(plan_path, *, lifecycle=None, loader=None, episode=None, identity
             require(report['recordedBytes'] <= MAX_RECORD_BYTES, 'Recording exceeded its fixed budget')
         except BaseException as error:
             report.update(status='failed', accountingError=str(error) or type(error).__name__)
+        if held_resume is not None:
+            errors = held_resume['held'].close()
+            if errors:
+                report['immutableHandleCleanupError'] = '; '.join(errors)
+        prior_close_errors = report.get('pausedImmutableAdmission', {}).get('closeErrors')
+        if prior_close_errors:
+            report['immutableHandleCleanupError'] = '; '.join(prior_close_errors)
         if (report['nativeStartOutcome'] == 'unresolved' or report.get('cleanupError') or report.get('monitorCleanupError')
+                or report.get('immutableHandleCleanupError')
                 or report.get('inventoryProbeCleanupError')
                 or report['nativeStartAttempted'] and report['nativeEpisode'] is None):
             report['status'] = 'unresolved'

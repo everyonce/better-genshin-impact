@@ -28,7 +28,10 @@ def ui_transition_fixture(test, operation, suffix=''):
     sources, revisions = {}, {}
     for name in sorted(CORE_REVISIONS | {'world-inventory.js', 'manifest.json', 'settings.json'}):
         raw = ('// exact inert native source ' + name).encode()
-        (pilot / name).write_bytes(raw)
+        if (pilot / name).exists():
+            assert (pilot / name).read_bytes() == raw
+        else:
+            (pilot / name).write_bytes(raw)
         target = folder / 'source-snapshot' / name
         target.parent.mkdir(exist_ok=True)
         target.write_bytes(raw)

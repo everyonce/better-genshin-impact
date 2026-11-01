@@ -26,6 +26,14 @@ class PausedReviewTrialTests(unittest.TestCase):
     def setUp(self):
         """Give each trial its own small source tree, original baseline and real-shaped native image."""
         fixtures.CombatPreparedTrialTests.setUp(self)
+        def fixture_owner_inputs(path, artifacts, validate_owner):
+            """Only this synthetic lifecycle owner is abbreviated; the held-module suite replays real-shaped lineage."""
+            self.assertEqual(Path(path), self.owner_file)
+            self.assertEqual(json.loads(Path(path).read_bytes()), fixtures.OWNER)
+            return validate_owner(path), {str(Path(path).absolute()): trial.digest(Path(path).read_bytes())}, {}
+        owner_inputs = patch.object(trial.file_admission, 'owner_inputs', side_effect=fixture_owner_inputs)
+        owner_inputs.start()
+        self.addCleanup(owner_inputs.stop)
         # Match the raw current native status relationship, so independent cleanup replay need not trust booleans.
         self.lifecycle.root.update(taskRunning=False, agentStreamRunning=False, serviceOwnsPilot=False,
             childConnectedState=1, childSessionId=self.lifecycle.child['windowsSessionId'])
@@ -159,30 +167,46 @@ class PausedReviewTrialTests(unittest.TestCase):
         self.assertEqual((self.loads, self.lifecycle.starts), (0, 0))
 
     def test_source_changed_after_paused_precheck_still_prevents_the_only_listener(self):
-        """Private precheck does not replace the final fresh complete Python source pass."""
+        """A held original source cannot be rewritten after the paused precheck or start a listener on error."""
         self.capture_and_pause()
         self.prepare()
+        original_bytes = self.code.read_bytes()
+        blocked_writes = []
         def resumed_then_changed(ready):
             """Change one exact original source only after a valid final native resume is retained."""
             self.resume(ready)
-            self.code.write_bytes(b'changed after precheck')
+            try:
+                self.code.write_bytes(b'changed after precheck')
+            except PermissionError as error:
+                blocked_writes.append(str(error))
+                raise
         self.assertEqual(self.worker(resume=resumed_then_changed), 1)
         self.assertEqual((self.loads, self.lifecycle.starts, self.episodes), (1, 0, 0))
-        self.assertIn('source', self.report()['error'].lower())
+        self.assertEqual(blocked_writes, [self.report()['error']])
+        self.assertEqual(self.code.read_bytes(), original_bytes)
         self.assertTrue(self.report()['cleanupVerified'])
 
+
     def test_review_changed_after_paused_precheck_is_caught_by_fresh_byte_hashes(self):
-        """Already-replayed semantics cannot conceal later changes to original review bytes."""
+        """Already-replayed original review bytes remain write-protected until worker cleanup."""
         self.capture_and_pause()
         self.prepare()
+        original_bytes = self.evidence['review'].read_bytes()
+        blocked_writes = []
         def resumed_then_changed(ready):
             """Keep the JSON meaning but change the exact separately authored review artifact."""
             self.resume(ready)
-            with self.evidence['review'].open('ab') as stream:
-                stream.write(b'\n')
+            try:
+                with self.evidence['review'].open('ab') as stream:
+                    stream.write(b'\n')
+            except PermissionError as error:
+                blocked_writes.append(str(error))
+                raise
         self.assertEqual(self.worker(resume=resumed_then_changed), 1)
         self.assertEqual((self.lifecycle.starts, self.episodes), (0, 0))
-        self.assertIn('immutable inputs changed', self.report()['error'])
+        self.assertEqual(blocked_writes, [self.report()['error']])
+        self.assertEqual(self.evidence['review'].read_bytes(), original_bytes)
+
 
     def test_stop_during_starting_status_write_remains_an_unattempted_native_start(self):
         """A blocking final status publication is followed by original liveness before issuing any start command."""
@@ -214,7 +238,7 @@ class PausedReviewTrialTests(unittest.TestCase):
         self.assertIn('stale', self.report()['error'].lower())
 
     def test_exact_dynamic_transport_is_snapshotted_and_rechecked_after_precheck(self):
-        """Seal only the known dynamic transport and reject its later mutation in the final full pass."""
+        """Seal only the known dynamic transport and deny its later mutation before native start."""
         transport = self.root / 'tools/quest-pilot/controller-control.py'
         unrelated = transport.with_name('unrelated.py')
         unrelated.write_bytes(b'not a transitive import')
@@ -224,13 +248,21 @@ class PausedReviewTrialTests(unittest.TestCase):
         self.assertEqual(self.preparation['sourceFiles'][key], trial.digest(transport.read_bytes()))
         self.assertEqual((self.folder / 'source-snapshot' / key).read_bytes(), transport.read_bytes())
         self.assertNotIn('tools/quest-pilot/unrelated.py', self.preparation['sourceFiles'])
+        original_bytes = transport.read_bytes()
+        blocked_writes = []
         def resumed_then_changed(ready):
             """Mutation occurs after all paused source checks, without touching any real transport."""
             self.resume(ready)
-            transport.write_bytes(b'changed dynamic transport')
+            try:
+                transport.write_bytes(b'changed dynamic transport')
+            except PermissionError as error:
+                blocked_writes.append(str(error))
+                raise
         self.assertEqual(self.worker(resume=resumed_then_changed), 1)
         self.assertEqual((self.loads, self.lifecycle.starts, self.episodes), (1, 0, 0))
-        self.assertIn('source', self.report()['error'].lower())
+        self.assertEqual(blocked_writes, [self.report()['error']])
+        self.assertEqual(transport.read_bytes(), original_bytes)
+
 
     def test_legacy_plan_loader_refuses_new_phase_records(self):
         """The old post-resume contract cannot silently consume this different ordering."""

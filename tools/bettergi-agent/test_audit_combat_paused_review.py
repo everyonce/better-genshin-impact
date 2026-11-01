@@ -24,7 +24,7 @@ class PausedReviewAuditTests(unittest.TestCase):
         # The full no-listener auditor requires exact current replay implementations.
         for name in ('combat_trial.py', 'combat_trial_guard.py', 'stream_client.py', 'native_combat.py',
                      'model_adapters.py', 'resident_runtime.py', 'episode_split.py', 'combat_pause_proof.py',
-                     'combat_process_identity.py', 'combat_paused_review_proof.py'):
+                     'combat_process_identity.py', 'combat_paused_review_proof.py', 'combat_paused_file_admission.py'):
             (fixture.root / 'tools/bettergi-agent' / name).write_bytes(Path(__file__).with_name(name).read_bytes())
         fixture.capture_and_pause()
         fixture.prepare(claim=False)

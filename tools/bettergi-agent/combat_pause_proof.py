@@ -1,4 +1,5 @@
 """Read retained native inventory transitions; never issue UI or gameplay commands."""
+from collections import OrderedDict
 import hashlib
 import io
 import json
@@ -7,9 +8,15 @@ import os
 from pathlib import Path
 import re
 import stat
+from threading import Lock
 
 
 CORE_REVISIONS = frozenset(('main.js', 'engine.js', 'bgi.js', 'mission.js', 'combat.js', 'recovery.js'))
+
+# Retain only bounded digest/revision metadata, never script bytes, paths or timestamps.
+_REVISION_CACHE_LIMIT = 128
+_revision_cache = OrderedDict()
+_revision_cache_lock = Lock()
 
 
 def require(value, message):
@@ -23,13 +30,34 @@ def number(value):
     return type(value) in (int, float) and math.isfinite(value)
 
 
-def revision(raw):
+def _uncached_revision(raw):
     """Replay the native pilot's FNV-1a hash over JavaScript UTF-16 code units."""
     encoded = raw.decode('utf-8-sig').encode('utf-16-le')
     value = 2166136261
     for index in range(0, len(encoded), 2):
         value = ((value ^ int.from_bytes(encoded[index:index + 2], 'little')) * 16777619) & 0xffffffff
     return format(value, 'x')
+
+
+def revision(raw):
+    """Reuse a content-identical FNV result without skipping fresh source reads or SHA checks."""
+    if type(raw) is not bytes:
+        # Preserve the existing decoder behavior for mutable or otherwise unusual callers.
+        return _uncached_revision(raw)
+    key = hashlib.sha256(raw).digest()
+    with _revision_cache_lock:
+        cached = _revision_cache.get(key)
+        if cached is not None:
+            _revision_cache.move_to_end(key)
+            return cached
+    # Decode and hash outside the lock; concurrent misses may safely calculate the same result.
+    value = _uncached_revision(raw)
+    with _revision_cache_lock:
+        _revision_cache[key] = value
+        _revision_cache.move_to_end(key)
+        if len(_revision_cache) > _REVISION_CACHE_LIMIT:
+            _revision_cache.popitem(last=False)
+    return value
 
 
 def inventory_visible(observation):

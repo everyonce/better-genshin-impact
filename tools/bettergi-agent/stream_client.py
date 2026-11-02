@@ -35,6 +35,75 @@ from p2p_startup import validate_startup_options
 from bridge_transport import forbid_reconnect, is_transport_failure, transport_origin
 
 
+class BatchFeedbackTerminalProbe:
+    """Spend one read-only probe and retain its exact action/source diagnostics.
+
+    The existing receive lock owns this bounded state. It grants neither input nor
+    recovery: the original frame intake, receipts, hold and deadlines remain owners.
+    """
+    def __init__(self):
+        """Keep one attempt and two diagnostic source identities for the original batch."""
+        self.evidence = dict(version=1, maximumProbes=1, attempted=False,
+            requestId=None, observedSource=None)
+
+    @staticmethod
+    def source_identity(frame):
+        """Retain the original source clocks, never publication time or new authority."""
+        source = frame.get('sourceFrame') or {}
+        result = dict(frameId=frame.get('frameId'), captureEpoch=source.get('captureEpoch'),
+            timestamp100ns=source.get('timestamp100ns'), freshnessAtMs=source.get('freshnessAtMs'))
+        if (type(result['frameId']) is not int or result['frameId'] < 0
+                or not isinstance(result['captureEpoch'], str) or not result['captureEpoch']
+                or type(result['timestamp100ns']) is not int or result['timestamp100ns'] < 0
+                or type(result['freshnessAtMs']) not in (int, float)
+                or not math.isfinite(result['freshnessAtMs']) or result['freshnessAtMs'] < 0):
+            raise RuntimeError('Feedback terminal probe source identity is invalid')
+        return result
+
+    def eligible(self, hold, guard, current, request, accepted_ns, now_ns, receipts):
+        """Anticipate the normal 50 ms poll window only after W50's 10 ms native tick."""
+        if (self.evidence['attempted'] or request['requestId'] in receipts
+                or hold.used != 0 or hold.phase != 'idle' or not hold.inflight
+                or hold.last is None or guard.trip is not None or guard.reason != 'healthyNativeEvidence'
+                or type(accepted_ns) is not int or type(now_ns) is not int
+                or now_ns < accepted_ns + 60_000_000
+                or len(request.get('steps', [])) != 1
+                or type(request['steps'][0].get('durationMs')) is not int
+                or request['steps'][0].get('durationMs') != 50):
+            return None
+        last = hold.last
+        frame = last['frame']
+        if (current.get('type') != 'frame' or current.get('frameId') != frame.get('frameId')
+                or current.get('sourceFrame') != frame.get('sourceFrame')
+                or type(last.get('clientTimeNs')) is not int or now_ns < last['clientTimeNs']):
+            return None
+        age, rtt = frame.get('sourceFrameAgeMs'), last.get('roundTripMs')
+        if any(type(value) not in (int, float) or not math.isfinite(value) or value < 0
+               for value in (age, rtt)):
+            return None
+        upper = age + rtt + (now_ns-last['clientTimeNs'])/1e6
+        # This is a read-only preparation window, not a widened freshness gate.
+        if not 100 <= upper < 150:
+            return None
+        return dict(requestId=request['requestId'], acceptedAtClientNs=accepted_ns,
+            requestedAtClientNs=now_ns, sourceAgeUpperBoundMs=upper,
+            qualifyingSource=self.source_identity(frame), acceptedHorizonMs=50, nativeTickMs=10)
+
+    def reserve(self, *args):
+        """Consume before the fallible frame RPC, including a failed or empty reply."""
+        evidence = self.eligible(*args)
+        if evidence is None:
+            return False
+        self.evidence.update(evidence, attempted=True)
+        return True
+
+    def received(self, frame, now_ns, receipt_observed):
+        """Retain the reply; the unchanged post-terminal gate alone admits new pixels."""
+        self.evidence.update(observedSource=self.source_identity(frame),
+            receivedAtClientNs=now_ns, receiptObserved=receipt_observed,
+            replySourceAgeMs=frame.get('sourceFrameAgeMs'), replyServerNowMs=frame.get('serverNowMs'))
+
+
 class HostTimingObserver:
     """Bounded diagnostics for the explicit source-hold mode; never input or clock authority."""
     EVENT_LIMIT = 4096
@@ -2196,6 +2265,10 @@ def run_episode(args, policy=None, control=None):
     unapplied_receipt_sequence = 0
     recovery_interruption_sequence = 0
     receipt_inbox = []
+    # Only the explicitly admitted source-hold batch gets this one read-only probe.
+    feedback_probe = BatchFeedbackTerminalProbe() if batch_source_hold is not None else None
+    if feedback_probe is not None:
+        report['feedbackTerminalProbe'] = feedback_probe.evidence
     report['decisionHz'] = args.decision_hz
     report['capturePollHz'] = args.fps
     report['maxObservationAgeMs'] = args.max_observation_age_ms
@@ -2355,7 +2428,7 @@ def run_episode(args, policy=None, control=None):
                 stopped.set()
             raise
 
-    def poll_frame(origin='decision-refresh', wake=None):
+    def poll_frame(origin='decision-refresh', wake=None, feedback=None):
         """Serialize frame ingestion so scheduled and just-in-time polls cannot reorder evidence."""
         nonlocal server_snapshot
         nonlocal received_frame_id
@@ -2363,6 +2436,27 @@ def run_episode(args, policy=None, control=None):
         nonlocal recovery_capture_context
         with (host_timing.poll(origin, wake) if host_timing is not None else nullcontext()) as timing, receive_lock, combat_intake_boundary():
             if host_timing is not None:host_timing.mark(timing, 'intakeAcquiredNs')
+            if feedback is not None:
+                # Recheck after the intake lock: the reader may have delivered the
+                # receipt or a newer source while the policy thread was waiting.
+                request, accepted_ns = feedback
+                if stopped.is_set():
+                    raise RuntimeError('Executed-history reader stopped before terminal probe')
+                if time.perf_counter() >= deadline:
+                    raise RuntimeError('Executed-history lease ended before terminal probe')
+                hybrid.check_leg_deadline()
+                # Match the feedback loop: an already-collected terminal goes
+                # through its original validator, not a redundant probe deadline.
+                if request['requestId'] in history_receipts:
+                    return
+                received_at, status = server_snapshot
+                server_now = status.get('serverNowMs')
+                if (type(server_now) not in (int, float) or not math.isfinite(server_now)
+                        or server_now+(time.perf_counter()-received_at)*1000 >= request['expiresAtMs']):
+                    raise RuntimeError('Executed-history original request deadline ended before terminal probe')
+                if not feedback_probe.reserve(batch_source_hold, scout_guard, status, request,
+                        accepted_ns, time.perf_counter_ns(), history_receipts):
+                    return
             start = time.perf_counter_ns()
             if host_timing is not None:host_timing.mark(timing, 'rpcStartedNs', start)
             metadata, pixels = bridge.request('frame')
@@ -2536,6 +2630,11 @@ def run_episode(args, policy=None, control=None):
                     recorder.put(recording_frame_metadata(metadata, execution_mode, retain_execution=combat_source_recovery), pixels)
                 if host_timing is not None:host_timing.mark(timing, 'recorderQueuedNs')
                 received_frame_id = metadata['frameId']
+            if feedback is not None:
+                # Retain only diagnostic attribution. The unchanged intake and
+                # post-terminal gate own every hazard, receipt and later source.
+                feedback_probe.received(metadata, time.perf_counter_ns(),
+                    request['requestId'] in history_receipts)
 
     # Keep one actual reader failure; strings alone cannot authorize another lease.
     receive_failure = []
@@ -2634,6 +2733,7 @@ def run_episode(args, policy=None, control=None):
                     recorder.check()
                     if host_timing is not None:host_timing.elapsed(timing, 'recorderChecks', recorder_at)
                     intake_at = time.perf_counter_ns() if host_timing is not None else None
+                    probe_ready = False
                     with receive_lock:
                         if host_timing is not None:host_timing.elapsed(timing, 'intakeWait', intake_at)
                         matches = [item for item in receipt_inbox if item.get('requestId') == request['requestId']]
@@ -2651,8 +2751,19 @@ def run_episode(args, policy=None, control=None):
                         if (type(server_now) not in (int, float) or not math.isfinite(server_now)
                                 or server_now+(time.perf_counter()-received_at)*1000 >= request['expiresAtMs']):
                             raise RuntimeError('Executed-history receipt is unavailable before the original request deadline')
+                        if feedback_probe is not None:
+                            probe_ready = feedback_probe.eligible(batch_source_hold, scout_guard, status, request,
+                                event['acceptedAtClientNs'], time.perf_counter_ns(), history_receipts) is not None
+                    if probe_ready:
+                        # poll_frame owns this same lock; never call it while holding
+                        # intake or let a drained receipt overtake its hazard path.
+                        poll_frame('feedback-terminal', feedback=(request, event['acceptedAtClientNs']))
+                        continue
                     wait_at = time.perf_counter_ns() if host_timing is not None else None
-                    stopped.wait(.002)
+                    if feedback_probe is not None:
+                        sleep_until(time.perf_counter()+.002, stopped)
+                    else:
+                        stopped.wait(.002)
                     if host_timing is not None:host_timing.elapsed(timing, 'receiptSleep', wait_at)
         except Exception as error:
             failure, event['error'] = error, str(error)

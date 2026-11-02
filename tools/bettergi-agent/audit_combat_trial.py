@@ -770,11 +770,12 @@ def verify_reviewed_episode_clocks(plan, wrapper, episode, events=None):
             and held.get('kind') == 'per-worker-held-immutable-admission-v1'
             and all(held.get(key) is True for key in ('denyWriteDelete', 'freshHashReadRequired', 'consumed', 'closed'))
             and held.get('checkpointContentHeld') is False and held.get('closeErrors') == []
-            and (held.get('maximumFiles'), held.get('maximumBytes'), held.get('maximumFileBytes'))
-                == (2304, 384 * 1024 * 1024, 32 * 1024 * 1024)
+            # Historical declarations retain their own ceiling; only the finite R73 increase is added.
+            and type(held.get('maximumBytes')) is int and held['maximumBytes'] in (384 * 1024 * 1024, 448 * 1024 * 1024)
+            and (held.get('maximumFiles'), held.get('maximumFileBytes')) == (2304, 32 * 1024 * 1024)
             and type(held.get('fileCount')) is int and 0 < held['fileCount'] <= 2304
             and isinstance(held.get('immutableFiles'), dict) and len(held['immutableFiles']) == held['fileCount']
-            and type(held.get('freshHashBytes')) is int and 0 < held['freshHashBytes'] <= 384 * 1024 * 1024
+            and type(held.get('freshHashBytes')) is int and 0 < held['freshHashBytes'] <= held['maximumBytes']
             and type(held.get('freshHashMilliseconds')) in (int, float)
             and math.isfinite(held['freshHashMilliseconds']) and held['freshHashMilliseconds'] >= 0,
             'Held paused-review admission lacks its consumed and closed source declaration')

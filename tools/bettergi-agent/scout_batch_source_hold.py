@@ -7,6 +7,7 @@ from native_combat import validate_frame
 from native_ground_control import require_ground_frame, validate_frame as validate_ground_frame
 from navigation_profiles import allows_pose_scope
 from p2p_executed_history import verify_completed_receipt
+from ongoing_input import EVENT_CAPACITY as INPUT_EVENT_CAPACITY, validate as validate_input_context
 from reviewed_scout_route import batch_source_hold_policy
 
 
@@ -39,6 +40,87 @@ def retained_frame(frame):
         'groundControlEvidence', 'navigationPose', 'frameWorldReadiness', 'worldReadiness',
         'sourceFrameAgeMs', 'serverNowMs', 'inputAvailable', 'motionEvidence', 'receipts',
         'droppedReceipts', 'executionContext') if key in frame}
+
+
+def _paired_call(rows, origin, terminal, identity):
+    """Join both software stages without upgrading an aggregate return to physical proof."""
+    require(len(rows) == 2, 'current input call is not fully retained')
+    first, last = rows
+    for row in rows:
+        require(row['origin'] == origin
+                and tuple(row[key] for key in ('requestId', 'modelId', 'frameId', 'stepIndex')) == identity,
+                'current input call has a foreign origin or request')
+    started, finished = first['call'], last['call']
+    require(started['stage'] == 'started' and finished['stage'] == terminal
+            and {key: value for key, value in started.items() if key != 'stage'}
+            == {key: value for key, value in finished.items() if key != 'stage'}
+            and started['error'] is None, 'current input call is unmatched or failed')
+    return started
+
+
+def _idle_input_tail(context, receipt, server_now, *, release_after=None):
+    """Prove only the settled action and current release inside the native retained ring."""
+    # The existing wire validator checks bounded shapes, exact scalar types,
+    # contiguous event sequences, duplicate last-event bytes and native clocks.
+    validate_input_context(context, {receipt['requestId']: receipt})
+    state, rows = context['trackedState'], context['events']
+    require(context['telemetryComplete'] is True and context['active'] is None
+            and state['heldKeys'] == [] and state['telemetryIncomplete'] is False
+            and state['releaseOutcome'] == 'returned_unverified'
+            and state['executionUncertain'] is True,
+            'current input context is not completely observed and software-released')
+    require(number(server_now) and server_now <= context['sampledAtMs']
+            and len(rows) == min(context['lastSequence'], INPUT_EVENT_CAPACITY)
+            and context['evictedEvents'] == max(0, context['lastSequence'] - INPUT_EVENT_CAPACITY)
+            and context['firstSequence'] == context['evictedEvents'] + 1,
+            'current input context has an unproven retention prefix or clock')
+    indexes = [index for index, row in enumerate(rows) if row['requestId'] == receipt['requestId']]
+    require(indexes and indexes == list(range(indexes[0], indexes[-1] + 1)),
+            'settled action is missing or interleaved with foreign input')
+    own, after = rows[indexes[0]:indexes[-1] + 1], rows[indexes[-1] + 1:]
+    require(len(own) >= 2 and len(own) % 2 == 0, 'settled action has a cut-through call')
+    identity = (receipt['requestId'], receipt['modelId'], receipt['frameId'], 0)
+    step, calls = receipt['appliedSteps'][0], []
+    dispatched = []
+    for index in range(0, len(own) - 2, 2):
+        pair = own[index:index + 2]
+        call = _paired_call(pair, 'dispatch', 'returned', identity)
+        require(step['startedAtMs'] <= pair[0]['atMs'] <= pair[1]['atMs'] <= receipt['endedAtMs'],
+                'settled dispatch is outside its original receipt')
+        dispatched.append((call['operation'], call['key'], call['mouseDx'], call['mouseDy']))
+        calls.append(call['callId'])
+    expected = [('buttonDown' if key in ('LBUTTON', 'RBUTTON', 'MBUTTON') else 'keyDown', key, 0, 0)
+                for key in step['keys']]
+    if step['mouseDx'] or step['mouseDy']:
+        expected.append(('mouseMove', None, step['mouseDx'], step['mouseDy']))
+    require(len(dispatched) == len(expected) and set(dispatched) == set(expected)
+            and (not expected or expected[-1][0] != 'mouseMove' or dispatched[-1] == expected[-1]),
+            'settled dispatch calls do not exactly cover its applied step')
+    horizon = _paired_call(own[-2:], 'release:horizon_complete', 'returned_unverified', identity)
+    require(horizon['operation'] == 'releaseAll'
+            and receipt['endedAtMs'] <= own[-2]['atMs'] <= own[-1]['atMs'] <= server_now,
+            'settled horizon release is unproven')
+    calls.append(horizon['callId'])
+    if release_after is None:
+        require(not after, 'new input followed the settled horizon release')
+    else:
+        released = _paired_call(after, 'release:client_release', 'returned_unverified', (None, None, None, None))
+        require(released['operation'] == 'releaseAll' and number(release_after)
+                and release_after <= after[0]['atMs'] <= after[1]['atMs'] <= server_now,
+                'current client release is missing or predates its trigger')
+        calls.append(released['callId'])
+    require(all(right == left + 1 for left, right in zip(calls, calls[1:])),
+            'current action or release skipped a software call')
+
+
+def _unchanged_input_events(previous, current, appended):
+    """Permit only the two owned ACK stages, or no new stages during reacquisition."""
+    require(current['lastSequence'] == previous['lastSequence'] + appended,
+            'unexpected input appeared across the hold barrier')
+    old = [row for row in previous['events'] if row['sequence'] >= current['firstSequence']]
+    new = current['events'][:-appended] if appended else current['events']
+    require(json.dumps(old, sort_keys=True, allow_nan=False) == json.dumps(new, sort_keys=True, allow_nan=False),
+            'retained current input events changed across the hold barrier')
 
 
 class BatchSourceHold:
@@ -219,7 +301,7 @@ class BatchSourceHold:
                     'non-owned readiness interruption')
             positive = current.get('ready') is True and gate.get('ready') is True and gate.get('epoch') == expected
             require(frame['inputAvailable'] is positive, 'input availability contradicts native readiness')
-            self._empty_context(frame)
+            self._empty_context(frame, self.runtime['settled']['receipt'])
             evidence = validate_frame(frame, self.binding.get('nativeCombatObservation')) or {}
             ground = validate_ground_frame(frame) or {}
             if evidence.get('state') == 'valid':
@@ -302,24 +384,22 @@ class BatchSourceHold:
                 and abs(server_now-source['freshnessAtMs']-age) <= .01
                 and source['freshnessAtMs']+150 <= checked <= server_now,
                 'not the exact repeated world-observation expiry')
-        self._empty_context(frame)
+        self._empty_context(frame, receipt)
         self.used, self.phase = 1, 'awaitingRelease'
         self.runtime = deepcopy(runtime)
         self.trigger = dict(frame=retained_frame(frame), clientTimeNs=now_ns)
         return self._event('Trigger', now_ns, frame=retained_frame(frame), previous=self.last,
                            runtime=runtime, roundTripMs=round_trip_ms)
 
-    @staticmethod
-    def _empty_context(frame):
-        """Known foreign/active input or receipt contradictions cannot disappear behind a later ACK."""
+    def _empty_context(self, frame, receipt):
+        """Known foreign/active input cannot disappear behind a later ACK."""
         require(frame.get('receipts') == [] and frame.get('droppedReceipts') == 0, 'unexpected receipt or receipt loss')
         context = frame.get('executionContext')
         if context is not None:
-            require(isinstance(context, dict) and context.get('active', 'missing') is None
-                    and context.get('telemetryComplete') is True and context.get('evictedEvents') == 0
-                    and (context.get('trackedState') or {}).get('heldKeys') == []
-                    and (context.get('trackedState') or {}).get('telemetryIncomplete') is False
-                    and (context.get('trackedState') or {}).get('releaseOutcome') == 'returned_unverified', 'observed native input is not idle')
+            release_after = None if self.release is None else self.trigger['frame']['serverNowMs']
+            _idle_input_tail(context, receipt, frame.get('serverNowMs'), release_after=release_after)
+            if self.release is not None:
+                _unchanged_input_events(self.release['response']['executionContext'], context, 0)
 
     def acknowledge_release(self, response, payload_bytes, now_ns, runtime):
         """Accept one exact release; software uncertainty remains explicit, never physical-delivery proof."""
@@ -340,10 +420,14 @@ class BatchSourceHold:
                 and type(source.get('timestamp100ns')) is int and source['timestamp100ns'] >= trigger['sourceFrame']['timestamp100ns']
                 and number(source.get('freshnessAtMs')) and trigger['sourceFrame']['freshnessAtMs'] <= source['freshnessAtMs'] <= response['serverNowMs']
                 and context.get('active', 'missing') is None and context.get('telemetryComplete') is True
-                and context.get('evictedEvents') == 0 and tracked.get('heldKeys') == []
+                and tracked.get('heldKeys') == []
                 and tracked.get('telemetryIncomplete') is False and tracked.get('releaseOutcome') == 'returned_unverified'
                 and self.runtime['settled']['receipt']['endedAtMs'] <= response['serverNowMs'],
                 'release ACK does not join exact epoch/source/drained software input')
+        _idle_input_tail(context, self.runtime['settled']['receipt'], response['serverNowMs'],
+                         release_after=trigger['serverNowMs'])
+        if trigger.get('executionContext') is not None:
+            _unchanged_input_events(trigger['executionContext'], context, 2)
         self.release = dict(response=deepcopy(response), payloadBytes=payload_bytes, clientTimeNs=now_ns)
         self.phase = 'awaitingSources'
         return self._event('Release', now_ns, response=response, payloadBytes=payload_bytes, runtime=runtime)

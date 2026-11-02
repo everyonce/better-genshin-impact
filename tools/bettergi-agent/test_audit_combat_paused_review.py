@@ -313,6 +313,44 @@ class HeldClockAuditTests(unittest.TestCase):
         """Call the real auditor without altering its inputs or predicates."""
         return audit.verify_reviewed_episode_clocks(self.plan, self.wrapper, self.episode, events)
 
+    def test_historical_budget_cannot_inherit_the_larger_ceiling(self):
+        """A 384 MiB declaration still fails at its own next byte, regardless of the newer contract."""
+        held=self.wrapper['pausedImmutableAdmission']
+        held['freshHashBytes']=384*1024*1024
+        self.verify()
+        held['freshHashBytes']+=1
+        with self.assertRaisesRegex(ValueError,'source declaration'):self.verify()
+
+    def test_new_budget_measured_shape_boundary_and_overrun(self):
+        """The finite 448 MiB declaration admits the measured run39 size, its boundary, but no more."""
+        held=self.wrapper['pausedImmutableAdmission'];held['maximumBytes']=448*1024*1024
+        held['freshHashBytes']=427529818
+        self.verify()
+        held['freshHashBytes']=448*1024*1024
+        self.verify()
+        held['freshHashBytes']+=1
+        with self.assertRaisesRegex(ValueError,'source declaration'):self.verify()
+
+    def test_unknown_or_non_integer_budget_declarations_refuse(self):
+        """Only the two explicit integer ceilings exist; unknown or numeric-lookalike values refuse."""
+        held=self.wrapper['pausedImmutableAdmission']
+        for value in (0,True,False,None,'469762048',float(384*1024*1024),float(448*1024*1024),
+                      384*1024*1024-1,384*1024*1024+1,448*1024*1024+1,512*1024*1024):
+            with self.subTest(value=value):
+                held['maximumBytes']=value
+                with self.assertRaisesRegex(ValueError,'source declaration'):self.verify()
+
+    def test_new_budget_cannot_relax_clock_or_source_mode(self):
+        """The larger file bound cannot introduce later admission or an undeclared held mode."""
+        self.wrapper['pausedImmutableAdmission']['maximumBytes']=448*1024*1024
+        self.verify()
+        admitted=self.wrapper['finalPausedReviewAdmission']['admittedAtClientNs']
+        self.wrapper['finalPausedReviewAdmission']['admittedAtClientNs']=self.qpc+61_000_000_001
+        with self.assertRaisesRegex(ValueError,'lease widened'):self.verify()
+        self.wrapper['finalPausedReviewAdmission']['admittedAtClientNs']=admitted
+        self.plan['sourceFiles']={}
+        with self.assertRaisesRegex(ValueError,'Historical'):self.verify()
+
     def test_held_admission_after_pair_before_start_passes(self):
         """A real final read may finish after sampling, while every deadline stays fixed."""
         self.verify()

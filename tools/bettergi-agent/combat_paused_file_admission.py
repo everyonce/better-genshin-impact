@@ -11,7 +11,9 @@ import time
 
 MAX_FILES = 2304
 MAX_FILE_BYTES = 32 * 1024 * 1024
-MAX_TOTAL_BYTES = 384 * 1024 * 1024
+# R73 has 16 retained native generations; run39 measured 407.72 MiB across 1,809 pinned paths.
+# Keep a finite 448 MiB aggregate while preserving every per-file, census and fresh-hash check.
+MAX_TOTAL_BYTES = 448 * 1024 * 1024
 
 
 def require(value, message):

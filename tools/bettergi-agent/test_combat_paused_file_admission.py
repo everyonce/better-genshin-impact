@@ -179,6 +179,83 @@ class HeldFileTests(unittest.TestCase):
         cap.close()
 
 
+    def _metadata_budget(self, sizes, expected_error=None):
+        """Exercise real acquisition/cleanup with tiny files and virtual stat sizes, not large byte allocations.
+
+        Only this budget fixture substitutes the final content verifier. The existing tests above
+        exercise actual hash, identity, sharing, parent, STOP and private-admission checks.
+        """
+        folder=self.folder/'budget';folder.mkdir(exist_ok=True)
+        paths=[folder/('%04d.json' % index) for index in range(len(sizes))]
+        for path in paths:path.write_bytes(b'x')
+        pins={str(path):hashlib.sha256(b'x').hexdigest() for path in paths}
+        metadata={str(path):size for path,size in zip(paths,sizes)}
+        original_open=open;original_fstat=os.fstat;opened=[];by_fd={};files=None
+        def opened_file(name,*args,**kwargs):
+            """Keep every real stream available for the partial-retirement assertion."""
+            stream=original_open(name,*args,**kwargs);opened.append(stream)
+            by_fd[stream.fileno()]=metadata[str(name)]
+            return stream
+        def sized_fstat(fd):
+            """Change only the reported size for the aggregate/per-file admission boundaries."""
+            info=list(original_fstat(fd));info[6]=by_fd[fd]
+            return os.stat_result(info)
+        try:
+            with patch('builtins.open',opened_file),patch.object(held.os,'fstat',side_effect=sized_fstat), \
+                    patch.object(held.HeldFiles,'verify',return_value=({},sum(sizes))) as verify:
+                if expected_error:
+                    with self.assertRaisesRegex(ValueError,expected_error):held.HeldFiles(pins)
+                    verify.assert_not_called()
+                else:
+                    files=held.HeldFiles(pins)
+                    self.assertEqual(len(files.rows),len(sizes))
+                    self.assertEqual(sum(row[1][2] for row in files.rows.values()),sum(sizes))
+                    verify.assert_called_once_with()
+        finally:
+            if files is not None:self.assertEqual(files.close(),[])
+        self.assertTrue(opened)
+        self.assertTrue(all(stream.closed for stream in opened))
+        paths[0].write_bytes(b'retired');paths[-1].write_bytes(b'retired')
+
+    def test_measured_r73_run39_budget_shape_and_old_cap_refusal(self):
+        """Retain the real count/group totals and sixteen DLL sizes without depending on live artifacts."""
+        def partition(total,count):
+            """Model only aggregate-size accounting; small within-group distributions are immaterial."""
+            size,remainder=divmod(total,count)
+            return [size+1]*remainder+[size]*(count-remainder)
+        dll_sizes=[20913152, 20914688, 20843008, 20848640, 20856320, 20882944, 20883968, 20884480, 20912128, 20913152, 20913152, 20913152, 20913152, 20913152, 20913152, 20913152]
+        sizes=dll_sizes+[305152]*16+partition(538904,97)
+        sizes+=partition(6003463,369)*2+partition(959640,8)+partition(74810524,934)
+        self.assertEqual((len(sizes),sum(sizes)),(1809,427529818))
+        self.assertEqual(held.MAX_FILES,2304)
+        self.assertEqual(held.MAX_FILE_BYTES,32*1024*1024)
+        self.assertEqual(held.MAX_TOTAL_BYTES,448*1024*1024)
+        with patch.object(held,'MAX_TOTAL_BYTES',384*1024*1024):
+            self._metadata_budget(sizes,'Immutable file byte budget exceeded')
+        self._metadata_budget(sizes)
+
+    def test_exact_aggregate_cap_and_one_byte_excess_retire_all_handles(self):
+        """Accept the precise 448 MiB boundary; reject its next byte before content verification."""
+        sizes=[32*1024*1024]*14
+        self.assertEqual(sum(sizes),held.MAX_TOTAL_BYTES)
+        self._metadata_budget(sizes)
+        self._metadata_budget(sizes+[1],'Immutable file byte budget exceeded')
+
+    def test_per_file_cap_is_not_relaxed_by_aggregate_increase(self):
+        """The unchanged 32 MiB individual-file ceiling still retires the just-opened stream."""
+        self._metadata_budget([1,32*1024*1024+1],'unbounded immutable file')
+
+    def test_fresh_real_byte_read_still_enforces_aggregate_cap(self):
+        """Fresh verification uses the same ceiling and preserves real digest/identity checks."""
+        self.files=held.HeldFiles(self.pins)
+        actual,total=self.files.verify()
+        self.assertEqual(actual,self.pins)
+        with patch.object(held,'MAX_TOTAL_BYTES',total-1):
+            with self.assertRaisesRegex(ValueError,'Immutable file byte budget changed'):self.files.verify()
+        self.assertEqual(self.files.close(),[])
+        self.a.write_bytes(b'released after verify refusal')
+
+
 class OwnerClosureTests(unittest.TestCase):
     """Build the finite lineage entirely from the repository's existing synthetic owner fixture."""
     def setUp(self):

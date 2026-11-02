@@ -789,6 +789,8 @@ var ActOneMission = (function () {
         if(name==='lisaWindriseTeleport'||name==='actTwoGateTeleport'||name==='actTwoCityTeleport'||name==='actTwoWindriseTeleport'||name==='actTwoLionTeleport'||name==='actTwoNorthTeleport'||name==='actTwoStarfellTeleport'||name==='actTwoCoastTeleport'||name==='actTwoSpringvaleTeleport')return api.runLisaWindriseTeleport(observation,observe);
         if(name==='lisaTempleMapInspect')return api.runLisaTempleMapInspect(observation,observe);
         if(name==='lisaTempleTeleport')return api.runLisaTempleTeleport(observation,observe);
+        if(name==='combatStatueRetreat')return api.runCombatStatueRetreat(observation,observe);
+        if(name==='combatStatueHeal')return api.runCombatStatueHeal(observation,observe);
         if(name==='lisaStatueRecovery')return api.runLisaStatueRecovery(observation,observe);
         if(name==='lionFieldCombat'||name==='lionFieldProbe')return api.runLionFieldCombat(observation,observe);
         if(name==='windriseReveal')return api.runWindriseReveal(observation,observe);

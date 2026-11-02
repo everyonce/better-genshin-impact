@@ -180,4 +180,3 @@ def run(args, config, command, source_verification):
     emit({"sourceVerification": source_verification, "relayReady": True, "session": owner.session, "windowsSessionId": owner.windows_session_id,
           "ownerLifetimeBinding": owner.owner_lifetime_binding, "preparedProtocol": 2})
     relay.loop(sys.stdin, emit)
-

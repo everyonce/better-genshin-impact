@@ -2186,6 +2186,46 @@ function createActOneAdapter(sessionId,options) {
     }
     var lionFieldState={closed:false,selected:false,fought:false,returnedAmber:false,paused:false,lastInputFrame:-1,observer:null,chartedProbePending:false,chartedProbeAnchor:null,climbReleaseArmed:false,climbReleaseAttempted:false};
     var lisaRecoveryState={closed:false,mapOpened:false,teleported:false,lastInputFrame:-1,observer:null};
+    // This independent operation never borrows the obsolete Lisa quest or healing gates.
+    var combatRetreatState={closed:false,mapOpened:false,teleported:false,lastInputFrame:-1,deadline:0,seal:null};
+    var combatRetreatDefinition=null;
+    // Private state binds current-party healing to one original request and its observed UI transitions.
+    var combatHealState={requestId:null,session:null,warmed:false,closed:false,interacted:false,chosen:false,panelClosed:false,moves:0,turns:0,portraits:0,lastInputFrame:-1,deadline:0,seal:null,world:null,choice:null};
+    var combatHealDefinition=null,combatHealPanelDefinition=null;
+    function combatHealModule(){
+        if(!combatHealDefinition)combatHealDefinition=eval(file.readTextSync('combat-statue-heal.js')+'\nActOneCombatStatueHeal;');
+        if(!combatHealDefinition||typeof combatHealDefinition.run!=='function')throw new Error('Current-party Statue healer is required');
+        return combatHealDefinition;
+    }
+    function combatHealPanelModule(){
+        if(!combatHealPanelDefinition)combatHealPanelDefinition=eval(file.readTextSync('combat-statue-panel.js')+'\nActOneCombatStatuePanel;');
+        if(!combatHealPanelDefinition||typeof combatHealPanelDefinition.run!=='function')throw new Error('Reviewed Lisa panel runner is required');
+        return combatHealPanelDefinition;
+    }
+    // Compare immutable private capture content before taking the final source/deadline clock.
+    function combatHealCurrent(o){
+        if(!request||request.mission!=='questStep'||request.step!=='combatStatueHeal'||request.inventoryUiOnlyV1===true||
+           request.id!==combatHealState.requestId||request.session!==combatHealState.session)return false;
+        var gate=combatRetreatModule();
+        var same=!!(o&&lastObservation&&o.session===request.session&&o.frameId===lastObservation.frameId&&
+            o.timestamp===lastObservation.timestamp&&o.hud&&o.hud.captureStamp&&
+            o.hud.captureStamp.capturedAt===lastObservation.capturedAt&&combatRetreatSeal(o)===combatHealState.seal);
+        var now=Date.now();
+        return same&&now<combatHealState.deadline&&gate.fresh(o,now,request.session,combatHealState.lastInputFrame);
+    }
+
+    function combatRetreatModule(){
+        if(!combatRetreatDefinition)combatRetreatDefinition=eval(file.readTextSync('combat-statue-retreat.js')+'\nActOneCombatStatueRetreat;');
+        if(!combatRetreatDefinition||typeof combatRetreatDefinition.run!=='function')throw new Error('Combat Statue retreat runner is required');
+        return combatRetreatDefinition;
+    }
+    function combatRetreatSeal(o){return JSON.stringify({session:o.session,frameId:o.frameId,timestamp:o.timestamp,map:o.map||null,hud:o.hud,ocr:o.ocr});}
+    function combatRetreatCurrent(o){return !!(request&&request.mission==='questStep'&&request.step==='combatStatueRetreat'&&
+        !inventoryUiOnly&&o&&lastObservation&&o.frameId===lastObservation.frameId&&o.timestamp===lastObservation.timestamp&&
+        o.frameId>combatRetreatState.lastInputFrame&&Date.now()<combatRetreatState.deadline&&
+        combatRetreatModule().fresh(o,Date.now(),request.session,-1)&&
+        o.hud.captureStamp.capturedAt===lastObservation.capturedAt&&combatRetreatSeal(o)===combatRetreatState.seal);}
+
     function lisaRecoveryCurrent(o){return !!(request&&request.mission==='questStep'&&request.step==='lisaStatueRecovery'&&o&&lastObservation&&
         o.session===request.session&&o.frameId===lastObservation.frameId&&o.timestamp===lastObservation.timestamp&&o.frameId>lisaRecoveryState.lastInputFrame);}
     var lisaClimbReleaseDefinition=null;
@@ -2951,10 +2991,13 @@ function createActOneAdapter(sessionId,options) {
         if(!fedKaeya) return feedTarget?'feedKaeya':null;
         return null;
     }
-    async function boundedKey(key, ms, frameId) {
+    async function boundedKey(key, ms, frameId, sourceGuard) {
         // A failed earlier key-up must be retried before a new key can replace
         // the held-key record, including during failure cleanup.
-        checkStop(); release(); held = key;
+        checkStop(); release();
+        // New source-scoped callers recheck after potentially blocking stop/release work.
+        if(sourceGuard)sourceGuard();
+        held = key;
         var event = { type: 'key', key: key, durationMs: ms, startedAt: Date.now() }; events.push(event);
         if(Number.isInteger(frameId)&&frameId>=0)event.frameId=frameId;
         try {
@@ -3297,6 +3340,10 @@ function createActOneAdapter(sessionId,options) {
             pauseProtectionActive=false;pauseProtectionObserver=null;pauseProtectionKeys=Object.create(null);pauseProtectionLastInputFrame=-1;pauseProtectionLastStatusAt=-Infinity;
             lionFieldState={closed:false,selected:false,fought:false,returnedAmber:false,paused:false,lastInputFrame:-1,observer:null,chartedProbePending:false,chartedProbeAnchor:null,climbReleaseArmed:false,climbReleaseAttempted:false};
             lisaRecoveryState={closed:false,mapOpened:false,teleported:false,lastInputFrame:-1,observer:null};
+            combatRetreatState={closed:false,mapOpened:false,teleported:false,lastInputFrame:-1,deadline:Number(value.createdAt)+90000,seal:null};
+            combatRetreatDefinition=null;
+            combatHealState={requestId:value.id,session:value.session,warmed:false,closed:false,interacted:false,chosen:false,panelClosed:false,moves:0,turns:0,portraits:0,lastInputFrame:-1,deadline:Number(value.createdAt)+90000,seal:null,world:null,choice:null};
+            combatHealDefinition=null;combatHealPanelDefinition=null;
             lisaClimbReleaseDefinition=null;
             windriseState={used:false,moves:0,turns:0,interactions:0,paused:false,pauseOnly:false,lastInputFrame:-1,observer:null,plan:null};
             statueDialogueState={advanceAttempted:false,leaveAttempted:false,lastInputFrame:-1};
@@ -3336,6 +3383,8 @@ function createActOneAdapter(sessionId,options) {
             if(value.mission==='questStep'&&['lionFieldCombat','lionFieldProbe'].indexOf(value.step)>=0)names.push('lion-field-combat.js','world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&value.step==='lionFieldProbe')names.push('paused-navigation-anchor.js','lisa-climb-release.js');
             if(value.mission==='questStep'&&value.step==='lisaStatueRecovery')names.push('lisa-statue-recovery.js','world-inventory.js','local-pause.js');
+            if(value.mission==='questStep'&&value.step==='combatStatueRetreat')names.push('combat-statue-retreat.js','world-inventory.js','local-pause.js');
+            if(value.mission==='questStep'&&value.step==='combatStatueHeal')names.push('combat-statue-retreat.js','combat-statue-heal.js','combat-statue-panel.js','world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&value.step==='worldInventoryClose')names.push('world-inventory.js');
             if(value.mission==='questStep'&&(value.step==='lionStart'||value.step==='lionPartyStart'))names.push('lion-entry.js');
             if(value.mission==='questStep'&&value.step==='wolfSpikeCrossFirst')names.push('wolf-spike.js');
@@ -5731,6 +5780,226 @@ function createActOneAdapter(sessionId,options) {
             }catch(e){operationError=String(e&&e.message||e);}
             if(attempted)return await finishWithLocalPause(protector,this,initial,observe,lastInputFrame,result,operationError);
             return result;
+        },
+        // Fixed retreat from a recognized pause. The existing protector owns final pause input.
+        runCombatStatueRetreat: async function(initial,observe){
+            var protector=loadLocalPause(),runner=combatRetreatModule(),answer=null,error=null;
+            var startedInField=actOneLocalPauseInputReady(initial,Date.now(),request.session);
+            try{answer=await runner.run(initial,this,observe);}catch(e){error=String(e&&e.message||e);}
+            if(combatRetreatState.closed||startedInField){
+                if(answer&&Number.isInteger(answer.frameId))answer.fieldFrameId=answer.frameId;
+                answer=await finishWithLocalPause(protector,this,initial,observe,Math.max(initial.frameId,combatRetreatState.lastInputFrame),answer,error);
+            }else if(error)throw new Error(error);
+            return answer;
+        },
+        combatRetreatDeadline: function(){return combatRetreatState.deadline;},
+        combatRetreatInventoryReady: function(o){
+            checkStop();ready();
+            if(combatRetreatState.closed||!combatRetreatCurrent(o)||!combatRetreatModule().originalUid(o)||
+               actOneEnterGameAuthPrompt(o.ocr)||actOneEnterGameUnknownUi(o.ocr))return false;
+            var permission=!!eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;')(o,Date.now(),request.session);
+            // Helper reads/evaluation can block: recheck STOP and the original capture clock last.
+            checkStop();ready();
+            return combatRetreatCurrent(o)&&permission;
+        },
+        combatRetreatInitialMapReady: function(o){
+            checkStop();ready();
+            if(combatRetreatState.closed||!combatRetreatCurrent(o)||!combatRetreatModule().originalUid(o)||
+               actOneEnterGameAuthPrompt(o.ocr)||actOneEnterGameUnknownUi(o.ocr))return false;
+            var proof=actOneLocalPauseProof(o,Date.now(),request.session);
+            return !!(proof&&proof.kind==='map'&&actOneInventoryUiBigMap(o.ocr));
+        },
+        combatRetreatAdoptMap: async function(o){
+            if(!this.combatRetreatInitialMapReady(o))throw new Error('Fresh original-account paused map required');
+            combatRetreatState.closed=true;combatRetreatState.mapOpened=true;
+            events.push({type:'combatRetreatMapAdopted',frameId:o.frameId,startedAt:Date.now(),characterEvidence:'hidden-by-map'});
+        },
+        combatRetreatCloseInventory: async function(o){
+            var base=this;
+            if(!base.combatRetreatInventoryReady(o))throw new Error('Fresh original-account inventory required');
+            await boundedKey('VK_ESCAPE',60,o.frameId,function(){
+                if(!base.combatRetreatInventoryReady(o))throw new Error('Inventory source changed before Escape');
+                combatRetreatState.closed=true;combatRetreatState.lastInputFrame=o.frameId;
+            });
+        },
+        combatRetreatFieldReady: function(o){
+            checkStop();ready();
+            return combatRetreatState.closed&&combatRetreatCurrent(o)&&combatRetreatModule().worldReady(o,Date.now(),request.session,false);
+        },
+        combatRetreatOpenMap: async function(o){
+            var base=this;
+            if(combatRetreatState.teleported||(combatRetreatState.mapInputs||0)>=3||!base.combatRetreatFieldReady(o))
+                throw new Error('Fresh living Lisa party required for bounded M input');
+            await boundedKey('VK_M',60,o.frameId,function(){
+                if(!base.combatRetreatFieldReady(o))throw new Error('World source changed before M');
+                combatRetreatState.mapInputs=(combatRetreatState.mapInputs||0)+1;
+                combatRetreatState.mapOpened=true;combatRetreatState.lastInputFrame=o.frameId;
+            });
+        },
+        combatRetreatMapReady: function(o){
+            checkStop();ready();
+            if(!combatRetreatState.closed||!combatRetreatState.mapOpened||!combatRetreatCurrent(o)||
+               !combatRetreatModule().originalUid(o)||actOneEnterGameAuthPrompt(o.ocr)||actOneEnterGameUnknownUi(o.ocr))return false;
+            var proof=actOneLocalPauseProof(o,Date.now(),request.session);
+            return !!(proof&&proof.kind==='map'&&actOneInventoryUiBigMap(o.ocr));
+        },
+        combatRetreatTeleport: async function(o){
+            if(combatRetreatState.teleported||!this.combatRetreatMapReady(o))throw new Error('Fresh owned map required for one fixed Statue teleport');
+            combatRetreatState.teleported=true;combatRetreatState.lastInputFrame=o.frameId;
+            var e={type:'combatStatueRetreatTeleport',frameId:o.frameId,sourceCapturedAt:o.hud.captureStamp.capturedAt,
+                x:-1323.474,y:2566.115,force:false,startedAt:Date.now(),stockInternalRetries:3,stockTimeoutMs:60000};events.push(e);
+            try{await genshin.tp(-1323.474,2566.115,false);checkStop();ready();}finally{e.finishedAt=Date.now();}
+        },
+        combatRetreatAtStatue: function(o){
+            return combatRetreatState.teleported&&this.combatRetreatFieldReady(o)&&combatRetreatModule().atStatue(o,Date.now(),request.session);
+        },
+        // Separate current-Lisa recovery; only this request can own its world-to-panel chain.
+        runCombatStatueHeal: async function(initial,observe){
+            var protector=loadLocalPause(),runner=combatHealModule(),panel=combatHealPanelModule(),answer=null,error=null;
+            var startedInField=actOneLocalPauseInputReady(initial,Date.now(),request.session);
+            try{answer=await runner.run(initial,this,observe);}catch(e){error=String(e&&e.message||e);}
+            if(combatHealState.closed||startedInField){
+                if(answer&&Number.isInteger(answer.frameId))answer.fieldFrameId=answer.frameId;
+                answer=await finishWithLocalPause(protector,this,initial,observe,Math.max(initial.frameId,combatHealState.lastInputFrame),answer,error);
+            }else if(error)throw new Error(error);
+            return answer;
+        },
+        // The original request clock includes preparation and every approach/panel operation.
+        combatHealDeadline: function(){return combatHealState.deadline;},
+        // Hidden inventory health never substitutes for the fresh world health checked after Escape.
+        combatHealInventoryReady: function(o){
+            checkStop();ready();
+            if(combatHealState.closed||!combatHealCurrent(o)||!combatRetreatModule().originalUid(o)||
+               actOneEnterGameAuthPrompt(o.ocr)||actOneEnterGameUnknownUi(o.ocr))return false;
+            var permission=!!eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;')(o,Date.now(),request.session);
+            // The final check follows every fallible helper read/evaluation, as in the corrected retreat.
+            checkStop();ready();
+            return combatHealCurrent(o)&&permission;
+        },
+        // This public lazy getter warms map layers without capture/input while the inventory is qualified.
+        combatHealPrepareNavigation: async function(o){
+            if(combatHealState.warmed||!this.combatHealInventoryReady(o))throw new Error('Fresh owned inventory required for map preparation');
+            var event={type:'combatStatueHealNavigationPreparation',frameId:o.frameId,startedAt:Date.now(),inputSent:false};events.push(event);
+            try{
+                var lazy=genshin.LazyNavigationInstance;
+                if(!lazy||!lazy.Value)throw new Error('Existing lazy navigation host is unavailable');
+                combatHealState.warmed=true;event.completed=true;
+            }finally{event.finishedAt=Date.now();}
+        },
+        // A fresh post-preparation inventory frame authorizes exactly one Escape.
+        combatHealCloseInventory: async function(o){
+            var base=this;
+            if(!combatHealState.warmed||!base.combatHealInventoryReady(o))throw new Error('Prepared fresh inventory required');
+            await boundedKey('VK_ESCAPE',60,o.frameId,function(){
+                if(!base.combatHealInventoryReady(o))throw new Error('Healing inventory changed before Escape');
+                combatHealState.closed=true;combatHealState.lastInputFrame=o.frameId;
+            });
+        },
+        // Movement and interaction remain local, living, grounded and threat-free.
+        combatHealFieldReady: function(o){
+            checkStop();ready();
+            return combatHealState.closed&&combatHealCurrent(o)&&combatRetreatModule().worldReady(o,Date.now(),request.session,true)&&
+                o.map&&o.map.map==='Teyvat'&&Number.isFinite(o.map.x)&&Number.isFinite(o.map.y)&&
+                Math.hypot(o.map.x+1323.474,o.map.y-2566.115)<=15;
+        },
+        // Retain the established at-most12 separate horizontal turns, each |dx|<=250.
+        combatHealRotate: async function(o,dx){
+            if(!Number.isInteger(dx)||Math.abs(dx)>250||dx===0||combatHealState.turns>=12||!this.combatHealFieldReady(o))
+                throw new Error('Bounded fresh Statue turn required');
+            checkStop();release();
+            if(!this.combatHealFieldReady(o))throw new Error('Statue turn source changed before input');
+            combatHealState.turns++;combatHealState.lastInputFrame=o.frameId;
+            var event={type:'combatStatueHealTurn',frameId:o.frameId,sourceCapturedAt:o.hud.captureStamp.capturedAt,dx:dx,dy:0,startedAt:Date.now()};events.push(event);
+            try{moveMouseBy(dx,0);}finally{event.finishedAt=Date.now();}
+        },
+        // Retain at most4 forward500ms pulses; every pulse needs a new private source.
+        combatHealForward: async function(o,ms){
+            var base=this;
+            if(ms!==500||combatHealState.moves>=4||!base.combatHealFieldReady(o))throw new Error('Bounded fresh Statue forward pulse required');
+            await boundedKey('VK_W',ms,o.frameId,function(){
+                if(!base.combatHealFieldReady(o))throw new Error('Statue forward source changed before input');
+                combatHealState.moves++;combatHealState.lastInputFrame=o.frameId;
+            });
+        },
+        // One exact nearby Statue label permits F; no general interaction or dialogue advance is exposed.
+        combatHealInteractReady: function(o){
+            return !combatHealState.interacted&&this.combatHealFieldReady(o)&&
+                Math.hypot(o.map.x+1323.474,o.map.y-2566.115)<=3&&
+                o.ocr.filter(function(r){return String(r.text||'').replace(/\s+/g,'')==='StatueofTheSeven'&&r.x>1100&&r.y>400&&r.y<700;}).length===1;
+        },
+        // Retain the actual world source before the single F and its completion clock afterward.
+        combatHealInteract: async function(o){
+            var base=this;
+            if(!base.combatHealInteractReady(o))throw new Error('Exact fresh Statue interaction required');
+            await boundedKey('VK_F',60,o.frameId,function(){
+                if(!base.combatHealInteractReady(o))throw new Error('Statue F source changed before input');
+                combatHealState.world={session:o.session,frameId:o.frameId,capturedAt:o.hud.captureStamp.capturedAt,
+                    timestamp:o.timestamp,health:JSON.parse(JSON.stringify(o.hud.health)),position:JSON.parse(JSON.stringify(o.map))};
+                combatHealState.interacted=true;combatHealState.lastInputFrame=o.frameId;
+                events.push({type:'combatStatueHealOwnedWorld',source:combatHealState.world,startedAt:Date.now()});
+            });
+            combatHealState.fFinishedAt=Date.now();
+        },
+        // Reuse the exact original-UID Statue choice selector, joined to this request's completed F.
+        combatHealBlessingReady: function(o){
+            checkStop();ready();
+            return combatHealState.interacted&&!combatHealState.chosen&&Number.isFinite(combatHealState.fFinishedAt)&&
+                combatHealCurrent(o)&&o.frameId>combatHealState.world.frameId&&
+                o.hud.captureStamp.capturedAt>combatHealState.fFinishedAt&&
+                !!actOneStatueBlessingChoiceTarget(lastObservation,Date.now(),request.session);
+        },
+        // Exactly one Blessing choice; offerings and missing/ambiguous choices have no fallback.
+        combatHealChooseBlessing: async function(o){
+            if(!this.combatHealBlessingReady(o))throw new Error('Fresh owned Statue Blessing choice required');
+            checkStop();release();
+            if(!this.combatHealBlessingReady(o))throw new Error('Blessing source changed before click');
+            var target=actOneStatueBlessingChoiceTarget(lastObservation,Date.now(),request.session);
+            combatHealState.chosen=true;combatHealState.lastInputFrame=o.frameId;
+            combatHealState.choice={session:o.session,frameId:o.frameId,capturedAt:o.hud.captureStamp.capturedAt,timestamp:o.timestamp};
+            var event={type:'combatStatueHealBlessingChoice',source:combatHealState.choice,target:target,startedAt:Date.now()};events.push(event);
+            try{click(target.x,target.y);combatHealState.choiceFinishedAt=Date.now();}finally{event.finishedAt=Date.now();}
+        },
+        // The fourth-card layout alone cannot authorize healing: the owned world/F/choice chain is mandatory.
+        combatHealPanelReady: function(o){
+            checkStop();ready();
+            return combatHealState.closed&&combatHealState.interacted&&combatHealState.chosen&&!combatHealState.panelClosed&&
+                combatHealState.world&&combatHealState.world.session===request.session&&combatHealState.world.health.max===1001&&
+                Number.isFinite(combatHealState.choiceFinishedAt)&&combatHealCurrent(o)&&
+                o.frameId>combatHealState.choice.frameId&&o.hud.captureStamp.capturedAt>combatHealState.choiceFinishedAt&&
+                !!combatHealPanelModule().permission(o,Date.now(),request.session,combatHealState.lastInputFrame);
+        },
+        // Bind the independently reviewed panel runner to private source checks at every actual click/close.
+        combatHealRunPanel: async function(initial,observe){
+            var base=this,panel=combatHealPanelModule();
+            if(!base.combatHealPanelReady(initial))throw new Error('Owned world-to-panel transition required');
+            var owned={now:function(){return Date.now();},sleep:function(ms){return base.sleep(ms);},release:release,
+                checkStop:function(){checkStop();if(Date.now()>=combatHealState.deadline)throw new Error('Original Statue healing deadline reached');},
+                panelSourceReady:function(o){return !!base.combatHealPanelReady(o);},
+                clickLisaPortrait:async function(o,permit){
+                    if(combatHealState.portraits>=3||!base.combatHealPanelReady(o)||!permit||permit.slot!==4||permit.uid!=='693306810'||
+                       permit.x!==658||permit.y!==160||permit.frameId!==o.frameId||permit.capturedAt!==o.hud.captureStamp.capturedAt)
+                        throw new Error('Exact fresh owned Lisa fourth portrait required');
+                    checkStop();release();
+                    if(!base.combatHealPanelReady(o))throw new Error('Lisa portrait source changed before click');
+                    combatHealState.portraits++;combatHealState.lastInputFrame=o.frameId;
+                    var event={type:'combatStatueHealLisaPortrait',frameId:o.frameId,sourceCapturedAt:o.hud.captureStamp.capturedAt,
+                        slot:4,x:658,y:160,attempt:combatHealState.portraits,worldFrameId:combatHealState.world.frameId,
+                        choiceFrameId:combatHealState.choice.frameId,startedAt:Date.now()};events.push(event);
+                    try{click(658,160);}finally{event.finishedAt=Date.now();}
+                },
+                closeStatuePanel:async function(o){
+                    if(combatHealState.portraits!==3||!base.combatHealPanelReady(o))throw new Error('Fresh owned panel required before one Escape');
+                    await boundedKey('VK_ESCAPE',60,o.frameId,function(){
+                        if(!base.combatHealPanelReady(o))throw new Error('Panel close source changed before Escape');
+                        combatHealState.panelClosed=true;combatHealState.lastInputFrame=o.frameId;
+                    });
+                }};
+            return await panel.run(initial,owned,async function(){
+                var o=await observe();
+                if(o&&o.hud&&o.hud.world===true&&!base.combatHealFieldReady(o))
+                    throw new Error('Post-panel world lacks strict current-party threat-free local evidence');
+                return o;
+            });
         },
         runLisaStatueRecovery: async function(initial,observe){
             var protector=loadLocalPause();
@@ -8438,11 +8707,15 @@ function createActOneAdapter(sessionId,options) {
                     if (!file.writeImageSync(png, img.srcMat)) {var blocked=new Error('PNG write failed: capture storage is blocked');blocked.code='CAPTURE_STORAGE_BLOCKED';throw blocked;}
                     pngMs=Date.now()-p0;
                 }
+                var combatRetreatObservation=!!(request&&request.mission==='questStep'&&request.step==='combatStatueRetreat');
+                var combatHealObservation=!!(request&&request.mission==='questStep'&&request.step==='combatStatueHeal');
                 var map0 = Date.now(), pos = null, mapDiagnostic = null;
                 try {
                     var mp,regionalObservation=false;
                     if(request&&request.step==='actTwoField'){try{regionalObservation=actTwoRegionalObservationPlan(request,JSON.parse(file.readTextSync('act-two-field-request.json')));}catch(regionalReadError){regionalObservation=false;}}
                     if(inventoryUiOnly){mapDiagnostic={reason:'Inventory UI-only v1: map and orientation deliberately omitted',mode:'inventory-ui-only-v1'};}
+                    else if(combatRetreatObservation){mapDiagnostic={reason:'Fixed combat retreat: localization omitted before verified arrival',mode:'combat-statue-retreat-v1'};}
+                    else if(combatHealObservation){mapDiagnostic={reason:'Current-party Statue healer: only qualified local approach uses localization',mode:'combat-statue-heal-v1'};}
                     else if(request&&request.mission==='questStep'&&request.step==='statueBlessingOpen') {
                         // This command admits only same-capture dialogue/panel OCR, never map coordinates.
                         mapDiagnostic={reason:'Statue Blessing dialogue: map and orientation deliberately omitted',mode:'statue-blessing-dialogue-v1'};
@@ -8489,7 +8762,7 @@ function createActOneAdapter(sessionId,options) {
                 var interactionObjective=actOneResolveInteractionObjective(request&&request.objective,objectiveRows);
                 var choice = rows.some(function (r) { return r.x > 1000 && r.y > 430 && r.y < 830 && r.text.trim().length > 6; }) || actTwoAmberFinalChoice(rows);
                 var journal = rows.some(function (r) { return /^In Progress$/i.test(r.text.trim()) && r.y < 100; });
-                var bigMap = !journal && (inventoryUiOnly ? actOneInventoryUiBigMap(rows) :
+                var bigMap = !journal && ((inventoryUiOnly||combatRetreatObservation||combatHealObservation) ? actOneInventoryUiBigMap(rows) :
                     !pos && (/Exploration Progress|Starfell Valley/.test(text) || actOneFullMapState(rows)));
                 var acquired = /Obtained New Character/.test(text) && /Click anywhere in the blank area to continue/.test(text) ? rows.filter(function(r) { return ['Amber','Kaeya','Lisa'].indexOf(r.text.trim()) >= 0 && r.x < 500 && r.y > 500 && r.y < 700; }) : [];
                 var tutorialStep = /Press 2 to switch to Amber/i.test(text) && /Use Amber to defeat the airborne/i.test(text) ? 'switchAmber' : null;
@@ -8522,7 +8795,7 @@ function createActOneAdapter(sessionId,options) {
                 var windriseControlRequest=request&&request.mission==='questStep'&&['windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0&&
                     objectiveRows.some(function(r){return actOneLisaObjective(r.text);});
                 var indoorControlRequest=actTwoIndoorControlCandidate(request,rows,hp,{auto:auto,journal:journal,bigMap:bigMap,choice:choice,dialogueReady:actOneDialogueReady(rows,choice),tutorialStep:tutorialStep},objectiveRows);
-                if((pos||inventoryUiOnly||regionalObservation||indoorControlRequest||(request&&request.mission==='questStep'&&/^(falcon|wolf)/.test(request.step))||windriseControlRequest||recoverWolfSafe||recoverWolfFoodDomainRequest)&&hp&&!auto&&!journal&&!bigMap&&!(auto&&choice)&&!tutorialStep&&
+                if((pos||inventoryUiOnly||combatRetreatObservation||combatHealObservation||regionalObservation||indoorControlRequest||(request&&request.mission==='questStep'&&/^(falcon|wolf)/.test(request.step))||windriseControlRequest||recoverWolfSafe||recoverWolfFoodDomainRequest)&&hp&&!auto&&!journal&&!bigMap&&!(auto&&choice)&&!tutorialStep&&
                    (!request||request.mission!=='recover'||recoverWolfSafe||recoverStatuePanelRequest)&&actOneNeedsControlCrop(rows)) {
                     var control0=Date.now(),controlLocal=scaledRows(img,1520,985,390,80);
                     rows=actOneMergeControlCropRows(rows,controlLocal,1520,985);
@@ -8689,7 +8962,7 @@ function createActOneAdapter(sessionId,options) {
                     if(skewerDigits.length===1&&String(skewerDigits[0].text).trim()==='1'&&skewerDigits[0].x/3+1105>1125&&skewerDigits[0].x/3+1105<1165&&skewerDigits[0].y/3+590>605&&skewerDigits[0].y/3+590<655)foodQuantity={value:1,source:'scaled-same-frame',frameId:frame};
                 }
                 var groundObjectiveIgnored=[];if(regionalObservation&&JSON.parse(file.readTextSync('act-two-field-request.json')).mode==='actions'||request&&(request.mission==='observe'||request.step==='actTwoWorldMap')){var filteredGroundObjectives=actTwoGroundObjectiveRows(objectiveRows);if(filteredGroundObjectives.length!==objectiveRows.length)groundObjectiveIgnored=objectiveRows;objectiveRows=filteredGroundObjectives;}
-                var hud = { foodQuantity:foodQuantity, auto:auto, climbing:climbing, groundControls:actOneGroundControlEvidence(rows), enemyBars: combatObjective ? readEnemyBars(img, rows) : request&&/^falcon(Combat|AmberCombat|Ranged|Engage)$/.test(request.step) ? readEnemyBars(img,rows,4) : request&&request.mission==='questStep'&&/^wolf(Combat|RecoveryCombat|CryoWait|CharactersOpen|WitnessAction|SpikeCrossFirst|SpikeCrossSecond|PlatformObserve|DefensiveCryo|Forward|ForwardFine|Advance|Right|Left|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue|KaeyaSkill|TurretPass|ChestInteract|LootInteract|ConsoleInteract|ApproachEnemy)$/.test(request.step)&&hp&&!auto&&!journal&&!bigMap ? readEnemyBars(img,rows,5) : [], aerialBossVisible:aerialBossVisible, aerialBoss:aerialBoss, slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: dialogueReady, choice: auto && choice, journal: journal, bigMap: bigMap,
+                var hud = { foodQuantity:foodQuantity, auto:auto, climbing:climbing, groundControls:actOneGroundControlEvidence(rows), enemyBars: (combatRetreatObservation||combatHealObservation) ? readEnemyBars(img,rows,'any',true) : combatObjective ? readEnemyBars(img, rows) : request&&/^falcon(Combat|AmberCombat|Ranged|Engage)$/.test(request.step) ? readEnemyBars(img,rows,4) : request&&request.mission==='questStep'&&/^wolf(Combat|RecoveryCombat|CryoWait|CharactersOpen|WitnessAction|SpikeCrossFirst|SpikeCrossSecond|PlatformObserve|DefensiveCryo|Forward|ForwardFine|Advance|Right|Left|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue|KaeyaSkill|TurretPass|ChestInteract|LootInteract|ConsoleInteract|ApproachEnemy)$/.test(request.step)&&hp&&!auto&&!journal&&!bigMap ? readEnemyBars(img,rows,5) : [], aerialBossVisible:aerialBossVisible, aerialBoss:aerialBoss, slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: dialogueReady, choice: auto && choice, journal: journal, bigMap: bigMap,
                     objectiveChanged: /objective updated|quest completed/i.test(text), health: hp, healthOcr: healthRows.map(function (r) { return r.text; }), healthDiagnostic:healthRead.diagnostic,
                     healthPct: hp && hp.max > 0 ? hp.current / hp.max : null,
                     lowHealth: !hp || hp.max <= 0 || hp.current > hp.max || hp.current / hp.max < 0.6,
@@ -8749,7 +9022,7 @@ function createActOneAdapter(sessionId,options) {
                     if(hud.combatTargetState.target&&hud.enemyBars.filter(b=>b.width>=20).length<=1){hud.globalEnemyBars=hud.enemyBars;hud.enemyBars=[hud.combatTargetState.target];rows.push(hud.combatTargetState.label);}
                 }
                 if(regionalObservation)rows=actTwoMergeLeyLineLevelRows(rows,objectiveRows,hud);
-                    if(!inventoryUiOnly)hud.compassAngle=Number(genshin.getCameraOrientation());
+                    if(!inventoryUiOnly&&!combatRetreatObservation&&!combatHealObservation)hud.compassAngle=Number(genshin.getCameraOrientation());
                 }
                 if(request&&request.mission==='questStep'&&['lionFieldCombat','lionFieldProbe','lisaStatueRecovery'].indexOf(request.step)>=0)
                     hud.world=actOneLionFieldWorld({session:session,frameId:frame,timestamp:Date.now(),hud:hud,ocr:rows},Date.now(),session,0,request.step==='lisaStatueRecovery');
@@ -8788,7 +9061,7 @@ function createActOneAdapter(sessionId,options) {
                     ready();
                 }
                 var inventoryPartyOcrMs=0;
-                if(inventoryUiOnly) {
+                if(inventoryUiOnly||combatRetreatObservation||combatHealObservation) {
                     // Classify only the current image; retain no inherited position or camera value.
                     hud.loading=actOneEnterGameLoading(rows);
                     hud.unknownHud=actOneEnterGameAuthPrompt(rows)||actOneEnterGameUnknownUi(rows);
@@ -8806,6 +9079,47 @@ function createActOneAdapter(sessionId,options) {
                         ocrMs=Date.now()-o0;
                     }
                     hud.world=actOneInventoryUiWorldEvidence(rows,hud);
+                }
+                if(combatRetreatObservation){
+                    hud.combatRetreatObservation={version:1,session:session,frameId:frame,observationStartedAtUnixMs:t0,
+                        phase:pauseProtectionActive?'protection':combatRetreatState.teleported?'arrival':'entry'};
+                    // A fixed local lookup is allowed only after tp, on a positive threat-free same-capture HUD.
+                    // The pause protector needs no localization and retains its existing independent contract.
+                    var provisional={session:session,frameId:frame,timestamp:Date.now(),ocr:rows,hud:Object.assign({},hud,
+                        {captureStamp:{session:session,frameId:frame,capturedAt:t0,source:'game-capture-start'}})};
+                    if(combatRetreatState.teleported&&!pauseProtectionActive&&combatRetreatModule().worldReady(provisional,Date.now(),session,true)){
+                        var retreatMap0=Date.now();
+                        try{
+                            var retreatPosition=genshin.getPositionFromMap('Teyvat',host.toSingle(-1323.474),host.toSingle(2566.115));
+                            if(retreatPosition&&Number.isFinite(Number(retreatPosition.x))&&Number.isFinite(Number(retreatPosition.y))&&
+                               Math.hypot(Number(retreatPosition.x)+1323.474,Number(retreatPosition.y)-2566.115)<=20){
+                                pos={x:Number(retreatPosition.x),y:Number(retreatPosition.y),map:'Teyvat'};
+                                mapDiagnostic={reason:'Fixed combat retreat Statue anchor accepted',mode:'combat-statue-retreat-v1'};
+                            }else mapDiagnostic={reason:'Fixed combat retreat Statue anchor rejected',mode:'combat-statue-retreat-v1'};
+                        }catch(retreatMapError){mapDiagnostic={reason:String(retreatMapError&&retreatMapError.message||retreatMapError),mode:'combat-statue-retreat-v1'};}
+                        mapMs+=Date.now()-retreatMap0;
+                    }
+                }
+                if(combatHealObservation){
+                    hud.combatHealObservation={version:1,session:session,frameId:frame,observationStartedAtUnixMs:t0,
+                        phase:pauseProtectionActive?'protection':combatHealState.panelClosed?'return':combatHealState.chosen?'panel':
+                            combatHealState.interacted?'dialogue':combatHealState.closed?'approach':'entry'};
+                    var healingSource={session:session,frameId:frame,timestamp:Date.now(),ocr:rows,hud:Object.assign({},hud,
+                        {captureStamp:{session:session,frameId:frame,capturedAt:t0,source:'game-capture-start'}})};
+                    // Before Escape and during protection, localization remains omitted; heavy assets were warmed while paused.
+                    if(combatHealState.closed&&!pauseProtectionActive&&combatRetreatModule().worldReady(healingSource,Date.now(),session,true)){
+                        var healingMap0=Date.now();
+                        try{
+                            var healingPosition=genshin.getPositionFromMap('Teyvat',host.toSingle(-1323.474),host.toSingle(2566.115));
+                            var healingDistance=healingPosition&&Math.hypot(Number(healingPosition.x)+1323.474,Number(healingPosition.y)-2566.115);
+                            if(healingPosition&&Number.isFinite(Number(healingPosition.x))&&Number.isFinite(Number(healingPosition.y))&&healingDistance<=15){
+                                pos={x:Number(healingPosition.x),y:Number(healingPosition.y),map:'Teyvat'};
+                                if(healingDistance>3&&hud.health.current/hud.health.max<0.95)pos.cameraAngle=Number(genshin.getCameraOrientation());
+                                mapDiagnostic={reason:'Current-party Statue local anchor accepted',mode:'combat-statue-heal-v1'};
+                            }else mapDiagnostic={reason:'Current-party Statue local anchor rejected',mode:'combat-statue-heal-v1'};
+                        }catch(healingMapError){mapDiagnostic={reason:String(healingMapError&&healingMapError.message||healingMapError),mode:'combat-statue-heal-v1'};}
+                        mapMs+=Date.now()-healingMap0;
+                    }
                 }
                 if(pngPending) {
                     // An observation remains a durable proof: never publish a path until
@@ -8829,6 +9143,8 @@ function createActOneAdapter(sessionId,options) {
                     // Wall-clock OCR duration is diagnostic; the unchanged freshness gate uses t0.
                     lastObservation.timings.partyNameOcrMs=inventoryPartyOcrMs;
                 }
+                if(combatRetreatObservation)combatRetreatState.seal=combatRetreatSeal(lastObservation);
+                if(combatHealObservation)combatHealState.seal=combatRetreatSeal(lastObservation);
                 if(lisaNavigationRequest()&&lisaNavigationInputReady(lastObservation))lisaNavigationState.lastField=lastObservation;
                 return lastObservation;
             } finally {

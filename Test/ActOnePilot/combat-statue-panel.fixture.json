@@ -1,0 +1,416 @@
+{
+  "provenance": {
+    "panel": "artifacts\\live\\2026-10-30-endurance\\north-starfell-panel-recovery-r63-01\\native-frames\\frame-0001.json",
+    "panelSha256": "9dd3c4a60e1710135f7b37ef51ad14f948bed8dacb08a5b768df420b3e4386ff",
+    "world": "artifacts\\live\\2026-10-30-endurance\\north-starfell-encounter-pause-r68-gate-combat-09-capture\\before.json",
+    "worldSha256": "02744795649a807d4d1db1280336e8c6114eda4c53e7dca460e589fb4b622175",
+    "note": "Retained real OCR/HUD. Tests inject clocks, capture stamps and no-enemy full-health outcomes; not live evidence."
+  },
+  "panel": {
+    "session": "mvwu9p99-z7q300d6cjh",
+    "frameId": 1,
+    "timestamp": 1793477622671,
+    "screenshotPath": "observations/mvwu9p99-z7q300d6cjh/frame-0001.png",
+    "ocr": [
+      {
+        "text": " Click on the character portrait to restore HP",
+        "x": 213,
+        "y": 32,
+        "width": 567,
+        "height": 37
+      },
+      {
+        "text": "Statue's Blessing",
+        "x": 1517,
+        "y": 25,
+        "width": 252,
+        "height": 48
+      },
+      {
+        "text": "+In combat",
+        "x": 28,
+        "y": 38,
+        "width": 203,
+        "height": 27
+      },
+      {
+        "text": "Lv. 17",
+        "x": 84,
+        "y": 222,
+        "width": 67,
+        "height": 29
+      },
+      {
+        "text": "Lv. 11",
+        "x": 264,
+        "y": 222,
+        "width": 67,
+        "height": 29
+      },
+      {
+        "text": "Lv. 20",
+        "x": 440,
+        "y": 226,
+        "width": 79,
+        "height": 29
+      },
+      {
+        "text": "Lv. 4",
+        "x": 628,
+        "y": 226,
+        "width": 59,
+        "height": 23
+      },
+      {
+        "text": "+ Preparing for combat",
+        "x": 23,
+        "y": 289,
+        "width": 351,
+        "height": 40
+      },
+      {
+        "text": "Restorative Power: 10000/ 10000",
+        "x": 1403,
+        "y": 597,
+        "width": 486,
+        "height": 29
+      },
+      {
+        "text": "Auto-recover when",
+        "x": 1512,
+        "y": 719,
+        "width": 267,
+        "height": 34
+      },
+      {
+        "text": "+",
+        "x": 1422,
+        "y": 741,
+        "width": 19,
+        "height": 20
+      },
+      {
+        "text": "nearby",
+        "x": 1594,
+        "y": 752,
+        "width": 99,
+        "height": 37
+      },
+      {
+        "text": "50%",
+        "x": 1606,
+        "y": 802,
+        "width": 79,
+        "height": 37
+      },
+      {
+        "text": "UID: 693306810",
+        "x": 1684,
+        "y": 1050,
+        "width": 177,
+        "height": 29
+      }
+    ],
+    "map": null,
+    "hud": {
+      "foodQuantity": null,
+      "auto": false,
+      "climbing": false,
+      "groundControls": false,
+      "enemyBars": [],
+      "aerialBossVisible": false,
+      "aerialBoss": null,
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": null,
+      "healthOcr": [],
+      "healthDiagnostic": {
+        "fullRow": [],
+        "primary": [],
+        "left": [],
+        "right": [],
+        "decision": "health-unresolved"
+      },
+      "healthPct": null,
+      "lowHealth": true,
+      "world": false,
+      "interact": false,
+      "objectives": [
+        "V",
+        "LV.",
+        "LV.20",
+        "bat"
+      ],
+      "enemyBarDiagnostic": null
+    },
+    "timings": {
+      "mapDiagnostic": {
+        "reason": "Cannot recognize minimap coordinates while not on the main screen."
+      },
+      "captureMs": 2,
+      "ocrMs": 1232,
+      "ocrFindMultiMs": 1196,
+      "ocrReadCount": 5,
+      "fullOcrMs": 1111,
+      "reviveStockOcrMs": 0,
+      "healthOcrMs": 52,
+      "objectiveOcrMs": 69,
+      "controlOcrMs": 0,
+      "cooldownOcrMs": 0,
+      "spikeSurfaceMs": 0,
+      "levelPanelOcrMs": 0,
+      "interactionOcrMs": 0,
+      "objectiveSource": "crop",
+      "pngWriteMs": 7,
+      "pngWriteMode": "overlapped",
+      "pngScheduleMs": 7,
+      "pngWaitMs": 0,
+      "mapMs": 16,
+      "totalMs": 1270
+    }
+  },
+  "world": {
+    "session": "mvyi1kqo-lc8qi9y6rni",
+    "frameId": 1,
+    "timestamp": 1793578019729,
+    "screenshotPath": "observations/mvyi1kqo-lc8qi9y6rni/frame-0001.png",
+    "ocr": [
+      {
+        "text": "l 15 ms",
+        "x": 1798,
+        "y": 79,
+        "width": 97,
+        "height": 29
+      },
+      {
+        "text": "Lumina",
+        "x": 1678,
+        "y": 255,
+        "width": 88,
+        "height": 35
+      },
+      {
+        "text": "1",
+        "x": 1856,
+        "y": 261,
+        "width": 28,
+        "height": 29
+      },
+      {
+        "text": "Amber",
+        "x": 1690,
+        "y": 349,
+        "width": 73,
+        "height": 29
+      },
+      {
+        "text": "Kaeya",
+        "x": 1698,
+        "y": 443,
+        "width": 63,
+        "height": 23
+      },
+      {
+        "text": "IS",
+        "x": 1700,
+        "y": 544,
+        "width": 29,
+        "height": 15
+      },
+      {
+        "text": "797/1001",
+        "x": 920,
+        "y": 1003,
+        "width": 83,
+        "height": 20
+      },
+      {
+        "text": " Enter",
+        "x": 40,
+        "y": 1022,
+        "width": 115,
+        "height": 35
+      },
+      {
+        "text": "q",
+        "x": 1802,
+        "y": 1026,
+        "width": 35,
+        "height": 27
+      },
+      {
+        "text": "UID: 693306810",
+        "x": 1684,
+        "y": 1052,
+        "width": 179,
+        "height": 27
+      },
+      {
+        "text": "E",
+        "x": 1692,
+        "y": 1029.6666666666667,
+        "width": 14.333333333333334,
+        "height": 18.666666666666668
+      },
+      {
+        "text": "Q",
+        "x": 1809.6666666666667,
+        "y": 1029.3333333333333,
+        "width": 19.333333333333332,
+        "height": 21
+      },
+      {
+        "text": "306010",
+        "x": 1774,
+        "y": 1054.3333333333333,
+        "width": 83,
+        "height": 10.666666666666666
+      },
+      {
+        "text": "Lisa",
+        "x": 1691.3333333333333,
+        "y": 537.3333333333333,
+        "width": 45.666666666666664,
+        "height": 24.333333333333332
+      }
+    ],
+    "map": null,
+    "hud": {
+      "foodQuantity": null,
+      "auto": false,
+      "climbing": false,
+      "groundControls": true,
+      "enemyBars": [],
+      "aerialBossVisible": false,
+      "aerialBoss": null,
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": {
+        "current": 797,
+        "max": 1001
+      },
+      "healthOcr": [
+        "797/1001"
+      ],
+      "healthDiagnostic": null,
+      "healthPct": 0.7962037962037962,
+      "lowHealth": false,
+      "world": true,
+      "interact": false,
+      "objectives": [
+        "LY."
+      ],
+      "enemyBarDiagnostic": null,
+      "loading": false,
+      "unknownHud": false,
+      "partyNameOcr": {
+        "version": 1,
+        "kind": "scaled-same-capture-party-strip-v1",
+        "session": "mvyi1kqo-lc8qi9y6rni",
+        "frameId": 1,
+        "observationStartedAtUnixMs": 1793578019254,
+        "startedAtUnixMs": 1793578019607,
+        "finishedAtUnixMs": 1793578019728,
+        "region": {
+          "x": 1640,
+          "y": 240,
+          "width": 140,
+          "height": 350
+        },
+        "scale": 3,
+        "rawRows": [
+          {
+            "text": "Lumina",
+            "x": 136,
+            "y": 58,
+            "width": 227,
+            "height": 58
+          },
+          {
+            "text": "Amber",
+            "x": 154,
+            "y": 327,
+            "width": 212,
+            "height": 70
+          },
+          {
+            "text": "Kaeya",
+            "x": 169,
+            "y": 597,
+            "width": 201,
+            "height": 84
+          },
+          {
+            "text": "Lisa",
+            "x": 154,
+            "y": 892,
+            "width": 137,
+            "height": 73
+          }
+        ],
+        "addedRows": [
+          {
+            "text": "Lisa",
+            "x": 1691.3333333333333,
+            "y": 537.3333333333333,
+            "width": 45.666666666666664,
+            "height": 24.333333333333332
+          }
+        ]
+      }
+    },
+    "timings": {
+      "mapDiagnostic": {
+        "reason": "Inventory UI-only v1: map and orientation deliberately omitted",
+        "mode": "inventory-ui-only-v1"
+      },
+      "captureMs": 1,
+      "ocrMs": 469,
+      "ocrFindMultiMs": 448,
+      "ocrReadCount": 4,
+      "fullOcrMs": 229,
+      "reviveStockOcrMs": 0,
+      "healthOcrMs": 1,
+      "objectiveOcrMs": 28,
+      "controlOcrMs": 76,
+      "cooldownOcrMs": 0,
+      "spikeSurfaceMs": 0,
+      "levelPanelOcrMs": 0,
+      "interactionOcrMs": 0,
+      "objectiveSource": "crop",
+      "pngWriteMs": 3,
+      "pngWriteMode": "overlapped",
+      "pngScheduleMs": 3,
+      "pngWaitMs": 0,
+      "mapMs": 0,
+      "totalMs": 475,
+      "partyNameOcrMs": 121
+    },
+    "uiObservation": {
+      "version": 1,
+      "kind": "inventory-ui-only-v1",
+      "mapOmitted": true,
+      "orientationOmitted": true,
+      "observationStartedAtUnixMs": 1793578019254
+    }
+  },
+  "alternativePowerRow": {
+    "text": "Restorative Power: 9598 710000",
+    "x": 1396,
+    "y": 598,
+    "width": 495,
+    "height": 28
+  }
+}

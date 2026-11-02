@@ -96,6 +96,13 @@ class PassiveSceneTests(unittest.TestCase):
         self.app=self.root/'artifacts/release/BetterGI-English-win-x64'
         self.app.mkdir(parents=True)
         self.output=self.live/'inspection'
+        self.owner_file=self.live/'owner.json'
+        self.owner_file.write_bytes(canonical(OWNER))
+        def owner_inputs(path,artifacts,validate):
+            """Keep the real held-file primitive while isolating the finite ancestry semantic replay."""
+            return validate(path),{str(path):hashlib.sha256(Path(path).read_bytes()).hexdigest()},{}
+        self.stack.enter_context(patch.object(capture,'owner_inputs',owner_inputs))
+        self.addCleanup(lambda:[capture.close_prepared_capture(token) for token in list(capture._PREPARED_CAPTURES)])
         self.child=dict(OWNER['child'],appDirectory=str(self.app),agentPipeName='inert')
         self.lifecycle=SimpleNamespace(start_agent=Mock(return_value=self.child),stop_agent=Mock())
         self.bridge=PassiveSceneBridge(self.app,[scene_frame(i) for i in range(1,6)])
@@ -248,6 +255,149 @@ class PassiveSceneTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,'owner changed'):self.run_capture('--inspect-current')
         self.lifecycle.start_agent.assert_not_called()
         self.assertEqual(self.bridge.commands,[])
+
+
+    def prepare(self,run_id='inert-capture',stop_paths=()):
+        """Create only the private file capability; every native and GPU boundary remains mocked."""
+        args=capture.parse_args([str(self.output),'--owner-from',str(self.owner_file),'--inspect-current'])
+        return capture.prepare_capture(args,run_id=run_id,stop_paths=stop_paths)
+
+    def test_prepare_is_file_only_and_run_consumes_once(self):
+        with patch.object(capture,'ready_session',side_effect=AssertionError('discovery during preparation')):
+            token=self.prepare()
+        self.lifecycle.start_agent.assert_not_called()
+        capture.subprocess.check_output.assert_not_called()
+        self.assertEqual(self.bridge.commands,[])
+        with redirect_stdout(io.StringIO()):
+            capture.run_capture(token,run_id='inert-capture')
+        retained=(self.output/'result.json').read_bytes()
+        self.assertNotIn(token,capture._PREPARED_CAPTURES)
+        with self.assertRaisesRegex(RuntimeError,'retired'):
+            capture.run_capture(token,run_id='inert-capture')
+        self.assertEqual((self.output/'result.json').read_bytes(),retained)
+        self.assertEqual(capture.close_prepared_capture(token),[])
+        self.assert_passive_cleanup()
+
+    def test_foreign_run_and_mutated_context_never_start(self):
+        token=self.prepare()
+        with self.assertRaisesRegex(RuntimeError,'foreign'):
+            capture.run_capture(token,run_id='another-run')
+        state=capture._PREPARED_CAPTURES[token]
+        self.assertFalse(state['admission'].consumed)
+        state['args'].navigation_profile='foreign'
+        with self.assertRaisesRegex(RuntimeError,'context changed'):
+            capture.run_capture(token,run_id='inert-capture')
+        self.lifecycle.start_agent.assert_not_called()
+
+    def test_actual_held_owner_file_denies_write_until_close(self):
+        token=self.prepare()
+        before=self.owner_file.read_bytes()
+        with self.assertRaises(PermissionError):self.owner_file.write_bytes(b'changed')
+        self.assertEqual(self.owner_file.read_bytes(),before)
+        self.assertEqual(capture.close_prepared_capture(token),[])
+        self.owner_file.write_bytes(b'changed')
+        with self.assertRaisesRegex(RuntimeError,'retired'):
+            capture.run_capture(token,run_id='inert-capture')
+        self.lifecycle.start_agent.assert_not_called()
+
+    def test_stop_during_paused_owner_replay_closes_without_native_start(self):
+        stop=self.live/'STOP'
+        original=capture.owner_inputs
+        def stopped_owner(*args):
+            result=original(*args)
+            stop.write_text('stop')
+            return result
+        with patch.object(capture,'owner_inputs',stopped_owner),self.assertRaisesRegex(RuntimeError,'Operator stop'):
+            self.prepare()
+        self.assertEqual(capture._PREPARED_CAPTURES,{})
+        self.owner_file.write_bytes(b'unlocked after refusal')
+        self.lifecycle.start_agent.assert_not_called()
+
+    def test_stop_after_blocking_discovery_or_temperature_prevents_start(self):
+        for phase in ['discovery','temperature']:
+            with self.subTest(phase=phase):
+                self.output=self.live/phase
+                stop=self.output/'STOP'
+                token=self.prepare()
+                def discover(_):
+                    stop.write_text('stop')
+                    return OWNER['root'],self.child
+                def temperature(*args,**kwargs):
+                    stop.write_text('stop')
+                    return '50'
+                target=('ready_session',discover) if phase=='discovery' else ('check_output',temperature)
+                module=capture if phase=='discovery' else capture.subprocess
+                with patch.object(module,target[0],side_effect=target[1]),self.assertRaisesRegex(RuntimeError,'Operator stop'):
+                    capture.run_capture(token,run_id='inert-capture')
+                self.lifecycle.start_agent.assert_not_called()
+                stop.unlink()
+
+    def test_independent_pause_handles_overlap_before_capture_retirement(self):
+        from combat_paused_file_admission import HeldFiles
+        token=self.prepare()
+        with self.assertRaisesRegex(RuntimeError,'another owner file'):
+            capture.prepared_capture_owner(token,run_id='inert-capture',owner_file=self.live/'foreign.json')
+        owner=capture.prepared_capture_owner(token,run_id='inert-capture',owner_file=self.owner_file)
+        second=HeldFiles(capture._PREPARED_CAPTURES[token]['pins'])
+        self.addCleanup(second.close)
+        self.bridge.hello['inputEnabled']=True
+        with self.assertRaisesRegex(RuntimeError,'input unexpectedly enabled'):
+            capture.run_capture(token,run_id='inert-capture')
+        self.assertNotIn(token,capture._PREPARED_CAPTURES)
+        self.assertEqual(owner,OWNER)
+        with self.assertRaises(PermissionError):self.owner_file.write_bytes(b'changed')
+        second.verify()
+        self.assertEqual(second.close(),[])
+        self.assertEqual(json.loads((self.output/'result.json').read_bytes())['status'],'failed')
+        self.assert_passive_cleanup()
+
+    def test_fresh_held_hash_failure_never_starts(self):
+        token=self.prepare()
+        files=capture._PREPARED_CAPTURES[token]['admission'].files
+        with patch.object(files,'verify',side_effect=ValueError('held source mutation')),self.assertRaisesRegex(ValueError,'mutation'):
+            capture.run_capture(token,run_id='inert-capture')
+        self.assertTrue(files.closed)
+        self.lifecycle.start_agent.assert_not_called()
+
+    def test_handle_close_failure_preserves_native_error_and_unresolved_status(self):
+        token=self.prepare()
+        files=capture._PREPARED_CAPTURES[token]['admission'].files
+        original=files.close
+        def failed_close():
+            original()
+            return ['inert close failure']
+        self.bridge.hello['inputEnabled']=True
+        with patch.object(files,'close',side_effect=failed_close),self.assertRaises(BaseExceptionGroup) as raised:
+            capture.run_capture(token,run_id='inert-capture')
+        self.assertIn('input unexpectedly enabled',str(raised.exception.exceptions[0]))
+        result=json.loads((self.output/'result.json').read_bytes())
+        self.assertEqual(result['status'],'unresolved')
+        self.assertIn('input unexpectedly enabled',result['error'])
+        self.assertIn('inert close failure',result['immutableHandleCleanupError'])
+        self.assert_passive_cleanup()
+
+    def test_historical_package_selection_change_refuses_before_start(self):
+        original=capture.owner_inputs
+        release=self.root/'artifacts/release-r69'
+        def package_owner(*args):
+            owner,pins,_=original(*args)
+            return owner,pins,{str(release):dict(originalPresent=False,selected='retained witness')}
+        with patch.object(capture,'owner_inputs',package_owner):token=self.prepare()
+        release.mkdir()
+        with self.assertRaisesRegex(ValueError,'package selection changed'):
+            capture.run_capture(token,run_id='inert-capture')
+        self.lifecycle.start_agent.assert_not_called()
+
+
+    def test_owner_change_between_collection_and_held_replay_never_starts(self):
+        """The semantic owner must still agree after all original evidence files are locked."""
+        changed=copy.deepcopy(OWNER)
+        changed['child']['processId']+=1
+        with patch.object(capture,'load_map_owner',side_effect=[copy.deepcopy(OWNER),changed]),self.assertRaisesRegex(RuntimeError,'no longer replays'):
+            self.prepare()
+        self.assertFalse(capture._PREPARED_CAPTURES)
+        self.lifecycle.start_agent.assert_not_called()
+        self.owner_file.write_text('owner handles released',encoding='utf-8')
 
 
 if __name__=='__main__':unittest.main()

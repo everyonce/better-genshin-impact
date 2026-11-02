@@ -191,7 +191,7 @@ class OwnerClosureTests(unittest.TestCase):
         owner_fixtures.write(self.path,map_owner.replacement(prior,self.folder))
         self.prior=prior
 
-    def verify_reader_set(self):
+    def verify_reader_set(self, expected_packages=11):
         """Require every actual immutable validator read to appear in the held census."""
         owner,pins,packages=held.owner_inputs(self.path,map_owner.ARTIFACTS,map_owner.load_map_owner)
         observed=set();original=Path.open
@@ -201,7 +201,7 @@ class OwnerClosureTests(unittest.TestCase):
             return original(path,*args,**kwargs)
         with patch.object(Path,'open',read_trace):actual=map_owner.load_map_owner(self.path)
         self.assertEqual(actual,owner);self.assertEqual(observed,set(pins))
-        self.assertEqual(len(packages),11)
+        self.assertEqual(len(packages),expected_packages)
         files=held.HeldFiles(pins)
         try:
             self.assertEqual(files.verify()[0],pins)
@@ -232,6 +232,72 @@ class OwnerClosureTests(unittest.TestCase):
         (self.folder/'game-before.json').unlink()
         with self.assertRaises(FileNotFoundError):
             held.owner_inputs(self.path,map_owner.ARTIFACTS,map_owner.load_map_owner)
+
+
+    def append_r69(self):
+        """Extend the existing synthetic R68 receipt with one exact English R69 handoff."""
+        prior=self.path
+        game=json.loads(prior.read_bytes())['protectedGame']
+        folder,result=self.fixture.create_next_handoff(prior,self.result,game,69)
+        build,_=map_owner.target_package(69)
+        owner_fixtures.write(Path(build['targetDirectory'])/'User/config.json',map_owner.R62_CLEAN_CAPTURE)
+        config_sha=map_owner.check_clean_target(build)
+        preflight=json.loads((folder/'preflight.json').read_bytes())
+        preflight['targetConfigSha256']=config_sha
+        result['replacementEvidence']['existingTargetConfigSha256']=config_sha
+        owner_fixtures.write(folder/'preflight.json',preflight)
+        owner_fixtures.write(folder/'ensure-child.json',result)
+        self.prior,self.folder,self.result=prior,folder,result
+        self.path=folder/'map-owner-lineage.json'
+        owner_fixtures.write(self.path,map_owner.replacement(prior,folder))
+
+    def test_r69_complete_reader_set_is_held(self):
+        """All twelve packages and every actual immutable owner read belong to the held census."""
+        self.append_r69()
+        _,pins,_=self.verify_reader_set(expected_packages=12)
+        self.assertEqual(len(pins),97)
+
+    def test_r69_retained_endpoints_and_selection_remain_bound(self):
+        """R68/R69 witnesses preserve exact replay; later original-path reappearance still refuses."""
+        self.append_r69()
+        self.fixture.check_source_and_target_witnesses(self.prior,self.folder,self.result,(68,69))
+        owner,pins,packages=self.verify_reader_set(expected_packages=12)
+        missing=map_owner.ARTIFACTS/'release-r68'
+        self.assertFalse(packages[str(missing)]['originalPresent'])
+        report={};context={'owner':owner}
+        cap=held.PausedAdmission(context,pins,(),lambda:[],[],packages,report)
+        try:
+            missing.mkdir()
+            with self.assertRaisesRegex(ValueError,'package selection'):
+                cap.consume(lambda:context,report,lambda:None)
+        finally:self.assertEqual(cap.close(),[])
+
+    def test_r69_missing_game_evidence_refuses_before_validation(self):
+        """A missing newest game-lifetime document cannot be replaced by an already-known owner."""
+        self.append_r69()
+        (self.folder/'game-before.json').unlink()
+        with patch.object(map_owner,'load_map_owner') as validate:
+            with self.assertRaises(FileNotFoundError):
+                held.owner_inputs(self.path,map_owner.ARTIFACTS,validate)
+            validate.assert_not_called()
+
+    def test_r69_scope_rejects_r70_and_thirteenth_link_before_validation(self):
+        """The collector independently refuses a later package and an extra otherwise-shaped link."""
+        self.append_r69()
+        game=json.loads(self.path.read_bytes())['protectedGame']
+        later,_=self.fixture.create_next_handoff(self.path,self.result,game,70)
+        future=later/'map-owner-lineage.json'
+        owner_fixtures.write(future,dict(prior=str(self.path),protectedGame=game))
+        extra=self.folder.parent/'excess-link'
+        for name in ('before.json','preflight.json','ensure-child.json','game-before.json'):
+            owner_fixtures.write(extra/name,json.loads((self.folder/name).read_bytes()))
+        overlong=extra/'map-owner-lineage.json'
+        owner_fixtures.write(overlong,dict(prior=str(self.path),protectedGame=game))
+        for path,message in ((future,'package scope'),(overlong,'finite lineage')):
+            with self.subTest(path=path),patch.object(map_owner,'load_map_owner') as validate:
+                with self.assertRaisesRegex(ValueError,message):
+                    held.owner_inputs(path,map_owner.ARTIFACTS,validate)
+                validate.assert_not_called()
 
 
 class WorkerHeldTests(PausedReviewTrialTests):

@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "description": "Original R71 heal02 intro frame29. Tests use only its observed OCR/UI shape under new synthetic clocks; this old source never authorizes live input.",
+  "recordedJsonSha256": "d0be963f23f19371a1c1ff03c374bf8bbbc089849bcce07941d10155dc84166c",
+  "recordedPngSha256": "3af6a59fe01b5d75be4dcf1956aab62f77a04e96f010e2993a06c6271279db7b",
+  "observation": {
+    "session": "mvysq7qa-ngjsjbzwqr7",
+    "frameId": 29,
+    "timestamp": 1793595988899,
+    "screenshotPath": "observations/mvysq7qa-ngjsjbzwqr7/frame-0029.png",
+    "ocr": [
+      {
+        "text": "Auto",
+        "x": 96,
+        "y": 36,
+        "width": 75,
+        "height": 29
+      },
+      {
+        "text": "Statue of The Seven",
+        "x": 789,
+        "y": 855,
+        "width": 343,
+        "height": 41
+      },
+      {
+        "text": "UID: 693306810",
+        "x": 1686,
+        "y": 1054,
+        "width": 175,
+        "height": 21
+      }
+    ],
+    "map": null,
+    "hud": {
+      "foodQuantity": null,
+      "auto": true,
+      "climbing": false,
+      "groundControls": false,
+      "enemyBars": [],
+      "aerialBossVisible": false,
+      "aerialBoss": null,
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": true,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": null,
+      "healthOcr": [],
+      "healthDiagnostic": {
+        "fullRow": [],
+        "primary": [],
+        "left": [],
+        "right": [],
+        "decision": "health-unresolved"
+      },
+      "healthPct": null,
+      "lowHealth": true,
+      "world": false,
+      "interact": false,
+      "objectives": [],
+      "enemyBarDiagnostic": {
+        "level": "any",
+        "candidates": 0,
+        "localReads": [],
+        "greenMask": null
+      },
+      "loading": false,
+      "unknownHud": false,
+      "combatHealObservation": {
+        "version": 1,
+        "session": "mvysq7qa-ngjsjbzwqr7",
+        "frameId": 29,
+        "observationStartedAtUnixMs": 1793595988449,
+        "phase": "protection"
+      },
+      "captureStamp": {
+        "session": "mvysq7qa-ngjsjbzwqr7",
+        "frameId": 29,
+        "capturedAt": 1793595988449,
+        "source": "game-capture-start"
+      }
+    },
+    "timings": {
+      "mapDiagnostic": {
+        "reason": "Current-party Statue healer: only qualified local approach uses localization",
+        "mode": "combat-statue-heal-v1"
+      },
+      "captureMs": 10,
+      "ocrMs": 405,
+      "ocrFindMultiMs": 403,
+      "ocrReadCount": 5,
+      "fullOcrMs": 340,
+      "reviveStockOcrMs": 0,
+      "healthOcrMs": 38,
+      "objectiveOcrMs": 27,
+      "controlOcrMs": 0,
+      "cooldownOcrMs": 0,
+      "spikeSurfaceMs": 0,
+      "levelPanelOcrMs": 0,
+      "interactionOcrMs": 0,
+      "objectiveSource": "crop",
+      "pngWriteMs": 6,
+      "pngWriteMode": "overlapped",
+      "pngScheduleMs": 5,
+      "pngWaitMs": 1,
+      "mapMs": 0,
+      "totalMs": 450
+    }
+  }
+}

@@ -19,18 +19,19 @@ function pure(options={}){
     combatHealForward:async(o,ms)=>{calls.push(['W',ms]);if(!options.stalledMove)distance=2;if(options.unsafeMove)unsafe=true;},
     combatHealInteractReady:o=>o.kind==='world'&&distance<=3&&!options.noPrompt,
     combatHealInteract:async()=>{calls.push('F');kind='dialogue';},
+    combatHealIntroReady:()=>false,combatHealAdvanceIntro:async()=>{throw Error('Unexpected intro advance');},
     combatHealBlessingReady:o=>o.kind==='dialogue'&&!options.noChoice,
     combatHealChooseBlessing:async()=>{calls.push('Blessing');kind='panel';},
     combatHealPanelReady:o=>o.kind==='panel'&&!options.noPanel,
     combatHealRunPanel:async()=>{calls.push('panel');if(options.expirePanel)now=90000;return {status:'completed',healthVerified:true,frameId:id,health:{current:1001,max:1001}};}};
   const initial=source();
   const observe=async()=>{if(!options.repeat)id++;const o=source();if(options.reusedStart)o.hud.captureStamp.capturedAt=1000;return o;};
-  return {calls,api,run:()=>heal.run(initial,api,observe)};
+  return {calls,api,initial,observe,run:()=>heal.run(initial,api,observe)};
 }
 test('runner performs only bounded current-party approach and exact F/Blessing/panel sequence',async()=>{
   const f=pure(),r=await f.run();assert.equal(r.status,'completed');
   assert.deepEqual(f.calls,['warm','Escape',['turn',-250],['W',500],'F','Blessing','panel','release']);
-  assert.deepEqual(r.approach,{moves:1,turns:1,interactAttempted:true,blessingChoiceAttempted:true,worldToPanelOwned:true});
+  assert.deepEqual(r.approach,{moves:1,turns:1,interactAttempted:true,blessingChoiceAttempted:true,introAdvanceAttempted:false,worldToPanelOwned:true});
 });
 for(const [name,options,count,kind] of [['turn bound',{stalledTurn:true},12,'turn'],['move bound',{angle:0,stalledMove:true},4,'W']])
 test(name+' stops without F or panel fallback',async()=>{
@@ -164,7 +165,7 @@ test('real Engine/mission receipts join both new runners and preserve final inve
   assert.equal(receipt.details.result.healthVerified,true);assert.equal(receipt.details.result.pauseVerified,true);
   const revision=receipt.details.inputEvents.find(e=>e.type==='controllerRevision');
   assert.deepEqual(Object.keys(revision.files).sort(),['main.js','engine.js','bgi.js','mission.js','combat.js','recovery.js',
-    'combat-statue-retreat.js','combat-statue-heal.js','combat-statue-panel.js','world-inventory.js','local-pause.js'].sort());
+    'combat-statue-retreat.js','combat-statue-heal.js','combat-statue-panel.js','world-inventory.js','local-pause.js','statue-dialogue.js'].sort());
   assert.equal(f.getOverlappingKeyDowns().length,0);
 });
 test('inventory-only UI mode cannot acquire the new healing authority',()=>{
@@ -244,7 +245,8 @@ const cloneHeal=value=>JSON.parse(JSON.stringify(value));
 
 // Replay the real9→10 conflict through the pure runner; later variants are explicitly synthetic.
 function reacquisitionReplay(sequence=['conflict','healthy'],options={}){
-  const good=retainedHealFrames[9],bad=retainedHealFrames[10],calls=[];
+  const frames=options.retainedFrames||retainedHealFrames;
+  const good=frames[9],bad=frames[10],calls=[];
   let now=good.hud.captureStamp.capturedAt-1000,current=null,reads=0,turns=0,moves=0,nextIndex=0,stopped=false,readyForAgeCheck=false;
   const deadline=now+90000;
   function stamp(o,id,start,completion){
@@ -282,6 +284,7 @@ function reacquisitionReplay(sequence=['conflict','healthy'],options={}){
     combatHealRotate:async(o,dx)=>{turns++;calls.push(['turn',o.frameId,dx]);},
     combatHealForward:async(o,ms)=>{moves++;calls.push(['W',o.frameId,ms]);},
     combatHealInteractReady:()=>false,combatHealInteract:async()=>calls.push(['F']),
+    combatHealIntroReady:()=>false,combatHealAdvanceIntro:async()=>{throw Error('Unexpected intro advance');},
     combatHealBlessingReady:()=>false,combatHealChooseBlessing:async()=>calls.push(['choice']),
     combatHealPanelReady:()=>false,combatHealRunPanel:async()=>{throw Error('Unexpected panel');},
   };
@@ -291,7 +294,7 @@ function reacquisitionReplay(sequence=['conflict','healthy'],options={}){
     else if(reads===2)o=cloneHeal(good);
     else{
       const kind=sequence[Math.min(nextIndex++,sequence.length-1)];
-      o=reads===3&&kind==='conflict'?cloneHeal(bad):kind==='protection'?cloneHeal(retainedHealFrames[11]):fresh(kind);
+      o=reads===3&&kind==='conflict'?cloneHeal(bad):kind==='protection'?cloneHeal(frames[11]):fresh(kind);
       if(reads===3&&options.mutate)options.mutate(o,current);
     }
     now=Math.max(now,o.timestamp);current=o;calls.push(['observe',o.frameId]);
@@ -333,7 +336,7 @@ test('three exhausted passive retries stop without consuming a later healthy sou
 for(const [name,mutate] of [
   ['raw enemy',o=>o.hud.enemyBarDiagnostic.candidates=1],
   ['final enemy',o=>o.hud.enemyBars.push({x:500,y:250,width:90,height:8})],
-  ['climbing',o=>o.hud.climbing=true],['missing ground',o=>o.hud.groundControls=false],
+  ['climbing',o=>o.hud.climbing=true],['missing ground',o=>delete o.hud.groundControls],
   ['foreign UID',o=>o.ocr.find(r=>r.text.startsWith('UID')).text='UID: 693306811'],
   ['duplicate UID',o=>o.ocr.push(cloneHeal(o.ocr.find(r=>r.text.startsWith('UID'))))],
   ['positive zero health',o=>o.hud.health={current:0,max:1001}],
@@ -368,18 +371,26 @@ for(const kind of ['protection','mapless'])test('fresh numeric health without ap
 
 // Replay retained OCR rows/halves at the actual adapter boundary; game, clock and OCR execution remain inert.
 function actualReacquisition(options={}){
-  const f=actual({health:719,distance:options.prompt?2:5,angle:90,stalledTurn:true,noPrompt:!!options.prompt});
-  let turns=0,fieldCaptures=0,delivered=false,mode='normal';
+  const frames=options.retainedFrames||retainedHealFrames;
+  const f=actual({health:719,distance:options.prompt?2:5,angle:90,stalledTurn:!options.afterMove,
+    stalledMove:!!options.afterMove,noPrompt:!!options.prompt});
+  let turns=0,moves=0,fieldCaptures=0,delivered=false,mode='normal';
   const move=f.context.moveMouseBy,capture=f.context.captureGameRegion,ImageRegion=f.context.ImageRegion;
   f.context.moveMouseBy=(dx,dy)=>{turns++;move(dx,dy);};
+  const down=f.context.keyDown;
+  f.context.keyDown=key=>{if(key==='VK_W')moves++;down(key);};
   f.context.captureGameRegion=()=>{
     const image=capture();
     if(f.getScreen()==='field')fieldCaptures++;
-    mode=f.getScreen()==='field'&&(options.prompt?fieldCaptures>=2:turns>0)?(delivered?'healthy':'conflict'):'normal';
+    mode=f.getScreen()==='field'&&(options.prompt?fieldCaptures>=2:options.afterMove?moves>0:turns>0)?(delivered?'healthy':'conflict'):'normal';
     if(mode==='normal')return image;
-    const source=cloneHeal(retainedHealFrames[mode==='conflict'?10:9]);
+    const source=cloneHeal(frames[mode==='conflict'?10:9]);
     if(mode==='conflict')delivered=true;
-    else for(const r of source.ocr)if(r.text==='719 /1001')r.text='1001/1001';
+    else {
+      // This later full-HP capture is synthetic; retained protection frame11 is never promoted.
+      source.ocr=source.ocr.filter(r=>!/^\s*\d+\s*\/\s*\d+\s*$/.test(r.text));
+      source.ocr.push(row('1001/1001',900,1002,120,24));
+    }
     image.findMulti=ro=>{
       const rows=source.ocr.filter(r=>r.x>=ro.x&&r.x<ro.x+ro.w&&r.y>=ro.y&&r.y<ro.y+ro.h);
       rows.count=rows.length;return rows;
@@ -388,13 +399,13 @@ function actualReacquisition(options={}){
   };
   f.context.ImageRegion=class extends ImageRegion{
     findMulti(ro){
-      const rect=this.srcMat.rect,d=retainedHealFrames[10].hud.healthDiagnostic;
+      const rect=this.srcMat.rect,d=frames[10].hud.healthDiagnostic;
       const text=mode==='conflict'&&rect&&(rect.x===900&&rect.y===990?d.primary:rect.x===893&&rect.y===998?d.left:rect.x===967&&rect.y===998?d.right:null);
       if(text){const rows=text.map(t=>row(t,1,1,90,20));rows.count=rows.length;return rows;}
       return super.findMulti(ro);
     }
   };
-  return {...f,turns:()=>turns};
+  return {...f,turns:()=>turns,moves:()=>moves};
 }
 
 test('actual adapter reacquires exact conflicting OCR without carrying HP or another input',async()=>{
@@ -436,4 +447,240 @@ test('final blocking STOP check cannot turn an aged reacquired source into a hea
   const f=reacquisitionReplay(['conflict','healthy'],{ageFinalCheck:true}),r=await f.run();
   assert.equal(r.status,'stopped');assert.equal(r.healthVerified,false);assert.equal(r.passiveReacquisitionAttempts,1);
   assert.equal(f.turns(),1);assert.equal(f.reads(),4);assert.equal(r.health,undefined);
+});
+
+
+// R71's exact conflict has lowercase full-frame e/q and no focused control OCR: ground is explicitly false.
+const groundGapFixture=JSON.parse(fs.readFileSync(path.join(__dirname,'combat-statue-heal-ground-gap.fixture.json'),'utf8'));
+const retainedGroundGap={};
+for(const document of groundGapFixture.documents){
+  assert.equal(Buffer.byteLength(document.utf8,'utf8'),document.bytes);
+  assert.equal(crypto.createHash('sha256').update(document.utf8,'utf8').digest('hex'),document.sha256);
+  retainedGroundGap[document.frameId]=JSON.parse(document.utf8);
+}
+
+test('R71 retained unknown ground conflict and later protection retain their distinct authority',()=>{
+  const bad=retainedGroundGap[10],protection=retainedGroundGap[11];
+  assert.equal(bad.hud.groundControls,false);assert.equal(bad.hud.health,null);assert.equal(bad.hud.world,false);
+  assert.equal(bad.map,null);assert.equal(bad.timestamp-bad.hud.captureStamp.capturedAt,278);
+  assert.equal(bad.hud.combatHealObservation.phase,'approach');assert.equal(bad.timings.controlOcrMs,0);
+  assert.deepEqual(bad.hud.healthDiagnostic,retainedHealFrames[10].hud.healthDiagnostic);
+  assert.equal(retreatFieldGate.worldReady(bad,bad.timestamp,bad.session,true),false);
+  assert.equal(protection.timestamp-protection.hud.captureStamp.capturedAt,419);
+  assert.deepEqual(protection.hud.health,{current:719,max:1001});assert.equal(protection.map,null);
+  assert.equal(protection.hud.combatHealObservation.phase,'protection');
+});
+
+test('R71 boolean-false ground permits only passive retry before a new fully qualified source',async()=>{
+  const f=reacquisitionReplay(['conflict','healthy'],{retainedFrames:retainedGroundGap}),r=await f.run();
+  assert.equal(r.status,'completed');assert.equal(r.healthVerified,true);assert.equal(r.passiveReacquisitionAttempts,1);
+  assert.equal(f.moves(),1);assert.equal(f.turns(),0);assert.deepEqual(r.health,{current:1001,max:1001});
+  const after=f.calls.findIndex(c=>c[0]==='observe'&&c[1]===10);
+  assert.deepEqual(f.calls.slice(after+1),[['sleep',150,10],['observe',11],['release']]);
+});
+
+for(const [name,mutate] of [
+  ['missing',o=>delete o.hud.groundControls],['null',o=>o.hud.groundControls=null],
+  ['number',o=>o.hud.groundControls=0],['string',o=>o.hud.groundControls='false'],
+  ['positive climbing',o=>o.hud.climbing=true],['positive raw enemy',o=>o.hud.enemyBarDiagnostic.candidates=1],
+  ['positive loading',o=>o.hud.loading=true],['positive dialogue',o=>o.hud.auto=true],
+])test('R71 unknown-ground conflict immediately refuses '+name,async()=>{
+  const f=reacquisitionReplay(['conflict','healthy'],{retainedFrames:retainedGroundGap,mutate}),r=await f.run();
+  assert.equal(r.status,'stopped');assert.equal(r.healthVerified,false);assert.equal(r.passiveReacquisitionAttempts,0);
+  assert.equal(f.reads(),3);assert.equal(f.moves(),1);assert.equal(f.turns(),0);
+});
+
+test('R71 false-ground gaps share the same three retry and four movement budgets',async()=>{
+  const f=reacquisitionReplay(['conflict','safe','conflict','safe','conflict','safe','conflict','healthy'],
+    {retainedFrames:retainedGroundGap}),r=await f.run();
+  assert.equal(r.status,'stopped');assert.equal(r.healthVerified,false);assert.equal(r.passiveReacquisitionAttempts,3);
+  assert.equal(f.moves(),4);assert.equal(f.turns(),0);assert.equal(f.reads(),9);
+});
+
+test('R71 persistent false-ground conflict exhausts three passive reads without input or borrowed HP',async()=>{
+  const f=reacquisitionReplay(['conflict','conflict','conflict','conflict','healthy'],
+    {retainedFrames:retainedGroundGap}),r=await f.run();
+  assert.equal(r.status,'stopped');assert.equal(r.passiveReacquisitionAttempts,3);assert.equal(r.healthVerified,false);
+  assert.equal(f.moves(),1);assert.equal(f.turns(),0);assert.equal(f.reads(),6);assert.equal(r.health,undefined);
+});
+
+for(const kind of ['protection','mapless'])test('R71 false-ground retry cannot consume '+kind+' as approach authority',async()=>{
+  const f=reacquisitionReplay(['conflict',kind],{retainedFrames:retainedGroundGap}),r=await f.run();
+  assert.equal(r.status,'stopped');assert.equal(r.healthVerified,false);assert.equal(r.passiveReacquisitionAttempts,1);
+  assert.equal(f.moves(),1);assert.equal(f.turns(),0);assert.equal(f.reads(),4);
+});
+
+test('R71 actual adapter independently reacquires after one turn and one W with the retained ground-false OCR',async()=>{
+  const f=actualReacquisition({retainedFrames:retainedGroundGap,afterMove:true}),r=await f.run();
+  assert.equal(r.status,'completed',JSON.stringify(r));assert.equal(r.healthVerified,true);assert.equal(r.pauseVerified,true);
+  assert.equal(r.passiveReacquisitionAttempts,1);assert.equal(f.turns(),1);assert.equal(f.moves(),1);
+  assert.deepEqual(downs(f),['VK_ESCAPE','VK_W','VK_B']);assert.equal(f.clicks.length,0);
+  const bad=f.observations.find(o=>o.hud.healthDiagnostic&&o.hud.healthDiagnostic.decision==='conflict-halves-disagree-or-missing');
+  assert.ok(bad);assert.equal(bad.hud.groundControls,false);assert.equal(bad.hud.world,false);assert.equal(bad.hud.health,null);assert.equal(bad.map,null);
+  assert.deepEqual(JSON.parse(JSON.stringify(bad.hud.healthDiagnostic)),retainedGroundGap[10].hud.healthDiagnostic);
+  const fresh=f.observations.find(o=>o.frameId>bad.frameId&&o.hud.health&&o.hud.health.current===1001&&o.map);
+  assert.ok(fresh);assert.equal(fresh.hud.groundControls,true);assert.equal(fresh.hud.combatHealObservation.phase,'approach');
+  assert.ok(fresh.hud.captureStamp.capturedAt>bad.timestamp);assert.equal(f.getScreen(),'inventory');
+  const inputEvents=Array.from(f.adapter.events()).filter(e=>['key','combatStatueHealTurn'].includes(e.type));
+  assert.ok(inputEvents.every(e=>e.frameId!==bad.frameId));
+  assert.deepEqual(inputEvents.filter(e=>e.startedAt>bad.timestamp).map(e=>e.key||e.type),['VK_B']);
+});
+
+test('R71 actual Engine keeps unknown ground input-disabled and journals the fresh retry plus protection',async()=>{
+  const f=actualReacquisition({retainedFrames:retainedGroundGap,afterMove:true});
+  vm.runInNewContext(fs.readFileSync(path.join(dir,'engine.js'),'utf8'),f.context);
+  vm.runInNewContext(fs.readFileSync(path.join(dir,'mission.js'),'utf8'),f.context);
+  const engine=f.context.ActOnePilot.create(f.adapter,{session:'lion-adapter-test',enableInput:true});await engine.observe();
+  assert.equal(await engine.process({id:'heal-ground-gap-engine',session:'lion-adapter-test',mission:'questStep',step:'combatStatueHeal',
+    createdAt:f.context.Date.now(),expectedFrameId:engine.getFrame()},()=>f.context.ActOneMission),'completed');
+  const receipt=JSON.parse(f.getVirtualFiles().get('receipts/lion-adapter-test/heal-ground-gap-engine.json'));
+  assert.equal(receipt.details.result.passiveReacquisitionAttempts,1);assert.equal(receipt.details.result.healthVerified,true);
+  assert.equal(receipt.details.result.pauseVerified,true);assert.deepEqual(downs(f),['VK_ESCAPE','VK_W','VK_B']);
+  assert.equal(f.turns(),1);assert.equal(f.moves(),1);assert.equal(f.getOverlappingKeyDowns().length,0);
+  assert.equal(f.nativeCalls.length,0);assert.equal(f.clicks.length,0);
+});
+
+
+// Retained fade/intro documents stay immutable; only their OCR shape is used in new inert captures.
+const introWindowFixture=JSON.parse(fs.readFileSync(path.join(__dirname,'combat-statue-heal-intro-window.fixture.json'),'utf8'));
+const retainedIntroWindow=introWindowFixture.documents.map(document=>{
+  assert.equal(Buffer.byteLength(document.utf8,'utf8'),document.bytes);
+  assert.equal(crypto.createHash('sha256').update(document.utf8,'utf8').digest('hex'),document.sha256);
+  return JSON.parse(document.utf8);
+});
+
+// This fixture models the two adapter API contracts, not private native admission.
+// Dedicated real-adapter/Engine tests separately qualify ownership, UID, source and shared guardian limits.
+function introLoopReplay(options={}){
+  const f=pure({distance:2}),api=f.api;let polls=0,advanced=false,ownedF=false,advanceCalls=0,stopped=false;
+  const interact=api.combatHealInteract,checkStop=api.checkStop;
+  api.checkStop=()=>{checkStop();if(stopped)throw Error('Original STOP after intro');};
+  api.combatHealInteract=async o=>{await interact(o);ownedF=true;};
+  api.combatHealBlessingReady=o=>ownedF&&o.syntheticChoices===true;
+  api.combatHealIntroReady=o=>ownedF&&o.kind==='dialogue'&&o.hud.auto===true&&o.hud.choice===false&&
+    retreatFieldGate.originalUid(o)&&o.ocr.filter(r=>r.text==='Statue of The Seven').length===1;
+  api.combatHealAdvanceIntro=async o=>{
+    advanceCalls++;advanced=true;f.calls.push(['introAdvance',o.frameId]);
+    if(options.unknownAdvance)throw Error('Unknown intro outcome');
+    if(options.stopAfterAdvance)stopped=true;
+    if(options.expireAfterAdvance)await api.sleep(90000);
+  };
+  async function observe(){
+    const o=await f.observe();
+    if(o.kind!=='dialogue')return o;
+    polls++;
+    const index=options.immediate?8:options.noUid?Math.min(polls-1,7):Math.min(polls-1,8);
+    const retained=retainedIntroWindow[index],capture=o.hud.captureStamp;
+    o.ocr=cloneHeal(retained.ocr);o.hud=cloneHeal(retained.hud);o.map=null;
+    // These are new synthetic session/frame/clock values, never admission of the historical protection frames.
+    o.hud.captureStamp=capture;
+    o.hud.combatHealObservation={version:1,session:o.session,frameId:o.frameId,
+      observationStartedAtUnixMs:capture.capturedAt,phase:'dialogue'};
+    if(advanced&&!options.stalledIntro){
+      o.syntheticChoices=true;o.ocr=dialogue();o.hud.choice=true;o.hud.dialogueReady=false;
+    }
+    f.calls.push(['dialogueObserve',polls,o.frameId]);
+    if(options.mutate&&polls===9)options.mutate(o);
+    return o;
+  }
+  return {...f,polls:()=>polls,advanceCalls:()=>advanceCalls,run:()=>heal.run(f.initial,api,observe)};
+}
+
+test('retained heal02 intro has no usable original UID until the ninth post-F observation',()=>{
+  assert.deepEqual(retainedIntroWindow.map(o=>o.frameId),[10,11,12,13,14,15,16,17,18]);
+  assert.ok(retainedIntroWindow.slice(3,8).every(o=>o.hud.auto===true&&!retreatFieldGate.originalUid(o)));
+  assert.equal(retreatFieldGate.originalUid(retainedIntroWindow[8]),true);
+  assert.equal(retainedIntroWindow[8].hud.choice,false);
+  assert.equal(retainedIntroWindow[8].hud.combatHealObservation.phase,'protection');
+});
+
+test('owned intro loop consumes one advance after actual delayed UID shape and waits for new choices',async()=>{
+  const f=introLoopReplay(),r=await f.run();
+  assert.equal(r.status,'completed');assert.equal(r.healthVerified,true);assert.equal(f.polls(),10);
+  assert.equal(f.advanceCalls(),1);assert.equal(r.introAdvanceAttempted,true);assert.equal(r.approach.introAdvanceAttempted,true);
+  const index=f.calls.findIndex(c=>Array.isArray(c)&&c[0]==='introAdvance');
+  assert.equal(f.calls[index-1][0],'dialogueObserve');assert.equal(f.calls[index-1][1],9);
+  assert.equal(f.calls[index+1][0],'dialogueObserve');assert.equal(f.calls[index+1][1],10);
+  assert.equal(f.calls.filter(c=>c==='F').length,1);assert.equal(f.calls.filter(c=>c==='Blessing').length,1);
+});
+
+test('owned intro loop never turns a successful Space attempt into a Blessing verdict',async()=>{
+  const f=introLoopReplay({immediate:true,stalledIntro:true}),r=await f.run();
+  assert.equal(r.status,'stopped');assert.equal(r.healthVerified,false);assert.equal(r.introAdvanceAttempted,true);
+  assert.equal(f.advanceCalls(),1);assert.equal(f.polls(),12);assert.ok(!f.calls.includes('Blessing'));
+});
+
+test('owned intro loop with missing UID uses only twelve original-window passive observations',async()=>{
+  const f=introLoopReplay({noUid:true}),r=await f.run();
+  assert.equal(r.status,'stopped');assert.equal(r.healthVerified,false);assert.equal(r.introAdvanceAttempted,false);
+  assert.equal(f.advanceCalls(),0);assert.equal(f.polls(),12);assert.ok(!f.calls.includes('Blessing'));
+});
+
+for(const [name,options,error] of [
+  ['unknown outcome',{immediate:true,unknownAdvance:true},/Unknown intro outcome/],
+  ['STOP',{immediate:true,stopAfterAdvance:true},/Original STOP/],
+  ['original deadline',{immediate:true,expireAfterAdvance:true},/deadline/],
+])test('owned intro loop consumes its attempt before '+name+' and never retries',async()=>{
+  const f=introLoopReplay(options),r=await f.run();
+  assert.equal(r.status,'stopped');assert.equal(r.healthVerified,false);assert.match(r.reason,error);
+  assert.equal(r.introAdvanceAttempted,true);assert.equal(f.advanceCalls(),1);assert.equal(f.polls(),1);
+  assert.equal(f.calls.at(-1),'release');assert.ok(!f.calls.includes('Blessing'));
+});
+
+for(const name of ['combatHealIntroReady','combatHealAdvanceIntro'])test('owned intro API '+name+' is required before warm or input',async()=>{
+  const f=pure();delete f.api[name];const r=await f.run();
+  assert.equal(r.status,'stopped');assert.equal(r.introAdvanceAttempted,false);assert.match(r.reason,/Required owned/);
+  assert.deepEqual(f.calls,['release']);
+});
+
+for(const [name,mutate] of [
+  ['stale capture',o=>o.hud.captureStamp.capturedAt=o.timestamp-1001],
+  ['foreign source',o=>o.session='foreign'],
+])test('owned intro loop refuses '+name+' before advance',async()=>{
+  const f=introLoopReplay({mutate}),r=await f.run();
+  assert.equal(r.status,'stopped');assert.equal(r.introAdvanceAttempted,false);assert.equal(f.advanceCalls(),0);
+  assert.equal(f.polls(),9);assert.ok(!f.calls.includes('Blessing'));
+});
+
+
+test('actual Engine waits through retained heal02 fade and absent UID before one normal intro advance',async()=>{
+  const f=actual({health:719,distance:2}),capture=f.context.captureGameRegion,down=f.context.keyDown,
+    ImageRegion=f.context.ImageRegion;
+  let ownedF=false,advanced=false,usingIntroRows=false,introCaptures=0;
+  f.context.keyDown=key=>{down(key);if(key==='VK_F')ownedF=true;if(key==='VK_SPACE')advanced=true;};
+  f.context.captureGameRegion=()=>{
+    const image=capture();usingIntroRows=ownedF&&!advanced&&f.getScreen()==='field';
+    if(usingIntroRows){
+      const retained=retainedIntroWindow[Math.min(introCaptures++,retainedIntroWindow.length-1)];
+      const rows=cloneHeal(retained.ocr);
+      image.findMulti=ro=>{const found=rows.filter(r=>r.x>=ro.x&&r.x<ro.x+ro.w&&r.y>=ro.y&&r.y<ro.y+ro.h);
+        found.count=found.length;return found;};
+    }
+    return image;
+  };
+  f.context.ImageRegion=class extends ImageRegion{
+    findMulti(ro){
+      // No invented cropped UID/HP/control evidence during the retained hidden-HUD intro.
+      if(usingIntroRows){const rows=[];rows.count=0;return rows;}
+      return super.findMulti(ro);
+    }
+  };
+  vm.runInNewContext(fs.readFileSync(path.join(dir,'engine.js'),'utf8'),f.context);
+  vm.runInNewContext(fs.readFileSync(path.join(dir,'mission.js'),'utf8'),f.context);
+  const engine=f.context.ActOnePilot.create(f.adapter,{session:'lion-adapter-test',enableInput:true});await engine.observe();
+  assert.equal(await engine.process({id:'heal-delayed-intro-engine',session:'lion-adapter-test',mission:'questStep',step:'combatStatueHeal',
+    createdAt:f.context.Date.now(),expectedFrameId:engine.getFrame()},()=>f.context.ActOneMission),'completed');
+  const receipt=JSON.parse(f.getVirtualFiles().get('receipts/lion-adapter-test/heal-delayed-intro-engine.json'));
+  const answer=receipt.details.result,events=receipt.details.inputEvents;
+  assert.equal(answer.healthVerified,true);assert.equal(answer.pauseVerified,true);assert.equal(answer.introAdvanceAttempted,true);
+  assert.equal(answer.approach.introAdvanceAttempted,true);assert.equal(introCaptures,9);
+  assert.deepEqual(downs(f),['VK_ESCAPE','VK_F','VK_SPACE','VK_ESCAPE','VK_B']);
+  const spaces=events.filter(e=>e.type==='key'&&e.key==='VK_SPACE');assert.equal(spaces.length,1);assert.equal(spaces[0].durationMs,60);
+  const rawSource=f.getVirtualFiles().get('observations/lion-adapter-test/frame-'+String(spaces[0].frameId).padStart(4,'0')+'.json');
+  assert.equal(typeof rawSource,'string');const source=JSON.parse(rawSource);assert.equal(source.frameId,spaces[0].frameId);
+  assert.equal(retreatFieldGate.originalUid(source),true);assert.equal(source.hud.health,null);assert.equal(source.map,null);
+  assert.equal(source.hud.combatHealObservation.phase,'dialogue');
+  const choice=events.find(e=>e.type==='combatStatueHealBlessingChoice');assert.ok(choice);
+  assert.ok(choice.source.capturedAt>spaces[0].finishedAt);assert.equal(f.getPortraits(),3);assert.equal(f.getScreen(),'inventory');
+  assert.equal(f.getOverlappingKeyDowns().length,0);assert.equal(f.nativeCalls.length,0);
 });

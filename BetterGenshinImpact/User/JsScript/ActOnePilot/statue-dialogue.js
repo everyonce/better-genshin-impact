@@ -111,5 +111,43 @@
     return { kind: 'advance', key: 'VK_SPACE', durationMs: 60 };
   }
 
-  return Object.freeze({ action: action });
+  // Current-party recovery has its own source/account contract; entry cleanup never pretends to have pressed F.
+  function recoveryAction(o, now, session, state) {
+    var stamp = o && o.hud && o.hud.captureStamp;
+    if (!state || state.session !== session ||
+        (state.purpose !== 'healer-intro' && state.purpose !== 'inventory-protection') ||
+        !Number.isInteger(state.lastInputFrame) || state.lastInputFrame < -1 ||
+        typeof state.advanceAttempted !== 'boolean' || typeof state.leaveAttempted !== 'boolean' ||
+        !(state.afterInputAt === null || Number.isFinite(state.afterInputAt)) ||
+        !o || o.session !== session || !Number.isInteger(o.frameId) || o.frameId <= 0 || o.frameId <= state.lastInputFrame ||
+        !Number.isFinite(now) || !Number.isFinite(o.timestamp) || o.timestamp > now ||
+        !stamp || stamp.session !== session || stamp.frameId !== o.frameId || stamp.source !== 'game-capture-start' ||
+        !Number.isFinite(stamp.capturedAt) || stamp.capturedAt <= 0 || stamp.capturedAt > o.timestamp ||
+        now < stamp.capturedAt || now - stamp.capturedAt > FRESH_MS ||
+        state.afterInputAt !== null && stamp.capturedAt <= state.afterInputAt ||
+        o.map !== null || unsafeHud(o.hud) || o.hud.groundControls !== false ||
+        o.hud.loading !== false || o.hud.unknownHud !== false) return null;
+    // A complete conflicting UID anywhere, or an ambiguous account strip, rejects the source.
+    var ids = (Array.isArray(o.ocr) ? o.ocr : []).filter(function (r) {
+      var text = r && String(r.text || '').trim();
+      return r && (/^UID\s*:?\s*\d{9}$/i.test(text) ||
+        Number.isFinite(r.x) && Number.isFinite(r.y) && r.x >= 1600 && r.y >= 1030 &&
+        (/^UID\b/i.test(text) || /^\d{9}$/.test(text)));
+    });
+    var uid = ids[0];
+    if (ids.length !== 1 || !/^(?:UID\s*:?\s*)?693306810$/.test(String(uid.text || '').trim()) ||
+        !validRow(uid) || uid.x < 1600 || uid.y < 1030 || uid.x + uid.width > 1920 || uid.y + uid.height > 1080)
+      return null;
+    var found = exactDialogueRows(o, true);
+    if (!found) return null;
+    if (o.hud.choice === true) {
+      if (state.purpose !== 'inventory-protection' || state.leaveAttempted) return null;
+      var leave = leaveTarget(found.rows);
+      return leave ? { kind: 'leave', x: leave.x + leave.width / 2, y: leave.y + leave.height / 2 } : null;
+    }
+    if (found.rows.some(inChoiceBox)) return null;
+    return state.advanceAttempted || o.hud.choice !== false ? null : { kind: 'advance', key: 'VK_SPACE', durationMs: 60 };
+  }
+
+  return Object.freeze({ action: action, recoveryAction: recoveryAction });
 });

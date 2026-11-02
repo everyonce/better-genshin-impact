@@ -6,11 +6,11 @@ var ActOneCombatStatueHeal = (function () {
 
     // Retain the established bounded approach: no pathfinding, teleport or fallback dialogue.
     async function work(initial, api, observe) {
-        var current = initial, moves = 0, turns = 0, interacted = false, chosen = false, reacquisitions = 0;
+        var current = initial, moves = 0, turns = 0, interacted = false, chosen = false, introAdvanced = false, reacquisitions = 0;
         var session = initial && initial.session, lastFrame = -1, lastCapture = -1, lastCompleted = -1;
         function result(reason) {
             return { status: 'stopped', step: 'combatStatueHeal', reason: reason, moves: moves, turns: turns,
-                interactAttempted: interacted, blessingChoiceAttempted: chosen, healthVerified: false,
+                interactAttempted: interacted, blessingChoiceAttempted: chosen, introAdvanceAttempted: introAdvanced, healthVerified: false,
                 frameId: current && current.frameId, passiveReacquisitionAttempts: reacquisitions };
         }
         function check() {
@@ -35,6 +35,7 @@ var ActOneCombatStatueHeal = (function () {
         }
         // Only this unresolved numeric conflict may request another input-free capture.
         // It never promotes diagnostic guesses, a prior HP value, or a protection frame.
+        // Explicit false may accompany this OCR gap; only a later fully qualified frame can permit input.
         function mayReobserveConflict() {
             var h = current && current.hud, s = h && h.captureStamp, phase = h && h.combatHealObservation;
             var d = h && h.enemyBarDiagnostic, now = api.now(), rows = current && current.ocr;
@@ -44,7 +45,7 @@ var ActOneCombatStatueHeal = (function () {
                 !Array.isArray(h.healthOcr) || h.healthOcr.length !== 0 ||
                 !phase || phase.version !== 1 || phase.phase !== 'approach' || phase.session !== session ||
                 phase.frameId !== current.frameId || phase.observationStartedAtUnixMs !== s.capturedAt ||
-                h.groundControls !== true || h.climbing !== false || h.auto !== false || h.journal !== false ||
+                typeof h.groundControls !== 'boolean' || h.climbing !== false || h.auto !== false || h.journal !== false ||
                 h.bigMap !== false || h.choice !== false || h.dialogueReady !== false || h.objectiveChanged !== false ||
                 h.loading || h.unknownHud || h.tutorial || h.tutorialStep || h.characterAcquired ||
                 h.aerialBossVisible || h.aerialBoss || h.slimeTarget ||
@@ -86,7 +87,8 @@ var ActOneCombatStatueHeal = (function () {
             if (!api || ['now','checkStop','sleep','release','combatHealDeadline','combatHealInventoryReady',
                 'combatHealPrepareNavigation','combatHealCloseInventory','combatHealFieldReady',
                 'combatHealRotate','combatHealForward','combatHealInteractReady','combatHealInteract',
-                'combatHealBlessingReady','combatHealChooseBlessing','combatHealPanelReady','combatHealRunPanel']
+                'combatHealIntroReady','combatHealAdvanceIntro','combatHealBlessingReady','combatHealChooseBlessing',
+                'combatHealPanelReady','combatHealRunPanel']
                 .some(function (name) { return typeof api[name] !== 'function'; }) || typeof observe !== 'function')
                 return result('Required owned Statue healing adapter is missing');
             check(); accept(initial);
@@ -132,9 +134,14 @@ var ActOneCombatStatueHeal = (function () {
             if (!api.combatHealInteractReady(current)) return result('Unique exact Statue interaction prompt required');
             check(); interacted = true; await api.combatHealInteract(current);
             var choice = false;
-            for (var dialoguePoll = 0; dialoguePoll < 6; dialoguePoll++) {
+            // One combined fade/intro/choice window; neither the advance nor UID appearance resets its clock or count.
+            for (var dialoguePoll = 0; dialoguePoll < 12; dialoguePoll++) {
                 await next(350);
                 if (api.combatHealBlessingReady(current)) { choice = true; break; }
+                if (!introAdvanced && api.combatHealIntroReady(current)) {
+                    // Consume the local attempt before awaiting the independently guarded, same-F-owned action.
+                    check(); introAdvanced = true; await api.combatHealAdvanceIntro(current); check();
+                }
             }
             if (!choice) return result('Exact owned Statue dialogue and unique Blessing choice required; no fallback');
             check(); chosen = true; await api.combatHealChooseBlessing(current);
@@ -143,8 +150,9 @@ var ActOneCombatStatueHeal = (function () {
                 if (api.combatHealPanelReady(current)) {
                     var answer = await api.combatHealRunPanel(current, observe); check();
                     answer.passiveReacquisitionAttempts = reacquisitions;
+                    answer.introAdvanceAttempted = introAdvanced;
                     answer.approach = { moves: moves, turns: turns, interactAttempted: interacted,
-                        blessingChoiceAttempted: chosen, worldToPanelOwned: true };
+                        blessingChoiceAttempted: chosen, introAdvanceAttempted: introAdvanced, worldToPanelOwned: true };
                     return answer;
                 }
             }

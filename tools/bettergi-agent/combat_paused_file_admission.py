@@ -142,7 +142,7 @@ class HeldFiles:
 def owner_inputs(path, artifacts, validate_owner):
     """Enumerate the current finite owner's complete immutable replay inputs, then validate normally.
 
-    This mirrors only map_owner's explicit R58..R71 evidence names and package-selection rule.
+    This mirrors only map_owner's explicit R58..R72 evidence names and package-selection rule.
     Its actual reader set is checked by an independent read-trace regression; no new owner is admitted here.
     """
     artifacts = Path(artifacts).resolve()
@@ -163,7 +163,7 @@ def owner_inputs(path, artifacts, validate_owner):
         return raw
     cursor = Path(path).absolute()
     while cursor.name != 'warm-launcher.json':
-        require(cursor.name == 'map-owner-lineage.json' and cursor not in seen and len(seen) < 14,
+        require(cursor.name == 'map-owner-lineage.json' and cursor not in seen and len(seen) < 15,
             'Owner closure exceeds the finite lineage')
         seen.add(cursor)
         receipt = json.loads(add(cursor))
@@ -174,7 +174,7 @@ def owner_inputs(path, artifacts, validate_owner):
             add(folder / 'game-before.json')
         selected = json.loads(add(folder / 'ensure-child.json'))['selectedPackage']
         target = Path(selected['targetDirectory']).absolute()
-        match = re.fullmatch(r'release-r(5[89]|6[0-9]|7[01])', target.parent.name)
+        match = re.fullmatch(r'release-r(5[89]|6[0-9]|7[012])', target.parent.name)
         require(match is not None and target == artifacts / target.parent.name / 'BetterGI-English-win-x64',
             'Unexpected owner package scope')
         number = int(match[1])

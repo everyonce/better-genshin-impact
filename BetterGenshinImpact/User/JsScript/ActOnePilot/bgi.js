@@ -2145,6 +2145,8 @@ function createActOneAdapter(sessionId,options) {
         var proof=null;
         async function pending(info){try{await api.pausePending(info);}catch(e){/* Keep ownership if status persistence fails. */}}
         var protectorStarted=Date.now(),protectorAttempts=0,pauseDeadline=Math.min(Number.isFinite(request.shieldHardDeadline)?request.shieldHardDeadline:Infinity,protectorStarted+18000);
+        // Cleanup uses the existing protector deadline, never a renewed normal-healing lease.
+        if(request&&request.mission==='questStep'&&request.step==='combatStatueHeal')combatHealDialogue.protectionDeadline=pauseDeadline;
         while(!proof){
             if(actTwoShieldDeadlineReached(request,Date.now())||++protectorAttempts>2 || pauseDeadline-Date.now()<5000){
                 release();pauseProtectionActive=false;
@@ -2192,6 +2194,8 @@ function createActOneAdapter(sessionId,options) {
     // Private state binds current-party healing to one original request and its observed UI transitions.
     var combatHealState={requestId:null,session:null,warmed:false,closed:false,interacted:false,chosen:false,panelClosed:false,moves:0,turns:0,portraits:0,lastInputFrame:-1,deadline:0,seal:null,world:null,choice:null};
     var combatHealDefinition=null,combatHealPanelDefinition=null;
+    // One shared allowance spans normal healing and protection; entry cleanup owns no world/F/HP history.
+    var combatHealDialogue={advanceAttempted:false,leaveAttempted:false,entry:null,lastFinishedAt:null,advanceFinishedAt:null,protectionDeadline:null};
     function combatHealModule(){
         if(!combatHealDefinition)combatHealDefinition=eval(file.readTextSync('combat-statue-heal.js')+'\nActOneCombatStatueHeal;');
         if(!combatHealDefinition||typeof combatHealDefinition.run!=='function')throw new Error('Current-party Statue healer is required');
@@ -2212,6 +2216,77 @@ function createActOneAdapter(sessionId,options) {
             o.hud.captureStamp.capturedAt===lastObservation.capturedAt&&combatRetreatSeal(o)===combatHealState.seal);
         var now=Date.now();
         return same&&now<combatHealState.deadline&&gate.fresh(o,now,request.session,combatHealState.lastInputFrame);
+    }
+
+    // The current-party dialogue source is private, immutable and fresh from capture start.
+    function combatHealDialogueCurrent(o,protecting){
+        if(!request||request.mission!=='questStep'||request.step!=='combatStatueHeal'||inventoryUiOnly||
+           request.id!==combatHealState.requestId||request.session!==combatHealState.session)return false;
+        var gate=combatRetreatModule(),same=!!(o&&lastObservation&&o.session===request.session&&
+            o.frameId===lastObservation.frameId&&o.timestamp===lastObservation.timestamp&&o.hud&&o.hud.captureStamp&&
+            o.hud.captureStamp.capturedAt===lastObservation.capturedAt&&combatRetreatSeal(o)===combatHealState.seal);
+        var now=Date.now(),deadline=protecting?combatHealDialogue.protectionDeadline:combatHealState.deadline;
+        return same&&(!protecting||pauseProtectionActive)&&Number.isFinite(deadline)&&now<deadline&&
+            gate.fresh(o,now,request.session,combatHealState.lastInputFrame);
+    }
+    // Construct explicit cleanup permission, without substituting an old world/F witness for an entry dialogue.
+    function combatHealDialoguePermit(o,protecting,entry){
+        var owned=!!(combatHealState.interacted&&combatHealState.world&&
+            combatHealState.world.session===request.session&&Number.isFinite(combatHealState.fFinishedAt));
+        if(entry){
+            if(combatHealDialogue.entry||combatHealState.warmed||combatHealState.closed||combatHealState.interacted)return null;
+        }else if(!owned&&!combatHealDialogue.entry)return null;
+        if(!protecting&&!entry&&(!owned||combatHealState.chosen))return null;
+        var after=Number.isFinite(combatHealDialogue.lastFinishedAt)?combatHealDialogue.lastFinishedAt:
+            owned?combatHealState.fFinishedAt:null;
+        var state={session:request.session,purpose:protecting||entry?'inventory-protection':'healer-intro',
+            lastInputFrame:combatHealState.lastInputFrame,afterInputAt:after,
+            advanceAttempted:combatHealDialogue.advanceAttempted,leaveAttempted:combatHealDialogue.leaveAttempted};
+        var resolver=statueDialogueModule();
+        checkStop();ready();
+        if(typeof resolver.recoveryAction!=='function'||!combatHealDialogueCurrent(o,protecting))return null;
+        var action=resolver.recoveryAction(o,Date.now(),request.session,state);
+        return action?{action:action,state:state,authority:entry||combatHealDialogue.entry?'entry-cleanup':'owned-healer'}:null;
+    }
+    // Consume before persistence, and revalidate after every blocking operation before the actual input.
+    async function combatHealDialogueInput(o,protecting,requiredKind){
+        var permit=combatHealDialoguePermit(o,protecting,false);
+        if(!permit||permit.action.kind!==requiredKind)throw new Error('Fresh exact owned Statue dialogue action required');
+        if(requiredKind==='advance')combatHealDialogue.advanceAttempted=true;
+        else if(requiredKind==='leave')combatHealDialogue.leaveAttempted=true;
+        else throw new Error('Unsupported current-party Statue dialogue action');
+        var marker={session:request.session,requestId:request.id,authority:permit.authority,kind:requiredKind,
+            frameId:o.frameId,sourceCapturedAt:o.hud.captureStamp.capturedAt,sourceTimestamp:o.timestamp,
+            advanceAttempted:combatHealDialogue.advanceAttempted,leaveAttempted:combatHealDialogue.leaveAttempted,attemptedAt:Date.now()};
+        events.push(Object.assign({type:'combatStatueHealDialogueAttempt'},marker));
+        var markerPath='reports/'+request.session+'.'+request.id+'.statue-dialogue-'+requiredKind+'.json',text=JSON.stringify(marker);
+        if(file.isExists(markerPath)||!file.writeTextSync(markerPath,text)||file.readTextSync(markerPath)!==text)
+            throw new Error('Current-party Statue dialogue attempt persistence not verified; no input sent');
+        var event=null;
+        function sourceGuard(){
+            var resolver=statueDialogueModule();
+            checkStop();ready();
+            if(!combatHealDialogueCurrent(o,protecting)||typeof resolver.recoveryAction!=='function')
+                throw new Error('Current-party Statue dialogue source expired before input');
+            var action=resolver.recoveryAction(o,Date.now(),request.session,permit.state);
+            if(!action||JSON.stringify(action)!==JSON.stringify(permit.action))throw new Error('Current-party Statue dialogue changed before input');
+            combatHealState.lastInputFrame=o.frameId;
+            if(protecting)pauseProtectionLastInputFrame=o.frameId;
+            event={type:requiredKind==='advance'?'combatStatueHealIntroAdvance':'combatStatueHealDialogueLeave',
+                authority:permit.authority,frameId:o.frameId,sourceCapturedAt:o.hud.captureStamp.capturedAt,sourceTimestamp:o.timestamp,
+                worldFrameId:permit.authority==='owned-healer'?combatHealState.world.frameId:null,
+                entryFrameId:combatHealDialogue.entry?combatHealDialogue.entry.frameId:null,startedAt:Date.now()};
+            if(requiredKind==='advance'){event.key='VK_SPACE';event.durationMs=60;}
+            else {event.x=action.x;event.y=action.y;}
+            events.push(event);
+        }
+        try{
+            if(requiredKind==='advance')await boundedKey('VK_SPACE',60,o.frameId,sourceGuard);
+            else {checkStop();release();sourceGuard();click(permit.action.x,permit.action.y);}
+        }finally{
+            if(event){event.finishedAt=Date.now();combatHealDialogue.lastFinishedAt=event.finishedAt;
+                if(requiredKind==='advance')combatHealDialogue.advanceFinishedAt=event.finishedAt;}
+        }
     }
 
     function combatRetreatModule(){
@@ -3344,6 +3419,7 @@ function createActOneAdapter(sessionId,options) {
             combatRetreatDefinition=null;
             combatHealState={requestId:value.id,session:value.session,warmed:false,closed:false,interacted:false,chosen:false,panelClosed:false,moves:0,turns:0,portraits:0,lastInputFrame:-1,deadline:Number(value.createdAt)+90000,seal:null,world:null,choice:null};
             combatHealDefinition=null;combatHealPanelDefinition=null;
+            combatHealDialogue={advanceAttempted:false,leaveAttempted:false,entry:null,lastFinishedAt:null,advanceFinishedAt:null,protectionDeadline:null};
             lisaClimbReleaseDefinition=null;
             windriseState={used:false,moves:0,turns:0,interactions:0,paused:false,pauseOnly:false,lastInputFrame:-1,observer:null,plan:null};
             statueDialogueState={advanceAttempted:false,leaveAttempted:false,lastInputFrame:-1};
@@ -3384,7 +3460,7 @@ function createActOneAdapter(sessionId,options) {
             if(value.mission==='questStep'&&value.step==='lionFieldProbe')names.push('paused-navigation-anchor.js','lisa-climb-release.js');
             if(value.mission==='questStep'&&value.step==='lisaStatueRecovery')names.push('lisa-statue-recovery.js','world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&value.step==='combatStatueRetreat')names.push('combat-statue-retreat.js','world-inventory.js','local-pause.js');
-            if(value.mission==='questStep'&&value.step==='combatStatueHeal')names.push('combat-statue-retreat.js','combat-statue-heal.js','combat-statue-panel.js','world-inventory.js','local-pause.js');
+            if(value.mission==='questStep'&&value.step==='combatStatueHeal')names.push('combat-statue-retreat.js','combat-statue-heal.js','combat-statue-panel.js','world-inventory.js','local-pause.js','statue-dialogue.js');
             if(value.mission==='questStep'&&value.step==='worldInventoryClose')names.push('world-inventory.js');
             if(value.mission==='questStep'&&(value.step==='lionStart'||value.step==='lionPartyStart'))names.push('lion-entry.js');
             if(value.mission==='questStep'&&value.step==='wolfSpikeCrossFirst')names.push('wolf-spike.js');
@@ -5869,6 +5945,23 @@ function createActOneAdapter(sessionId,options) {
         runCombatStatueHeal: async function(initial,observe){
             var protector=loadLocalPause(),runner=combatHealModule(),panel=combatHealPanelModule(),answer=null,error=null;
             var startedInField=actOneLocalPauseInputReady(initial,Date.now(),request.session);
+            // A new request may only leave a positively identified entry dialogue and protect inventory.
+            // It does not inherit an F, active-character health, or permission to heal from a prior request.
+            var entry=combatHealDialoguePermit(initial,false,true);
+            if(entry){
+                combatHealDialogue.entry={session:initial.session,frameId:initial.frameId,
+                    capturedAt:initial.hud.captureStamp.capturedAt,timestamp:initial.timestamp,uid:'693306810'};
+                events.push({type:'combatStatueHealEntryDialogue',source:combatHealDialogue.entry,startedAt:Date.now()});
+                answer={status:'stopped',step:'combatStatueHeal',healthVerified:false,questComplete:false,
+                    reason:'entry-dialogue-cleanup-only',entryDialogueCleanupOnly:true,entryDialogueRecovered:false,
+                    frameId:initial.frameId,health:null,approach:{moves:0,turns:0,interactAttempted:false,
+                        blessingChoiceAttempted:false,worldToPanelOwned:false,introAdvanceAttempted:false}};
+                answer=await finishWithLocalPause(protector,this,initial,observe,initial.frameId,answer,null);
+                answer.entryDialogueRecovered=answer.pauseProof.kind==='inventory';
+                answer.reason=answer.entryDialogueRecovered?'entry-dialogue-recovered':'entry-dialogue-protected-without-inventory';
+                answer.approach.introAdvanceAttempted=combatHealDialogue.advanceAttempted;
+                return answer;
+            }
             try{answer=await runner.run(initial,this,observe);}catch(e){error=String(e&&e.message||e);}
             if(combatHealState.closed||startedInField){
                 if(answer&&Number.isInteger(answer.frameId))answer.fieldFrameId=answer.frameId;
@@ -5933,7 +6026,7 @@ function createActOneAdapter(sessionId,options) {
                 combatHealState.moves++;combatHealState.lastInputFrame=o.frameId;
             });
         },
-        // One exact nearby Statue label permits F; no general interaction or dialogue advance is exposed.
+        // One exact nearby Statue label permits F; the separate intro advance remains same-request and exact-UI only.
         combatHealInteractReady: function(o){
             return !combatHealState.interacted&&this.combatHealFieldReady(o)&&
                 Math.hypot(o.map.x+1323.474,o.map.y-2566.115)<=3&&
@@ -5952,12 +6045,20 @@ function createActOneAdapter(sessionId,options) {
             });
             combatHealState.fFinishedAt=Date.now();
         },
+        // Only this request's completed F can authorize the one normal intro advance.
+        combatHealIntroReady: function(o){
+            var permit=combatHealDialoguePermit(o,false,false);
+            return !!(permit&&permit.action.kind==='advance');
+        },
+        combatHealAdvanceIntro: async function(o){await combatHealDialogueInput(o,false,'advance');},
         // Reuse the exact original-UID Statue choice selector, joined to this request's completed F.
         combatHealBlessingReady: function(o){
             checkStop();ready();
             return combatHealState.interacted&&!combatHealState.chosen&&Number.isFinite(combatHealState.fFinishedAt)&&
                 combatHealCurrent(o)&&o.frameId>combatHealState.world.frameId&&
                 o.hud.captureStamp.capturedAt>combatHealState.fFinishedAt&&
+                 (!combatHealDialogue.advanceAttempted||Number.isFinite(combatHealDialogue.advanceFinishedAt)&&
+                    o.hud.captureStamp.capturedAt>combatHealDialogue.advanceFinishedAt)&&
                 !!actOneStatueBlessingChoiceTarget(lastObservation,Date.now(),request.session);
         },
         // Exactly one Blessing choice; offerings and missing/ambiguous choices have no fallback.
@@ -6227,6 +6328,13 @@ function createActOneAdapter(sessionId,options) {
             return proof;
         },
         pauseResolveKnownUi: async function(o){
+            // Current-party protection shares the normal one-advance allowance and may choose only exact Leave.
+            if(pauseProtectionActive&&request&&request.mission==='questStep'&&request.step==='combatStatueHeal'){
+                var currentParty=combatHealDialoguePermit(o,true,false);
+                if(!currentParty)return false;
+                await combatHealDialogueInput(o,true,currentParty.action.kind);
+                return true;
+            }
             if(pauseProtectionActive&&request&&request.mission==='questStep'&&['actTwoMapClose','actTwoRecover'].indexOf(request.step)>=0&&o&&lastObservation&&o.session===request.session&&o.frameId===lastObservation.frameId&&o.timestamp===lastObservation.timestamp&&this.actTwoHandbookRecoveryReady(o)&&!events.some(function(e){return e.type==='actTwoHandbookSafetyClose';})){
                 checkStop();ready();release();pauseProtectionLastInputFrame=o.frameId;var event={type:'actTwoHandbookSafetyClose',frameId:o.frameId,startedAt:Date.now()};events.push(event);try{await boundedKey('VK_ESCAPE',60,o.frameId);await sleep(650);return true;}finally{event.finishedAt=Date.now();}
             }

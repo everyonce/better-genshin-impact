@@ -94,9 +94,61 @@ class BatchSourceHold:
         require(not self.waiting and not self.inflight, 'prediction crossed an active hold or transaction')
         require(self.selected_after_release(frame or {}), 'prediction selected pre-confirmation pixels')
         self.inflight = True
-        # Only this serial post-confirmation selection consumes the ACK-epoch fence.
-        # Its immutable source floor and the one-hold budget remain through later endpoint releases.
+        # This serial selection or a fully verified endpoint retires the ACK-epoch fence.
+        # Immutable source floors and the one-hold budget remain through later endpoint releases.
         self.selection_barrier = False
+
+    def verified_endpoint(self, endpoint, transition, frame, now_ns):
+        """Retire only the old ACK epoch after the existing controller fully verifies its released waypoint."""
+        if not self.selection_barrier:return None
+        require(self.phase == 'complete' and self.used == 1 and not self.inflight,
+                'endpoint crossed an unfinished hold or prediction')
+        marker = transition.get('executedHistoryReset') or {}
+        release = marker.get('release') or {};gate = release.get('worldReadiness') or {}
+        last = self.sources[-1]['frame'];floor = last['sourceFrame'];source = frame.get('sourceFrame') or {}
+        predecessor = {key:self.runtime['predecessor'][key] for key in ('requestId','endedAtMs')}
+        expected_epoch = self.release['response']['worldReadiness']['epoch']+1
+        require(endpoint.get('type') == 'hybridEndpointVerified'
+                and endpoint.get('routeSpecSha256') == self.route_sha
+                and endpoint.get('completedLegs') == self.runtime['completedLegs']+1
+                and endpoint.get('endpoint') == self.runtime['targetName']
+                and endpoint.get('sourceEpoch') == floor['captureEpoch']
+                and type(endpoint.get('arrivalFrameId')) is int and endpoint['arrivalFrameId'] >= last['frameId']
+                and transition.get('type') == 'controlTransition' and transition.get('state') == 'held'
+                and transition.get('reason') == 'hybridEndpoint' and marker.get('version') == 1
+                and marker.get('routeSpecSha256') == self.route_sha
+                and marker.get('endpointOrdinal') == endpoint['completedLegs']
+                and marker.get('arrivalFrameId') == endpoint['arrivalFrameId']
+                and marker.get('previousReceipt') == predecessor and marker.get('before') == self.runtime['history']
+                and all((marker.get('after') or {}).get(key) == 0
+                        for key in ('afterFrames','afterIndex','afterValidTokens','validFrames')),
+                'endpoint is not the original settled waypoint/reset')
+        released_source = gate.get('sourceFrame') or {}
+        require(release.get('type') == 'released' and release.get('droppedReceipts') == 0 and release.get('receipts') == []
+                and number(release.get('serverNowMs')) and release['serverNowMs'] == endpoint.get('releaseAtMs')
+                and predecessor['endedAtMs'] <= release['serverNowMs']
+                and gate.get('epoch') == endpoint.get('releaseEpoch') == expected_epoch
+                and gate.get('ready') is False and gate.get('reason') == 'client_release'
+                and type(gate.get('sourceFrameId')) is int and gate['sourceFrameId'] >= endpoint['arrivalFrameId']
+                and released_source.get('captureEpoch') == floor['captureEpoch']
+                and released_source.get('timestamp100ns',-1) >= floor['timestamp100ns']
+                and floor['freshnessAtMs'] <= released_source.get('freshnessAtMs',-1) <= release['serverNowMs'],
+                'endpoint lost its exact next release/source barrier')
+        self._healthy(frame)
+        samples = endpoint.get('samples') or []
+        require(len(samples) == 3 and samples[-1].get('frameId') == frame.get('frameId')
+                and frame['frameId'] >= last['frameId'] and source.get('captureEpoch') == floor['captureEpoch']
+                and source.get('timestamp100ns',-1) >= floor['timestamp100ns']
+                and source.get('freshnessAtMs',-1) >= floor['freshnessAtMs']
+                and source['freshnessAtMs'] > release['serverNowMs']
+                and frame['frameWorldReadiness']['epoch'] == expected_epoch
+                and type(transition.get('clientTimeNs')) is int
+                and self.sources[-1]['clientTimeNs'] <= transition['clientTimeNs'] <= now_ns,
+                'endpoint lacks its exact post-release settled source')
+        # No history, clock, source floor or hold budget changes here. The ordinary
+        # endpoint proof now owns the next epoch; arbitrary phase changes do not.
+        self.selection_barrier = False
+        return self._event('Endpoint', now_ns, endpoint=endpoint, transition=transition, frame=retained_frame(frame))
 
     def finish_prediction(self):
         """Release the reservation only after feedback and its original journal are settled."""

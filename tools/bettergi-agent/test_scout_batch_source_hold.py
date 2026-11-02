@@ -1,5 +1,7 @@
 """Portable source-hold authority, real intake and original-receipt replay tests; no GPU or native IO."""
+import ast
 import copy
+from types import SimpleNamespace
 import json
 from pathlib import Path
 import tempfile
@@ -294,6 +296,127 @@ def run_hold_fixture(folder,*,bridge=None,policy=None,recorder=None,args=None,co
         return batch_tests.run_batch_fixture(folder,bridge=bridge,policy=policy,recorder=recorder,args=args,control=control)
 
 
+def production_method(filename,name,owner=None):
+    """Execute the exact selected method body without importing torch or a model constructor."""
+    path=Path(__file__).with_name(filename);tree=ast.parse(path.read_text(encoding='utf-8'))
+    scope=next(node for node in tree.body if isinstance(node,ast.ClassDef) and node.name==owner) if owner else tree
+    matches=[node for node in ast.walk(scope) if isinstance(node,ast.FunctionDef) and node.name==name]
+    assert len(matches)==1
+    namespace={'deepcopy':copy.deepcopy}
+    exec(compile(ast.Module(body=[matches[0]],type_ignores=[]),str(path),'exec'),namespace)
+    return namespace[name]
+
+
+class CounterScalar:
+    """Supply only the scalar storage operations used by the unchanged adapter lifecycle."""
+    def __init__(self,value=0):
+        """Create scalar storage, not model state or backup counters."""
+        self.value=value
+    def item(self):
+        """Return the current scalar for the real counter method."""
+        return self.value
+    def clone(self):
+        """Let the actual transaction method create its own independent backup."""
+        return CounterScalar(self.value)
+    def copy_(self,other):
+        """Mirror the in-place scalar copy used by rejection and later predictions."""
+        self.value=other.value;return self
+    def zero_(self):
+        """Allow the actual reset body to clear retained scalar storage."""
+        self.value=0;return self
+
+
+class ColdBackupPolicy(batch_tests.stream_tests.HistoryPolicy):
+    """Run real adapter transaction/reset/counter bodies around an inert proposal and receipt."""
+    _begin_history_transaction=production_method('model_adapters.py','_begin_history_transaction','OpenP2PAdapter')
+    executed_history_counters=production_method('model_adapters.py','executed_history_counters','OpenP2PAdapter')
+    actual_reset=production_method('model_adapters.py','reset','OpenP2PAdapter')
+    actual_finish=production_method('model_adapters.py','finish_executed_action','OpenP2PAdapter')
+    actual_reject=production_method('model_adapters.py','finish_action','OpenP2PAdapter')
+    def __init__(self):
+        """Match initialized public storage while deliberately leaving all three backup fields absent."""
+        super().__init__();self.steps_seen=0;self.idx=CounterScalar();self.state=[]
+        self.static_idx=self.idx;self.static_state=self.state;self.graph=object();self.text=CounterScalar()
+        self.temporal_cache=SimpleNamespace(valid_tokens=CounterScalar())
+        self.temporal_cache.reset=self.temporal_cache.valid_tokens.zero_
+        self.config=SimpleNamespace(shared=SimpleNamespace(n_seq_timesteps=41))
+        self._pending_feedback=False;self._executed_candidate=None;self._history_backup=None
+        self.cold_prediction_entries=[]
+    def predict(self,image,size,**kwargs):
+        """Only the unchanged real transaction body may create backup attributes before the inert forward."""
+        self.cold_prediction_entries.append(not hasattr(self,'_backup_steps'))
+        self._begin_history_transaction();result=super().predict(image,size,**kwargs)
+        self.steps_seen=self.frames;self.idx.value=self.frames*12
+        self.temporal_cache.valid_tokens.value=min(self.frames,41)*12
+        return result
+    def prepare_executed_action(self,step):
+        """Retain the same selected step for the real completed-receipt method, with no tensor forward."""
+        encoded=super().prepare_executed_action(step)
+        self._executed_candidate=dict(step=copy.deepcopy(step),encodedAction=copy.deepcopy(encoded))
+        return encoded
+    def finish_executed_action(self,receipt,request,accepted):
+        """Exercise the production receipt/candidate join before the existing inert evidence ledger."""
+        self.actual_finish(receipt,request,accepted);super().finish_executed_action(receipt,request,accepted)
+    def finish_action(self,accepted):
+        """Exercise real rollback without fabricating a settled predecessor."""
+        self.actual_reject(accepted);super().finish_action(accepted)
+    def reset(self):
+        """Use the actual reset, including its deliberate retention of previously created backups."""
+        self.actual_reset();super().reset()
+
+
+def runtime_snapshot(policy,events,predecessor):
+    """Run the actual nested snapshot with the existing precise source-hold fixture bookkeeping."""
+    runtime=fixture()[-1];method=production_method('stream_client.py','source_hold_runtime')
+    method.__globals__.update(copy=copy,source_hold_runtime_ready=True,batch_source_hold=SimpleNamespace(inflight=False),
+        report=dict(executedHistoryEvents=events,acceptedInputActions=len(policy.commits)),
+        bridge=SimpleNamespace(hello=runtime['lease']),args=SimpleNamespace(reviewed_scout_route=BATCH),
+        hybrid=SimpleNamespace(phase=runtime['phase'],target=runtime['target'],target_name=runtime['targetName'],
+            legs=runtime['completedLegs'],leg_started=runtime['legStartedAtMs'],leg_deadline_ns=runtime['legDeadlineClientNs']),
+        deadline=runtime['deadlineClientNs']/1e9,last_accepted_at=runtime['lastAcceptedClientNs']/1e9,
+        policy=policy,history_receipts=set(policy.commits),history_predecessor=predecessor)
+    return method()
+
+
+class ColdSourceHoldSnapshotTests(unittest.TestCase):
+    """A real cold adapter has no history snapshot until this run has an exact settled predecessor."""
+    def test_cold_snapshot_never_reads_or_fabricates_adapter_backup_counters(self):
+        policy=ColdBackupPolicy();policy.reset()
+        for name in ('_backup_steps','_backup_idx','_backup_valid'):self.assertFalse(hasattr(policy,name))
+        with self.assertRaisesRegex(AttributeError,'_backup_steps'):policy.executed_history_counters()
+        self.assertIsNone(runtime_snapshot(policy,[],None))
+        # Either half missing remains unresolved, even when the other half resembles an old run.
+        old=fixture()[-1]
+        self.assertIsNone(runtime_snapshot(policy,[],old['predecessor']))
+        self.assertIsNone(runtime_snapshot(policy,[old['settled']],None))
+        for name in ('_backup_steps','_backup_idx','_backup_valid'):self.assertFalse(hasattr(policy,name))
+
+    def test_real_settlement_counters_survive_and_reset_does_not_forge_a_predecessor(self):
+        policy=ColdBackupPolicy();machine,healthy,stale,ack,runtime=fixture();settled=runtime['settled']
+        policy.predict(None,(1,1));policy.prepare_executed_action(settled['arguments']['steps'][0])
+        policy.finish_executed_action(settled['receipt'],settled['arguments'],settled['acceptance'])
+        snapshot=runtime_snapshot(policy,[settled],runtime['predecessor'])
+        self.assertEqual(snapshot,runtime);self.assertEqual(snapshot['history'],policy.executed_history_counters())
+        machine.observe(stale,1_220_000_000,snapshot,1);machine.acknowledge_release(ack,0,1_230_000_000,snapshot)
+        policy.reset();self.assertTrue(hasattr(policy,'_backup_steps'))
+        self.assertEqual(policy.executed_history_counters()['afterFrames'],0)
+        missing=runtime_snapshot(policy,[settled],None);self.assertIsNone(missing)
+        # Loss during an active hold still fails closed; startup omission is never renewed authority.
+        with self.assertRaises(AttributeError):machine.tick(1_240_000_000,missing)
+        self.assertTrue(machine.waiting);self.assertEqual(machine.used,1)
+
+    def test_cold_real_counter_adapter_reaches_first_prediction_and_two_endpoints(self):
+        with tempfile.TemporaryDirectory() as folder:
+            policy=ColdBackupPolicy()
+            code,part,recorder,bridge,policy=run_hold_fixture(folder,policy=policy)
+            self.assertEqual((code,part['status'],bridge.hold_releases),(0,'completed',1))
+            self.assertEqual((len(bridge.actions),len(bridge.completed),len(policy.commits)),(6,6,6))
+            self.assertEqual(policy.cold_prediction_entries,[True,False,False,False,False,False])
+            self.assertEqual([event['history']['afterFrames'] for event in part['executedHistoryEvents']],[1,2,3,1,2,3])
+            self.assertEqual(len([row for row in part['controlTransitions'] if 'executedHistoryReset' in row]),2)
+            self.assertTrue(recorder.closed);self.assertEqual(bridge.commands[-1],'stop')
+
+
 class BatchSourceHoldStreamTests(unittest.TestCase):
     """Retain one model/request across two endpoints, while proving hold and failure fences."""
     def test_one_hold_two_endpoints_retains_history_and_no_prediction_between_confirmations(self):
@@ -371,7 +494,7 @@ class BatchSourceHoldAuditTests(unittest.TestCase):
         trace=copy.deepcopy(self.trace)
         trace[0]['scoutBatchSourceHoldEvents'][:]=[row for row in trace[0]['scoutBatchSourceHoldEvents'] if not row['type'].endswith('Transaction')]
         trace[2][:]=[row for row in trace[2] if row.get('type')!='scoutBatchSourceHoldTransaction']
-        with self.assertRaisesRegex(ValueError,'transactions'):self.replay(trace)
+        with self.assertRaisesRegex(ValueError,r'^(Source-hold transactions do not cover every original prediction/history result|Source-hold endpoint is missing or repeated)$'):self.replay(trace)
 
     def test_begin_moved_after_real_prediction_refuses_even_when_report_matches(self):
         trace=copy.deepcopy(self.trace);decision=trace[0]['decisions'][3]
@@ -389,6 +512,87 @@ class BatchSourceHoldAuditTests(unittest.TestCase):
                 for row in rows:
                     if str(row.get('type','')).startswith('scoutBatchSourceHold') and 'runtime' in row:row['runtime'][key]=value
             with self.subTest(key=key),self.assertRaises(ValueError):self.replay(trace)
+
+
+class SourceHoldEndpointBeforePredictionTests(unittest.TestCase):
+    """A hold completing at a waypoint must use the existing verified endpoint, never an arbitrary phase."""
+    replay=BatchSourceHoldAuditTests.replay
+    @classmethod
+    def setUpClass(cls):
+        """Retain one cold-adapter action3 trace with both subsequent endpoint and next-leg input."""
+        with tempfile.TemporaryDirectory() as folder:
+            recorder=batch_tests.stream_tests.HistoryRecorder();bridge=HoldBridge(recorder,freeze_action=3)
+            code,part,recorder,_,policy=run_hold_fixture(folder,bridge=bridge,recorder=recorder,policy=ColdBackupPolicy())
+            if code:raise AssertionError(part)
+            cls.trace=(part,{row['frameId']:row for row,_ in recorder.frames},recorder.events)
+            cls.closed=recorder.closed;cls.commands=bridge.commands;cls.cold=policy.cold_prediction_entries
+
+    def endpoint_machine(self):
+        """Replay the original hold packets up to the exact endpoint marker without a new native call."""
+        part,frames,rows=self.trace;events=part['scoutBatchSourceHoldEvents']
+        machine=BatchSourceHold(batch_source_hold_policy(),BATCH.profile_id,BATCH.sha256,part['hello'],part['scoutEncounterGuard'])
+        trigger=next(row for row in events if row['type']=='scoutBatchSourceHoldTrigger');prior=trigger['previous']
+        machine.remember_healthy(prior['frame'],prior['clientTimeNs'],prior['roundTripMs'],dict(state='ready'))
+        machine.observe(trigger['frame'],trigger['clientTimeNs'],trigger['runtime'],trigger['roundTripMs'])
+        for row in events:
+            if row['type']=='scoutBatchSourceHoldRelease':
+                machine.acknowledge_release(row['response'],row['payloadBytes'],row['clientTimeNs'],row['runtime'])
+            elif row['type']=='scoutBatchSourceHoldObservation':
+                machine.observe(row['frame'],row['clientTimeNs'],row['runtime'],row['roundTripMs'])
+            elif row['type']=='scoutBatchSourceHoldEndpoint':return machine,copy.deepcopy(row)
+        raise AssertionError('Missing real endpoint retirement marker')
+
+    def test_cold_action3_hold_endpoint_and_next_leg_complete_with_full_replay(self):
+        part,frames,rows=self.trace;result=self.replay(self.trace)
+        self.assertEqual((result['verifiedLegs'],result['acceptedActions'],result['batchSourceHold']['holds']),(2,6,1))
+        self.assertEqual(self.cold,[True,False,False,False,False,False])
+        self.assertTrue(self.closed);self.assertEqual(self.commands[-1],'stop')
+        machine,row=self.endpoint_machine();floors=copy.deepcopy(machine.sources);prior=copy.deepcopy(machine.runtime)
+        self.assertTrue(machine.selection_barrier)
+        self.assertEqual(machine.verified_endpoint(row['endpoint'],row['transition'],row['frame'],row['clientTimeNs']),row)
+        self.assertFalse(machine.selection_barrier);self.assertEqual(machine.used,1)
+        self.assertEqual(machine.sources,floors);self.assertEqual(machine.runtime,prior)
+        self.assertFalse(machine.selected_after_release(machine.trigger['frame']))
+        self.assertTrue(machine.selected_after_release(row['frame']))
+        marker_index=rows.index(row);endpoint_index=rows.index(row['endpoint'])
+        self.assertLess(endpoint_index,marker_index)
+        self.assertEqual([event['history']['afterFrames'] for event in part['executedHistoryEvents']],[1,2,3,1,2,3])
+
+    def test_unmatched_endpoint_old_source_epoch_release_or_reset_cannot_clear_barrier(self):
+        def unmatched(row,machine):row['endpoint']['completedLegs']+=1
+        def old_source(row,machine):row['frame']=copy.deepcopy(machine.sources[-1]['frame'])
+        def foreign_source(row,machine):
+            def replace(value):
+                if isinstance(value,dict):
+                    for key,item in value.items():
+                        if key=='captureEpoch':value[key]='foreign-capture'
+                        else:replace(item)
+                elif isinstance(value,list):
+                    for item in value:replace(item)
+            replace(row['frame'])
+        def old_epoch(row,machine):
+            for name in ('worldReadiness','frameWorldReadiness'):row['frame'][name]['epoch']-=1
+        def wrong_release(row,machine):row['transition']['executedHistoryReset']['release']['worldReadiness']['epoch']+=1
+        def changed_reset(row,machine):row['transition']['executedHistoryReset']['before']['afterFrames']+=1
+        def wrong_transition(row,machine):row['transition']['reason']='worldTransition'
+        for mutate in (unmatched,old_source,foreign_source,old_epoch,wrong_release,changed_reset,wrong_transition):
+            machine,row=self.endpoint_machine();mutate(row,machine)
+            with self.subTest(mutation=mutate.__name__),self.assertRaises(ValueError):
+                machine.verified_endpoint(row['endpoint'],row['transition'],row['frame'],row['clientTimeNs'])
+            self.assertTrue(machine.selection_barrier);self.assertEqual(machine.used,1)
+
+    def test_missing_or_detached_endpoint_marker_fails_complete_audit(self):
+        for mutation in ('missing','before-endpoint','unmatched-copy'):
+            part,frames,rows=copy.deepcopy(self.trace)
+            marker=next(row for row in rows if row.get('type')=='scoutBatchSourceHoldEndpoint')
+            if mutation=='missing':
+                rows.remove(marker);part['scoutBatchSourceHoldEvents'].remove(marker)
+            elif mutation=='before-endpoint':
+                rows.remove(marker);rows.insert(rows.index(marker['endpoint']),marker)
+            else:
+                marker['endpoint']['completedLegs']+=1
+                next(row for row in part['scoutBatchSourceHoldEvents'] if row['type']=='scoutBatchSourceHoldEndpoint')['endpoint']['completedLegs']+=1
+            with self.subTest(mutation=mutation),self.assertRaises(ValueError):self.replay((part,frames,rows))
 
 
 class BatchSourceHoldRaceTests(unittest.TestCase):

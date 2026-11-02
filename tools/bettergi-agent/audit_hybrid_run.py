@@ -747,6 +747,7 @@ def verify_batch_source_hold(run, parts, frames, entries, recordings, reuse):
             'Source-hold original batch clock changed')
     machine=BatchSourceHold(descriptor,route.profile_id,route.sha256,native,part['scoutEncounterGuard'])
     guard_rows={};history=[];leg=None;legs=[];transaction=None;last_ns=-1;trigger=None;release_rows=[];paired=[]
+    pending_endpoint=None;endpoint_transitions=[]
     decisions={row.get('acceptance',{}).get('requestId'):row for row in part['decisions']
                if row.get('acceptance',{}).get('type')=='accepted'}
     for row in rows:
@@ -754,10 +755,17 @@ def verify_batch_source_hold(run, parts, frames, entries, recordings, reuse):
         if kind=='scoutEncounterGuardObservation':guard_rows[row['clientReceivedNs']]=row
         if kind=='p2pExecutedHistory':history.append(row)
         if kind=='scoutEncounterGuardRelease' and row.get('reason')==RELEASE_REASON:release_rows.append(row)
+        if kind=='controlTransition' and row.get('reason')=='hybridEndpoint':endpoint_transitions.append(row)
+        if kind=='hybridEndpointVerified' and machine.selection_barrier:
+            require(pending_endpoint is None and row in part['hybridNavigationEvents'],
+                    'Source-hold endpoint is missing or repeated')
+            pending_endpoint=row
         if not str(kind).startswith(EVENT_PREFIX):continue
         now=row.get('clientTimeNs')
         require(type(now) is int and now>=last_ns,'Source-hold event clock regressed')
         last_ns=now
+        require(pending_endpoint is None or kind==EVENT_PREFIX+'Endpoint',
+                'Source-hold endpoint retirement was skipped or detached')
         if kind==EVENT_PREFIX+'Lease':
             require(row==lease and transaction is None,'Source-hold lease changed')
         elif kind==EVENT_PREFIX+'Leg':
@@ -791,6 +799,17 @@ def verify_batch_source_hold(run, parts, frames, entries, recordings, reuse):
                         and row.get('outcome')==history[-1]['outcome']
                         and transaction['clientTimeNs']<=history[-1]['clientTimeNs']<=now,'Prediction reservation ended without exact feedback')
                 machine.finish_prediction();paired.append(row['frameId']);transaction=None
+        elif kind==EVENT_PREFIX+'Endpoint':
+            endpoint=row.get('endpoint');transition=row.get('transition');frame=row.get('frame') or {}
+            require(pending_endpoint is not None and endpoint==pending_endpoint
+                    and transition in endpoint_transitions and transition in part['controlTransitions']
+                    and transaction is None and history and history[-1]==machine.runtime['settled']
+                    and immutable_frame(frames.get(frame.get('frameId'),{}))==immutable_frame(frame),
+                    'Source-hold endpoint marker is detached from original controller/source evidence')
+            validate_ground_frame(frame,replay_pixels=True)
+            require(machine.verified_endpoint(endpoint,transition,frame,now)==row,
+                    'Source-hold endpoint differs from exact replay')
+            pending_endpoint=None
         elif kind==EVENT_PREFIX+'Trigger':
             runtime=row.get('runtime') or {};prior=row.get('previous') or {}
             old=guard_rows.get(prior.get('clientTimeNs'))
@@ -831,7 +850,7 @@ def verify_batch_source_hold(run, parts, frames, entries, recordings, reuse):
     require(len(paired)==len(set(paired)) and paired==[item['frameId'] for item in part['decisions']]
             ==[item['frameId'] for item in part['executedHistoryEvents']],
             'Source-hold transactions do not cover every original prediction/history result')
-    require(transaction is None and not machine.waiting and machine.snapshot()==part.get('scoutBatchSourceHoldState'),
+    require(transaction is None and pending_endpoint is None and not machine.waiting and machine.snapshot()==part.get('scoutBatchSourceHoldState'),
             'Source hold ended with pending prediction, recovery or changed state')
     require(len(release_rows)==machine.used,'Source hold lacks its unique existing guard disarm')
     if machine.used:

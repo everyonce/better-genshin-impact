@@ -2040,6 +2040,8 @@ def run_episode(args, policy=None, control=None):
         if not source_hold_runtime_ready:return None
         if batch_source_hold.inflight:return dict(pendingFeedback=True, pendingCandidate=True)
         settled = report['executedHistoryEvents'][-1] if report['executedHistoryEvents'] else None
+        # Adapter backup counters exist only after prediction; old backups alone are not a current settled predecessor.
+        if settled is None or history_predecessor is None:return None
         return dict(lease={key:copy.deepcopy(bridge.hello.get(key)) for key in ('sessionId','ownerEpoch','goalVersion')},
             routeSpecSha256=args.reviewed_scout_route.sha256, phase=hybrid.phase,
             target=list(hybrid.target), targetName=hybrid.target_name, completedLegs=hybrid.legs,
@@ -2520,6 +2522,15 @@ def run_episode(args, policy=None, control=None):
                     from landmark_shadow_sources import retain
                     retain(recorder,event,station_frame,station_pixels,control.run_id,bridge.hello,
                            args.expected_process_id,args.expected_session_id)
+            if batch_source_hold is not None and event['type'] == 'hybridEndpointVerified':
+                with receive_lock:
+                    if batch_source_hold.selection_barrier:
+                        matches = [row for row in report['controlTransitions']
+                            if (row.get('executedHistoryReset') or {}).get('endpointOrdinal') == event['completedLegs']]
+                        if len(matches) != 1:
+                            raise RuntimeError('Source-hold endpoint has no exact retained release/reset')
+                        record_source_hold(batch_source_hold.verified_endpoint(
+                            event, matches[0], station_frame, time.perf_counter_ns()))
             if warm:
                 if event['type'] == 'hybridEndpointVerified':
                     endpoint = event

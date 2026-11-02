@@ -44,6 +44,7 @@ var ActOneCombatStatueRetreat = (function () {
     }
 
     // Enemy candidates are read on this capture even when the quest objective is unrelated.
+    // Entry permits any well-formed enemy count; arrival and healing still require zero.
     function worldReady(o, now, session, noEnemies) {
         var h = o && o.hud, hp = h && h.health, diagnostic = h && h.enemyBarDiagnostic;
         if (!fresh(o, now, session, -1) || !originalUid(o) || !party(o) || !h || h.world !== true ||
@@ -51,9 +52,9 @@ var ActOneCombatStatueRetreat = (function () {
             h.bigMap !== false || h.choice !== false || h.dialogueReady !== false || h.objectiveChanged !== false ||
             h.loading || h.unknownHud || h.tutorial || h.tutorialStep || h.characterAcquired ||
             !hp || !Number.isInteger(hp.current) || hp.max !== 1001 || hp.current <= 0 || hp.current > 1001 ||
-            !Array.isArray(h.healthOcr) || !Array.isArray(h.enemyBars) || h.enemyBars.length > 4 ||
+            !Array.isArray(h.healthOcr) || !Array.isArray(h.enemyBars) ||
             !diagnostic || diagnostic.level !== 'any' || !Number.isInteger(diagnostic.candidates) ||
-            diagnostic.candidates < 0 || diagnostic.candidates > 4) return false;
+            diagnostic.candidates < 0) return false;
         var parsed = h.healthOcr.map(function (text) { return /^(\d+)\s*\/\s*(\d+)$/.exec(String(text).trim()); }).filter(Boolean);
         return parsed.length > 0 && parsed.every(function (m) { return Number(m[1]) === hp.current && Number(m[2]) === hp.max; }) &&
             (!noEnemies || h.enemyBars.length === 0 && diagnostic.candidates === 0);

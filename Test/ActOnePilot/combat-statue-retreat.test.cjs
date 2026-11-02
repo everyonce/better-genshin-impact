@@ -6,6 +6,8 @@ const path=require('node:path');
 const vm=require('node:vm');
 const dir=path.resolve(__dirname,'../../BetterGenshinImpact/User/JsScript/ActOnePilot');
 const retreat=require(path.join(dir,'combat-statue-retreat.js'));
+// Exact historical frame9 from R69 retreat01; its original completion clock is used only for replay.
+const recordedEntry=JSON.parse(fs.readFileSync(path.join(__dirname,'fixtures/combat-statue-retreat-r69-entry.fixture.json'),'utf8'));
 const row=(text,x,y,width=90,height=28)=>({text,x,y,width,height});
 const uid=()=>row('UID: 693306810',1690,1050,190,24);
 const party=()=>[row('Lumina',1678,255),row('Amber',1690,349),row('Kaeya',1698,443),row('Lisa',1691,537)];
@@ -41,7 +43,12 @@ for(const [name,change] of [
   ['wrong ordered roster',o=>o.ocr.find(r=>r.text==='Lisa').y=443],
   ['duplicate name',o=>o.ocr.push(row('Lisa',1700,540))],
   ['missing candidate recognition',o=>delete o.hud.enemyBarDiagnostic],
-  ['more than four raw candidates',o=>o.hud.enemyBarDiagnostic.candidates=5],
+  ['negative raw candidate count',o=>o.hud.enemyBarDiagnostic.candidates=-1],
+  ['missing raw candidate count',o=>delete o.hud.enemyBarDiagnostic.candidates],
+  ['nonfinite raw candidate count',o=>o.hud.enemyBarDiagnostic.candidates=Infinity],
+  ['fractional raw candidate count',o=>o.hud.enemyBarDiagnostic.candidates=1.5],
+  ['boolean raw candidate count',o=>o.hud.enemyBarDiagnostic.candidates=true],
+  ['string raw candidate count',o=>o.hud.enemyBarDiagnostic.candidates='5'],
   ['unqualified candidate mode',o=>o.hud.enemyBarDiagnostic.level=1],
   ['climbing',o=>o.hud.climbing=true],
   ['unrelated menu',o=>o.hud.journal=true],
@@ -76,6 +83,7 @@ function pure(options={}){
     combatRetreatAtStatue:o=>teleported&&retreat.atStatue(o,now,o.session)};
   if(options.reusedCompletion)initial.hud.captureStamp.capturedAt=900;
   const observe=async()=>{if(!options.repeat)id++;const o=frame(id,now,screen);
+    if(options.threatenedEntry&&!teleported&&screen==='world'){o.hud.enemyBars=recordedEntry.hud.enemyBars.map(b=>({...b}));o.hud.enemyBarDiagnostic={...recordedEntry.hud.enemyBarDiagnostic};}
     if(options.reusedStart)o.hud.captureStamp.capturedAt=initial.hud.captureStamp.capturedAt;
     if(options.reusedCompletion){o.timestamp=initial.timestamp;o.hud.captureStamp.capturedAt=950;}
     return o;};
@@ -234,4 +242,33 @@ for(const mode of ['age','stop'])test('final inventory helper read cannot hide '
   assert.equal(initial.timestamp-initial.hud.captureStamp.capturedAt,500);
   await assert.rejects(f.adapter.combatRetreatCloseInventory(initial),mode==='age'?/source changed/:/Stop requested/);
   assert.equal(reads,2);assert.deepEqual(downs(f),[]);assert.equal(f.getScreen(),'inventory');
+});
+
+
+test('recorded R69 world permits retreat entry despite five raw candidates',()=>{
+  const o=recordedEntry;
+  assert.equal(o.frameId,9);assert.equal(o.hud.enemyBars.length,4);assert.equal(o.hud.enemyBarDiagnostic.candidates,5);
+  assert.equal(retreat.worldReady(o,o.timestamp,o.session,false),true);
+  assert.equal(retreat.worldReady(o,o.hud.captureStamp.capturedAt+1001,o.session,false),false);
+});
+test('well-formed larger final-bar counts do not block retreat entry',()=>{
+  const o=JSON.parse(JSON.stringify(recordedEntry));o.hud.enemyBars.push({...o.hud.enemyBars[0],x:500});o.hud.enemyBarDiagnostic.candidates=6;
+  assert.equal(retreat.worldReady(o,o.timestamp,o.session,false),true);
+  assert.equal(retreat.worldReady(o,o.timestamp,o.session,true),false);
+});
+test('recorded threats cannot qualify arrival or the healing world gate',()=>{
+  const o=JSON.parse(JSON.stringify(recordedEntry));
+  // This synthetic position isolates the unchanged no-enemy arrival gate; it is not an arrival claim.
+  o.map={map:'Teyvat',x:-1323.474,y:2566.115};
+  assert.equal(retreat.atStatue(o,o.timestamp,o.session),false);
+  o.hud.enemyBars=[];assert.equal(retreat.atStatue(o,o.timestamp,o.session),false);
+  assert.equal(retreat.worldReady(o,o.timestamp,o.session,true),false);
+  o.hud.enemyBarDiagnostic.candidates=0;o.hud.enemyBars=[{...recordedEntry.hud.enemyBars[0]}];
+  assert.equal(retreat.atStatue(o,o.timestamp,o.session),false);
+  o.hud.enemyBars=[];assert.equal(retreat.atStatue(o,o.timestamp,o.session),true);
+  assert.equal(retreat.worldReady(o,o.timestamp,o.session,true),true);
+});
+test('runner opens the map from the threatened entry and still requires clear arrival',async()=>{
+  const f=pure({threatenedEntry:true}),r=await f.run();
+  assert.deepEqual(f.calls,['Escape','M','tp','release']);assert.equal(r.arrived,true);assert.equal(r.healingVerified,false);
 });

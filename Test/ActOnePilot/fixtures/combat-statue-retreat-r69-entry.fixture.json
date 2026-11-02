@@ -1,0 +1,264 @@
+{
+  "session": "mvyo1ej0-czcnlqo7t8k",
+  "frameId": 9,
+  "timestamp": 1793588095884,
+  "screenshotPath": "observations/mvyo1ej0-czcnlqo7t8k/frame-0009.png",
+  "ocr": [
+    {
+      "text": "Lumma",
+      "x": 1688,
+      "y": 266,
+      "width": 67,
+      "height": 15
+    },
+    {
+      "text": "Amber",
+      "x": 1698,
+      "y": 351,
+      "width": 59,
+      "height": 23
+    },
+    {
+      "text": "Enter",
+      "x": 41,
+      "y": 1025,
+      "width": 112,
+      "height": 30
+    },
+    {
+      "text": "e",
+      "x": 1682,
+      "y": 1026,
+      "width": 35,
+      "height": 25
+    },
+    {
+      "text": "q",
+      "x": 1802,
+      "y": 1026,
+      "width": 35,
+      "height": 27
+    },
+    {
+      "text": "UID: 693306810",
+      "x": 1684,
+      "y": 1052,
+      "width": 179,
+      "height": 27
+    },
+    {
+      "text": "E",
+      "x": 1690.6666666666667,
+      "y": 1028,
+      "width": 17,
+      "height": 21.333333333333332
+    },
+    {
+      "text": "Q",
+      "x": 1807.6666666666667,
+      "y": 1027.3333333333333,
+      "width": 23,
+      "height": 24.666666666666668
+    },
+    {
+      "text": "206010",
+      "x": 1772.6666666666667,
+      "y": 1053.3333333333333,
+      "width": 83.66666666666667,
+      "height": 11.666666666666666
+    },
+    {
+      "text": "Lumina",
+      "x": 1685,
+      "y": 259.3333333333333,
+      "width": 76,
+      "height": 20
+    },
+    {
+      "text": "Kaeya",
+      "x": 1696.6666666666667,
+      "y": 440.33333333333337,
+      "width": 66.33333333333333,
+      "height": 26
+    },
+    {
+      "text": "Lisa",
+      "x": 1692.3333333333333,
+      "y": 538,
+      "width": 44,
+      "height": 23.333333333333332
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": false,
+    "climbing": false,
+    "groundControls": true,
+    "enemyBars": [
+      {
+        "x": 428,
+        "y": 461.5,
+        "width": 106,
+        "height": 9
+      },
+      {
+        "x": 724,
+        "y": 517,
+        "width": 80,
+        "height": 6
+      },
+      {
+        "x": 394,
+        "y": 260,
+        "width": 60,
+        "height": 6
+      },
+      {
+        "x": 920.5,
+        "y": 567.5,
+        "width": 31,
+        "height": 5
+      }
+    ],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": false,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": {
+      "current": 762,
+      "max": 1001
+    },
+    "healthOcr": [
+      "762/1001"
+    ],
+    "healthDiagnostic": null,
+    "healthPct": 0.7612387612387612,
+    "lowHealth": false,
+    "world": true,
+    "interact": false,
+    "objectives": [],
+    "enemyBarDiagnostic": {
+      "level": "any",
+      "candidates": 5,
+      "localReads": [],
+      "greenMask": null
+    },
+    "loading": false,
+    "unknownHud": false,
+    "partyNameOcr": {
+      "version": 1,
+      "kind": "scaled-same-capture-party-strip-v1",
+      "session": "mvyo1ej0-czcnlqo7t8k",
+      "frameId": 9,
+      "observationStartedAtUnixMs": 1793588095408,
+      "startedAtUnixMs": 1793588095755,
+      "finishedAtUnixMs": 1793588095884,
+      "region": {
+        "x": 1640,
+        "y": 240,
+        "width": 140,
+        "height": 350
+      },
+      "scale": 3,
+      "rawRows": [
+        {
+          "text": "Lumina",
+          "x": 135,
+          "y": 58,
+          "width": 228,
+          "height": 60
+        },
+        {
+          "text": "Amber",
+          "x": 157,
+          "y": 329,
+          "width": 209,
+          "height": 63
+        },
+        {
+          "text": "Kaeya",
+          "x": 170,
+          "y": 601,
+          "width": 199,
+          "height": 78
+        },
+        {
+          "text": "Lisa",
+          "x": 157,
+          "y": 894,
+          "width": 132,
+          "height": 70
+        }
+      ],
+      "addedRows": [
+        {
+          "text": "Lumina",
+          "x": 1685,
+          "y": 259.3333333333333,
+          "width": 76,
+          "height": 20
+        },
+        {
+          "text": "Kaeya",
+          "x": 1696.6666666666667,
+          "y": 440.33333333333337,
+          "width": 66.33333333333333,
+          "height": 26
+        },
+        {
+          "text": "Lisa",
+          "x": 1692.3333333333333,
+          "y": 538,
+          "width": 44,
+          "height": 23.333333333333332
+        }
+      ]
+    },
+    "combatRetreatObservation": {
+      "version": 1,
+      "session": "mvyo1ej0-czcnlqo7t8k",
+      "frameId": 9,
+      "observationStartedAtUnixMs": 1793588095408,
+      "phase": "entry"
+    },
+    "captureStamp": {
+      "session": "mvyo1ej0-czcnlqo7t8k",
+      "frameId": 9,
+      "capturedAt": 1793588095408,
+      "source": "game-capture-start"
+    }
+  },
+  "timings": {
+    "mapDiagnostic": {
+      "reason": "Fixed combat retreat: localization omitted before verified arrival",
+      "mode": "combat-statue-retreat-v1"
+    },
+    "captureMs": 4,
+    "ocrMs": 469,
+    "ocrFindMultiMs": 443,
+    "ocrReadCount": 5,
+    "fullOcrMs": 190,
+    "reviveStockOcrMs": 0,
+    "healthOcrMs": 35,
+    "objectiveOcrMs": 22,
+    "controlOcrMs": 79,
+    "cooldownOcrMs": 0,
+    "spikeSurfaceMs": 0,
+    "levelPanelOcrMs": 0,
+    "interactionOcrMs": 0,
+    "objectiveSource": "crop",
+    "pngWriteMs": 3,
+    "pngWriteMode": "overlapped",
+    "pngScheduleMs": 3,
+    "pngWaitMs": 0,
+    "mapMs": 0,
+    "totalMs": 476
+  }
+}

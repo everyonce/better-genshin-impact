@@ -281,11 +281,59 @@ class OwnerClosureTests(unittest.TestCase):
                 held.owner_inputs(self.path,map_owner.ARTIFACTS,validate)
             validate.assert_not_called()
 
-    def test_r69_scope_rejects_r70_and_thirteenth_link_before_validation(self):
-        """The collector independently refuses a later package and an extra otherwise-shaped link."""
+    def append_r70(self):
+        """Extend the existing synthetic R69 receipt with one exact English R70 handoff."""
         self.append_r69()
+        prior=self.path
+        game=json.loads(prior.read_bytes())['protectedGame']
+        folder,result=self.fixture.create_next_handoff(prior,self.result,game,70)
+        build,_=map_owner.target_package(70)
+        owner_fixtures.write(Path(build['targetDirectory'])/'User/config.json',map_owner.R62_CLEAN_CAPTURE)
+        config_sha=map_owner.check_clean_target(build)
+        preflight=json.loads((folder/'preflight.json').read_bytes())
+        preflight['targetConfigSha256']=config_sha
+        result['replacementEvidence']['existingTargetConfigSha256']=config_sha
+        owner_fixtures.write(folder/'preflight.json',preflight)
+        owner_fixtures.write(folder/'ensure-child.json',result)
+        self.prior,self.folder,self.result=prior,folder,result
+        self.path=folder/'map-owner-lineage.json'
+        owner_fixtures.write(self.path,map_owner.replacement(prior,folder))
+
+    def test_r70_complete_reader_set_is_held(self):
+        """All thirteen packages and every actual immutable owner read belong to the held census."""
+        self.append_r70()
+        _,pins,_=self.verify_reader_set(expected_packages=13)
+        self.assertEqual(len(pins),105)
+
+    def test_r70_retained_endpoints_and_selection_remain_bound(self):
+        """R69/R70 witnesses preserve exact replay; later original-path reappearance still refuses."""
+        self.append_r70()
+        self.fixture.check_source_and_target_witnesses(self.prior,self.folder,self.result,(69,70))
+        owner,pins,packages=self.verify_reader_set(expected_packages=13)
+        missing=map_owner.ARTIFACTS/'release-r69'
+        self.assertFalse(packages[str(missing)]['originalPresent'])
+        report={};context={'owner':owner}
+        cap=held.PausedAdmission(context,pins,(),lambda:[],[],packages,report)
+        try:
+            missing.mkdir()
+            with self.assertRaisesRegex(ValueError,'package selection'):
+                cap.consume(lambda:context,report,lambda:None)
+        finally:self.assertEqual(cap.close(),[])
+
+    def test_r70_missing_game_evidence_refuses_before_validation(self):
+        """A missing newest game-lifetime document cannot be replaced by an already-known owner."""
+        self.append_r70()
+        (self.folder/'game-before.json').unlink()
+        with patch.object(map_owner,'load_map_owner') as validate:
+            with self.assertRaises(FileNotFoundError):
+                held.owner_inputs(self.path,map_owner.ARTIFACTS,validate)
+            validate.assert_not_called()
+
+    def test_r70_scope_rejects_r71_and_fourteenth_link_before_validation(self):
+        """The collector independently refuses a later package and an extra otherwise-shaped link."""
+        self.append_r70()
         game=json.loads(self.path.read_bytes())['protectedGame']
-        later,_=self.fixture.create_next_handoff(self.path,self.result,game,70)
+        later,_=self.fixture.create_next_handoff(self.path,self.result,game,71)
         future=later/'map-owner-lineage.json'
         owner_fixtures.write(future,dict(prior=str(self.path),protectedGame=game))
         extra=self.folder.parent/'excess-link'

@@ -43,10 +43,32 @@ def validate_navigation_plan(route, deadline_ms):
             raise ValueError('Navigation waypoints require finite x/y coordinates in Teyvat.')
 
 
-def atomic(path, value):
+def atomic(path, value, *, before_replace=None):
     pending = path.with_suffix('.pending.json')
     pending.write_text(json.dumps(value), encoding='utf-8')
-    os.replace(pending, path)
+    # Retry only the same atomic replacement; never rebuild or resubmit a request.
+    deadline = time.monotonic() + 1.0
+    retry_error = None
+    while True:
+        if before_replace is not None:
+            before_replace()
+        # Preserve the initial attempt; later attempts keep the original deadline
+        # even when the fresh admission check itself takes time.
+        if retry_error is not None and time.monotonic() >= deadline:
+            raise retry_error
+        try:
+            os.replace(pending, path)
+            return
+        except OSError as error:
+            if getattr(error, 'winerror', None) not in (5, 32, 33):
+                raise
+            retry_error = error
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise
+            time.sleep(min(0.05, remaining))
+            if time.monotonic() >= deadline:
+                raise
 
 
 def navigation_route_hash(route):
@@ -262,7 +284,7 @@ def validate_terminal_receipt(request, receipt, observation):
 
 def request_receipt_path(root, session, request_id):
     """Return the immutable receipt path after rejecting path-like identifiers."""
-    if not isinstance(session, str) or not re.fullmatch(r'[a-z0-9]+-[a-z0-9]*', session):
+    if not isinstance(session, str) or not re.fullmatch(r'[a-z0-9]+-[a-z0-9]*(?:-r[23])?', session):
         raise RuntimeError('Controller session is not a valid generated session identifier.')
     if not isinstance(request_id, str) or not re.fullmatch(r'mission-[0-9a-f]{32}', request_id):
         raise RuntimeError('Request ID is not a valid generated mission identifier.')
@@ -270,7 +292,7 @@ def request_receipt_path(root, session, request_id):
 
 
 def observation_path(root, session, frame_id):
-    if not isinstance(session, str) or not re.fullmatch(r'[a-z0-9]+-[a-z0-9]*', session):
+    if not isinstance(session, str) or not re.fullmatch(r'[a-z0-9]+-[a-z0-9]*(?:-r[23])?', session):
         raise RuntimeError('Controller session is not a valid generated session identifier.')
     if (not isinstance(frame_id, int) or isinstance(frame_id, bool) or frame_id < 0):
         raise RuntimeError('Terminal receipt has an invalid observation frame; no retry was sent.')
@@ -417,7 +439,7 @@ def maintain_receipts_for_controller(root, heartbeat):
     return result
 
 
-def main():
+def main(*, before_request_write=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('mission', choices=['observe', 'stop', 'keyPress', 'look', 'navigation', 'dialogue', 'combat', 'recover', 'questStep', 'cancel'])
     parser.add_argument('--session', required=True)
@@ -553,7 +575,27 @@ def main():
             'session': args.session, 'requestId': request['id'],
             'routeHash': navigation_route_hash(route), 'startIndex': route_start,
             'waypointCount': len(route['waypoints']), 'createdAt': request['createdAt']})
-    atomic(ROOT / 'request.json', request)
+    if before_request_write is not None:
+        prepared_bytes = json.dumps(request).encode('utf-8')
+        prepared_ack = before_request_write(prepared_bytes, json.loads(json.dumps(controller_heartbeat)))
+        if (type(prepared_ack) is not dict
+                or set(prepared_ack) != {'requestId', 'requestSha256', 'binding', 'durable', 'revalidate'}
+                or prepared_ack['requestId'] != request['id']
+                or prepared_ack['requestSha256'] != hashlib.sha256(prepared_bytes).hexdigest()
+                or type(prepared_ack['binding']) is not str
+                or not re.fullmatch(r'[0-9a-f]{64}', prepared_ack['binding'])
+                or prepared_ack['durable'] is not True
+                or not callable(prepared_ack['revalidate'])
+                or json.dumps(request).encode('utf-8') != prepared_bytes):
+            raise RuntimeError('Prepared request was not durably bound before submission.')
+        def revalidate_prepared_replace():
+            current_heartbeat = require_live_controller(
+                ROOT, args.session, args.frame, args.expected_windows_session_id,
+                allow_faulted=fault_recovery_command)
+            prepared_ack['revalidate'](json.loads(json.dumps(current_heartbeat)))
+        atomic(ROOT / 'request.json', request, before_replace=revalidate_prepared_replace)
+    else:
+        atomic(ROOT / 'request.json', request)
     print(json.dumps({'submitted': request['id'], 'session': args.session}), flush=True)
     deadline = time.monotonic() + args.wait_seconds
     while time.monotonic() < deadline:

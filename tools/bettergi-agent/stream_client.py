@@ -1361,6 +1361,8 @@ def parse_arguments(argv=None):
                         help='Choose a surveyed fixed route; defaults to the original courtyard segment')
     parser.add_argument('--reviewed-scout-route',metavar='JSON',
                         help='Explicit scout geometry; requires a reviewed cached-session request')
+    parser.add_argument('--batch-source-hold', action='store_true', default=argparse.SUPPRESS,
+                        help='One explicitly reviewed idle-source hold; no retry or deadline renewal')
     parser.add_argument('--reviewed-scout-batch', action='store_true', default=argparse.SUPPRESS,
                         help='Explicit whole-polyline batch; requires the matching private reviewed worker admission')
     parser.add_argument('--steering-shadow', metavar='CHECKPOINT',
@@ -1786,6 +1788,16 @@ def run_episode(args, policy=None, control=None):
         report['proposalJournal'] = dict(version=3, historyCommitMode=EXECUTED_HISTORY_MODE)
     history_predecessor = None
     history_requests, history_receipts = {}, set()
+    batch_source_hold = None
+    source_hold_runtime_ready = False
+    source_hold_epoch_synced = False
+    if getattr(args, 'batch_source_hold', False):
+        from scout_batch_source_hold import BatchSourceHold
+        batch_source_hold = BatchSourceHold(control.scout_batch_policy['sourceHoldPolicy'],
+            args.navigation_profile, args.reviewed_scout_route.sha256, bridge.hello, scout_guard.binding)
+        report['scoutBatchSourceHoldPolicy'] = copy.deepcopy(batch_source_hold.descriptor)
+        report['scoutBatchSourceHoldEvents'] = []
+        report['scoutBatchSourceHoldState'] = batch_source_hold.snapshot()
     if getattr(args,'warm_endurance',False):
         from destination_queue_limits import ENDURANCE
         report['queueLimitsProfile'] = ENDURANCE.profile
@@ -2023,6 +2035,29 @@ def run_episode(args, policy=None, control=None):
                         **({'executionContext': report['executionContext']} if execution_mode != 'off' else {}),
                         'residentRunId': report['residentRunId']})
 
+    def source_hold_runtime():
+        """Read only intake-owned bookkeeping; never acquire ResidentControl under receive_lock."""
+        if not source_hold_runtime_ready:return None
+        if batch_source_hold.inflight:return dict(pendingFeedback=True, pendingCandidate=True)
+        settled = report['executedHistoryEvents'][-1] if report['executedHistoryEvents'] else None
+        return dict(lease={key:copy.deepcopy(bridge.hello.get(key)) for key in ('sessionId','ownerEpoch','goalVersion')},
+            routeSpecSha256=args.reviewed_scout_route.sha256, phase=hybrid.phase,
+            target=list(hybrid.target), targetName=hybrid.target_name, completedLegs=hybrid.legs,
+            legStartedAtMs=hybrid.leg_started, legDeadlineClientNs=hybrid.leg_deadline_ns,
+            deadlineClientNs=round(deadline*1e9), lastAcceptedClientNs=None if last_accepted_at is None else round(last_accepted_at*1e9),
+            pendingFeedback=bool(getattr(policy,'_pending_feedback',False)),
+            pendingCandidate=getattr(policy,'_executed_candidate',None) is not None,
+            unacknowledgedInput=report.get('unacknowledgedAction') is not None,
+            acceptedActions=report['acceptedInputActions'], terminalReceipts=len(history_receipts),
+            historyCommits=sum(value['outcome']=='committed' for value in report['executedHistoryEvents']),
+            history=policy.executed_history_counters(), predecessor=copy.deepcopy(history_predecessor), settled=copy.deepcopy(settled))
+
+    def record_source_hold(event):
+        """Keep exact returned evidence in the terminal report before fallible journal work."""
+        report['scoutBatchSourceHoldEvents'].append(copy.deepcopy(event))
+        report['scoutBatchSourceHoldState'] = batch_source_hold.snapshot()
+        recorder.event(event)
+
     def collect_receipts(metadata):
         nonlocal unapplied_receipt_sequence
         # No JSON serialization, flushing, or filesystem access occurs here.
@@ -2140,6 +2175,33 @@ def run_episode(args, policy=None, control=None):
                     from combat_trial_guard import CombatTrialStop
                     raise CombatTrialStop('Combat trial stopped: ' + trip['reason'])
                 recorder.event(event)
+            if batch_source_hold is not None:
+                # The source hold is classified before ordinary observation. A successful
+                # ACK disarms that unchanged guard; no terminal trip is ever cleared.
+                host_contract.validate(metadata)
+                if metadata.get('type') == 'frame':verify_frame(metadata, pixels, profile_contract)
+                runtime = (source_hold_runtime() if batch_source_hold.waiting or
+                    (metadata.get('worldReadiness') or {}).get('reason') == 'world_observation_stale' else None)
+                event = batch_source_hold.observe(metadata, arrived, runtime, (arrived-start)/1e6)
+                if event is not None:
+                    record_source_hold(event)
+                    if event['type'] == 'scoutBatchSourceHoldTrigger':
+                        from scout_batch_source_hold import RELEASE_REASON
+                        released, payload = bridge.request('release')
+                        ack_at = time.perf_counter_ns()
+                        report.setdefault('scoutBatchSourceHoldReleaseReplies', []).append(dict(
+                            response=copy.deepcopy(released), payloadBytes=len(payload), clientTimeNs=ack_at))
+                        event = batch_source_hold.acknowledge_release(released, len(payload), ack_at, source_hold_runtime())
+                        guard_event = scout_guard.acknowledge_release(released, len(payload), ack_at, RELEASE_REASON)
+                        report['scoutEncounterGuardState'] = guard_event['state']
+                        record_source_hold(event)
+                        recorder.event(guard_event)
+                        collect_receipts(released)
+                        server_snapshot = (time.perf_counter(), released)
+                        latest.clear()
+                        # Original stale receive time predates the ACK. Its separate trigger
+                        # event is retained; never relabel it as a post-release observation.
+                        return
             if scout_guard is not None:
                 guard_event = scout_guard.observe(metadata, arrived)
                 report['scoutEncounterGuardState'] = guard_event['state']
@@ -2196,6 +2258,8 @@ def run_episode(args, policy=None, control=None):
                             report['scoutEncounterGuardReleaseError'] = str(error)
                         from scout_encounter_guard import ScoutEncounterStop
                         raise ScoutEncounterStop('Scout encounter guard: '+trip['reason'])
+            if batch_source_hold is not None:
+                batch_source_hold.remember_healthy(metadata, arrived, (arrived-start)/1e6, scout_guard.snapshot())
             host_contract.validate(metadata)
             if metadata.get('type') == 'frame':
                 verify_frame(metadata, pixels, profile_contract)
@@ -2278,6 +2342,14 @@ def run_episode(args, policy=None, control=None):
     seen_unapplied_receipts = 0
     seen_recovery_interruptions = 0
     recording_error_reported = False
+    source_hold_leg_deadline = None
+    if batch_source_hold is not None:
+        with receive_lock:
+            record_source_hold(dict(type='scoutBatchSourceHoldLease', clientTimeNs=time.perf_counter_ns(),
+                lease=copy.deepcopy(batch_source_hold.lease), routeSpecSha256=args.reviewed_scout_route.sha256,
+                startedClientNs=round((deadline-remaining)*1e9), deadlineClientNs=round(deadline*1e9),
+                remainingSeconds=remaining, requestedSeconds=args.seconds))
+    source_hold_runtime_ready = True
 
     def finish_executed_feedback(result, frame, request, control_token):
         """Resolve one action before another prediction, retaining failures before retirement."""
@@ -2290,6 +2362,7 @@ def run_episode(args, policy=None, control=None):
             step=copy.deepcopy(result['steps'][0]), encodedAction=encode_controller_step(result['steps'][0]),
             arguments=copy.deepcopy(request), acceptance=copy.deepcopy(result['acceptance']), receipt=None,
             previousReceipt=previous_receipt, error=None)
+        if batch_source_hold is not None:event['acceptedAtClientNs']=result.get('executedHistoryAcceptedClientNs')
         failure = None
         try:
             if result['acceptance']['type'] != 'accepted':
@@ -2647,6 +2720,15 @@ def run_episode(args, policy=None, control=None):
                                             latest_recovery_eligible(reset_checked_at))
                 seen_unapplied_receipts = observed_receipt_sequence
                 report['receiptHistoryResets'] += 1
+            if batch_source_hold is not None:
+                with receive_lock:
+                    batch_source_hold.tick(time.perf_counter_ns(), source_hold_runtime())
+                    if batch_source_hold.release is not None and not source_hold_epoch_synced:
+                        last_readiness_epoch = batch_source_hold.release['response']['worldReadiness']['epoch']
+                        source_hold_epoch_synced = True
+                    if batch_source_hold.waiting:
+                        cadence.advance(time.perf_counter())
+                        continue
             refresh_ms = 0.0
             if policy is not None and args.fresh_frame_at_decision:
                 # The 5 ms executed-history wait only inspects the reader's latest
@@ -2711,7 +2793,15 @@ def run_episode(args, policy=None, control=None):
                     continue
             # A repeated stale poll can arrive after the earlier phase check. Only the
             # already-latched opt-in barrier may wait; generic hold gains no recovery authority.
-            with receive_lock if combat_source_recovery else nullcontext():
+            with receive_lock if combat_source_recovery or batch_source_hold is not None else nullcontext():
+                if batch_source_hold is not None:
+                    batch_source_hold.tick(time.perf_counter_ns(), source_hold_runtime())
+                    if batch_source_hold.release is not None and not source_hold_epoch_synced:
+                        last_readiness_epoch = batch_source_hold.release['response']['worldReadiness']['epoch']
+                        source_hold_epoch_synced = True
+                    if batch_source_hold.waiting:
+                        cadence.advance(time.perf_counter())
+                        continue
                 if combat_source_recovery:
                     state = combat_guard.tick(time.perf_counter_ns())
                     report['combatTrialGuardState'] = state
@@ -2783,7 +2873,18 @@ def run_episode(args, policy=None, control=None):
                     hold('hybridStalePose')
                     cadence.advance(time.perf_counter())
                     continue
-                hybrid_wait = hybrid.prepare(frame)
+                with receive_lock if batch_source_hold is not None else nullcontext():
+                    if batch_source_hold is not None and batch_source_hold.waiting:
+                        cadence.advance(time.perf_counter())
+                        continue
+                    hybrid_wait = hybrid.prepare(frame)
+                    if (batch_source_hold is not None and hybrid.phase == 'walking'
+                            and hybrid.leg_deadline_ns != source_hold_leg_deadline):
+                        source_hold_leg_deadline = hybrid.leg_deadline_ns
+                        record_source_hold(dict(type='scoutBatchSourceHoldLeg',clientTimeNs=time.perf_counter_ns(),
+                            routeSpecSha256=args.reviewed_scout_route.sha256, target=list(hybrid.target),
+                            targetName=hybrid.target_name, completedLegs=hybrid.legs,
+                            legStartedAtMs=hybrid.leg_started, legDeadlineClientNs=hybrid.leg_deadline_ns))
                 if hybrid_wait == 'releaseRequired':
                     hybrid.released(hold('hybridEndpoint', force_release=True))
                 elif hybrid_wait == 'retryReleaseRequired':
@@ -2865,6 +2966,15 @@ def run_episode(args, policy=None, control=None):
             if control_token[3] != 'run':
                 cadence.advance(time.perf_counter())
                 continue
+            if batch_source_hold is not None:
+                with receive_lock:
+                    if not batch_source_hold.selected_after_release(frame):
+                        cadence.advance(time.perf_counter())
+                        continue
+                    if stopped.is_set():raise RuntimeError('Executed-history reader stopped before prediction')
+                    batch_source_hold.begin_prediction(frame)
+                    record_source_hold(dict(type='scoutBatchSourceHoldTransaction',phase='begin',
+                        clientTimeNs=time.perf_counter_ns(),frameId=frame['frameId'],sourceFrame=copy.deepcopy(frame['sourceFrame'])))
             combat_result = None
             if combat_observer is not None:
                 combat_started = time.perf_counter_ns()
@@ -3003,6 +3113,8 @@ def run_episode(args, policy=None, control=None):
                             executed_request = dict(version=1, command='action',
                                 **{key: bridge.hello[key] for key in ('sessionId', 'ownerEpoch', 'goalVersion')},
                                 **copy.deepcopy(arguments))
+                        if batch_source_hold is not None and (batch_source_hold.waiting or not batch_source_hold.inflight):
+                            raise RuntimeError('Batch source hold fenced the input transaction')
                         if scout_guard is not None:
                             result['scoutEncounterGuard'] = scout_dispatch(scout_guard,report,recorder,frame,request_id)
                         if combat_guard is not None:
@@ -3055,6 +3167,8 @@ def run_episode(args, policy=None, control=None):
             if committed:
                 report['acceptedInputActions'] += 1
                 last_accepted_at = time.perf_counter()
+                if batch_source_hold is not None:
+                    result['executedHistoryAcceptedClientNs'] = round(last_accepted_at*1e9)
                 history_gap_reset = False
             feedback_error = None
             if executed_history:
@@ -3122,6 +3236,12 @@ def run_episode(args, policy=None, control=None):
                     recorder.event(result['executedHistory'])
             if feedback_error is not None:
                 raise feedback_error
+            if batch_source_hold is not None:
+                with receive_lock:
+                    batch_source_hold.finish_prediction()
+                    record_source_hold(dict(type='scoutBatchSourceHoldTransaction',phase='settled',
+                        clientTimeNs=time.perf_counter_ns(),frameId=frame['frameId'],sourceFrame=copy.deepcopy(frame['sourceFrame']),
+                        outcome=report['executedHistoryEvents'][-1]['outcome']))
             print(json.dumps({'frameId': previous, 'modelMs': result['fullActionMs'], 'ageMs': age,
                               'acceptance': result['acceptance']}), flush=True)
             if control:
@@ -3280,6 +3400,8 @@ def run_episode(args, policy=None, control=None):
                         raise RuntimeError('Combat trial frozen goal was changed or requested to change')
                 except Exception as error:
                     report['combatTrialGuardState'] = combat_guard.fail('goalMutation', time.perf_counter_ns(), error=str(error))['state']
+        if batch_source_hold is not None:
+            report['scoutBatchSourceHoldState'] = batch_source_hold.snapshot()
         if scout_guard is not None:
             report['scoutEncounterGuardState'] = scout_guard.snapshot()
             if report['scoutEncounterGuardState']['trip'] is not None:

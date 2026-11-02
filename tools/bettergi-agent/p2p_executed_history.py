@@ -99,7 +99,8 @@ def validate_executed_history_options(args, policy=None, control=None, *, requir
             or getattr(control, 'frozen_goal', False) is not True):
         raise ValueError('Executed history requires its declared adapter and frozen reviewed scout guard')
     if require_bound and batch and (
-            not batch_policy_matches(getattr(control, 'scout_batch_policy', None), route.profile_id)
+            not batch_policy_matches(getattr(control, 'scout_batch_policy', None), route.profile_id,
+                                     source_hold=getattr(args,'batch_source_hold',False))
             or getattr(control, 'scout_batch_route_sha256', None) != route.sha256
             or getattr(control.scout_encounter_guard, 'ground_capability', None) is None):
         raise ValueError('Batch history requires its private resident authority and reviewed ground binding')

@@ -82,20 +82,34 @@ class ReviewedScoutRoute:
         return 'reviewed-scout-v1-'+self.sha256
 
 
-def reviewed_batch_policy(profile=SCOUT_PROFILE):
+def batch_source_hold_policy():
+    """Declare one idle, input-free source hold; no route/action retry or clock reset is authorized."""
+    return dict(kind='idle-source-release-once-v1', maximumHolds=1, confirmationSources=2,
+                postReleaseDelayMs=60, acceptanceGapLimitMs=500, retainExecutedHistory=True,
+                resetsDeadlines=False, retriesActions=False, obstacleRecovery=False)
+
+
+def reviewed_batch_policy(profile=SCOUT_PROFILE, *, source_hold=False):
     """Declare an optional finite waypoint lease; the original one-leg policy is unchanged."""
     scout_scope(profile)
-    return dict(version=1, profileId=profile, maximumLegs=8, maximumLengthPerLeg=40,
-                maximumSeconds=60, legDeadlineSeconds=35, actionHoldMs=50,
-                sourceFreshnessMs=150, wholePolylineReviewRequired=True,
-                endpointHistory='acknowledged-release-reset', automaticRecovery=False, recordingSegmentSeconds=90)
+    if type(source_hold) is not bool:raise ValueError('Batch source hold opt-in must be boolean')
+    result = dict(version=1, profileId=profile, maximumLegs=8, maximumLengthPerLeg=40,
+                  maximumSeconds=60, legDeadlineSeconds=35, actionHoldMs=50,
+                  sourceFreshnessMs=150, wholePolylineReviewRequired=True,
+                  endpointHistory='acknowledged-release-reset', automaticRecovery=False, recordingSegmentSeconds=90)
+    if source_hold:result.update(version=2, sourceHoldPolicy=batch_source_hold_policy())
+    return result
 
 
-def batch_policy_matches(value, profile=SCOUT_PROFILE):
+def batch_policy_matches(value, profile=SCOUT_PROFILE, *, source_hold=False):
     """Compare every fixed descriptor field with its exact scalar type, including booleans."""
-    expected = reviewed_batch_policy(profile)
-    return (type(value) is dict and set(value) == set(expected)
-            and all(type(value[key]) is type(item) and value[key] == item for key, item in expected.items()))
+    expected = reviewed_batch_policy(profile, source_hold=source_hold)
+    if not (type(value) is dict and set(value) == set(expected)
+            and all(type(value[key]) is type(item) and value[key] == item for key, item in expected.items())):
+        return False
+    # Canonical JSON also distinguishes nested Boolean/integer substitutions in the opt-in descriptor.
+    try:return json.dumps(value,sort_keys=True,allow_nan=False)==json.dumps(expected,sort_keys=True,allow_nan=False)
+    except (TypeError,ValueError):return False
 
 
 @dataclass(frozen=True)
@@ -165,6 +179,9 @@ def validate_reviewed_options(args):
     batch = type(route) is ReviewedScoutBatch
     if getattr(args, 'reviewed_scout_batch', False) is not batch:
         raise ValueError('Batch geometry requires its explicit reviewed-scout-batch opt-in')
+    source_hold = getattr(args, 'batch_source_hold', False)
+    if type(source_hold) is not bool or source_hold and not batch:
+        raise ValueError('Source hold requires explicit reviewed batch authority')
     if route is None:return None
     if batch:
         if (args.hybrid_route != route.route_id or args.navigation_profile != route.profile_id

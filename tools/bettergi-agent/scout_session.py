@@ -112,15 +112,16 @@ def model_contract(args):
         contract.update(groundControlPolicy=ground_policy(),groundControlSourceSha256=ground_source_contract())
     if getattr(args,'p2p_executed_history',False):
         from p2p_executed_history import executed_history_policy
-        contract.update(executedHistorySourceSha256=executed_history_sources(),
+        contract.update(executedHistorySourceSha256=executed_history_sources(source_hold=getattr(args,'batch_source_hold',False)),
                         executedHistoryPolicy=executed_history_policy(args.action_hold_ms))
     return contract
 
 
-def executed_history_sources():
+def executed_history_sources(*, source_hold=False):
     """Pin the existing receipt/navigation boundary and every local P2P runtime helper."""
     root=Path(__file__).absolute().parent
-    return source_contract()|{name:file_sha(root/name) for name in EXECUTED_HISTORY_EXTRA_SOURCES}
+    names=EXECUTED_HISTORY_EXTRA_SOURCES+(('scout_batch_source_hold.py',) if source_hold else ())
+    return source_contract()|{name:file_sha(root/name) for name in names}
 
 
 def archive_executed_history_sources(directory, contract):
@@ -336,6 +337,7 @@ def leg_arguments(settings, owner, route, folder, binding, remaining_mib, review
         argv[argv.index('--segment-seconds')+1] = '90'
         argv[argv.index('--hybrid-legs')+1] = str(reviewed_leg_count(reviewed_route))
         argv.append('--reviewed-scout-batch')
+        if getattr(settings, 'allow_batch_source_hold', False):argv.append('--batch-source-hold')
     if binding:argv.append('--patrol-series-binding='+binding)
     args=client.parse_arguments(argv)
     args.patrol_series_binding=runtime.parse_series_binding(binding) if binding else None
@@ -397,7 +399,8 @@ def review_evidence(path, manifest, after_ns):
     batch = type(spec) is ReviewedScoutBatch
     require(batch == ('reviewedScoutBatchPolicy' in manifest), 'Batch and single-leg worker authority differ')
     if batch:
-        require(batch_policy_matches(manifest['reviewedScoutBatchPolicy'], profile)
+        require(batch_policy_matches(manifest['reviewedScoutBatchPolicy'], profile,
+                    source_hold=manifest.get('configuration',{}).get('arguments',{}).get('batch_source_hold',False))
                 and manifest.get('historyCommitMode') == EXECUTED_HISTORY_MODE
                 and type(manifest.get('actionHoldMs')) is int and manifest['actionHoldMs'] == 50
                 and not any(key in manifest for key in ('inspectedObstacleRecoveryPolicy', 'inspectedSourceGapRecoveryPolicy')),
@@ -478,7 +481,7 @@ def review_evidence(path, manifest, after_ns):
                   imageSha256=review['imageSha256'],imageMetadataSha256=metadata_sha,
                   scoutEncounterGuard=guard_binding)
     if spec is not None:evidence.update(routeSpec=spec.document(),routeSpecSha256=spec.sha256)
-    if batch:evidence['reviewedScoutBatchPolicy'] = reviewed_batch_policy(profile)
+    if batch:evidence['reviewedScoutBatchPolicy'] = copy.deepcopy(manifest['reviewedScoutBatchPolicy'])
     return evidence
 
 
@@ -608,6 +611,9 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
                 prefix_auditor=audit_failed_prefix, source_gap_auditor=None):
     """Load once, run only reviewed one-leg requests, and remain bridge-free between successful runs."""
     batch_enabled = getattr(settings, 'allow_reviewed_batches', False)
+    source_hold = getattr(settings, 'allow_batch_source_hold', False)
+    require(type(source_hold) is bool and (not source_hold or batch_enabled),
+            'Source hold requires an explicitly reviewed batch worker')
     require(type(batch_enabled) is bool, 'Batch startup requires an explicit boolean')
     if batch_enabled:
         require(getattr(settings, 'allow_reviewed_routes', False) is True
@@ -665,7 +671,7 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
             scoutGroundControlPolicy=ground_policy())
         manifest.update(history_declaration(base))
         if getattr(settings,'allow_reviewed_routes',False):manifest['reviewedScoutRoutePolicy']=reviewed_route_policy(profile)
-        if batch_enabled:manifest['reviewedScoutBatchPolicy'] = reviewed_batch_policy(profile)
+        if batch_enabled:manifest['reviewedScoutBatchPolicy'] = reviewed_batch_policy(profile, source_hold=source_hold)
         if getattr(settings,'allow_inspected_obstacle_recovery',False):
             manifest.update(inspectedObstacleRecoveryPolicy=recovery_policy(),recoverySourceSha256=source_contract())
         if getattr(settings,'allow_inspected_source_gap_recovery',False):
@@ -713,7 +719,7 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
                     'Inspected source-gap recovery runtime source changed')
         if 'executedHistorySourceSha256' in configuration:
             from p2p_executed_history import executed_history_policy
-            require(executed_history_sources()==configuration['executedHistorySourceSha256']
+            require(executed_history_sources(source_hold=source_hold)==configuration['executedHistorySourceSha256']
                     and executed_history_policy(args.action_hold_ms)==configuration['executedHistoryPolicy'],
                     'Executed-history runtime source or policy changed')
 
@@ -943,6 +949,8 @@ def options(argv=None):
     run.add_argument('--allow-reviewed-routes',action='store_true',help='Allow fresh explicit two-point scout reviews within the existing scope')
     run.add_argument('--allow-reviewed-batches', action='store_true', default=argparse.SUPPRESS,
                      help='Require whole-polyline review for each no-retry, at-most-eight-leg 60-second batch')
+    run.add_argument('--allow-batch-source-hold', action='store_true', default=argparse.SUPPRESS,
+                     help='Permit one idle source hold inside the original reviewed batch lease')
     run.add_argument('--allow-inspected-obstacle-recovery',action='store_true',
                      help='Retain only the loaded policy after at most one fully audited geometric stop; require a new reviewed route')
     run.add_argument('--allow-inspected-source-gap-recovery',action='store_true',
@@ -972,6 +980,8 @@ def options(argv=None):
     batch.add_argument('--navigation-profile', choices=SCOUT_PROFILES, default=SCOUT_PROFILE)
     args=parser.parse_args(argv)
     if args.command=='run':
+        if getattr(args,'allow_batch_source_hold',False) and not getattr(args,'allow_reviewed_batches',False):
+            parser.error('Source hold requires --allow-reviewed-batches')
         args.action_hold_ms=args.action_hold_ms or (50 if args.p2p_executed_history else 100)
         if args.action_hold_ms not in ((50,60) if args.p2p_executed_history else (100,)):
             parser.error('Executed history requires 50 or 60 ms holds; existing scouts retain 100 ms')

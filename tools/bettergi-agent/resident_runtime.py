@@ -359,8 +359,9 @@ def run_resident(args, load_policy, run_episode, *, policy_reuse=None):
     from reviewed_scout_route import ReviewedScoutBatch, reviewed_batch_policy, batch_policy_matches
     batch = type(getattr(args, 'reviewed_scout_route', None)) is ReviewedScoutBatch
     if batch:
-        batch_policy = reviewed_batch_policy(args.navigation_profile)
-        if (not batch_policy_matches(policy_reuse.get('reviewedScoutBatchPolicy'), args.navigation_profile)
+        batch_policy = reviewed_batch_policy(args.navigation_profile, source_hold=getattr(args,'batch_source_hold',False))
+        if (not batch_policy_matches(policy_reuse.get('reviewedScoutBatchPolicy'), args.navigation_profile,
+                                    source_hold=getattr(args,'batch_source_hold',False))
                 or any(key in policy_reuse for key in ('obstacleRecovery', 'sourceGapRecovery'))):
             raise ValueError('Batch lease requires its exact reviewed cached-session authority without recovery')
     elif isinstance(policy_reuse, dict) and 'reviewedScoutBatchPolicy' in policy_reuse:

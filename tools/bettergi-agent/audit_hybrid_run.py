@@ -83,7 +83,8 @@ def verify_executed_history_sources(configuration, manifest, session_directory, 
                 ==json.dumps(configuration,sort_keys=True,allow_nan=False),
             'Executed-history policy descriptor or manifest configuration changed')
     sources=configuration.get('executedHistorySourceSha256')
-    require(isinstance(sources,dict) and set(sources)==set(EXECUTED_HISTORY_SOURCE_NAMES),
+    require(isinstance(sources,dict) and set(sources)==set(EXECUTED_HISTORY_SOURCE_NAMES + (('scout_batch_source_hold.py',) if
+                configuration.get('arguments',{}).get('batch_source_hold',False) else ())),
             'Executed-history original source contract is incomplete')
     snapshot=Path(session_directory).parent/'source-snapshot'
     for name,digest in sources.items():
@@ -136,7 +137,8 @@ def verify_executed_history(run, parts, frames, entries, recordings, reuse):
     batch_route = parse_reviewed_route(reuse.get('routeSpec')) if batch else None
     if batch:
         require(type(batch_route) is ReviewedScoutBatch
-                and batch_policy_matches(reuse['reviewedScoutBatchPolicy'], batch_route.profile_id),
+                and batch_policy_matches(reuse['reviewedScoutBatchPolicy'], batch_route.profile_id,
+                    source_hold=reuse['reviewedScoutBatchPolicy'].get('version')==2),
                 'Executed-history batch policy or geometry is invalid')
     hold=reuse.get('actionHoldMs')
     require(type(hold) is int and hold in (50,60),'Executed-history audit has no pinned selected hold')
@@ -561,8 +563,10 @@ def verify_policy_reuse(run, run_path, proof_path):
     require(('reviewedScoutBatchPolicy' in session) == batch
             and (settings.get('reviewed_scout_batch', False) is True) == batch,
             'Cached batch startup authority differs from its original policy session')
+    source_hold=settings.get('batch_source_hold',False)
+    require(type(source_hold) is bool and (not source_hold or batch),'Undeclared source-hold startup authority')
     if batch:
-        require(batch_policy_matches(manifest['reviewedScoutBatchPolicy'], profile)
+        require(batch_policy_matches(manifest['reviewedScoutBatchPolicy'], profile,source_hold=source_hold)
                 and session['reviewedScoutBatchPolicy'] == manifest['reviewedScoutBatchPolicy']
                 and 'hybrid_legs' not in settings and settings.get('action_hold_ms') == 50
                 and not any(key in manifest for key in ('inspectedObstacleRecoveryPolicy','inspectedSourceGapRecoveryPolicy')),
@@ -620,7 +624,7 @@ def verify_policy_reuse(run, run_path, proof_path):
     require(all(('reviewedScoutBatchPolicy' in value) == batch for value in (*declarations, run)),
             'Batch authority is missing or undeclared in the original proof chain')
     if batch:
-        require(all(batch_policy_matches(value['reviewedScoutBatchPolicy'], profile) for value in (*declarations, run))
+        require(all(batch_policy_matches(value['reviewedScoutBatchPolicy'], profile,source_hold=source_hold) for value in (*declarations, run))
                 and executed_history and ground_required
                 and all(not any(key in value for key in ('obstacleRecovery','sourceGapRecovery')) for value in declarations),
                 'Batch proof changed its guard, history or no-retry scope')
@@ -695,6 +699,149 @@ def verify_policy_reuse(run, run_path, proof_path):
         require(not any(has_scout_guard_evidence(value) for value in (manifest,session,request,reuse,run)),
                 'Historical scout evidence retains an undeclared encounter guard')
     return reuse
+
+
+def has_batch_source_hold_evidence(value):
+    """Refuse namespace stripping into an older batch or single-leg audit contract."""
+    if isinstance(value,dict):
+        return (any(key.startswith('scoutBatchSourceHold') for key in value)
+                or str(value.get('type','')).startswith('scoutBatchSourceHold')
+                or any(has_batch_source_hold_evidence(item) for item in value.values()))
+    return isinstance(value,list) and any(has_batch_source_hold_evidence(item) for item in value)
+
+
+def verify_batch_source_hold(run, parts, frames, entries, recordings, reuse):
+    """Replay one idle release against original transactions, receipt history and unchanged clocks."""
+    EVENT_PREFIX='scoutBatchSourceHold'
+    from reviewed_scout_route import batch_source_hold_policy
+    from scout_encounter_guard import sensor_frame
+    from native_ground_control import validate_frame as validate_ground_frame
+    journals=[]
+    for entry in entries:
+        path=Path(recordings)/f"{entry['number']:05d}"/'events.jsonl'
+        journals.append(read_recording_jsonl(path.parent,path.name)[0] if path.is_file() or path.with_suffix('.jsonl.gz').is_file() else [])
+    policy=(reuse or {}).get('reviewedScoutBatchPolicy') or {}
+    enabled=policy.get('version')==2
+    if not enabled:
+        require(not any(has_batch_source_hold_evidence(value) for value in (run,parts,journals)),
+                'Undeclared batch source-hold evidence')
+        return None
+    from scout_batch_source_hold import BatchSourceHold, RELEASE_REASON, immutable_frame
+    route=parse_reviewed_route(reuse['routeSpec'])
+    require(type(route) is ReviewedScoutBatch and batch_policy_matches(policy,route.profile_id,source_hold=True)
+            and len(parts)==len(entries)==1,'Source hold changed batch or single native lease authority')
+    part,rows=parts[0],journals[0]
+    descriptor=batch_source_hold_policy()
+    require(part.get('scoutBatchSourceHoldPolicy')==descriptor,'Source-hold segment policy changed')
+    selected=[row for row in rows if str(row.get('type','')).startswith(EVENT_PREFIX)]
+    require(selected==part.get('scoutBatchSourceHoldEvents'),'Source-hold report and original journal differ')
+    leases=[row for row in selected if row['type']==EVENT_PREFIX+'Lease']
+    require(len(leases)==1,'Source-hold original lease clock is missing or repeated')
+    lease=leases[0]
+    native={key:part['hello'][key] for key in ('sessionId','ownerEpoch','goalVersion')}
+    require(lease.get('lease')==native and lease.get('routeSpecSha256')==route.sha256
+            and all(type(lease.get(key)) is int for key in ('startedClientNs','deadlineClientNs','clientTimeNs'))
+            and 0 < lease['deadlineClientNs']-lease['startedClientNs'] <= 60_000_000_001
+            and 0 < lease.get('remainingSeconds',0) <= lease.get('requestedSeconds',0) <= 60
+            and abs(lease['deadlineClientNs']-lease['startedClientNs']-lease['remainingSeconds']*1e9)<=2,
+            'Source-hold original batch clock changed')
+    machine=BatchSourceHold(descriptor,route.profile_id,route.sha256,native,part['scoutEncounterGuard'])
+    guard_rows={};history=[];leg=None;legs=[];transaction=None;last_ns=-1;trigger=None;release_rows=[];paired=[]
+    decisions={row.get('acceptance',{}).get('requestId'):row for row in part['decisions']
+               if row.get('acceptance',{}).get('type')=='accepted'}
+    for row in rows:
+        kind=row.get('type')
+        if kind=='scoutEncounterGuardObservation':guard_rows[row['clientReceivedNs']]=row
+        if kind=='p2pExecutedHistory':history.append(row)
+        if kind=='scoutEncounterGuardRelease' and row.get('reason')==RELEASE_REASON:release_rows.append(row)
+        if not str(kind).startswith(EVENT_PREFIX):continue
+        now=row.get('clientTimeNs')
+        require(type(now) is int and now>=last_ns,'Source-hold event clock regressed')
+        last_ns=now
+        if kind==EVENT_PREFIX+'Lease':
+            require(row==lease and transaction is None,'Source-hold lease changed')
+        elif kind==EVENT_PREFIX+'Leg':
+            ordinal=row.get('completedLegs')
+            require(type(ordinal) is int and ordinal==len(legs) and ordinal<len(route.points)-1
+                    and row.get('routeSpecSha256')==route.sha256
+                    and row.get('target')==list(route.points[ordinal+1])
+                    and row.get('targetName')==f'waypoint-{ordinal+1}'
+                    and type(row.get('legDeadlineClientNs')) is int
+                    and 0 < row['legDeadlineClientNs']-now <= 35_000_000_000
+                    and now<lease['deadlineClientNs'],'Source-hold leg clock or target was renewed')
+            original=([event for event in part['hybridNavigationEvents'] if event['type']=='hybridStartVerified']
+                      if ordinal==0 else [event for event in part['hybridNavigationEvents']
+                          if event['type']=='hybridEndpointVerified' and event['completedLegs']==ordinal])
+            require(len(original)==1 and row['legStartedAtMs']==(original[0]['atMs'] if ordinal==0
+                    else original[0]['samples'][-1]['atMs']),'Source-hold leg did not start at the original endpoint')
+            require(not machine.waiting and transaction is None,'Waypoint changed during source hold')
+            leg=row;legs.append(row)
+        elif kind==EVENT_PREFIX+'Transaction':
+            if row.get('phase')=='begin':
+                require(transaction is None and leg is not None,'Prediction transaction overlapped')
+                matching=[item for item in part['decisions'] if item['frameId']==row.get('frameId')]
+                require(len(matching)==1 and row.get('sourceFrame')==frames[row['frameId']]['sourceFrame']
+                        and now <= matching[0]['frameTiming']['predictionStartedAtClientNs'],
+                        'Source-hold reservation does not precede its exact prediction')
+                machine.begin_prediction(frames[row['frameId']]);transaction=row
+            else:
+                require(row.get('phase')=='settled' and transaction is not None and history
+                        and row.get('frameId')==transaction.get('frameId')==history[-1]['frameId']
+                        and row.get('sourceFrame')==transaction.get('sourceFrame')==history[-1]['sourceFrame']
+                        and row.get('outcome')==history[-1]['outcome']
+                        and transaction['clientTimeNs']<=history[-1]['clientTimeNs']<=now,'Prediction reservation ended without exact feedback')
+                machine.finish_prediction();paired.append(row['frameId']);transaction=None
+        elif kind==EVENT_PREFIX+'Trigger':
+            runtime=row.get('runtime') or {};prior=row.get('previous') or {}
+            old=guard_rows.get(prior.get('clientTimeNs'))
+            require(old is not None and old['state']['state']=='ready'
+                    and old['frame']==sensor_frame(prior['frame'])
+                    and immutable_frame(frames.get(prior['frame']['frameId'],{}))==immutable_frame(prior['frame']),
+                    'Stale repeat has no original healthy capture/poll')
+            require(transaction is None and history and runtime.get('settled')==history[-1]
+                    and history[-1]['outcome']=='committed' and leg is not None,
+                    'Source hold crossed a pending prediction or unsettled predecessor')
+            decision=decisions.get(history[-1]['requestId']) or {}
+            require(runtime.get('lastAcceptedClientNs')==history[-1].get('acceptedAtClientNs')
+                    ==decision.get('executedHistoryAcceptedClientNs')
+                    and type(runtime.get('lastAcceptedClientNs')) is int
+                    and runtime['lastAcceptedClientNs']<=history[-1]['clientTimeNs']<=now,
+                    'Source hold renewed the original acceptance clock')
+            require(runtime.get('acceptedActions')==runtime.get('terminalReceipts')==runtime.get('historyCommits')
+                    ==sum(item['outcome']=='committed' for item in history)
+                    and runtime.get('deadlineClientNs')==lease['deadlineClientNs']
+                    and all(runtime.get(key)==leg[key] for key in
+                        ('target','targetName','completedLegs','legStartedAtMs','legDeadlineClientNs')),
+                    'Source hold changed receipt accounting, target or original clocks')
+            machine.remember_healthy(prior['frame'],prior['clientTimeNs'],prior['roundTripMs'],old['state'])
+            require(machine.last==prior and machine.observe(row['frame'],now,runtime,row['roundTripMs'])==row,
+                    'Source-hold trigger differs from exact stale-repeat replay')
+            trigger=row
+        elif kind==EVENT_PREFIX+'Release':
+            require(trigger is not None and machine.acknowledge_release(row['response'],row['payloadBytes'],now,row['runtime'])==row,
+                    'Source-hold release differs from exact ACK replay')
+        elif kind==EVENT_PREFIX+'Observation':
+            validate_ground_frame(row['frame'],replay_pixels=True)
+            require(machine.observe(row['frame'],now,row['runtime'],row['roundTripMs'])==row,
+                    'Source-hold confirmation differs from original native evidence')
+            if row['qualified']:
+                require(immutable_frame(frames.get(row['frame']['frameId'],{}))==immutable_frame(row['frame']),
+                        'Source-hold confirmation lacks its original RGB source')
+        else:raise ValueError('Unknown source-hold event')
+    require(len(paired)==len(set(paired)) and paired==[item['frameId'] for item in part['decisions']]
+            ==[item['frameId'] for item in part['executedHistoryEvents']],
+            'Source-hold transactions do not cover every original prediction/history result')
+    require(transaction is None and not machine.waiting and machine.snapshot()==part.get('scoutBatchSourceHoldState'),
+            'Source hold ended with pending prediction, recovery or changed state')
+    require(len(release_rows)==machine.used,'Source hold lacks its unique existing guard disarm')
+    if machine.used:
+        ack=machine.release
+        require(part.get('scoutBatchSourceHoldReleaseReplies')==[ack]
+                and release_rows[0]['response']==ack['response'] and release_rows[0]['payloadBytes']==ack['payloadBytes']
+                and release_rows[0]['clientTimeNs']==ack['clientTimeNs'],
+                'Source hold disarm differs from its exact retained release ACK')
+    return dict(policy=descriptor,holds=machine.used,confirmingSources=len(machine.sources),
+                retainedExecutedHistory=True,originalClocksPreserved=True,physicalInputDeliveryVerified=False)
 
 
 def verify_scout_guard(run, parts, frames, entries, recordings, reuse, *, allow_stale_stop=False):
@@ -1664,6 +1811,7 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
     require(bool(parts), 'No recorded segments')
     if batch:require(len(parts) == 1, 'A bounded batch must retain one complete recording segment')
     verify_scout_guard(run,parts,frames,run['segments'],recordings,reuse)
+    source_hold=verify_batch_source_hold(run,parts,frames,run['segments'],recordings,reuse)
     executed_history=verify_executed_history(run,parts,frames,run['segments'],recordings,reuse)
     lease = tuple(parts[0]['hello'][k] for k in ('sessionId', 'ownerEpoch'))
     require(all(tuple(p['hello'][k] for k in ('sessionId', 'ownerEpoch')) == lease for p in parts),
@@ -1881,6 +2029,7 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
                 physicalInputDeliveryVerified=False, generalNavigationQualified=False)
     if reuse is not None:result['policyReuse']=reuse
     if executed_history is not None:result['executedHistory']=executed_history
+    if source_hold is not None:result['batchSourceHold']=source_hold
     if spec is not None:
         result.update(scope=('reviewed-scout-batch-endpoint-and-software-input-joins' if batch
                              else 'reviewed-scout-endpoint-and-software-input-joins'),

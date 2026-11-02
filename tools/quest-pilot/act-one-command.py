@@ -12,7 +12,8 @@ import uuid
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-APP = Path(os.environ.get('BETTERGI_PILOT_APP_DIR', REPO / 'artifacts/release-r8/BetterGI-English-win-x64'))
+APP = Path(globals().get('_VERIFIED_APP_DIRECTORY') or
+           os.environ.get('BETTERGI_PILOT_APP_DIR', REPO / 'artifacts/release-r8/BetterGI-English-win-x64'))
 ROOT = APP / 'User/JsScript/ActOnePilot'
 HEARTBEAT_MAX_AGE_MS = 5000
 
@@ -153,6 +154,8 @@ def verify_windows_process(process_id, windows_session_id):
 
 def query_verified_service_status(process_id, windows_session_id):
     """Read status through the PID/session/SID-verified local control pipe."""
+    if globals().get('_VERIFIED_CONTROLLER_MODULE') is not None:
+        return _VERIFIED_CONTROLLER_MODULE.run('status', process_id, windows_session_id)
     import importlib.util
     control_path = Path(__file__).with_name('controller-control.py')
     spec = importlib.util.spec_from_file_location('act_one_controller_control', control_path)
@@ -418,8 +421,11 @@ def compact_terminal(submitted_id, receipt, observation, screenshot):
     }
 
 
-CALLER_SOURCE_SHA256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
-_receipt_archive_module = None
+# The relay injects the digest of the exact compiled bytes and verified helpers.
+# Standalone CLI use retains the existing on-disk loading behavior.
+CALLER_SOURCE_SHA256 = (globals().get('_VERIFIED_SOURCE_SHA256') or
+                        hashlib.sha256(Path(__file__).read_bytes()).hexdigest())
+_receipt_archive_module = globals().get('_VERIFIED_ARCHIVE_MODULE')
 
 
 def maintain_receipts_for_controller(root, heartbeat):

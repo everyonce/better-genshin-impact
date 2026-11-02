@@ -11,7 +11,8 @@ import stat
 import time
 from pathlib import Path
 
-SOURCE_SHA256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+SOURCE_SHA256 = (globals().get("_VERIFIED_SOURCE_SHA256") or
+                 hashlib.sha256(Path(__file__).read_bytes()).hexdigest())
 
 TRIGGER_FILES = 3000
 TARGET_FILES = 2000

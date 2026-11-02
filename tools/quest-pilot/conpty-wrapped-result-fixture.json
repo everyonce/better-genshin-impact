@@ -1,0 +1,5 @@
+{
+  "fixtureKind": "synthetic-conpty-wrap-v1",
+  "description": "Synthetic CRLF, ANSI cursor positioning and overwrite fragments. Contains no captured user or runtime data. Terminal text is deliberately non-authoritative.",
+  "output": "\u001b[?25l{\"relayDone\":\"r-transport-fixture-0001\",\"code\":0,\"state\":\"settled\",\r\n\"binding\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"}\r\n\u001b[3;1H\"binding\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\u001b[?25h"
+}

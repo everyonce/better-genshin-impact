@@ -567,4 +567,78 @@ class GuardAuditTests(unittest.TestCase):
                     with self.assertRaises((ValueError,ScoutEncounterStop)):invoke()
 
 
+
+class ReleaseContextSnapshotTests(unittest.TestCase):
+    """Keep native release telemetry once without changing private guard admission."""
+    @staticmethod
+    def context(label='first'):
+        """Provide a bounded native-shaped ledger large enough to expose accidental recopying."""
+        return dict(version=1,telemetryComplete=True,active=None,physicalExecutionProven=False,
+            trackedState=dict(heldKeys=[],telemetryIncomplete=False,releaseOutcome='returned_unverified'),
+            events=[dict(sequence=index,phase='returned',operation='key',key='W',label=label,
+                         detail='native-software-ledger-'+'x'*240) for index in range(256)])
+
+    def test_full_ack_is_private_and_retained_once_with_an_exact_small_reference(self):
+        """Detached snapshot mutation cannot alter the full native response or its cached identity."""
+        import hashlib
+        guard=ScoutEncounterGuard(binding());guard.observe(sample(),1)
+        response=dict(release_ack(),executionContext=self.context())
+        original=copy.deepcopy(response)
+        event=guard.acknowledge_release(response,0,2,'hybridEndpoint')
+        state=event['state'];last=state['lastRelease'];reference=last['executionContextReference']
+        expected=hashlib.sha256(json.dumps(original['executionContext'],sort_keys=True,
+            separators=(',', ':'),allow_nan=False).encode('utf-8')).hexdigest()
+        self.assertEqual(reference,dict(version=1,kind='scout-release-context-v1',bindingSha256=guard.sha256,
+                                       releaseNumber=1,sha256=expected))
+        self.assertNotIn('executionContext',last['response'])
+        self.assertLess(len(json.dumps(last)),1024)
+        self.assertEqual(event['response'],original)
+        self.assertEqual(guard.last_release['response'],original)
+        response['executionContext']['events'].clear()
+        event['response']['executionContext']['events'].clear()
+        last['executionContextReference']['sha256']='0'*64
+        self.assertEqual(guard.last_release['response'],original)
+        self.assertEqual(guard.snapshot()['lastRelease']['executionContextReference']['sha256'],expected)
+
+    def test_context_digest_is_cached_once_per_release_and_never_on_snapshot_intake(self):
+        """Repeated observations/snapshots cannot serialize the large native context again."""
+        import scout_encounter_guard as module
+        guard=ScoutEncounterGuard(binding());guard.observe(sample(),1)
+        original_dumps=json.dumps
+        with patch.object(module.json,'dumps',wraps=original_dumps) as dumps:
+            guard.acknowledge_release(dict(release_ack(),executionContext=self.context()),0,2,'hybridEndpoint')
+            self.assertEqual(dumps.call_count,1)
+            for _ in range(100):guard.snapshot()
+            self.assertEqual(dumps.call_count,1)
+            guard.observe(sample(2),3)
+            self.assertEqual(dumps.call_count,1)
+            guard.acknowledge_release(dict(release_ack(201,3),executionContext=self.context('next')),0,4,'hybridEndpoint')
+            self.assertEqual(dumps.call_count,2)
+        self.assertEqual(guard.snapshot()['lastRelease']['number'],2)
+        self.assertEqual(guard._last_release_snapshot['executionContextReference']['releaseNumber'],2)
+        self.assertIsInstance(guard._last_release_snapshot,dict)
+
+    def test_absent_context_keeps_original_shape_and_new_release_replaces_only_one_cache(self):
+        """An ACK without telemetry does not invent it or reuse a previous release's reference."""
+        guard=ScoutEncounterGuard(binding());guard.observe(sample(),1)
+        guard.acknowledge_release(dict(release_ack(),executionContext=self.context()),0,2,'hybridEndpoint')
+        guard.observe(sample(2),3)
+        event=guard.acknowledge_release(release_ack(201,3),0,4,'hybridEndpoint')
+        self.assertEqual(event['state']['lastRelease'],guard.last_release)
+        self.assertNotIn('executionContextReference',guard._last_release_snapshot)
+        self.assertEqual(guard._last_release_snapshot['response'],release_ack(201,3))
+
+    def test_reference_projection_preserves_original_release_clock_and_terminal_hazards(self):
+        """Full private ACK chronology still refuses old sources and latches a real sensor hazard."""
+        guard=ScoutEncounterGuard(binding());guard.observe(sample(),1);guard.check_dispatch(sample(),2)
+        guard.acknowledge_release(dict(release_ack(),executionContext=self.context()),0,3,'hybridEndpoint')
+        self.assertEqual(guard.observe(sample(),4)['state']['reason'],'awaitingPostReleaseNativeEvidence')
+        with self.assertRaises(ScoutEncounterStop):guard.check_dispatch(sample(),5)
+        guard.observe(sample(2),6);guard.check_dispatch(sample(2),7)
+        self.assertEqual(guard.observe(sample(3,candidates=True),8)['state']['trip']['reason'],'enemyBarCandidate')
+        guard.acknowledge_release(dict(release_ack(301,3),executionContext=self.context()),0,9,'cleanup')
+        self.assertIsNotNone(guard.trip)
+        with self.assertRaises(ScoutEncounterStop):guard.check_dispatch(sample(4),10)
+
+
 if __name__=='__main__':unittest.main()

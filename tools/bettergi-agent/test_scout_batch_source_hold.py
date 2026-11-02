@@ -946,4 +946,150 @@ class HostTimingTests(unittest.TestCase):
         self.assertEqual(module.gc.callbacks,before)
 
 
+class GcFacade:
+    """Observe only GC state APIs; no real collector, GPU, model or native operation is invoked."""
+    def __init__(self, enabled=True):
+        """Retain foreign callbacks and thresholds independently from the production scope."""
+        self.enabled=enabled;self.thresholds=(700,10,10);self.callbacks=[lambda phase,info:None]
+        self.calls=[];self.on_enable=None;self.fail_enable=False
+    def isenabled(self):
+        """Expose the process-state bit without adding any collection."""
+        self.calls.append('isenabled');return self.enabled
+    def get_threshold(self):
+        """Permit observation but no threshold mutation API."""
+        self.calls.append('get_threshold');return self.thresholds
+    def disable(self):
+        """Record the exact automatic-GC state transition."""
+        self.calls.append('disable');self.enabled=False
+    def enable(self):
+        """Assert cleanup order before restoring, or model a restoration failure."""
+        self.calls.append('enable')
+        if self.on_enable:self.on_enable()
+        if self.fail_enable:raise OSError('synthetic GC restore failure')
+        self.enabled=True
+    def collect(self,*args,**kwargs):
+        """Forced collection is prohibited in this change."""
+        raise AssertionError('No forced collection is permitted')
+    def set_threshold(self,*args):
+        """The scope must not alter or restore foreign threshold choices."""
+        raise AssertionError('No threshold mutation is permitted')
+
+
+class BatchAutomaticGcDeferralTests(unittest.TestCase):
+    """Prove the admitted scope restores GC after ordinary cleanup and every tested failure."""
+    def test_scope_preserves_enabled_state_thresholds_and_foreign_callbacks(self):
+        """Only the enabled bit is owned; foreign changes during the scope are not overwritten."""
+        module=batch_tests.client_module;fake=GcFacade();original=list(fake.callbacks);report={}
+        with patch.object(module,'gc',fake):
+            scope=module.BatchAutomaticGcDeferral(report,clock=lambda:123)
+            self.assertEqual(fake.calls,[]);scope.start();self.assertFalse(fake.enabled)
+            foreign=lambda phase,info:None;fake.callbacks.append(foreign);fake.thresholds=(800,12,13)
+            self.assertIsNone(scope.restore())
+        self.assertTrue(fake.enabled);self.assertTrue(scope.state['restored'])
+        self.assertEqual(fake.calls.count('disable'),1);self.assertEqual(fake.calls.count('enable'),1)
+        self.assertEqual(fake.callbacks,original+[foreign]);self.assertEqual(fake.thresholds,(800,12,13))
+        self.assertEqual(scope.state['thresholdsBefore'],[700,10,10]);self.assertEqual(scope.state['thresholdsAfter'],[800,12,13])
+
+    def test_originally_disabled_state_stays_disabled_even_when_timing_fails(self):
+        """An already-disabled caller is never enabled; diagnostic clocks are not restoration authority."""
+        module=batch_tests.client_module;fake=GcFacade(False)
+        def broken_clock():raise OSError('diagnostic clock failure')
+        with patch.object(module,'gc',fake):
+            scope=module.BatchAutomaticGcDeferral({},clock=broken_clock);scope.start()
+            self.assertIsNone(scope.restore())
+        self.assertFalse(fake.enabled);self.assertNotIn('enable',fake.calls);self.assertNotIn('disable',fake.calls)
+        self.assertTrue(scope.state['restored']);self.assertFalse(scope.state['changed'])
+        self.assertEqual(scope.state['timingErrorType'],'OSError')
+
+    def test_two_endpoints_restore_only_after_stop_handle_close_and_final_reader_join(self):
+        """Run real intake/history/endpoint code and inspect the precise state restoration boundary."""
+        module=batch_tests.client_module;fake=GcFacade();threads=[];joins=[];actual_thread=module.threading.Thread
+        def make_thread(*args,**kwargs):
+            thread=actual_thread(*args,**kwargs);old_join=thread.join;threads.append(thread)
+            def join(timeout=None):
+                try:return old_join(timeout)
+                finally:joins.append((timeout,thread.is_alive()))
+            thread.join=join;return thread
+        with tempfile.TemporaryDirectory() as folder:
+            recorder=batch_tests.stream_tests.HistoryRecorder();bridge=HoldBridge(recorder,freeze_action=3);policy=ColdBackupPolicy()
+            policy.during_predict=lambda:self.assertFalse(fake.enabled)
+            def check_retired():
+                self.assertEqual(bridge.commands[-1],'stop');self.assertTrue(bridge.handle.close.called)
+                self.assertTrue(threads);self.assertFalse(any(thread.is_alive() for thread in threads))
+                self.assertEqual(joins[-1],(1,False));self.assertEqual(len(fake.callbacks),1)
+            fake.on_enable=check_retired
+            with patch.object(module,'gc',fake),patch.object(module.threading,'Thread',make_thread):
+                code,part,recorder,bridge,policy=run_hold_fixture(folder,recorder=recorder,bridge=bridge,policy=policy)
+            self.assertEqual((code,len(bridge.actions),len(policy.commits)),(0,6,6))
+            self.assertEqual([row['history']['afterFrames'] for row in part['executedHistoryEvents']],[1,2,3,1,2,3])
+            self.assertTrue(part['batchAutomaticGcDeferral']['restored']);self.assertTrue(fake.enabled)
+            self.assertEqual(len([row for row in part['hybridNavigationEvents'] if row['type']=='hybridEndpointVerified']),2)
+            self.assertTrue(recorder.closed);self.assertTrue(part['hostTimingDiagnostics']['gcRemoved'])
+
+    def test_default_batch_does_not_query_or_change_gc(self):
+        """The existing opt-out batch path never constructs the scope or calls the GC facade."""
+        module=batch_tests.client_module;fake=GcFacade()
+        with tempfile.TemporaryDirectory() as folder,patch.object(module,'gc',fake):
+            code,part,recorder,bridge,policy=batch_tests.run_batch_fixture(folder)
+        self.assertEqual(code,0);self.assertNotIn('batchAutomaticGcDeferral',part);self.assertEqual(fake.calls,[])
+
+    def test_stop_guard_recorder_and_lost_ack_paths_restore_the_original_state(self):
+        """Retain the existing concrete primary-failure/cleanup assertions under the new scope."""
+        module=batch_tests.client_module
+        cases=((BatchSourceHoldRaceTests,'test_stop_after_first_confirmation_keeps_fence_and_retires'),
+            (BatchSourceHoldRaceTests,'test_stale_during_prediction_keeps_the_existing_terminal_trip'),
+            (HostTimingTests,'test_original_recorder_failure_still_stops_and_retires'),
+            (BatchSourceHoldStreamTests,'test_lost_release_ack_keeps_primary_failure_and_never_retries_hold'))
+        for case_type,name in cases:
+            fake=GcFacade();before=list(fake.callbacks)
+            with self.subTest(case=name),patch.object(module,'gc',fake):getattr(case_type(),name)()
+            self.assertTrue(fake.enabled);self.assertEqual(fake.calls.count('disable'),1)
+            self.assertEqual(fake.calls.count('enable'),1);self.assertEqual(fake.callbacks,before)
+
+    def test_restore_error_does_not_mask_original_lost_ack_and_is_retained(self):
+        """Restoration failure is separate from the original input-protocol failure."""
+        module=batch_tests.client_module;fake=GcFacade();fake.fail_enable=True
+        with tempfile.TemporaryDirectory() as folder,patch.object(module,'gc',fake):
+            recorder=batch_tests.stream_tests.HistoryRecorder();bridge=HoldBridge(recorder,lost_ack=True)
+            with self.assertRaisesRegex((RuntimeError,OSError),'ACK lost'):
+                run_hold_fixture(folder,recorder=recorder,bridge=bridge)
+            part=json.loads((Path(folder)/'run.json').read_bytes())
+            self.assertIn('ACK lost',part.get('error','')+part.get('streamError',''))
+            self.assertIn('synthetic GC restore failure',part['batchAutomaticGcRestoreError'])
+            self.assertFalse(part['batchAutomaticGcDeferral']['restored'])
+            self.assertEqual(bridge.commands[-1],'stop');self.assertTrue(bridge.handle.close.called)
+
+    def test_handle_close_exception_still_restores_and_preserves_the_cleanup_error(self):
+        """The restoration finally encloses raw handle close, not just its successful fall-through."""
+        module=batch_tests.client_module;fake=GcFacade();captured=[];original=module.BatchAutomaticGcDeferral
+        class Scope(original):
+            def __init__(self,report):super().__init__(report);captured.append(self.state)
+        with tempfile.TemporaryDirectory() as folder,patch.object(module,'gc',fake),patch.object(module,'BatchAutomaticGcDeferral',Scope):
+            recorder=batch_tests.stream_tests.HistoryRecorder();bridge=HoldBridge(recorder)
+            bridge.handle.close.side_effect=OSError('original handle-close failure')
+            with self.assertRaisesRegex(OSError,'original handle-close failure'):
+                run_hold_fixture(folder,recorder=recorder,bridge=bridge)
+            self.assertEqual(bridge.commands[-1],'stop')
+        self.assertTrue(fake.enabled);self.assertTrue(captured[0]['restored'])
+
+    def test_reader_join_exception_still_restores_without_reordering_cleanup(self):
+        """A real joined reader followed by an injected join failure cannot leak disabled GC."""
+        module=batch_tests.client_module;fake=GcFacade();captured=[];original=module.BatchAutomaticGcDeferral
+        actual_thread=module.threading.Thread
+        class Scope(original):
+            def __init__(self,report):super().__init__(report);captured.append(self.state)
+        def make_thread(*args,**kwargs):
+            thread=actual_thread(*args,**kwargs);old_join=thread.join
+            def join(timeout=None):
+                old_join(timeout)
+                if timeout==1:raise OSError('original final-reader-join failure')
+            thread.join=join;return thread
+        with tempfile.TemporaryDirectory() as folder,patch.object(module,'gc',fake),patch.object(module,'BatchAutomaticGcDeferral',Scope),patch.object(module.threading,'Thread',make_thread):
+            recorder=batch_tests.stream_tests.HistoryRecorder();bridge=HoldBridge(recorder)
+            with self.assertRaisesRegex(OSError,'original final-reader-join failure'):
+                run_hold_fixture(folder,recorder=recorder,bridge=bridge)
+            self.assertEqual(bridge.commands[-1],'stop');self.assertTrue(bridge.handle.close.called)
+        self.assertTrue(fake.enabled);self.assertTrue(captured[0]['restored'])
+
+
 if __name__=='__main__':unittest.main()

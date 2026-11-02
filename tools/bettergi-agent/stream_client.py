@@ -196,6 +196,61 @@ class HostTimingObserver:
             self.error(error)
 
 
+class BatchAutomaticGcDeferral:
+    """Defer only automatic cyclic GC in an admitted batch, then restore its prior process state."""
+    def __init__(self, report, clock=None):
+        """Keep bounded scalar evidence; construction neither queries nor changes GC."""
+        self.clock = clock or time.perf_counter_ns
+        self.state = dict(version=1, scope='reviewed-batch-source-hold', automaticOnly=True,
+            originalEnabled=None, changed=False, restoreAttempted=False, restored=False)
+        report['batchAutomaticGcDeferral'] = self.state
+
+    def mark(self, name):
+        """A diagnostic-clock failure never prevents state restoration or replaces a primary error."""
+        try:
+            self.state[name] = self.clock()
+        except Exception as error:
+            self.state['timingErrorType'] = type(error).__name__
+
+    def start(self):
+        """Enter inside the original main-loop try, before it can dispatch any input."""
+        self.mark('enteredAtClientNs')
+        self.state['originalEnabled'] = gc.isenabled()
+        self.state['thresholdsBefore'] = list(gc.get_threshold())
+        self.state['callbacksBefore'] = len(gc.callbacks)
+        if self.state['originalEnabled']:
+            # Record ownership before the mutation so even a partial entry failure restores it.
+            self.state['changed'] = True
+            gc.disable()
+        if gc.isenabled():
+            raise RuntimeError('Automatic GC was not deferred for the admitted batch')
+        self.mark('disabledAtClientNs')
+
+    def restore(self):
+        """Restore after native/reader cleanup attempts; return any failure without masking one in flight."""
+        self.state['restoreAttempted'] = True
+        self.mark('restoreStartedAtClientNs')
+        try:
+            original = self.state['originalEnabled']
+            if original is not None:
+                if gc.isenabled() != original:
+                    (gc.enable if original else gc.disable)()
+                self.state['restored'] = gc.isenabled() == original
+                if not self.state['restored']:
+                    raise RuntimeError('Automatic GC state restoration did not take effect')
+            else:
+                self.state['restored'] = True  # Entry failed before any owned mutation.
+            self.state['thresholdsAfter'] = list(gc.get_threshold())
+            self.state['callbacksAfter'] = len(gc.callbacks)
+            return None
+        except Exception as error:
+            self.state['restoreErrorType'] = type(error).__name__
+            self.state['restoreError'] = str(error)[:500]
+            return error
+        finally:
+            self.mark('restoreFinishedAtClientNs')
+
+
 class Bridge:
     """Serialize request/response pairs on the same-user local named pipe."""
     @staticmethod
@@ -2201,6 +2256,7 @@ def run_episode(args, policy=None, control=None):
     # Timings are measurement only and exist solely in the already-explicit source-hold mode.
     # Diagnostic rows stay in memory until retirement; required recording traffic is unchanged.
     host_timing = HostTimingObserver(report) if batch_source_hold is not None else None
+    batch_gc = BatchAutomaticGcDeferral(report) if batch_source_hold is not None else None
 
     def source_hold_runtime():
         """Read only intake-owned bookkeeping; never acquire ResidentControl under receive_lock."""
@@ -2827,6 +2883,7 @@ def run_episode(args, policy=None, control=None):
     episode_failure = None
     stop_failure = None
     try:
+        if batch_gc is not None:batch_gc.start()
         if host_timing is not None:host_timing.start_gc()
         while time.perf_counter() < deadline and not stopped.is_set():
             if executed_history:
@@ -3525,82 +3582,90 @@ def run_episode(args, policy=None, control=None):
                 raise climb.terminate('episode_failed_during_recovery', exc) from exc
             raise
     finally:
-        if host_timing is not None:host_timing.stop_gc()
-        stopped.set()
-        if executed_history:
-            # Attempt release before any encoder failure or cache reset can interrupt cleanup.
-            # Keep the raw acknowledgement even when its journal write fails.
-            with receive_lock:
-                try:
-                    released, payload = bridge.request('release')
-                    report['executedHistoryRelease'] = dict(response=copy.deepcopy(released), payloadBytes=len(payload))
-                    marker = scout_guard.acknowledge_release(released, len(payload), time.perf_counter_ns(), 'executedHistoryTeardown')
-                    report['scoutEncounterGuardState'] = marker['state']
-                    collect_receipts(released)
-                    if recorder:recorder.event(marker)
-                except Exception as error:
-                    stop_failure = error
-                    report['executedHistoryReleaseError'] = str(error)
-            try:
-                policy.reset()
-            except Exception as error:
-                stop_failure = stop_failure or error
-                report['executedHistoryResetError'] = str(error)
-        if combat_guard is not None:
-            # Release is unconditional, including failed recording, unknown admission,
-            # an interrupted final hold and an already latched reader hazard.
-            with receive_lock:
-                state = combat_guard.snapshot()
-                if not state['trialComplete'] and state['trip'] is None:
-                    # Replay must see this exact state transition before Release.
-                    # A failed journal must still leave the unconditional release reachable.
-                    terminal_stop = combat_guard.fail('trialEndedBeforeDrain', time.perf_counter_ns())
-                    report['combatTrialGuardState'] = terminal_stop['state']
-                    report['combatTrialTerminalStop'] = terminal_stop
+        try:
+            if host_timing is not None:host_timing.stop_gc()
+            stopped.set()
+            if executed_history:
+                # Attempt release before any encoder failure or cache reset can interrupt cleanup.
+                # Keep the raw acknowledgement even when its journal write fails.
+                with receive_lock:
                     try:
-                        if recorder and not recorder.error:
-                            recorder.event(terminal_stop)
+                        released, payload = bridge.request('release')
+                        report['executedHistoryRelease'] = dict(response=copy.deepcopy(released), payloadBytes=len(payload))
+                        marker = scout_guard.acknowledge_release(released, len(payload), time.perf_counter_ns(), 'executedHistoryTeardown')
+                        report['scoutEncounterGuardState'] = marker['state']
+                        collect_receipts(released)
+                        if recorder:recorder.event(marker)
                     except Exception as error:
                         stop_failure = error
-                        report['combatTrialStopJournalError'] = str(error)
+                        report['executedHistoryReleaseError'] = str(error)
                 try:
-                    released, _ = combat_trial_release(bridge, combat_guard, report,
-                        recorder if recorder and not recorder.error else None, 'combatTrialTeardown')
-                    collect_receipts(released)
+                    policy.reset()
                 except Exception as error:
                     stop_failure = stop_failure or error
-                    report['combatTrialReleaseError'] = str(error)
-                    report['combatTrialGuardState'] = combat_guard.fail('terminalReleaseFailure', time.perf_counter_ns(), error=str(error))['state']
-        producer.join(timeout=3)
-        if climb and climb.helper.blocks_model:
-            terminal_climb_error = climb.terminate('lease_ended_during_recovery', cleanup_allowed=not producer.is_alive())
-        if not producer.is_alive():
-            try:
-                if args.readiness_snapshots:
-                    diagnostic_status = bridge.request('status')[0]
-                    collect_receipts(diagnostic_status)
-                    report['readinessDiagnosticsBeforeStop'] = diagnostic_status.get('diagnostics')
-                report['stop'], stop_payload = bridge.request('stop')
-                collect_receipts(report['stop'])
-                if combat_guard is not None and (report['stop'].get('type') != 'stopped' or stop_payload):
-                    report['combatTrialGuardState'] = combat_guard.fail('invalidStopAcknowledgement', time.perf_counter_ns(),
-                        response=report['stop'], payloadBytes=len(stop_payload))['state']
-                    raise RuntimeError('Combat trial stop was not acknowledged')
-            except Exception as exc:
-                stop_failure = exc
-                report['stopError'] = str(exc)
-        if climb:
-            try:
-                climb.handle.close()  # Never close a substituted public handle.
-            except Exception as close_error:
-                report['navigationClimbHandleCloseError'] = str(close_error)
-                report.setdefault('error', 'Recovery handle close failed')
-                terminal_climb_error = terminal_climb_error or RuntimeError(report['error'])
-        else:
-            bridge.handle.close()
-        producer.join(timeout=1)
-        if producer.is_alive():
-            report['streamError'] = 'Frame reader did not stop after disconnection'
+                    report['executedHistoryResetError'] = str(error)
+            if combat_guard is not None:
+                # Release is unconditional, including failed recording, unknown admission,
+                # an interrupted final hold and an already latched reader hazard.
+                with receive_lock:
+                    state = combat_guard.snapshot()
+                    if not state['trialComplete'] and state['trip'] is None:
+                        # Replay must see this exact state transition before Release.
+                        # A failed journal must still leave the unconditional release reachable.
+                        terminal_stop = combat_guard.fail('trialEndedBeforeDrain', time.perf_counter_ns())
+                        report['combatTrialGuardState'] = terminal_stop['state']
+                        report['combatTrialTerminalStop'] = terminal_stop
+                        try:
+                            if recorder and not recorder.error:
+                                recorder.event(terminal_stop)
+                        except Exception as error:
+                            stop_failure = error
+                            report['combatTrialStopJournalError'] = str(error)
+                    try:
+                        released, _ = combat_trial_release(bridge, combat_guard, report,
+                            recorder if recorder and not recorder.error else None, 'combatTrialTeardown')
+                        collect_receipts(released)
+                    except Exception as error:
+                        stop_failure = stop_failure or error
+                        report['combatTrialReleaseError'] = str(error)
+                        report['combatTrialGuardState'] = combat_guard.fail('terminalReleaseFailure', time.perf_counter_ns(), error=str(error))['state']
+            producer.join(timeout=3)
+            if climb and climb.helper.blocks_model:
+                terminal_climb_error = climb.terminate('lease_ended_during_recovery', cleanup_allowed=not producer.is_alive())
+            if not producer.is_alive():
+                try:
+                    if args.readiness_snapshots:
+                        diagnostic_status = bridge.request('status')[0]
+                        collect_receipts(diagnostic_status)
+                        report['readinessDiagnosticsBeforeStop'] = diagnostic_status.get('diagnostics')
+                    report['stop'], stop_payload = bridge.request('stop')
+                    collect_receipts(report['stop'])
+                    if combat_guard is not None and (report['stop'].get('type') != 'stopped' or stop_payload):
+                        report['combatTrialGuardState'] = combat_guard.fail('invalidStopAcknowledgement', time.perf_counter_ns(),
+                            response=report['stop'], payloadBytes=len(stop_payload))['state']
+                        raise RuntimeError('Combat trial stop was not acknowledged')
+                except Exception as exc:
+                    stop_failure = exc
+                    report['stopError'] = str(exc)
+            if climb:
+                try:
+                    climb.handle.close()  # Never close a substituted public handle.
+                except Exception as close_error:
+                    report['navigationClimbHandleCloseError'] = str(close_error)
+                    report.setdefault('error', 'Recovery handle close failed')
+                    terminal_climb_error = terminal_climb_error or RuntimeError(report['error'])
+            else:
+                bridge.handle.close()
+            producer.join(timeout=1)
+            if producer.is_alive():
+                report['streamError'] = 'Frame reader did not stop after disconnection'
+        finally:
+            if batch_gc is not None:
+                gc_error = batch_gc.restore()
+                if gc_error is not None:
+                    report['batchAutomaticGcRestoreError'] = str(gc_error)[:500]
+                    stop_failure = stop_failure or gc_error
+                    report.setdefault('error', 'Automatic GC state restoration failed: '+str(gc_error))
         if report['captureQuality']['usableFrames'] == 0:
             report['captureError'] = 'No usable RGB frames were received; wholly black/white captures cannot evaluate a live policy.'
             report.setdefault('error', report['captureError'])

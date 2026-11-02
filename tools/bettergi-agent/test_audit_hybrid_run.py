@@ -1556,3 +1556,239 @@ class ExecutedHistoryAuditTests(unittest.TestCase):
                 elif mutation=='journal':part={};rows=[dict(type='p2pExecutedHistory')]
                 else:part={'policyMetadata':{'historyCommitMode':EXECUTED_HISTORY_MODE}};rows=[]
                 with self.assertRaises(ValueError):self.replay((run,part,frames,rows,None))
+
+
+class GuardReleaseContextAuditTests(unittest.TestCase):
+    """Resolve compact references causally while preserving exact historical inline replay."""
+    @staticmethod
+    def trace():
+        """Retain two different full native ACKs and sources on both sides of each release."""
+        from scout_encounter_guard import ScoutEncounterGuard
+        from test_scout_encounter_guard import binding,sample,release_ack,ReleaseContextSnapshotTests
+        guard=ScoutEncounterGuard(binding());frames={index:sample(index) for index in (1,2,3)}
+        rows=[];decisions=[]
+        for index,frame in frames.items():
+            rows.append(guard.observe(frame,index*100))
+            marker=guard.check_dispatch(frame,index*100+1)
+            request='context-action-'+str(index)
+            rows.append(dict(type='scoutEncounterGuardDispatch',requestId=request,marker=marker,
+                             frame=copy.deepcopy(frame),state=guard.snapshot()))
+            decisions.append(dict(frameId=index,acceptance=dict(type='accepted',requestId=request),scoutEncounterGuard=marker))
+            if index<3:
+                response=dict(release_ack(index*100+1,index+1),
+                              executionContext=ReleaseContextSnapshotTests.context(str(index)))
+                rows.append(guard.acknowledge_release(response,0,index*100+2,'hybridEndpoint'))
+        part=dict(scoutEncounterGuard=binding(),scoutEncounterGuardState=guard.snapshot(),decisions=decisions)
+        return dict(scoutEncounterGuardState=guard.snapshot()),part,frames,rows
+
+    def replay(self,trace):
+        """Exercise the actual JSONL reader and full independent scout guard/dispatch verifier."""
+        from audit_hybrid_run import verify_scout_guard
+        from test_scout_encounter_guard import binding
+        run,part,frames,rows=trace
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'00001'/'events.jsonl';path.parent.mkdir()
+            path.write_text(''.join(json.dumps(row)+'\n' for row in rows),encoding='utf-8')
+            return verify_scout_guard(run,[part],frames,[dict(number=1)],folder,dict(scoutEncounterGuard=binding()))
+
+    @staticmethod
+    def inline(trace):
+        """Reconstruct the historical schema independently from the already preceding full ACK."""
+        current=None
+        def expand(state):
+            """Only the latest retained release supplies an inline test snapshot."""
+            last=state.get('lastRelease')
+            if last and 'executionContextReference' in last:
+                if current is None:raise AssertionError('Missing preceding fixture ACK')
+                last.pop('executionContextReference')
+                last['response']['executionContext']=copy.deepcopy(current)
+        for row in trace[3]:
+            if row.get('type')=='scoutEncounterGuardRelease':current=row['response'].get('executionContext')
+            if isinstance(row.get('state'),dict):expand(row['state'])
+        for document in trace[:2]:expand(document['scoutEncounterGuardState'])
+        return trace
+
+    def test_compact_and_exact_historical_inline_release_states_both_replay(self):
+        """The new source does not reinterpret or discard historical full native acknowledgements."""
+        trace=self.trace();compact=self.replay(copy.deepcopy(trace))
+        legacy=self.replay(self.inline(copy.deepcopy(trace)))
+        self.assertEqual(compact,legacy)
+        self.assertEqual(compact['releases'],2)
+        for snapshot in ('event','part','run'):
+            changed=self.inline(copy.deepcopy(trace))
+            state=changed[3][3]['state'] if snapshot=='event' else changed[1 if snapshot=='part' else 0]['scoutEncounterGuardState']
+            state['lastRelease']['response']['executionContext']['events'][0]['key']='A'
+            with self.subTest(snapshot=snapshot),self.assertRaises(ValueError):self.replay(changed)
+
+    def test_missing_foreign_forward_mixed_and_typed_reference_mutations_refuse(self):
+        """Self-consistent future metadata cannot substitute for an already retained release row."""
+        cases=('missingAck','forward','binding','hash','version','booleanVersion','floatVersion',
+               'booleanNumber','extra','mixed','missingRef','changedFullAck','beforeFirstRelease')
+        for change in cases:
+            trace=self.trace();run,part,frames,rows=trace
+            last=rows[3]['state']['lastRelease'];reference=last['executionContextReference']
+            if change=='missingAck':rows.pop(2)
+            elif change=='forward':reference['releaseNumber']=2
+            elif change=='binding':reference['bindingSha256']='b'*64
+            elif change=='hash':reference['sha256']='0'*64
+            elif change=='version':reference['version']=2
+            elif change=='booleanVersion':reference['version']=True
+            elif change=='floatVersion':reference['version']=1.0
+            elif change=='booleanNumber':reference['releaseNumber']=True
+            elif change=='extra':reference['extra']=None
+            elif change=='mixed':last['response']['executionContext']=copy.deepcopy(rows[2]['response']['executionContext'])
+            elif change=='missingRef':last.pop('executionContextReference')
+            elif change=='changedFullAck':rows[2]['response']['executionContext']['events'][0]['key']='A'
+            elif change=='beforeFirstRelease':rows[0]['state']['lastRelease']=copy.deepcopy(last)
+            with self.subTest(change=change),self.assertRaises(ValueError):self.replay(trace)
+
+    def test_final_state_cannot_refer_to_an_earlier_release_or_unknown_source(self):
+        """Only one current release cache is valid; retained older contexts do not become a lookup pool."""
+        for document in (0,1):
+            trace=self.trace()
+            reference=trace[3][3]['state']['lastRelease']['executionContextReference']
+            trace[document]['scoutEncounterGuardState']['lastRelease']['executionContextReference']=copy.deepcopy(reference)
+            with self.subTest(document=document),self.assertRaises(ValueError):self.replay(trace)
+
+    def test_full_ack_and_receipt_data_cannot_hide_inside_a_reference(self):
+        """Only the duplicate context is compacted; full release and other state fields remain exact."""
+        for change in ('strippedFullContext','releaseMetadata','responseReadiness','stateCounter'):
+            trace=self.trace();row=trace[3][3]
+            if change=='strippedFullContext':trace[3][2]['response'].pop('executionContext')
+            elif change=='releaseMetadata':row['state']['lastRelease']['reason']='unrelated'
+            elif change=='responseReadiness':row['state']['lastRelease']['response']['worldReadiness']['epoch']+=1
+            else:row['state']['distinctSources']+=1
+            with self.subTest(change=change),self.assertRaises(ValueError):self.replay(trace)
+
+
+
+class MaximumReleaseContextRecordingTests(unittest.TestCase):
+    """Exercise a sixty-second lease/eight-endpoint workload through the real bounded writer and audit."""
+    evidence_sink=None  # Optional inert qualification export; normal repository tests need no artifact path.
+
+    def test_maximum_batch_window_and_eight_endpoints_keep_lossless_replay(self):
+        """Native/model/encoder and file-policy admission are synthetic; clocks, queues, journals and audit are real."""
+        from contextlib import ExitStack,redirect_stdout
+        import io
+        import time
+        import stream_client as client
+        import policy_rgb_archive as archive
+        import audit_hybrid_run as audit_module
+        import test_reviewed_scout_route as batch_tests
+        from reviewed_scout_route import ReviewedScoutBatch,reviewed_batch_policy
+        from scout_encounter_guard import ScoutEncounterGuard
+        from test_native_ground_control import binding as ground_binding
+        from test_recorder_metadata import MemoryEncoder
+        from test_resident_goals import dormant_control
+        from test_scout_encounter_guard import ReleaseContextSnapshotTests
+
+        points=[(-1135,2267)]
+        for index in range(8):
+            x,y=points[-1];points.append((x-12,y) if index%2 else (x,y-12))
+        batch=ReviewedScoutBatch(points)
+
+        class SustainedBridge(batch_tests.BatchBridge):
+            """Spread the eight synthetic endpoints over the original sixty-second input lease."""
+            def request(self,command,**arguments):
+                """Publish steady progress and full release ledgers without any native or OS calls."""
+                row,pixels=super().request(command,**arguments)
+                if command=='release':
+                    row['executionContext']=ReleaseContextSnapshotTests.context('release-'+str(self.epoch))
+                if command=='frame':
+                    index=min(self.epoch,7)
+                    start,end=batch.points[index:index+2]
+                    fraction=max(0,min(1,(self.now()-1000-index*7400)/7400))
+                    point=tuple(left+(right-left)*fraction for left,right in zip(start,end))
+                    pose=dict(zip(('x','y'),point));target=dict(zip(('x','y'),end))
+                    row['navigationPose'].update(x=point[0],y=point[1],
+                        yawDegrees=batch_tests.route_heading(pose,end),
+                        headingToStartDegrees=int(batch_tests.route_heading(pose,batch_tests.START)),
+                        headingToEndDegrees=int(batch_tests.route_heading(pose,batch_tests.END)))
+                return row,pixels
+
+        with tempfile.TemporaryDirectory() as folder,ExitStack() as stack:
+            root=Path(folder);record=root/'recording'/'00001'
+            stack.enter_context(patch.object(batch_tests,'BATCH',batch))
+            args=batch_tests.batch_arguments(folder,seconds=60)
+            args.fps,args.decision_hz,args.batch_source_hold=20,10,True
+            args.record_dir=str(record)
+            control=dormant_control(root,frozen_goal=True)
+            control.set_initial_goal(dict(instruction='fixed bounded eight-endpoint recording'),'ground-navigation')
+            control.scout_encounter_guard=ScoutEncounterGuard(ground_binding())
+            control.scout_batch_policy=reviewed_batch_policy(batch.profile_id,source_hold=True)
+            control.scout_batch_route_sha256=batch.sha256
+            bridge,policy=SustainedBridge(),batch_tests.stream_tests.HistoryPolicy()
+            stack.enter_context(patch.object(client.subprocess,'Popen',return_value=MemoryEncoder()))
+            recorder=client.AsyncVideoRecorder(record,'inert-encoder',args.fps,160*1024*1024,
+                                               frame_capacity=32,retain_policy_rgb=True)
+            stack.enter_context(patch.object(client,'Bridge',return_value=bridge))
+            stack.enter_context(patch.object(client,'AsyncVideoRecorder',return_value=recorder))
+            stack.enter_context(patch('resident_runtime.verify_bridge_identity'))
+            stack.enter_context(redirect_stdout(io.StringIO()))
+            started=time.perf_counter()
+            try:code=client.run_episode(args,policy,control)
+            finally:recorder.close()
+            elapsed=time.perf_counter()-started
+            part=json.loads(Path(args.output).read_bytes())
+            self.assertEqual((code,part['status'],part.get('error')),(0,'completed',None))
+            self.assertEqual((part['hybridNavigation']['completedLegs'],args.seconds,args.segment_seconds),(8,60,90))
+            self.assertGreater(elapsed,57)
+            self.assertLess(elapsed,65)  # Bounded teardown may outlast input; its original sixty-second clock never renews.
+            self.assertTrue(part['recording']['complete'] and part['recording']['lossless'])
+            for field in ('droppedFrames','droppedEvents','droppedObservations','abandonedFrames'):
+                self.assertEqual(part['recording'][field],0,field)
+            self.assertEqual(len(bridge.actions),len(bridge.completed))
+            self.assertEqual(len(bridge.completed),len(policy.commits))
+            self.assertGreater(len(policy.commits),300)
+            self.assertEqual(bridge.commands[-1],'stop')
+            self.assertTrue(bridge.handle.close.called)
+            self.assertFalse(policy.pending)
+
+            events,event_file=archive.read_recording_jsonl(record,'events.jsonl')
+            observations,_=archive.read_recording_jsonl(record,'observations.jsonl')
+            frame_rows,_=archive.read_recording_jsonl(record,'frames.jsonl')
+            full_releases=[row for row in events if row.get('type')=='scoutEncounterGuardRelease']
+            self.assertEqual(len(full_releases),9)
+            self.assertEqual(sum(row['reason']=='hybridEndpoint' for row in full_releases),8)
+            for row in full_releases:self.assertIn('executionContext',row['response'])
+            for index,row in enumerate(frame_rows):
+                self.assertEqual(archive.read_policy_rgb(record,row['policyRgb'],index=index,
+                    frame_id=row['frameId'],recording=part['recording']),bridge.pixels)
+            # Compute the old duplicated representation from only preceding full release rows.
+            current=None;old_decoded=0;compact_states=0
+            for event in events:
+                row=copy.deepcopy(event)
+                if row.get('type')=='scoutEncounterGuardRelease':current=row['response']['executionContext']
+                state=row.get('state');last=state.get('lastRelease') if isinstance(state,dict) else None
+                if last and 'executionContextReference' in last:
+                    compact_states+=1;last.pop('executionContextReference')
+                    last['response']['executionContext']=current
+                old_decoded+=len((json.dumps(row,separators=(',', ':'),ensure_ascii=False)+'\n').encode('utf-8'))
+            self.assertGreater(old_decoded,archive.JOURNAL_MAX_DECODED_BYTES)
+            self.assertGreater(compact_states,1000)
+            seal=json.loads((record/'recording.json').read_bytes())
+            for reference in seal['journalFiles'].values():
+                self.assertLessEqual(reference['bytes'],archive.JOURNAL_MAX_DECODED_BYTES)
+                self.assertLessEqual(reference['rows'],archive.JOURNAL_MAX_ROWS)
+            physical=sum(path.stat().st_size for path in record.rglob('*') if path.is_file())
+            self.assertLess(physical,archive.RECORDING_MAX_BYTES)
+
+            part['leaseInitialGoalState']=copy.deepcopy(part['initialGoalState'])
+            (root/'part.json').write_text(json.dumps(part),encoding='utf-8')
+            run=dict(part,evidenceComplete=True,modelLoads=0,segments=[dict(number=1,report='part.json')])
+            (root/'run.json').write_text(json.dumps(run),encoding='utf-8')
+            reuse=dict(routeId=batch.route_id,navigationProfile=batch.profile_id,routeSpec=batch.document(),
+                routeSpecSha256=batch.sha256,historyCommitMode=batch_tests.stream_tests.MODE,actionHoldMs=50,
+                reviewedScoutBatchPolicy=reviewed_batch_policy(batch.profile_id,source_hold=True),
+                scoutEncounterGuard=copy.deepcopy(part['scoutEncounterGuard']))
+            with patch.object(audit_module,'verify_policy_reuse',return_value=reuse):
+                audited=audit_module.audit(root/'run.json',record.parent,repository=root,minimum_legs=8,
+                    reviewed_scout_route=batch,policy_reuse_proof=root/'inert-file-proof.json')
+            self.assertEqual((audited['verifiedLegs'],audited['acceptedActions']),(8,len(policy.commits)))
+            self.assertFalse(audited['executedHistory']['physicalInputDeliveryVerified'])
+            summary=dict(synthetic=True,noModelNativeOrInputCalls=True,originalLeaseSeconds=args.seconds,
+                elapsedSeconds=elapsed,verifiedLegs=8,acceptedActions=len(policy.commits),releaseRows=len(full_releases),
+                compactStates=compact_states,eventRows=len(events),observationRows=len(observations),
+                frameRows=len(frame_rows),oldInlineDecodedBytes=old_decoded,physicalBytes=physical,
+                journalFiles=seal['journalFiles'],audit=audited,oneSegment=True,historyFrames=41)
+            if self.evidence_sink is not None:type(self).evidence_sink(root,summary)

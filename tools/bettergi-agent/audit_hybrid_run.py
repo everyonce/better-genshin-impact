@@ -863,6 +863,30 @@ def verify_batch_source_hold(run, parts, frames, entries, recordings, reuse):
                 retainedExecutedHistory=True,originalClocksPreserved=True,physicalInputDeliveryVerified=False)
 
 
+def expand_scout_guard_snapshot(state, release_context):
+    """Resolve only the current already-replayed release, preserving historical inline state."""
+    release=state.get('lastRelease') if isinstance(state,dict) else None
+    if not isinstance(release,dict) or 'executionContextReference' not in release:
+        return state
+    reference=release['executionContextReference']
+    response=release.get('response')
+    require(isinstance(reference,dict) and release_context is not None
+            and isinstance(response,dict) and 'executionContext' not in response,
+            'Scout release context reference is missing, mixed or has no causal release')
+    expected,context=release_context
+    require(json.dumps(reference,sort_keys=True,allow_nan=False)
+            ==json.dumps(expected,sort_keys=True,allow_nan=False)
+            and type(release.get('number')) is int and release['number']==expected['releaseNumber']
+            and state.get('bindingSha256')==expected['bindingSha256']
+            and type(state.get('releases')) is int and state['releases']==expected['releaseNumber'],
+            'Scout release context reference changed identity, version or digest')
+    # Copy only the three dictionaries on the changed path. The exact retained
+    # context stays read-only; no growing reference table or repeated hashing.
+    expanded=dict(release,response=dict(response,executionContext=context))
+    expanded.pop('executionContextReference')
+    return dict(state,lastRelease=expanded)
+
+
 def verify_scout_guard(run, parts, frames, entries, recordings, reuse, *, allow_stale_stop=False):
     """Replay guarded sensor intake independently and join every accepted dispatch to its latest safe poll."""
     require(type(allow_stale_stop) is bool,'Invalid failed-source replay mode')
@@ -882,6 +906,7 @@ def verify_scout_guard(run, parts, frames, entries, recordings, reuse, *, allow_
         return None
     from scout_encounter_guard import ScoutEncounterGuard,sensor_frame,validate_binding
     guard=ScoutEncounterGuard(binding)
+    release_context=None
     observations=[]
     dispatches={}
     first_frames={}
@@ -909,7 +934,21 @@ def verify_scout_guard(run, parts, frames, entries, recordings, reuse, *, allow_
                 if event.get('type')=='scoutEncounterGuardRelease':
                     at=event.get('clientTimeNs')
                     require(type(at) is int and at>=previous_ns,'Scout release clock crossed intake or dispatch')
-                    require(guard.acknowledge_release(event.get('response'),event.get('payloadBytes'),at,event.get('reason'))==event,
+                    replay=guard.acknowledge_release(event.get('response'),event.get('payloadBytes'),at,event.get('reason'))
+                    require(type(event.get('number')) is int and event['number']==guard.releases,
+                            'Scout release number changed')
+                    # Only this full release can authorize its own and later
+                    # snapshots. Replace the previous cache; never index ahead.
+                    release_context=None
+                    if 'executionContext' in event['response']:
+                        context=event['response']['executionContext']
+                        digest=hashlib.sha256(json.dumps(context,sort_keys=True,separators=(',', ':'),
+                            allow_nan=False).encode('utf-8')).hexdigest()
+                        reference=dict(version=1,kind='scout-release-context-v1',bindingSha256=guard.sha256,
+                                       releaseNumber=guard.releases,sha256=digest)
+                        release_context=(reference,context)
+                    require(dict(replay,state=expand_scout_guard_snapshot(replay.get('state'),release_context))
+                            ==dict(event,state=expand_scout_guard_snapshot(event.get('state'),release_context)),
                             'Scout release acknowledgement or disarm transition changed')
                     previous_ns=at
                     continue
@@ -920,7 +959,8 @@ def verify_scout_guard(run, parts, frames, entries, recordings, reuse, *, allow_
                     require(type(at) is int and at>=previous_ns and isinstance(request_id,str)
                             and request_id not in dispatches,'Scout dispatch journal identity or clock changed')
                     require(guard.check_dispatch(event.get('frame') or {},at)==marker
-                            and event.get('state')==guard.snapshot(),'Scout dispatch gate differs from sensor replay')
+                            and expand_scout_guard_snapshot(event.get('state'),release_context)
+                            ==expand_scout_guard_snapshot(guard.snapshot(),release_context),'Scout dispatch gate differs from sensor replay')
                     dispatches[request_id]=event
                     previous_ns=at
                     continue
@@ -930,7 +970,9 @@ def verify_scout_guard(run, parts, frames, entries, recordings, reuse, *, allow_
                 at=event.get('clientReceivedNs')
                 require(type(at) is int and at>previous_ns,'Scout guard intake clock did not advance')
                 replay=guard.observe(event.get('frame') or {},at)
-                require(replay==event,'Scout guard journal changed its source, evidence, or decision')
+                require(dict(replay,state=expand_scout_guard_snapshot(replay.get('state'),release_context))
+                        ==dict(event,state=expand_scout_guard_snapshot(event.get('state'),release_context)),
+                        'Scout guard journal changed its source, evidence, or decision')
                 # Only the separate failed-prefix auditor may replay this exact failure.
                 # The normal route audit still rejects every guard trip, including stale sources.
                 require(guard.trip is None or (allow_stale_stop and guard.trip.get('reason')=='nativeSensorStale'),
@@ -939,14 +981,17 @@ def verify_scout_guard(run, parts, frames, entries, recordings, reuse, *, allow_
                 previous_ns=at
                 frame=event['frame']
                 if frame.get('type')=='frame':first_frames.setdefault(frame['frameId'],frame)
-        require(part.get('scoutEncounterGuardState')==guard.snapshot(),'Segment scout guard state differs from intake replay')
+        require(expand_scout_guard_snapshot(part.get('scoutEncounterGuardState'),release_context)
+                ==expand_scout_guard_snapshot(guard.snapshot(),release_context),'Segment scout guard state differs from intake replay')
         if guard.ground_capability is not None:
             from native_ground_control import require_ground_frame
             for proof in part.get('hybridNavigationEvents',[]):
                 if proof.get('type') in ('hybridStartVerified','hybridEndpointVerified'):
                     for sample in proof.get('samples',[]):
                         require_ground_frame(frames.get(sample.get('frameId')) or {},replay_pixels=True)
-    require(guard.admitted and observations and run.get('scoutEncounterGuardState')==guard.snapshot(),
+    require(guard.admitted and observations
+            and expand_scout_guard_snapshot(run.get('scoutEncounterGuardState'),release_context)
+                ==expand_scout_guard_snapshot(guard.snapshot(),release_context),
             'Resident scout guard admission or final state is missing')
     require(set(first_frames)==set(frames) and all(first_frames[key]==sensor_frame(frame) for key,frame in frames.items()),
             'Scout guard sources differ from the original retained native observations')

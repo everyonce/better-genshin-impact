@@ -6,6 +6,8 @@ video presentation time is an index, not an assumption about capture cadence.
 """
 import argparse
 import copy
+import gc
+from collections import deque
 from contextlib import contextmanager, nullcontext
 import hashlib
 import json
@@ -31,6 +33,167 @@ from observation_profiles import (LEGACY, P2P_NATIVE, PROFILES, FrameProfileErro
                                   validate_model_profile, verify_hello, verify_frame)
 from p2p_startup import validate_startup_options
 from bridge_transport import forbid_reconnect, is_transport_failure, transport_origin
+
+
+class HostTimingObserver:
+    """Bounded diagnostics for the explicit source-hold mode; never input or clock authority."""
+    EVENT_LIMIT = 4096
+    GC_LIMIT = 512
+
+    def __init__(self, report, clock=None):
+        """Keep scalar rows in bounded memory until the existing post-retirement report write."""
+        self.clock = clock or time.perf_counter_ns
+        self.events = deque(maxlen=self.EVENT_LIMIT)
+        self._event_slots = iter(range(self.EVENT_LIMIT))
+        self.gc_events = deque(maxlen=self.GC_LIMIT)
+        self.deliveries = {}
+        self.state = dict(version=1, clock='perf_counter_ns', authority=False,
+            scope='reviewed-batch-source-hold', eventLimit=self.EVENT_LIMIT, gcLimit=self.GC_LIMIT,
+            storage='memory-until-retirement', measurementError=False, gcRegistered=False, gcRemoved=False)
+        report['hostTimingDiagnostics'] = self.state
+        self._gc_callback = self._observe_gc
+
+    def error(self, error):
+        """Diagnostic errors cannot replace the original action, reader or teardown failure."""
+        self.state.update(measurementError=True, lastErrorType=type(error).__name__)
+
+    def new(self, kind, **values):
+        """Start one small row without reading model state or serializing evidence."""
+        row = dict(type=kind, **values)
+        self.mark(row, 'startedAtClientNs')
+        return row
+
+    def mark(self, row, name, value=None):
+        """Timestamp an existing boundary; instrumentation failure is non-authoritative."""
+        try:
+            row[name] = self.clock() if value is None else value
+        except Exception as error:
+            self.error(error)
+
+    def elapsed(self, row, name, started):
+        """Aggregate frequent wait/check durations instead of creating per-iteration events."""
+        try:
+            duration = self.clock() - started
+            row[name + 'Count'] = row.get(name + 'Count', 0) + 1
+            row[name + 'TotalNs'] = row.get(name + 'TotalNs', 0) + duration
+            row[name + 'MaxNs'] = max(row.get(name + 'MaxNs', 0), duration)
+        except Exception as error:
+            self.error(error)
+
+    def emit(self, row):
+        """Retain only a bounded scalar row; never touch the required recorder or its queue."""
+        try:
+            if next(self._event_slots, None) is None:
+                self.state['eventsAtCapacity'] = True
+                return
+            self.events.append(row)
+        except Exception as error:
+            self.error(error)
+
+    @contextmanager
+    def poll(self, origin, wake):
+        """Bracket intake acquisition and its complete release, including early failure paths."""
+        row = self.new('hostPollTiming', origin=origin, **(wake or {}))
+        self.mark(row, 'intakeRequestedNs')
+        try:
+            yield row
+        except BaseException as error:
+            row['failureType'] = type(error).__name__
+            raise
+        finally:
+            self.mark(row, 'intakeScopeExitedNs')
+            self.emit(row)
+
+    @contextmanager
+    def native_call(self, command, request_id, frame_id):
+        """Measure the existing native action call without adding or retrying any request."""
+        row = self.new('hostNativeCallTiming', command=command, requestId=request_id, frameId=frame_id)
+        try:
+            yield
+        except BaseException as error:
+            row['failureType'] = type(error).__name__
+            raise
+        finally:
+            self.mark(row, 'returnedAtClientNs')
+            self.emit(row)
+
+    def receipt(self, receipt, metadata, poll):
+        """Join native terminal time to the existing envelope reply and inbox insertion."""
+        try:
+            row = self.new('hostReceiptDeliveryTiming', requestId=receipt.get('requestId'),
+                frameId=receipt.get('frameId'), nativeEndedAtMs=receipt.get('endedAtMs'),
+                envelopeType=metadata.get('type'), pollFrameId=metadata.get('frameId'),
+                replyAtClientNs=poll.get('rpcReturnedNs') if poll else None)
+            if len(self.deliveries) < self.EVENT_LIMIT:
+                self.deliveries[receipt.get('requestId')] = row
+            else:
+                self.state['deliveryMapAtCapacity'] = True
+            self.emit(row)
+        except Exception as error:
+            self.error(error)
+
+    def feedback(self, row, event):
+        """Retain existing history counters and delivery joins without another adapter read."""
+        try:
+            row.update(outcome=event.get('outcome'), error=event.get('error'),
+                history=dict(event['history']) if 'history' in event else None,
+                historyRecordedAtClientNs=event.get('clientTimeNs'),
+                delivery=self.deliveries.pop(event.get('requestId'), None))
+            self.emit(row)
+        except Exception as error:
+            self.error(error)
+
+    def gap(self, checked_before, accepted_at, event, predecessor, frame):
+        """Explain the unchanged500ms refusal using only its already-retained settled evidence."""
+        try:
+            row = self.new('hostAcceptanceGapTiming', checkedBeforeClientNs=checked_before,
+                lastAcceptedClientNs=round(accepted_at*1e9), frameId=frame.get('frameId'),
+                history=dict(event['history']) if event and 'history' in event else None,
+                historyRecordedAtClientNs=event.get('clientTimeNs') if event else None,
+                predecessorRequestId=predecessor.get('requestId') if predecessor else None)
+            self.state['acceptanceGap'] = row
+            self.emit(row)
+        except Exception as error:
+            self.error(error)
+
+    def _observe_gc(self, phase, info):
+        """Observe only generation1/2 with bounded scalars; never enqueue, collect or change GC settings."""
+        try:
+            generation = info.get('generation')
+            if generation in (1, 2) and phase in ('start', 'stop'):
+                self.gc_events.append((phase, generation, self.clock(), threading.get_ident()))
+        except Exception as error:
+            self.error(error)
+
+    def start_gc(self):
+        """Register one exact callback only inside the existing guarded main-loop try/finally."""
+        try:
+            if not self.state['gcRegistered']:
+                self.mark(self.state, 'gcObservationStartedNs')
+                gc.callbacks.append(self._gc_callback)
+                self.state['gcRegistered'] = True
+        except Exception as error:
+            self.error(error)
+
+    def stop_gc(self):
+        """Remove only this callback before ordinary release/stop cleanup; preserve all other callbacks."""
+        try:
+            for index, callback in enumerate(gc.callbacks):
+                if callback is self._gc_callback:
+                    del gc.callbacks[index]
+                    break
+            self.state['gcRemoved'] = not any(item is self._gc_callback for item in gc.callbacks)
+            self.mark(self.state, 'gcObservationEndedNs')
+        except Exception as error:
+            self.error(error)
+
+    def finish(self):
+        """Materialize bounded diagnostic rows only after normal reader/native retirement."""
+        try:
+            self.state.update(events=list(self.events), eventsAtCapacity=len(self.events)==self.EVENT_LIMIT,
+                gcEvents=list(self.gc_events), gcEventsAtCapacity=len(self.gc_events)==self.GC_LIMIT)
+        except Exception as error:
+            self.error(error)
 
 
 class Bridge:
@@ -2035,6 +2198,10 @@ def run_episode(args, policy=None, control=None):
                         **({'executionContext': report['executionContext']} if execution_mode != 'off' else {}),
                         'residentRunId': report['residentRunId']})
 
+    # Timings are measurement only and exist solely in the already-explicit source-hold mode.
+    # Diagnostic rows stay in memory until retirement; required recording traffic is unchanged.
+    host_timing = HostTimingObserver(report) if batch_source_hold is not None else None
+
     def source_hold_runtime():
         """Read only intake-owned bookkeeping; never acquire ResidentControl under receive_lock."""
         if not source_hold_runtime_ready:return None
@@ -2060,7 +2227,7 @@ def run_episode(args, policy=None, control=None):
         report['scoutBatchSourceHoldState'] = batch_source_hold.snapshot()
         recorder.event(event)
 
-    def collect_receipts(metadata):
+    def collect_receipts(metadata, timing=None):
         nonlocal unapplied_receipt_sequence
         # No JSON serialization, flushing, or filesystem access occurs here.
         if combat_guard is not None and (metadata.get('receipts') or metadata.get('droppedReceipts', 0)):
@@ -2070,6 +2237,7 @@ def run_episode(args, policy=None, control=None):
         for receipt in metadata.get('receipts', []):
             report['receipts'].append(receipt)
             receipt_inbox.append(receipt)
+            if host_timing is not None:host_timing.receipt(receipt, metadata, timing)
             if executed_history:
                 if recorder:recorder.event(receipt)
                 identity = receipt.get('requestId') if isinstance(receipt, dict) else None
@@ -2131,16 +2299,21 @@ def run_episode(args, policy=None, control=None):
                 stopped.set()
             raise
 
-    def poll_frame():
+    def poll_frame(origin='decision-refresh', wake=None):
         """Serialize frame ingestion so scheduled and just-in-time polls cannot reorder evidence."""
         nonlocal server_snapshot
         nonlocal received_frame_id
         nonlocal recovery_interruption_sequence
         nonlocal recovery_capture_context
-        with receive_lock, combat_intake_boundary():
+        with (host_timing.poll(origin, wake) if host_timing is not None else nullcontext()) as timing, receive_lock, combat_intake_boundary():
+            if host_timing is not None:host_timing.mark(timing, 'intakeAcquiredNs')
             start = time.perf_counter_ns()
+            if host_timing is not None:host_timing.mark(timing, 'rpcStartedNs', start)
             metadata, pixels = bridge.request('frame')
             arrived = time.perf_counter_ns()
+            if host_timing is not None:
+                host_timing.mark(timing, 'rpcReturnedNs', arrived)
+                if isinstance(metadata, dict):timing['frameId'] = metadata.get('frameId')
             if combat_guard is not None:
                 event = combat_guard.observe(metadata, arrived, round_trip_ms=(arrived-start)/1e6)
                 report['combatTrialGuardState'] = event['state']
@@ -2204,10 +2377,12 @@ def run_episode(args, policy=None, control=None):
                         # Original stale receive time predates the ACK. Its separate trigger
                         # event is retained; never relabel it as a post-release observation.
                         return
+            if host_timing is not None:host_timing.mark(timing, 'holdClassificationFinishedNs')
             if scout_guard is not None:
                 guard_event = scout_guard.observe(metadata, arrived)
                 report['scoutEncounterGuardState'] = guard_event['state']
                 trip = guard_event['state']['trip']
+                if host_timing is not None:host_timing.mark(timing, 'guardComputedNs')
                 if trip:
                     # Latch and retain the original trigger before recorder, receipt or reader errors.
                     stopped.set()
@@ -2215,6 +2390,7 @@ def run_episode(args, policy=None, control=None):
                 try:
                     if recorder:
                         recorder.event(guard_event)
+                    if host_timing is not None:host_timing.mark(timing, 'guardJournalQueuedNs')
                     if trip:
                         # Preserve exact hazardous pixels only after the ordinary host/profile/sensor
                         # checks. They enter evidence storage, never the policy's latest-frame slot.
@@ -2262,6 +2438,7 @@ def run_episode(args, policy=None, control=None):
                         raise ScoutEncounterStop('Scout encounter guard: '+trip['reason'])
             if batch_source_hold is not None:
                 batch_source_hold.remember_healthy(metadata, arrived, (arrived-start)/1e6, scout_guard.snapshot())
+                if host_timing is not None:host_timing.mark(timing, 'healthyRetainedNs')
             host_contract.validate(metadata)
             if metadata.get('type') == 'frame':
                 verify_frame(metadata, pixels, profile_contract)
@@ -2274,8 +2451,10 @@ def run_episode(args, policy=None, control=None):
                     # Include cached payload replies: current readiness may close while frameId is unchanged.
                     recovery_interruption_sequence += 1
                 recovery_capture_context = context
+            if host_timing is not None:host_timing.mark(timing, 'validationFinishedNs')
             server_snapshot = (time.perf_counter(), metadata)
-            collect_receipts(metadata)
+            collect_receipts(metadata, timing)
+            if host_timing is not None:host_timing.mark(timing, 'receiptsCollectedNs')
             if combat_guard is not None and combat_guard.snapshot()['trip'] is not None:
                 from combat_trial_guard import CombatTrialStop
                 raise CombatTrialStop('Combat trial receipt evidence failed')
@@ -2294,10 +2473,12 @@ def run_episode(args, policy=None, control=None):
                 if native_combat_enabled and metadata.get('combatEvidence') is not None:
                     report['nativeCombatEvidenceFrames'] += 1
                 latest.publish(metadata, pixels)
+                if host_timing is not None:host_timing.mark(timing, 'latestPublishedNs')
                 if recorder:
                     # Proposal/receipt events and source/pose clocks remain complete.
                     # Full rolling context is retained only when explicitly requested.
                     recorder.put(recording_frame_metadata(metadata, execution_mode, retain_execution=combat_source_recovery), pixels)
+                if host_timing is not None:host_timing.mark(timing, 'recorderQueuedNs')
                 received_frame_id = metadata['frameId']
 
     # Keep one actual reader failure; strings alone cannot authorize another lease.
@@ -2307,9 +2488,14 @@ def run_episode(args, policy=None, control=None):
         capture_cadence = DecisionCadence(args.fps, time.perf_counter())
         try:
             while not stopped.is_set():
+                wake = None
+                if host_timing is not None:
+                    wake = dict(scheduledWakeNs=round(capture_cadence.next_at*1e9))
+                    host_timing.mark(wake, 'sleepStartedNs')
                 if not sleep_until(capture_cadence.next_at, stopped):
                     break
-                poll_frame()
+                if host_timing is not None:host_timing.mark(wake, 'sleepReturnedNs')
+                poll_frame('reader', wake)
                 capture_cadence.advance(time.perf_counter())
         except Exception as exc:
             receive_failure.append(exc)
@@ -2365,6 +2551,8 @@ def run_episode(args, policy=None, control=None):
             arguments=copy.deepcopy(request), acceptance=copy.deepcopy(result['acceptance']), receipt=None,
             previousReceipt=previous_receipt, error=None)
         if batch_source_hold is not None:event['acceptedAtClientNs']=result.get('executedHistoryAcceptedClientNs')
+        timing = (host_timing.new('hostFeedbackTiming', frameId=frame['frameId'], requestId=event['requestId'],
+                  acceptedAtClientNs=event.get('acceptedAtClientNs')) if host_timing is not None else None)
         failure = None
         try:
             if result['acceptance']['type'] != 'accepted':
@@ -2373,38 +2561,56 @@ def run_episode(args, policy=None, control=None):
             else:
                 started = time.perf_counter_ns()
                 policy.prepare_executed_action(event['step'])
-                event['candidatePreparationMs'] = (time.perf_counter_ns()-started)/1e6
+                prepared_at = time.perf_counter_ns()
+                event['candidatePreparationMs'] = (prepared_at-started)/1e6
+                if host_timing is not None:timing.update(preparationStartedNs=started, preparationFinishedNs=prepared_at)
                 while True:
                     # The reader remains live during GPU work and receipt waiting.
                     # Its latched hazard, an operator stop, or any ownership change wins.
+                    checks_at = time.perf_counter_ns() if host_timing is not None else None
                     if stopped.is_set() or control.prediction_token() != control_token or control.snapshot()[0] != 'run':
                         raise RuntimeError('Executed-history action interrupted before its terminal proof')
                     if time.perf_counter() >= deadline:
                         raise RuntimeError('Executed-history lease ended before its terminal proof')
                     hybrid.check_leg_deadline()
+                    if host_timing is not None:host_timing.elapsed(timing, 'controlChecks', checks_at)
+                    recorder_at = time.perf_counter_ns() if host_timing is not None else None
                     recorder.check()
+                    if host_timing is not None:host_timing.elapsed(timing, 'recorderChecks', recorder_at)
+                    intake_at = time.perf_counter_ns() if host_timing is not None else None
                     with receive_lock:
+                        if host_timing is not None:host_timing.elapsed(timing, 'intakeWait', intake_at)
                         matches = [item for item in receipt_inbox if item.get('requestId') == request['requestId']]
                         if len(matches) > 1 or report['serverDroppedReceipts']:
                             raise RuntimeError('Executed-history terminal evidence is duplicated or incomplete')
                         if matches:
+                            if host_timing is not None:host_timing.mark(timing, 'receiptMatchedNs')
                             event['receipt'] = copy.deepcopy(matches[0])
                             policy.finish_executed_action(event['receipt'], request, result['acceptance'])
                             event['outcome'] = 'committed'
+                            if host_timing is not None:host_timing.mark(timing, 'terminalValidatedNs')
                             break
                         received_at, status = server_snapshot
                         server_now = status.get('serverNowMs')
                         if (type(server_now) not in (int, float) or not math.isfinite(server_now)
                                 or server_now+(time.perf_counter()-received_at)*1000 >= request['expiresAtMs']):
                             raise RuntimeError('Executed-history receipt is unavailable before the original request deadline')
+                    wait_at = time.perf_counter_ns() if host_timing is not None else None
                     stopped.wait(.002)
+                    if host_timing is not None:host_timing.elapsed(timing, 'receiptSleep', wait_at)
         except Exception as error:
             failure, event['error'] = error, str(error)
             # Partial or unknown execution cannot preserve a counterfactual cache.
             policy.reset()
             forbid_reconnect(error, 'executedHistoryIncomplete')
-        event['history'] = policy.executed_history_counters()
-        event['clientTimeNs'] = time.perf_counter_ns()
+        if host_timing is not None:host_timing.mark(timing, 'counterReadStartedNs')
+        try:
+            event['history'] = policy.executed_history_counters()
+            event['clientTimeNs'] = time.perf_counter_ns()
+        finally:
+            if host_timing is not None:
+                host_timing.mark(timing, 'counterReadFinishedNs')
+                host_timing.feedback(timing, event)
         return event, failure
 
     def hold(reason, force_release=False, preserve_navigation=False):
@@ -2621,6 +2827,7 @@ def run_episode(args, policy=None, control=None):
     episode_failure = None
     stop_failure = None
     try:
+        if host_timing is not None:host_timing.start_gc()
         while time.perf_counter() < deadline and not stopped.is_set():
             if executed_history:
                 recorder.check()
@@ -2943,9 +3150,13 @@ def run_episode(args, policy=None, control=None):
                                     framesReceived=report['framesReceived'], worldReadiness=current_status.get('worldReadiness'))
                 cadence.advance(time.perf_counter())
                 continue
+            gap_checked_before = time.perf_counter_ns() if host_timing is not None else None
             if (getattr(policy, 'execution_feedback', False) and last_accepted_at is not None
                     and time.perf_counter()-last_accepted_at > .5 and not history_gap_reset):
                 if executed_history:
+                    if host_timing is not None:
+                        host_timing.gap(gap_checked_before, last_accepted_at,
+                            report['executedHistoryEvents'][-1] if report['executedHistoryEvents'] else None, history_predecessor, frame)
                     raise RuntimeError('Executed-history acceptance gap cannot resume with empty history')
                 policy.reset()
                 idle_recovery.interrupt('acceptanceGapHistoryReset')
@@ -3139,7 +3350,8 @@ def run_episode(args, policy=None, control=None):
                             arguments = marker['arguments']
                             result['startBeforeMs'] = arguments['startBeforeMs']
                             evidence.update(expiresAtMs=arguments['expiresAtMs'], startBeforeMs=arguments['startBeforeMs'])
-                        response = transmit_bound_action(bridge,warm,report,arguments,'unacknowledgedAction',evidence)
+                        with (host_timing.native_call('action', request_id, frame['frameId']) if host_timing is not None else nullcontext()):
+                            response = transmit_bound_action(bridge,warm,report,arguments,'unacknowledgedAction',evidence)
                         if executed_history and action_response_accepted(response[0], request_id, response[1]):
                             # Register while intake is excluded, before a fast terminal reply can be collected.
                             history_requests[request_id] = copy.deepcopy(executed_request)
@@ -3313,6 +3525,7 @@ def run_episode(args, policy=None, control=None):
                 raise climb.terminate('episode_failed_during_recovery', exc) from exc
             raise
     finally:
+        if host_timing is not None:host_timing.stop_gc()
         stopped.set()
         if executed_history:
             # Attempt release before any encoder failure or cache reset can interrupt cleanup.
@@ -3478,6 +3691,7 @@ def run_episode(args, policy=None, control=None):
                 forbid_reconnect(failure, 'recordingFailure')
             report['episodeFailure'] = dict(type=type(failure).__name__,
                 transportOperation=transport_origin(failure))
+        if host_timing is not None:host_timing.finish()
         if recorder:
             try:
                 recorder.event({'type': 'captureQualitySummary', 'captureQuality': dict(report['captureQuality']),

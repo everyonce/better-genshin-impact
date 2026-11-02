@@ -738,4 +738,212 @@ class BatchSourceHoldConfigurationTests(unittest.TestCase):
             finally:case.doCleanups()
 
 
+
+
+class HostTimingTests(unittest.TestCase):
+    """Measure actual host boundaries without a GPU, native pipe, new input or altered clocks."""
+    def test_actual_poll_separates_wake_intake_rpc_and_processing(self):
+        """Run the exact nested poll body with deterministic costs for its existing dependencies."""
+        from contextlib import nullcontext
+        module=batch_tests.client_module;clock=SimpleNamespace(ns=0)
+        def advance(ms):clock.ns+=int(ms*1e6)
+        fake_time=SimpleNamespace(perf_counter_ns=lambda:clock.ns,perf_counter=lambda:clock.ns/1e9)
+        class Lock:
+            def __enter__(self):advance(5)
+            def __exit__(self,*args):advance(3)
+        class Recorder:
+            event_count=0
+            put_count=0
+            def event(self,row):self.event_count+=1;advance(19);return True
+            def put(self,*args):self.put_count+=1;advance(29)
+        class Guard:
+            def observe(self,*args):advance(17);return dict(state=dict(trip=None))
+        def request(command):
+            advance(7);return dict(type='frame',frameId=1,width=1,height=1),b'\x01\x02\x03'
+        def validate(*args):advance(13)
+        def verify(*args):advance(11)
+        def collect(*args):advance(31)
+        def publish(*args):advance(23)
+        report=dict(captureQuality={'usableFrames':0},framesReceived=0)
+        recorder=Recorder();observer=module.HostTimingObserver(report,clock=fake_time.perf_counter_ns)
+        observer.start_gc();self.addCleanup(observer.stop_gc)
+        tree=ast.parse(Path(module.__file__).read_text(encoding='utf-8'))
+        node=copy.deepcopy(next(n for n in ast.walk(tree) if isinstance(n,ast.FunctionDef) and n.name=='poll_frame'))
+        # Rebind the same closed-over variables into this isolated namespace; the poll body is unchanged.
+        node.body=[ast.Global(names=n.names) if isinstance(n,ast.Nonlocal) else n for n in node.body]
+        namespace=dict(time=fake_time,host_timing=observer,nullcontext=nullcontext,receive_lock=Lock(),
+            combat_intake_boundary=nullcontext,bridge=SimpleNamespace(request=request),combat_guard=None,
+            batch_source_hold=None,scout_guard=Guard(),report=report,recorder=recorder,host_contract=SimpleNamespace(validate=validate),
+            verify_frame=verify,profile_contract={},native_combat_enabled=False,idle_recovery=SimpleNamespace(threshold=None),
+            collect_receipts=collect,received_frame_id=None,rgb_frame_quality=lambda pixels:'usable',
+            latest=SimpleNamespace(publish=publish),recording_frame_metadata=lambda metadata,*args,**kwargs:metadata,
+            execution_mode='off',combat_source_recovery=False)
+        exec(compile(ast.fix_missing_locations(ast.Module(body=[node],type_ignores=[])),module.__file__,'exec'),namespace)
+        wake=dict(scheduledWakeNs=10_000_000,sleepStartedNs=0);advance(14);wake['sleepReturnedNs']=clock.ns
+        namespace['poll_frame']('reader',wake);observer.finish();row=observer.state['events'][0]
+        self.assertEqual(row['sleepReturnedNs']-row['scheduledWakeNs'],4_000_000)
+        self.assertEqual(row['intakeAcquiredNs']-row['intakeRequestedNs'],5_000_000)
+        self.assertEqual(row['rpcReturnedNs']-row['rpcStartedNs'],7_000_000)
+        self.assertEqual(row['guardComputedNs']-row['rpcReturnedNs'],17_000_000)
+        self.assertEqual(row['guardJournalQueuedNs']-row['guardComputedNs'],19_000_000)
+        self.assertEqual(row['validationFinishedNs']-row['guardJournalQueuedNs'],24_000_000)
+        self.assertEqual(row['receiptsCollectedNs']-row['validationFinishedNs'],31_000_000)
+        self.assertEqual(row['latestPublishedNs']-row['receiptsCollectedNs'],23_000_000)
+        self.assertEqual(row['recorderQueuedNs']-row['latestPublishedNs'],29_000_000)
+        self.assertEqual(row['intakeScopeExitedNs']-row['recorderQueuedNs'],3_000_000)
+        self.assertEqual(clock.ns,row['intakeScopeExitedNs'])
+        self.assertEqual((recorder.event_count,recorder.put_count),(1,1))  # Only original guard/RGB recording.
+
+    def test_receipt_visibility_feedback_aggregates_and_cached_gap_keep_original_history(self):
+        """Use the real500ms branch; cached20-frame evidence never calls an adapter counter."""
+        module=batch_tests.client_module;clock=SimpleNamespace(ns=1_500_000_000)
+        fake_time=SimpleNamespace(perf_counter_ns=lambda:clock.ns,perf_counter=lambda:clock.ns/1e9)
+        report=dict(executedHistoryEvents=[dict(history=dict(afterFrames=20,validFrames=20,afterValidTokens=240),
+            clientTimeNs=1_328_000_000)])
+        observer=module.HostTimingObserver(report,clock=fake_time.perf_counter_ns)
+        receipt=dict(requestId='settled',frameId=500,endedAtMs=18065.6043)
+        observer.receipt(receipt,dict(type='frame',frameId=511),dict(rpcReturnedNs=1_313_000_000))
+        row=observer.new('hostFeedbackTiming',requestId='settled');observer.elapsed(row,'intakeWait',clock.ns-7)
+        observer.elapsed(row,'intakeWait',clock.ns-3)
+        event=dict(report['executedHistoryEvents'][-1],requestId='settled',outcome='committed')
+        observer.feedback(row,event)
+        self.assertEqual((row['intakeWaitCount'],row['intakeWaitTotalNs'],row['intakeWaitMaxNs']),(2,10,7))
+        self.assertEqual(row['delivery']['replyAtClientNs'],1_313_000_000)
+        self.assertEqual(row['history']['validFrames'],20);self.assertEqual(observer.deliveries,{})
+        tree=ast.parse(Path(module.__file__).read_text(encoding='utf-8'))
+        guard=next(n for n in ast.walk(tree) if isinstance(n,ast.If)
+                   and 'execution_feedback' in ast.unparse(n.test) and 'last_accepted_at' in ast.unparse(n.test))
+        namespace=dict(time=fake_time,host_timing=observer,gap_checked_before=clock.ns,
+            policy=SimpleNamespace(execution_feedback=True),last_accepted_at=1.,history_gap_reset=False,
+            executed_history=True,report=report,history_predecessor=dict(requestId='settled'),frame=dict(frameId=516))
+        code=compile(ast.Module(body=[guard],type_ignores=[]),module.__file__,'exec')
+        exec(code,namespace);self.assertNotIn('acceptanceGap',observer.state)
+        clock.ns+=1;namespace['gap_checked_before']=clock.ns
+        with self.assertRaisesRegex(RuntimeError,'cannot resume with empty history'):exec(code,namespace)
+        gap=observer.state['acceptanceGap']
+        self.assertEqual(gap['lastAcceptedClientNs'],1_000_000_000)
+        self.assertEqual(gap['history'],event['history']);self.assertEqual(gap['predecessorRequestId'],'settled')
+        self.assertEqual(namespace['last_accepted_at'],1.)
+
+    def test_gc_observer_is_bounded_and_preserves_callbacks_and_settings(self):
+        """Invoke only diagnostic callbacks, never force a real collection or change GC thresholds."""
+        module=batch_tests.client_module;gc=module.gc;before=list(gc.callbacks)
+        enabled,thresholds=gc.isenabled(),gc.get_threshold();report={}
+        observer=module.HostTimingObserver(report,clock=lambda:123)
+        foreign=lambda phase,info:None
+        try:
+            observer.start_gc();observer.start_gc();gc.callbacks.append(foreign)
+            self.assertEqual(sum(row is observer._gc_callback for row in gc.callbacks),1)
+            observer._gc_callback('start',dict(generation=0));self.assertEqual(len(observer.gc_events),0)
+            for _ in range(observer.GC_LIMIT+5):observer._gc_callback('start',dict(generation=1))
+            observer._gc_callback('stop',dict(generation=2));observer.stop_gc();observer.stop_gc();observer.finish()
+            self.assertEqual(len(observer.state['gcEvents']),observer.GC_LIMIT)
+            self.assertTrue(observer.state['gcEventsAtCapacity']);self.assertTrue(observer.state['gcRemoved'])
+            self.assertEqual(gc.callbacks,before+[foreign])
+            self.assertEqual((gc.isenabled(),gc.get_threshold()),(enabled,thresholds))
+            for _ in range(observer.EVENT_LIMIT+5):observer.emit(dict(type='hostTestTiming'))
+            observer.finish();self.assertEqual(len(observer.state['events']),observer.EVENT_LIMIT)
+            self.assertTrue(observer.state['eventsAtCapacity'])
+        finally:
+            observer.stop_gc()
+            if foreign in gc.callbacks:gc.callbacks.remove(foreign)
+        self.assertEqual(gc.callbacks,before)
+
+    def test_observer_clock_failure_preserves_body_error_and_removes_only_own_callback(self):
+        """A diagnostic clock exception must not replace the original poll/native failure."""
+        module=batch_tests.client_module;before=list(module.gc.callbacks)
+        def broken_clock():raise OSError('diagnostic clock failed')
+        observer=module.HostTimingObserver({},clock=broken_clock)
+        try:
+            observer.start_gc()
+            with self.assertRaisesRegex(ValueError,'original poll failure'):
+                with observer.poll('reader',None):raise ValueError('original poll failure')
+            observer._gc_callback('start',dict(generation=1))
+        finally:observer.stop_gc();observer.finish()
+        self.assertTrue(observer.state['measurementError']);self.assertTrue(observer.state['gcRemoved'])
+        self.assertEqual(observer.state['events'][0]['failureType'],'ValueError')
+        self.assertEqual(module.gc.callbacks,before)
+
+    def test_default_batch_has_no_observer_or_new_diagnostic_contract(self):
+        """The existing opt-out path still completes the original endpoints without installing callbacks."""
+        module=batch_tests.client_module;before=list(module.gc.callbacks)
+        with tempfile.TemporaryDirectory() as folder:
+            code,part,recorder,bridge,policy=batch_tests.run_batch_fixture(folder)
+            self.assertEqual((code,len(bridge.actions)),(0,6))
+            self.assertNotIn('hostTimingDiagnostics',part)
+            self.assertFalse(any(row.get('type','').startswith('host') for row in recorder.events))
+            self.assertTrue(recorder.closed);self.assertEqual(bridge.commands[-1],'stop')
+        self.assertEqual(module.gc.callbacks,before)
+
+    def test_cold_endpoint_path_retains_timing_receipt_pairs_and_removes_gc_observer(self):
+        """Exercise action3 recovery, two real endpoints and the cold counter lifecycle with diagnostics."""
+        module=batch_tests.client_module;before=list(module.gc.callbacks)
+        with tempfile.TemporaryDirectory() as folder:
+            recorder=batch_tests.stream_tests.HistoryRecorder();bridge=HoldBridge(recorder,freeze_action=3)
+            code,part,recorder,bridge,policy=run_hold_fixture(folder,bridge=bridge,recorder=recorder,policy=ColdBackupPolicy())
+            self.assertEqual((code,len(bridge.actions),len(policy.commits)),(0,6,6))
+            diagnostics=part['hostTimingDiagnostics'];rows=diagnostics['events']
+            self.assertFalse(diagnostics['measurementError']);self.assertTrue(diagnostics['gcRegistered'])
+            self.assertTrue(diagnostics['gcRemoved']);self.assertFalse(diagnostics['eventsAtCapacity'])
+            polls=[row for row in rows if row['type']=='hostPollTiming'];self.assertTrue(polls)
+            self.assertTrue(any(row['origin']=='reader' and 'scheduledWakeNs' in row for row in polls))
+            self.assertFalse(any(row.get('type','').startswith('host') for row in recorder.events))
+            calls=[row for row in rows if row['type']=='hostNativeCallTiming']
+            deliveries=[row for row in rows if row['type']=='hostReceiptDeliveryTiming']
+            feedback=[row for row in rows if row['type']=='hostFeedbackTiming']
+            self.assertEqual((len(calls),len(deliveries),len(feedback)),(6,6,6))
+            self.assertEqual({row['requestId'] for row in calls},{row['requestId'] for row in feedback})
+            for row in feedback:
+                self.assertEqual(row['delivery']['requestId'],row['requestId'])
+                self.assertLessEqual(row['delivery']['startedAtClientNs'],row['receiptMatchedNs'])
+                self.assertLessEqual(row['receiptMatchedNs'],row['terminalValidatedNs'])
+                self.assertLessEqual(row['counterReadStartedNs'],row['historyRecordedAtClientNs'])
+                self.assertLessEqual(row['historyRecordedAtClientNs'],row['counterReadFinishedNs'])
+            trace=(part,{row['frameId']:row for row,_ in recorder.frames},recorder.events)
+            self.assertEqual(BatchSourceHoldAuditTests.replay(self,trace)['verifiedLegs'],2)
+            self.assertTrue(recorder.closed);self.assertEqual(bridge.commands[-1],'stop')
+        self.assertEqual(module.gc.callbacks,before)
+
+    def test_diagnostic_buffer_error_cannot_replace_lost_ack_or_prevent_cleanup(self):
+        """A failed diagnostic append cannot alter original recording or hide the lost release reply."""
+        from collections import deque
+        module=batch_tests.client_module;before=list(module.gc.callbacks)
+        class FailingBuffer(deque):
+            def append(self,row):raise OSError('diagnostic-only memory failure')
+        class Observer(module.HostTimingObserver):
+            def __init__(self,report):
+                super().__init__(report);self.events=FailingBuffer(maxlen=self.EVENT_LIMIT)
+        with tempfile.TemporaryDirectory() as folder:
+            recorder=batch_tests.stream_tests.HistoryRecorder();bridge=HoldBridge(recorder,lost_ack=True)
+            with patch.object(module,'HostTimingObserver',Observer),self.assertRaisesRegex((RuntimeError,OSError),'ACK lost'):
+                run_hold_fixture(folder,bridge=bridge,recorder=recorder)
+            part=json.loads((Path(folder)/'run.json').read_bytes())
+            self.assertTrue(part['hostTimingDiagnostics']['measurementError'])
+            self.assertTrue(part['hostTimingDiagnostics']['gcRemoved'])
+            self.assertIn('ACK lost',part.get('error','')+part.get('streamError',''))
+            self.assertEqual((len(bridge.actions),bridge.hold_releases),(4,1))
+            self.assertFalse(any(row.get('type','').startswith('host') for row in recorder.events))
+            self.assertTrue(recorder.closed);self.assertEqual(bridge.commands[-1],'stop')
+        self.assertEqual(module.gc.callbacks,before)
+
+    def test_original_recorder_failure_still_stops_and_retires(self):
+        """The original proposal-recorder failure still prevents any later action and cleans up."""
+        class RecorderFailure(batch_tests.stream_tests.HistoryRecorder):
+            def event(self,row):
+                if row.get('type')=='proposal':
+                    self.actions_at_failure=len(self.bridge.actions)
+                    self.error='original proposal recorder failure';return False
+                return super().event(row)
+        module=batch_tests.client_module;before=list(module.gc.callbacks)
+        with tempfile.TemporaryDirectory() as folder:
+            recorder=RecorderFailure();bridge=HoldBridge(recorder);recorder.bridge=bridge
+            with self.assertRaises((RuntimeError,ValueError)):
+                run_hold_fixture(folder,bridge=bridge,recorder=recorder)
+            part=json.loads((Path(folder)/'run.json').read_bytes())
+            self.assertFalse(part['hostTimingDiagnostics']['measurementError'])
+            self.assertEqual(len(bridge.actions),recorder.actions_at_failure)
+            self.assertTrue(recorder.closed);self.assertEqual(bridge.commands[-1],'stop')
+        self.assertEqual(module.gc.callbacks,before)
+
+
 if __name__=='__main__':unittest.main()

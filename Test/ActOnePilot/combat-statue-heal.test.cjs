@@ -230,3 +230,210 @@ test('passive sufficient HP during prompt settling returns before F',async()=>{
   assert.equal(r.interactAttempted,false);assert.ok(!downs(f).includes('VK_F'));assert.equal(f.clicks.length,0);
   assert.equal(r.pauseVerified,true);assert.equal(f.getScreen(),'inventory');
 });
+
+// Exact retained native JSON is portable evidence; synthetic replay clocks/frames are identified below.
+const crypto=require('node:crypto');
+const reacquisitionFixture=JSON.parse(fs.readFileSync(path.join(__dirname,'combat-statue-heal-reacquisition.fixture.json'),'utf8'));
+const retainedHealFrames={};
+for(const document of reacquisitionFixture.documents){
+  assert.equal(crypto.createHash('sha256').update(document.utf8,'utf8').digest('hex'),document.sha256);
+  retainedHealFrames[document.frameId]=JSON.parse(document.utf8);
+}
+const retreatFieldGate=require(path.join(dir,'combat-statue-retreat.js'));
+const cloneHeal=value=>JSON.parse(JSON.stringify(value));
+
+// Replay the real9→10 conflict through the pure runner; later variants are explicitly synthetic.
+function reacquisitionReplay(sequence=['conflict','healthy'],options={}){
+  const good=retainedHealFrames[9],bad=retainedHealFrames[10],calls=[];
+  let now=good.hud.captureStamp.capturedAt-1000,current=null,reads=0,turns=0,moves=0,nextIndex=0,stopped=false,readyForAgeCheck=false;
+  const deadline=now+90000;
+  function stamp(o,id,start,completion){
+    o.frameId=id;o.timestamp=completion;o.hud.captureStamp.frameId=id;o.hud.captureStamp.capturedAt=start;
+    o.hud.combatHealObservation={version:1,session:o.session,frameId:id,observationStartedAtUnixMs:start,phase:'approach'};
+    return o;
+  }
+  const initial=stamp(cloneHeal(good),1,now-50,now);initial.kind='inventory';
+  current=initial;
+  function fresh(kind){
+    const o=stamp(cloneHeal(kind==='conflict'?bad:good),current.frameId+1,now+1,now+21);
+    if(kind==='healthy'||kind==='mapless'){
+      o.hud.health={current:1001,max:1001};o.hud.healthOcr=['1001/1001'];
+      for(const r of o.ocr)if(r.text==='719 /1001')r.text='1001/1001';
+    }
+    if(kind==='mapless')o.map=null;
+    return o;
+  }
+  const api={
+    now:()=>now,checkStop(){if(stopped)throw Error('original STOP');
+      if(options.ageFinalCheck&&readyForAgeCheck){readyForAgeCheck=false;now+=1001;} },
+    sleep:async ms=>{calls.push(['sleep',ms,current.frameId]);now+=ms;
+      if(options.expireRetry&&ms===150&&current.frameId>=10)now=deadline;},
+    combatHealDeadline:()=>deadline,
+    release:async()=>calls.push(['release']),
+    combatHealInventoryReady:o=>o.kind==='inventory',
+    combatHealPrepareNavigation:async()=>calls.push(['warm']),
+    combatHealCloseInventory:async o=>calls.push(['Escape',o.frameId]),
+    combatHealFieldReady:o=>{
+      const ready=o===current&&retreatFieldGate.worldReady(o,now,o.session,true)&&
+        o.map&&o.map.map==='Teyvat'&&Math.hypot(o.map.x+1323.474,o.map.y-2566.115)<=15;
+      if(ready&&o.hud.health.current===1001)readyForAgeCheck=true;
+      return ready;
+    },
+    combatHealRotate:async(o,dx)=>{turns++;calls.push(['turn',o.frameId,dx]);},
+    combatHealForward:async(o,ms)=>{moves++;calls.push(['W',o.frameId,ms]);},
+    combatHealInteractReady:()=>false,combatHealInteract:async()=>calls.push(['F']),
+    combatHealBlessingReady:()=>false,combatHealChooseBlessing:async()=>calls.push(['choice']),
+    combatHealPanelReady:()=>false,combatHealRunPanel:async()=>{throw Error('Unexpected panel');},
+  };
+  async function observe(){
+    reads++;let o;
+    if(reads===1){o=fresh('safe');o.kind='inventory';}
+    else if(reads===2)o=cloneHeal(good);
+    else{
+      const kind=sequence[Math.min(nextIndex++,sequence.length-1)];
+      o=reads===3&&kind==='conflict'?cloneHeal(bad):kind==='protection'?cloneHeal(retainedHealFrames[11]):fresh(kind);
+      if(reads===3&&options.mutate)options.mutate(o,current);
+    }
+    now=Math.max(now,o.timestamp);current=o;calls.push(['observe',o.frameId]);
+    if(reads===3&&options.stopAfterConflict)stopped=true;
+    return o;
+  }
+  return {calls,run:()=>heal.run(initial,api,observe),reads:()=>reads,turns:()=>turns,moves:()=>moves};
+}
+
+test('retained conflict stays unknown and the next protection frame is not location evidence',()=>{
+  const a=retainedHealFrames[9],b=retainedHealFrames[10],c=retainedHealFrames[11];
+  assert.equal(retreatFieldGate.worldReady(a,a.timestamp,a.session,true),true);
+  assert.equal(b.hud.health,null);assert.equal(b.hud.world,false);assert.equal(b.map,null);
+  assert.deepEqual(b.hud.healthDiagnostic,{fullRow:['19/100'],primary:['719/1001'],left:['719'],right:['1001'],decision:'conflict-halves-disagree-or-missing'});
+  assert.equal(retreatFieldGate.worldReady(b,b.timestamp,b.session,true),false);
+  assert.deepEqual(c.hud.health,{current:719,max:1001});assert.equal(c.hud.combatHealObservation.phase,'protection');assert.equal(c.map,null);
+});
+
+test('one numeric conflict permits only passive reacquisition before fresh health completion',async()=>{
+  const f=reacquisitionReplay(),r=await f.run();
+  assert.equal(r.status,'completed');assert.equal(r.healthVerified,true);assert.deepEqual(r.health,{current:1001,max:1001});
+  assert.equal(r.passiveReacquisitionAttempts,1);assert.equal(f.turns(),1);assert.equal(f.moves(),0);
+  const after=f.calls.findIndex(c=>c[0]==='observe'&&c[1]===10);
+  assert.deepEqual(f.calls.slice(after+1),[['sleep',150,10],['observe',11],['release']]);
+});
+
+test('three passive retries are shared across gaps instead of resetting the input limits',async()=>{
+  const f=reacquisitionReplay(['conflict','safe','conflict','safe','conflict','safe','conflict','healthy']),r=await f.run();
+  assert.equal(r.status,'stopped');assert.equal(r.healthVerified,false);assert.equal(r.passiveReacquisitionAttempts,3);
+  assert.equal(f.turns(),4);assert.equal(f.moves(),0);assert.equal(f.reads(),9);
+});
+
+test('three exhausted passive retries stop without consuming a later healthy source',async()=>{
+  const f=reacquisitionReplay(['conflict','conflict','conflict','conflict','healthy']),r=await f.run();
+  assert.equal(r.status,'stopped');assert.equal(r.passiveReacquisitionAttempts,3);assert.equal(f.turns(),1);
+  assert.equal(f.reads(),6);assert.equal(r.health,undefined);
+});
+
+for(const [name,mutate] of [
+  ['raw enemy',o=>o.hud.enemyBarDiagnostic.candidates=1],
+  ['final enemy',o=>o.hud.enemyBars.push({x:500,y:250,width:90,height:8})],
+  ['climbing',o=>o.hud.climbing=true],['missing ground',o=>o.hud.groundControls=false],
+  ['foreign UID',o=>o.ocr.find(r=>r.text.startsWith('UID')).text='UID: 693306811'],
+  ['duplicate UID',o=>o.ocr.push(cloneHeal(o.ocr.find(r=>r.text.startsWith('UID'))))],
+  ['positive zero health',o=>o.hud.health={current:0,max:1001}],
+  ['foreign maximum',o=>o.hud.health={current:719,max:4015}],
+  ['missing diagnostic',o=>o.hud.healthDiagnostic=null],
+  ['protection phase',o=>o.hud.combatHealObservation.phase='protection'],
+  ['foreign source',o=>o.session='foreign'],
+  ['stale source',o=>o.hud.captureStamp.capturedAt=o.timestamp-1001],
+  ['reused capture start',(o,prior)=>o.hud.captureStamp.capturedAt=prior.hud.captureStamp.capturedAt],
+  ['reused completion',(o,prior)=>o.timestamp=prior.timestamp],
+])test('reacquisition immediately refuses '+name,async()=>{
+  const f=reacquisitionReplay(['conflict','healthy'],{mutate}),r=await f.run();
+  assert.equal(r.status,'stopped');assert.equal(r.healthVerified,false);assert.equal(r.passiveReacquisitionAttempts,0);
+  assert.equal(f.reads(),3);assert.equal(f.turns(),1);assert.equal(f.moves(),0);
+});
+
+test('original STOP prevents the next passive capture',async()=>{
+  const f=reacquisitionReplay(['conflict','healthy'],{stopAfterConflict:true}),r=await f.run();
+  assert.match(r.reason,/original STOP/);assert.equal(f.reads(),3);assert.equal(r.passiveReacquisitionAttempts,0);
+});
+
+test('original deadline expiring during retry spacing prevents capture and further input',async()=>{
+  const f=reacquisitionReplay(['conflict','healthy'],{expireRetry:true}),r=await f.run();
+  assert.match(r.reason,/deadline/);assert.equal(f.reads(),3);assert.equal(f.turns(),1);assert.equal(r.passiveReacquisitionAttempts,1);
+});
+
+for(const kind of ['protection','mapless'])test('fresh numeric health without approach location remains refused: '+kind,async()=>{
+  const f=reacquisitionReplay(['conflict',kind]),r=await f.run();
+  assert.equal(r.status,'stopped');assert.equal(r.healthVerified,false);assert.equal(r.passiveReacquisitionAttempts,1);
+  assert.equal(f.turns(),1);assert.equal(f.moves(),0);assert.equal(f.reads(),4);
+});
+
+// Replay retained OCR rows/halves at the actual adapter boundary; game, clock and OCR execution remain inert.
+function actualReacquisition(options={}){
+  const f=actual({health:719,distance:options.prompt?2:5,angle:90,stalledTurn:true,noPrompt:!!options.prompt});
+  let turns=0,fieldCaptures=0,delivered=false,mode='normal';
+  const move=f.context.moveMouseBy,capture=f.context.captureGameRegion,ImageRegion=f.context.ImageRegion;
+  f.context.moveMouseBy=(dx,dy)=>{turns++;move(dx,dy);};
+  f.context.captureGameRegion=()=>{
+    const image=capture();
+    if(f.getScreen()==='field')fieldCaptures++;
+    mode=f.getScreen()==='field'&&(options.prompt?fieldCaptures>=2:turns>0)?(delivered?'healthy':'conflict'):'normal';
+    if(mode==='normal')return image;
+    const source=cloneHeal(retainedHealFrames[mode==='conflict'?10:9]);
+    if(mode==='conflict')delivered=true;
+    else for(const r of source.ocr)if(r.text==='719 /1001')r.text='1001/1001';
+    image.findMulti=ro=>{
+      const rows=source.ocr.filter(r=>r.x>=ro.x&&r.x<ro.x+ro.w&&r.y>=ro.y&&r.y<ro.y+ro.h);
+      rows.count=rows.length;return rows;
+    };
+    return image;
+  };
+  f.context.ImageRegion=class extends ImageRegion{
+    findMulti(ro){
+      const rect=this.srcMat.rect,d=retainedHealFrames[10].hud.healthDiagnostic;
+      const text=mode==='conflict'&&rect&&(rect.x===900&&rect.y===990?d.primary:rect.x===893&&rect.y===998?d.left:rect.x===967&&rect.y===998?d.right:null);
+      if(text){const rows=text.map(t=>row(t,1,1,90,20));rows.count=rows.length;return rows;}
+      return super.findMulti(ro);
+    }
+  };
+  return {...f,turns:()=>turns};
+}
+
+test('actual adapter reacquires exact conflicting OCR without carrying HP or another input',async()=>{
+  const f=actualReacquisition(),r=await f.run();
+  assert.equal(r.status,'completed',JSON.stringify(r));assert.equal(r.healthVerified,true);assert.equal(r.pauseVerified,true);
+  assert.equal(r.health.current,1001);assert.equal(r.passiveReacquisitionAttempts,1);assert.equal(f.turns(),1);
+  assert.deepEqual(downs(f),['VK_ESCAPE','VK_B']);assert.equal(f.clicks.length,0);
+  const bad=f.observations.find(o=>o.hud.healthDiagnostic&&o.hud.healthDiagnostic.decision==='conflict-halves-disagree-or-missing');
+  assert.ok(bad);assert.equal(bad.hud.health,null);assert.equal(bad.map,null);assert.equal(bad.hud.world,false);
+  assert.deepEqual(JSON.parse(JSON.stringify(bad.hud.healthDiagnostic)),retainedHealFrames[10].hud.healthDiagnostic);
+  const fresh=f.observations.find(o=>o.frameId>bad.frameId&&o.hud.health&&o.hud.health.current===1001&&o.map);
+  assert.ok(fresh);assert.ok(fresh.hud.captureStamp.capturedAt>bad.timestamp);assert.equal(f.getScreen(),'inventory');
+});
+
+test('actual Engine receipt preserves one passive retry and qualified final inventory',async()=>{
+  const f=actualReacquisition();
+  vm.runInNewContext(fs.readFileSync(path.join(dir,'engine.js'),'utf8'),f.context);
+  vm.runInNewContext(fs.readFileSync(path.join(dir,'mission.js'),'utf8'),f.context);
+  const engine=f.context.ActOnePilot.create(f.adapter,{session:'lion-adapter-test',enableInput:true});
+  await engine.observe();
+  assert.equal(await engine.process({id:'heal-reacquire-engine',session:'lion-adapter-test',mission:'questStep',step:'combatStatueHeal',
+    createdAt:f.context.Date.now(),expectedFrameId:engine.getFrame()},()=>f.context.ActOneMission),'completed');
+  const receipt=JSON.parse(f.getVirtualFiles().get('receipts/lion-adapter-test/heal-reacquire-engine.json'));
+  assert.equal(receipt.details.result.passiveReacquisitionAttempts,1);assert.equal(receipt.details.result.healthVerified,true);
+  assert.equal(receipt.details.result.pauseVerified,true);assert.deepEqual(downs(f),['VK_ESCAPE','VK_B']);
+  assert.equal(f.getOverlappingKeyDowns().length,0);assert.equal(f.nativeCalls.length,0);
+});
+
+
+test('actual prompt settling reacquires conflicting OCR before any F or movement',async()=>{
+  const f=actualReacquisition({prompt:true}),r=await f.run();
+  assert.equal(r.status,'completed',JSON.stringify(r));assert.equal(r.healthVerified,true);assert.equal(r.pauseVerified,true);
+  assert.equal(r.passiveReacquisitionAttempts,1);assert.equal(r.health.current,1001);assert.equal(f.turns(),0);
+  assert.deepEqual(downs(f),['VK_ESCAPE','VK_B']);assert.equal(f.clicks.length,0);
+});
+
+
+test('final blocking STOP check cannot turn an aged reacquired source into a health claim',async()=>{
+  const f=reacquisitionReplay(['conflict','healthy'],{ageFinalCheck:true}),r=await f.run();
+  assert.equal(r.status,'stopped');assert.equal(r.healthVerified,false);assert.equal(r.passiveReacquisitionAttempts,1);
+  assert.equal(f.turns(),1);assert.equal(f.reads(),4);assert.equal(r.health,undefined);
+});

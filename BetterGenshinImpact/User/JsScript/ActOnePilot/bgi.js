@@ -2187,7 +2187,7 @@ function createActOneAdapter(sessionId,options) {
     var lionFieldState={closed:false,selected:false,fought:false,returnedAmber:false,paused:false,lastInputFrame:-1,observer:null,chartedProbePending:false,chartedProbeAnchor:null,climbReleaseArmed:false,climbReleaseAttempted:false};
     var lisaRecoveryState={closed:false,mapOpened:false,teleported:false,lastInputFrame:-1,observer:null};
     // This independent operation never borrows the obsolete Lisa quest or healing gates.
-    var combatRetreatState={closed:false,mapOpened:false,teleported:false,lastInputFrame:-1,deadline:0,seal:null};
+    var combatRetreatState={warmed:false,closed:false,mapOpened:false,teleported:false,lastInputFrame:-1,deadline:0,seal:null};
     var combatRetreatDefinition=null;
     // Private state binds current-party healing to one original request and its observed UI transitions.
     var combatHealState={requestId:null,session:null,warmed:false,closed:false,interacted:false,chosen:false,panelClosed:false,moves:0,turns:0,portraits:0,lastInputFrame:-1,deadline:0,seal:null,world:null,choice:null};
@@ -3340,7 +3340,7 @@ function createActOneAdapter(sessionId,options) {
             pauseProtectionActive=false;pauseProtectionObserver=null;pauseProtectionKeys=Object.create(null);pauseProtectionLastInputFrame=-1;pauseProtectionLastStatusAt=-Infinity;
             lionFieldState={closed:false,selected:false,fought:false,returnedAmber:false,paused:false,lastInputFrame:-1,observer:null,chartedProbePending:false,chartedProbeAnchor:null,climbReleaseArmed:false,climbReleaseAttempted:false};
             lisaRecoveryState={closed:false,mapOpened:false,teleported:false,lastInputFrame:-1,observer:null};
-            combatRetreatState={closed:false,mapOpened:false,teleported:false,lastInputFrame:-1,deadline:Number(value.createdAt)+90000,seal:null};
+            combatRetreatState={warmed:false,closed:false,mapOpened:false,teleported:false,lastInputFrame:-1,deadline:Number(value.createdAt)+90000,seal:null};
             combatRetreatDefinition=null;
             combatHealState={requestId:value.id,session:value.session,warmed:false,closed:false,interacted:false,chosen:false,panelClosed:false,moves:0,turns:0,portraits:0,lastInputFrame:-1,deadline:Number(value.createdAt)+90000,seal:null,world:null,choice:null};
             combatHealDefinition=null;combatHealPanelDefinition=null;
@@ -5809,16 +5809,28 @@ function createActOneAdapter(sessionId,options) {
             var proof=actOneLocalPauseProof(o,Date.now(),request.session);
             return !!(proof&&proof.kind==='map'&&actOneInventoryUiBigMap(o.ocr));
         },
+        // Load the existing map cache without capture/input, then require a new paused source.
+        combatRetreatPrepareNavigation: async function(o){
+            if(combatRetreatState.warmed)throw new Error('Retreat navigation preparation already consumed');
+            var kind=this.combatRetreatInitialMapReady(o)?'map':this.combatRetreatInventoryReady(o)?'inventory':null;
+            if(!kind)throw new Error('Fresh original-account inventory or map required for preparation');
+            var event={type:'combatStatueRetreatNavigationPreparation',frameId:o.frameId,entryKind:kind,startedAt:Date.now(),inputSent:false};events.push(event);
+            try{
+                var lazy=genshin.LazyNavigationInstance;
+                if(!lazy||!lazy.Value)throw new Error('Existing lazy navigation host is unavailable');
+                combatRetreatState.warmed=true;event.completed=true;
+            }finally{event.finishedAt=Date.now();}
+        },
         combatRetreatAdoptMap: async function(o){
-            if(!this.combatRetreatInitialMapReady(o))throw new Error('Fresh original-account paused map required');
+            if(!combatRetreatState.warmed||!this.combatRetreatInitialMapReady(o))throw new Error('Prepared fresh original-account paused map required');
             combatRetreatState.closed=true;combatRetreatState.mapOpened=true;
             events.push({type:'combatRetreatMapAdopted',frameId:o.frameId,startedAt:Date.now(),characterEvidence:'hidden-by-map'});
         },
         combatRetreatCloseInventory: async function(o){
             var base=this;
-            if(!base.combatRetreatInventoryReady(o))throw new Error('Fresh original-account inventory required');
+            if(!combatRetreatState.warmed||!base.combatRetreatInventoryReady(o))throw new Error('Fresh original-account inventory required');
             await boundedKey('VK_ESCAPE',60,o.frameId,function(){
-                if(!base.combatRetreatInventoryReady(o))throw new Error('Inventory source changed before Escape');
+                if(!combatRetreatState.warmed||!base.combatRetreatInventoryReady(o))throw new Error('Inventory source changed before Escape');
                 combatRetreatState.closed=true;combatRetreatState.lastInputFrame=o.frameId;
             });
         },

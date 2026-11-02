@@ -6,12 +6,12 @@ var ActOneCombatStatueHeal = (function () {
 
     // Retain the established bounded approach: no pathfinding, teleport or fallback dialogue.
     async function work(initial, api, observe) {
-        var current = initial, moves = 0, turns = 0, interacted = false, chosen = false;
+        var current = initial, moves = 0, turns = 0, interacted = false, chosen = false, reacquisitions = 0;
         var session = initial && initial.session, lastFrame = -1, lastCapture = -1, lastCompleted = -1;
         function result(reason) {
             return { status: 'stopped', step: 'combatStatueHeal', reason: reason, moves: moves, turns: turns,
                 interactAttempted: interacted, blessingChoiceAttempted: chosen, healthVerified: false,
-                frameId: current && current.frameId };
+                frameId: current && current.frameId, passiveReacquisitionAttempts: reacquisitions };
         }
         function check() {
             api.checkStop();
@@ -32,6 +32,47 @@ var ActOneCombatStatueHeal = (function () {
         async function next(delay) {
             check(); if (delay) await api.sleep(delay); check();
             var o = await observe(); check(); accept(o); return o;
+        }
+        // Only this unresolved numeric conflict may request another input-free capture.
+        // It never promotes diagnostic guesses, a prior HP value, or a protection frame.
+        function mayReobserveConflict() {
+            var h = current && current.hud, s = h && h.captureStamp, phase = h && h.combatHealObservation;
+            var d = h && h.enemyBarDiagnostic, now = api.now(), rows = current && current.ocr;
+            if (!h || !s || !Number.isFinite(now) || now < current.timestamp || now - s.capturedAt > 1000 ||
+                h.health !== null || h.world !== false || current.map !== null ||
+                !h.healthDiagnostic || h.healthDiagnostic.decision !== 'conflict-halves-disagree-or-missing' ||
+                !Array.isArray(h.healthOcr) || h.healthOcr.length !== 0 ||
+                !phase || phase.version !== 1 || phase.phase !== 'approach' || phase.session !== session ||
+                phase.frameId !== current.frameId || phase.observationStartedAtUnixMs !== s.capturedAt ||
+                h.groundControls !== true || h.climbing !== false || h.auto !== false || h.journal !== false ||
+                h.bigMap !== false || h.choice !== false || h.dialogueReady !== false || h.objectiveChanged !== false ||
+                h.loading || h.unknownHud || h.tutorial || h.tutorialStep || h.characterAcquired ||
+                h.aerialBossVisible || h.aerialBoss || h.slimeTarget ||
+                !Array.isArray(h.enemyBars) || h.enemyBars.length !== 0 ||
+                !d || d.level !== 'any' || d.candidates !== 0 || !Array.isArray(rows)) return false;
+            // Refuse visible foreign/duplicate identities and trial party evidence immediately.
+            if (rows.some(function (r) { return /^Trial$/i.test(String(r && r.text || '').trim()); })) return false;
+            var ids = rows.filter(function (r) {
+                return r && /^(?:UID\b|\d{9}$)/i.test(String(r.text || '').trim());
+            });
+            var id = ids[0];
+            return ids.length === 1 && /^(?:UID\s*:?\s*)?693306810$/.test(String(id.text || '').trim()) &&
+                [id.x,id.y,id.width,id.height].every(Number.isFinite) && id.width > 0 && id.height > 0 &&
+                id.x >= 1600 && id.y >= 1030 && id.x + id.width <= 1920 && id.y + id.height <= 1080;
+        }
+        // Share three passive observations across the whole request; no deadline or input budget resets.
+        async function qualifiedFieldAfterGap() {
+            check();
+            while (!api.combatHealFieldReady(current)) {
+                check();
+                if (reacquisitions >= 3 || !mayReobserveConflict()) return false;
+                reacquisitions++;
+                await next(150);
+            }
+            check();
+            // A blocking STOP check must not age a successful field proof into a health claim.
+            var now = api.now();
+            return Number.isFinite(now) && now >= current.timestamp && now - current.hud.captureStamp.capturedAt <= 1000;
         }
         function distance() { return Math.hypot(current.map.x - X, current.map.y - Y); }
         // Only a freshly qualified world source can end the approach without more input.
@@ -77,14 +118,14 @@ var ActOneCombatStatueHeal = (function () {
                 } else {
                     moves++; await api.combatHealForward(current, 500); await next(150);
                 }
-                if (!api.combatHealFieldReady(current)) return result('Statue approach lost fresh living grounded evidence');
+                if (!await qualifiedFieldAfterGap()) return result('Statue approach lost fresh living grounded evidence');
                 sufficient = sufficientHealth();
                 if (sufficient) return sufficient;
             }
             if (distance() > 3) return result('Bounded Statue approach did not reach the interaction radius');
             for (var settle = 0; settle < 4 && !api.combatHealInteractReady(current); settle++) {
                 await next(250);
-                if (!api.combatHealFieldReady(current)) return result('Statue interaction world became unsafe');
+                if (!await qualifiedFieldAfterGap()) return result('Statue interaction world became unsafe');
                 sufficient = sufficientHealth();
                 if (sufficient) return sufficient;
             }
@@ -101,6 +142,7 @@ var ActOneCombatStatueHeal = (function () {
                 await next(350);
                 if (api.combatHealPanelReady(current)) {
                     var answer = await api.combatHealRunPanel(current, observe); check();
+                    answer.passiveReacquisitionAttempts = reacquisitions;
                     answer.approach = { moves: moves, turns: turns, interactAttempted: interacted,
                         blessingChoiceAttempted: chosen, worldToPanelOwned: true };
                     return answer;

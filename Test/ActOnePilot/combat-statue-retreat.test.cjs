@@ -74,6 +74,7 @@ function pure(options={}){
   const api={now:()=>now,checkStop(){if(options.stop)throw Error('original STOP');},combatRetreatDeadline:()=>90000,
     sleep:async ms=>{now+=ms;},release:async()=>{calls.push('release');if(options.releaseFailure)throw Error('release failed');},
     combatRetreatInitialMapReady:o=>o.kind==='map',combatRetreatInventoryReady:o=>o.kind==='inventory',
+    combatRetreatPrepareNavigation:async()=>{calls.push('warm');},
     combatRetreatAdoptMap:async()=>calls.push('adopt'),
     combatRetreatCloseInventory:async()=>{calls.push('Escape');screen='world';if(options.stopAfterClose)options.stop=true;},
     combatRetreatFieldReady:o=>o.kind==='world'&&retreat.worldReady(o,now,o.session,false),
@@ -87,24 +88,24 @@ function pure(options={}){
     if(options.reusedStart)o.hud.captureStamp.capturedAt=initial.hud.captureStamp.capturedAt;
     if(options.reusedCompletion){o.timestamp=initial.timestamp;o.hud.captureStamp.capturedAt=950;}
     return o;};
-  return {calls,run:()=>retreat.run(initial,api,observe)};
+  return {calls,api,run:()=>retreat.run(initial,api,observe)};
 }
 test('runner has oneEscape, three new-world M attempts, one tp and explicit unverified healing',async()=>{
   const f=pure({ignoreMaps:2}),r=await f.run();
-  assert.deepEqual(f.calls,['Escape','M','M','M','tp','release']);
+  assert.deepEqual(f.calls,['warm','Escape','M','M','M','tp','release']);
   assert.equal(r.arrived,true);assert.equal(r.healingVerified,false);assert.equal(r.health.current,797);
 });
 test('a qualified paused map performs no inventory close or map key',async()=>{
   const f=pure({map:true}),r=await f.run();
-  assert.deepEqual(f.calls,['adopt','tp','release']);assert.equal(r.arrived,true);
+  assert.deepEqual(f.calls,['warm','adopt','tp','release']);assert.equal(r.arrived,true);
 });
 test('duplicate observation cannot authorize another key',async()=>{
   const f=pure({repeat:true}),r=await f.run();
-  assert.deepEqual(f.calls,['Escape','release']);assert.equal(r.status,'stopped');assert.match(r.reason,/non-advancing/);
+  assert.deepEqual(f.calls,['warm','release']);assert.equal(r.status,'stopped');assert.match(r.reason,/non-advancing/);
 });
 test('STOP after Escape releases without map or teleport',async()=>{
   const f=pure({stopAfterClose:true}),r=await f.run();
-  assert.deepEqual(f.calls,['Escape','release']);assert.match(r.reason,/original STOP/);
+  assert.deepEqual(f.calls,['warm','Escape','release']);assert.match(r.reason,/original STOP/);
 });
 test('teleport and release failures remain separately visible',async()=>{
   const f=pure({tpFailure:true,releaseFailure:true}),r=await f.run();
@@ -113,7 +114,7 @@ test('teleport and release failures remain separately visible',async()=>{
 });
 test('a blocking tp return cannot renew the original operation deadline',async()=>{
   const f=pure({expireAfterTp:true}),r=await f.run();
-  assert.equal(r.arrived,false);assert.match(r.reason,/deadline/);assert.equal(r.polls,2);
+  assert.equal(r.arrived,false);assert.match(r.reason,/deadline/);assert.equal(r.polls,3);
 });
 
 // Reuse only the real adapter fixture definitions, not the unrelated Lion tests.
@@ -135,10 +136,23 @@ function actual(options={}){
   const f=fixture({step:'combatStatueRetreat',noEnemy:!options.enemy,healthText:`${health}/${max}`,
     initialScreen:options.map?'map':'inventory',fieldRowsSequence:[worldRows],
     mapPosition:options.badPosition?{x:0,y:0}:{x:-1323.474,y:2566.115},...options.fixture});
+  // Model only the existing lazy cache initialization: no game capture or input in this getter.
+  let warm=0,offset=0,preparedCapture=false;const warmScreens=[],clock=f.context.Date.now.bind(f.context.Date);
+  f.context.Date.now=()=>clock()+offset;
+  Object.defineProperty(f.context.genshin,'LazyNavigationInstance',{configurable:true,get(){return {get Value(){
+    warm++;warmScreens.push(f.getScreen());offset+=options.warmMs||0;
+    if(options.warmFailure)throw Error('retained warm failure');
+    if(options.stopDuringWarm)f.getVirtualFiles().set('stop.json',JSON.stringify({session:'lion-adapter-test',createdAt:f.context.Date.now()}));
+    if(options.changeDuringWarm)f.setScreen(options.changeDuringWarm);
+    return {};
+  }};}});
+  const position=f.context.genshin.getPositionFromMap;
+  f.context.genshin.getPositionFromMap=function(...args){if(!warm)offset+=options.coldMapMs||0;return position.apply(this,args);};
   // Preserve source-image OCR geometry while supplying the original UID to the sanitized fixture.
   const capture=f.context.captureGameRegion;
   f.context.captureGameRegion=()=>{
     const image=capture(),find=image.findMulti.bind(image);
+    if(options.stalePrepared&&warm&&!preparedCapture){preparedCapture=true;offset+=1001;}
     image.findMulti=ro=>{const rows=Array.from(find(ro));
       const ids=options.uid===false?[]:[row(options.uid||'UID: 693306810',1690,1050,190,24)];
       if(options.duplicateUid)ids.push(uid());
@@ -155,7 +169,7 @@ function actual(options={}){
   };
   f.context.file.pinCaptureEvidence=()=>{};
   const initial=()=>f.adapter.observe('lion-adapter-test',1);
-  return {...f,initial,run:async()=>f.adapter.runCombatStatueRetreat(await initial(),f.observe)};
+  return {...f,initial,warmScreens,getWarm:()=>warm,run:async()=>f.adapter.runCombatStatueRetreat(await initial(),f.observe)};
 }
 const downs=f=>Array.from(f.inputs).filter(e=>e.kind==='down').map(e=>e.key);
 test('real adapter retreats and protects once, with map lookup only after teleport',async()=>{
@@ -194,18 +208,18 @@ test('real source seal rejects mutated initial evidence',async()=>{
   assert.equal(f.adapter.combatRetreatInventoryReady(initial),false);assert.deepEqual(downs(f),[]);
 });
 test('source aging during pre-key stop check is rechecked before Escape',async()=>{
-  const f=actual(),initial=await f.initial();let checks=0;const now=f.context.Date.now;
+  const f=actual(),initial=await f.initial();await f.adapter.combatRetreatPrepareNavigation(initial);let checks=0;const now=f.context.Date.now;
   f.adapter.setHeartbeat(()=>{if(++checks===2)f.context.Date.now=()=>now()+1001;});
   await assert.rejects(f.adapter.combatRetreatCloseInventory(initial),/source changed|Fresh original-account inventory required/);
   assert.deepEqual(downs(f),[]);assert.equal(f.getScreen(),'inventory');
 });
 test('STOP delivered during final pre-key check prevents Escape',async()=>{
-  const f=actual(),initial=await f.initial();let checks=0;
+  const f=actual(),initial=await f.initial();await f.adapter.combatRetreatPrepareNavigation(initial);let checks=0;
   f.adapter.setHeartbeat(()=>{if(++checks===2)f.getVirtualFiles().set('stop.json',JSON.stringify({session:'lion-adapter-test',createdAt:10000}));});
   await assert.rejects(f.adapter.combatRetreatCloseInventory(initial),/Stop requested/);assert.deepEqual(downs(f),[]);
 });
 test('real receipt flow through Engine/mission preserves arrival, sources, release and final pause',async()=>{
-  const f=actual();vm.runInNewContext(fs.readFileSync(path.join(dir,'engine.js'),'utf8'),f.context);
+  const f=actual({warmMs:12300,coldMapMs:12300});vm.runInNewContext(fs.readFileSync(path.join(dir,'engine.js'),'utf8'),f.context);
   vm.runInNewContext(fs.readFileSync(path.join(dir,'mission.js'),'utf8'),f.context);
   const runner=f.context.ActOnePilot.create(f.adapter,{session:'lion-adapter-test',enableInput:true});
   const initial=await runner.observe();
@@ -217,6 +231,10 @@ test('real receipt flow through Engine/mission preserves arrival, sources, relea
   assert.deepEqual(downs(f),['VK_ESCAPE','VK_M','VK_B']);
   assert.match(JSON.stringify(receipt.details.inputEvents),/combat-statue-retreat\.js/);
   assert.equal(f.getOverlappingKeyDowns().length,0);
+  const preparation=receipt.details.inputEvents.filter(e=>e.type==='combatStatueRetreatNavigationPreparation');
+  assert.equal(preparation.length,1);assert.equal(preparation[0].inputSent,false);assert.equal(preparation[0].completed,true);
+  const firstKey=receipt.details.inputEvents.find(e=>e.type==='key');
+  assert.ok(firstKey.frameId>preparation[0].frameId&&firstKey.startedAt>preparation[0].finishedAt);
 });
 test('inventory UI-only adapter still rejects the new retreat operation',()=>{
   const f=actual(),adapter=f.context.createActOneAdapter(5,{inventoryUiOnlyV1:true});
@@ -225,7 +243,7 @@ test('inventory UI-only adapter still rejects the new retreat operation',()=>{
 });
 
 for(const options of [{reusedStart:true},{reusedCompletion:true}])test('new frame cannot renew prior capture clock '+JSON.stringify(options),async()=>{
-  const f=pure(options),r=await f.run();assert.deepEqual(f.calls,['Escape','release']);
+  const f=pure(options),r=await f.run();assert.deepEqual(f.calls,['warm','release']);
   assert.equal(r.status,'stopped');assert.match(r.reason,/non-advancing/);
 });
 
@@ -234,7 +252,7 @@ for(const mode of ['age','stop'])test('final inventory helper read cannot hide '
   const clock=f.context.Date.now.bind(f.context.Date),capture=f.context.captureGameRegion;
   f.context.Date.now=()=>clock()+offset;
   f.context.captureGameRegion=()=>{const image=capture();offset+=500;return image;};
-  const initial=await f.initial(),read=f.context.file.readTextSync;
+  const initial=await f.initial();await f.adapter.combatRetreatPrepareNavigation(initial);const read=f.context.file.readTextSync;
   f.context.file.readTextSync=p=>{const data=read(p);if(p==='world-inventory.js'&&++reads===2){
     if(mode==='age')offset+=501;
     else f.getVirtualFiles().set('stop.json',JSON.stringify({session:'lion-adapter-test',createdAt:f.getNow()}));
@@ -270,5 +288,48 @@ test('recorded threats cannot qualify arrival or the healing world gate',()=>{
 });
 test('runner opens the map from the threatened entry and still requires clear arrival',async()=>{
   const f=pure({threatenedEntry:true}),r=await f.run();
-  assert.deepEqual(f.calls,['Escape','M','tp','release']);assert.equal(r.arrived,true);assert.equal(r.healingVerified,false);
+  assert.deepEqual(f.calls,['warm','Escape','M','tp','release']);assert.equal(r.arrived,true);assert.equal(r.healingVerified,false);
+});
+
+
+for(const map of [false,true])test('real cold navigation warms while '+(map?'map':'inventory')+' is paused, then uses a fresh source',async()=>{
+  const f=actual({map,warmMs:12300,coldMapMs:12300}),r=await f.run();
+  assert.equal(r.status,'completed',JSON.stringify(r));assert.equal(r.pauseVerified,true);
+  assert.deepEqual(f.warmScreens,[map?'map':'inventory']);assert.equal(f.getWarm(),1);
+  assert.deepEqual(downs(f),map?['VK_B']:['VK_ESCAPE','VK_M','VK_B']);
+  assert.equal(f.nativeCalls.filter(c=>c.kind==='tp').length,1);
+  const e=Array.from(f.adapter.events()).find(e=>e.type==='combatStatueRetreatNavigationPreparation');
+  assert.equal(e.inputSent,false);assert.equal(e.completed,true);assert.equal(e.entryKind,map?'map':'inventory');
+  assert.equal(e.finishedAt-e.startedAt,12300);
+  const next=f.observations.find(o=>o.frameId>e.frameId);
+  assert.ok(next.hud.captureStamp.capturedAt>e.finishedAt);assert.ok(next.timestamp-next.hud.captureStamp.capturedAt<=1000);
+});
+for(const map of [false,true])test('stale after-preparation '+(map?'map':'inventory')+' recapture refuses all input',async()=>{
+  const f=actual({map,warmMs:12300,stalePrepared:true}),r=await f.run();
+  assert.equal(r.status,'stopped');assert.match(r.reason,/stale|non-advancing/);
+  assert.equal(f.getWarm(),1);assert.deepEqual(downs(f),[]);assert.equal(f.nativeCalls.length,0);
+});
+for(const [name,options] of [['original deadline',{warmMs:90000}],['STOP',{warmMs:12300,stopDuringWarm:true}],['load failure',{warmFailure:true}]])
+test('preparation '+name+' cannot lead to Escape or teleport',async()=>{
+  const f=actual(options),r=await f.run();assert.equal(r.status,'stopped');
+  assert.equal(f.getWarm(),1);assert.deepEqual(downs(f),[]);assert.equal(f.nativeCalls.length,0);assert.equal(f.getScreen(),'inventory');
+});
+for(const map of [false,true])test('changed paused entry after preparation is refused '+map,async()=>{
+  const f=actual({map,changeDuringWarm:map?'inventory':'map'}),r=await f.run();
+  assert.equal(r.status,'stopped');assert.match(r.reason,/changed during navigation preparation/);
+  assert.deepEqual(downs(f),[]);assert.equal(f.nativeCalls.length,0);
+});
+test('missing preparation API refuses before input',async()=>{
+  const f=pure();delete f.api.combatRetreatPrepareNavigation;const r=await f.run();
+  assert.equal(r.status,'stopped');assert.deepEqual(f.calls,['release']);
+});
+test('real direct inventory close cannot bypass preparation',async()=>{
+  const f=actual(),o=await f.initial();
+  await assert.rejects(f.adapter.combatRetreatCloseInventory(o),/inventory required/);
+  assert.deepEqual(downs(f),[]);assert.equal(f.getWarm(),0);
+});
+test('real preparation is consumed once without another warm-up or input',async()=>{
+  const f=actual(),o=await f.initial();await f.adapter.combatRetreatPrepareNavigation(o);
+  await assert.rejects(f.adapter.combatRetreatPrepareNavigation(o),/already consumed/);
+  assert.equal(f.getWarm(),1);assert.deepEqual(downs(f),[]);
 });

@@ -91,13 +91,20 @@ var ActOneCombatStatueRetreat = (function () {
         try {
             if (!api || typeof api.now !== 'function' || typeof api.checkStop !== 'function' ||
                 typeof api.sleep !== 'function' || typeof api.combatRetreatDeadline !== 'function' ||
+                typeof api.combatRetreatPrepareNavigation !== 'function' ||
                 typeof observe !== 'function' || typeof session !== 'string' || !session ||
                 !fresh(current, api.now(), session, -1)) return stop('Fresh owned initial capture required');
             check();
-            if (api.combatRetreatInitialMapReady(current)) {
+            var pausedMap = api.combatRetreatInitialMapReady(current);
+            if (!pausedMap && !api.combatRetreatInventoryReady(current)) return stop('Exact owned inventory or map required');
+            // Cold map loading consumes the original deadline while still paused, never the next input source.
+            await api.combatRetreatPrepareNavigation(current); check();
+            current = await next(current.frameId, 20);
+            if (pausedMap) {
+                if (!api.combatRetreatInitialMapReady(current)) return stop('Paused map changed during navigation preparation');
                 await api.combatRetreatAdoptMap(current);
             } else {
-                if (!api.combatRetreatInventoryReady(current)) return stop('Exact owned inventory or map required');
+                if (!api.combatRetreatInventoryReady(current)) return stop('Inventory changed during navigation preparation');
                 await api.combatRetreatCloseInventory(current);
                 var world = false;
                 for (var w = 0; w < MAX_WORLD_POLLS; w++) {

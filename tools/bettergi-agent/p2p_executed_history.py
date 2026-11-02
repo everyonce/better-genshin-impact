@@ -71,6 +71,10 @@ def validate_executed_history_options(args, policy=None, control=None, *, requir
             raise ValueError('Executed-history adapter cannot run under legacy declarations')
         return False
     executed_history_policy(getattr(args, 'action_hold_ms', None))
+    from reviewed_scout_route import ReviewedScoutBatch, reviewed_leg_count, validate_reviewed_options, batch_policy_matches
+    route = getattr(args, 'reviewed_scout_route', None)
+    batch = type(route) is ReviewedScoutBatch
+    if batch or getattr(args, 'reviewed_scout_batch', False):validate_reviewed_options(args)
     required = ('resident', 'cuda_graph', 'p2p_fast_start', 'p2p_execution_feedback',
                 'p2p_prewarm', 'enable_input', 'hybrid_navigation', 'soft_cadence',
                 'retain_policy_rgb', 'native_combat_observation')
@@ -81,11 +85,11 @@ def validate_executed_history_options(args, policy=None, control=None, *, requir
             or any(getattr(args, key, None) for key in forbidden)
             or getattr(args, 'model', None) != 'open-p2p'
             or getattr(args, 'history', None) != 41
-            or getattr(args, 'hybrid_legs', None) != 1
+            or getattr(args, 'hybrid_legs', None) != reviewed_leg_count(route)
             or getattr(args, 'goal_intent', None) != 'ground-navigation'
             or getattr(args, 'execution_context', 'off') != 'off'
             or not getattr(args, 'reviewed_scout_route', None) or not getattr(args, 'record_dir', None)
-            or not 0 < getattr(args, 'seconds', 0) <= 35
+            or not 0 < getattr(args, 'seconds', 0) <= (60 if batch else 35)
             or not 0 < getattr(args, 'max_observation_age_ms', 0) <= 150
             or not 0 < getattr(args, 'record_max_mib', 0) <= 160):
         raise ValueError('Executed history requires bounded reviewed scout input, retained RGB and no side input tasks')
@@ -94,6 +98,11 @@ def validate_executed_history_options(args, policy=None, control=None, *, requir
             or control is None or getattr(control, 'scout_encounter_guard', None) is None
             or getattr(control, 'frozen_goal', False) is not True):
         raise ValueError('Executed history requires its declared adapter and frozen reviewed scout guard')
+    if require_bound and batch and (
+            not batch_policy_matches(getattr(control, 'scout_batch_policy', None), route.profile_id)
+            or getattr(control, 'scout_batch_route_sha256', None) != route.sha256
+            or getattr(control.scout_encounter_guard, 'ground_capability', None) is None):
+        raise ValueError('Batch history requires its private resident authority and reviewed ground binding')
     return True
 
 

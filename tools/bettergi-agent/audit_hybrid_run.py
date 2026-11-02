@@ -17,7 +17,9 @@ from observation_timing import observation_timestamp
 from destination_queue_limits import ENDURANCE, STANDARD, queue_limits
 from hybrid_routes import SURFACE_ROUTES
 from navigation_profiles import COURTYARD_PROFILE,SURFACE_PROFILE,SCOUT_PROFILE,SCOUT_PROFILES,validate_capability,allows_pose_scope,required_profile
-from reviewed_scout_route import ReviewedScoutRoute,load_reviewed_route,reviewed_route_policy
+from reviewed_scout_route import (ReviewedScoutRoute, ReviewedScoutBatch, load_reviewed_route,
+    reviewed_route_policy, reviewed_batch_policy, batch_policy_matches, reviewed_leg_count,
+    parse_reviewed_route, require_batch_review)
 from policy_rgb_archive import open_recording_jsonl, read_recording_jsonl, recording_metadata
 
 
@@ -130,6 +132,12 @@ def verify_executed_history(run, parts, frames, entries, recordings, reuse):
         require(not any(has_executed_history_evidence(value) for value in (run,parts,list(frames.values()),journals)),
                 'Historical route contains undeclared executed-history evidence')
         return None
+    batch = 'reviewedScoutBatchPolicy' in reuse
+    batch_route = parse_reviewed_route(reuse.get('routeSpec')) if batch else None
+    if batch:
+        require(type(batch_route) is ReviewedScoutBatch
+                and batch_policy_matches(reuse['reviewedScoutBatchPolicy'], batch_route.profile_id),
+                'Executed-history batch policy or geometry is invalid')
     hold=reuse.get('actionHoldMs')
     require(type(hold) is int and hold in (50,60),'Executed-history audit has no pinned selected hold')
     require(parts and len(parts)==len(entries)==len(journals),'Executed-history segment journal coverage differs')
@@ -139,6 +147,9 @@ def verify_executed_history(run, parts, frames, entries, recordings, reuse):
     committed=rejected=0
     request_ids=set()
     submitted_ids=set()
+    reset_count = 0
+    batch_endpoints = [event for part in parts for event in part.get('hybridNavigationEvents', [])
+                       if event.get('type') == 'hybridEndpointVerified'] if batch else []
 
     def finite(value):
         """Reject boolean and nonfinite timing values before comparing native clock evidence."""
@@ -187,8 +198,62 @@ def verify_executed_history(run, parts, frames, entries, recordings, reuse):
         terminal={receipt['requestId']:receipt for receipt in receipts}
         journal_terminal={row['requestId']:(index,row) for index,row in receipt_rows}
         accepted_here=set()
+        resets = [(index, row) for index, row in enumerate(rows) if 'executedHistoryReset' in row]
+        require(batch or not resets, 'Legacy executed history contains undeclared endpoint reset authority')
+        if batch:
+            holds = [row for row in rows if row.get('type') == 'controlTransition'
+                     and row.get('state') == 'held' and row.get('reason') == 'hybridEndpoint']
+            require([row for _, row in resets] == holds
+                    and all(row in part.get('controlTransitions', []) for _, row in resets),
+                    'Batch endpoint reset is missing or differs from its retained control transition')
+        reset_cursor = 0
+
+        def apply_endpoint_resets(before_index_in_journal):
+            """Replay only the original endpoint reset, without dropping its previous terminal receipt."""
+            nonlocal reset_cursor, reset_count, before_frames, before_index, before_tokens, previous_client_ns
+            while reset_cursor < len(resets) and resets[reset_cursor][0] < before_index_in_journal:
+                reset_index, transition = resets[reset_cursor]
+                marker = transition['executedHistoryReset']
+                require(type(marker) is dict and type(marker.get('version')) is int and marker['version'] == 1
+                        and marker.get('routeSpecSha256') == batch_route.sha256
+                        and type(marker.get('endpointOrdinal')) is int and marker['endpointOrdinal'] == reset_count + 1
+                        and reset_count < len(batch_endpoints), 'Batch reset changed its ordered endpoint authority')
+                endpoint = batch_endpoints[reset_count]
+                release = marker.get('release') or {}
+                at = transition.get('clientTimeNs')
+                before, after = marker.get('before') or {}, marker.get('after') or {}
+                fields = {'beforeFrames','afterFrames','validFrames','beforeIndex','afterIndex','beforeValidTokens','afterValidTokens'}
+                require(set(before) == set(after) == fields
+                        and all(type(value) is int and value >= 0 for value in [*before.values(), *after.values()])
+                        and (before['afterFrames'], before['afterIndex'], before['afterValidTokens'])
+                            == (before_frames, before_index, before_tokens)
+                        and all(after[key] == 0 for key in ('afterFrames','afterIndex','afterValidTokens','validFrames')),
+                        'Batch endpoint reset changed the settled history counters')
+                predecessor = None if previous is None else {key:previous[key] for key in ('requestId','endedAtMs')}
+                require(marker.get('previousReceipt') == predecessor and type(at) is int and at > previous_client_ns
+                        and transition.get('type') == 'controlTransition' and transition.get('state') == 'held'
+                        and transition.get('reason') == 'hybridEndpoint'
+                        and marker.get('arrivalFrameId') == endpoint.get('arrivalFrameId')
+                        and release.get('type') == 'released' and release.get('serverNowMs') == endpoint.get('releaseAtMs')
+                        and finite(release.get('serverNowMs'))
+                        and (previous is None or previous['endedAtMs'] <= release['serverNowMs'])
+                        and (release.get('worldReadiness') or {}).get('epoch') == endpoint.get('releaseEpoch')
+                        and (release.get('worldReadiness') or {}).get('ready') is False
+                        and (release.get('worldReadiness') or {}).get('reason') == 'client_release'
+                        and ((release.get('worldReadiness') or {}).get('sourceFrame') or {}).get('captureEpoch') == endpoint.get('sourceEpoch')
+                        and any(i < reset_index and event.get('type') == 'scoutEncounterGuardRelease'
+                                and event.get('reason') == 'hybridEndpoint' and event.get('response') == release
+                                and event.get('payloadBytes') == 0 and event.get('clientTimeNs', at+1) <= at
+                                for i, event in enumerate(rows)),
+                        'Batch reset lost its exact settled receipt, release ACK or confirmed endpoint')
+                before_frames = before_index = before_tokens = 0
+                previous_client_ns = at
+                reset_count += 1
+                reset_cursor += 1
+
         for number,(decision,event) in enumerate(zip(decisions,events)):
             proposal_index,proposal=paired[number*2]
+            apply_endpoint_resets(proposal_index)
             event_index,original=paired[number*2+1]
             require(event==original==decision.get('executedHistory') and event.get('type')=='p2pExecutedHistory'
                     and type(event.get('version')) is int and event['version']==1
@@ -285,7 +350,7 @@ def verify_executed_history(run, parts, frames, entries, recordings, reuse):
                         and finite(arguments.get('observedAtMs')) and arguments['observedAtMs']<=acceptance['acceptedAtMs']
                         and receipt['endedAtMs']>=acceptance['acceptedAtMs']+hold
                         and applied[0]['startedAtMs']<receipt['endedAtMs']<arguments['expiresAtMs']
-                        and receipt['endedAtMs']<=35000,
+                        and receipt['endedAtMs']<=(60000 if batch else 35000),
                         'Executed-history applied step or positive terminal interval changed')
                 before_frames+=1;before_index+=12;before_tokens=min(before_tokens+12,41*12)
                 previous=dict(requestId=request,endedAtMs=receipt['endedAtMs'],frameId=frame['frameId'],sourceFrame=source)
@@ -298,7 +363,9 @@ def verify_executed_history(run, parts, frames, entries, recordings, reuse):
             require((history['afterFrames'],history['afterIndex'],history['afterValidTokens'],history['validFrames'])
                     ==(before_frames,before_index,before_tokens,min(before_frames,41)),
                     'Executed-history cache advance does not match the completed selected action')
+        apply_endpoint_resets(len(rows))
         require(accepted_here==set(terminal),'Executed-history accepted actions and terminal receipts are not a bijection')
+    if batch:require(reset_count == reviewed_leg_count(batch_route), 'Batch lacks one reset for every confirmed endpoint')
     require(committed==run.get('acceptedInputActions'),'Executed-history accepted total differs from its commits')
     return dict(historyCommitMode=EXECUTED_HISTORY_MODE,actionHoldMs=hold,committedActions=committed,
                 rejectedPredictions=rejected,finalHistoryFrames=before_frames,finalValidHistoryFrames=min(before_frames,41),
@@ -328,7 +395,9 @@ def verify_scout_review(request, owner, points, spec=None, *, include_native_cap
                 'Original visual review geometry changed')
     else:
         require('routeSpec' not in review and 'routeSpecSha256' not in review,'Fixed review contains undeclared geometry')
-    require(review.get('attacksAllowed') is False and type(review.get('maximumLegs')) is int and review['maximumLegs']==1
+    require_batch_review(review, spec)
+    require(review.get('attacksAllowed') is False and type(review.get('maximumLegs')) is int
+            and review['maximumLegs']==reviewed_leg_count(spec)
             and type(review.get('inspectedHealth')) is int and type(review.get('inspectedMaximumHealth')) is int
             and 0<review['inspectedHealth']<=review['inspectedMaximumHealth']
             and isinstance(review.get('visualReview'),str) and review['visualReview'].strip(),'Original scout scene/health review is incomplete')
@@ -488,6 +557,16 @@ def verify_policy_reuse(run, run_path, proof_path):
                 and 'scoutEncounterGuardPolicy' in manifest,
                 'Northern cached scouting lacks its explicit reviewed-only scope')
     settings=configuration.get('arguments') or {}
+    batch = 'reviewedScoutBatchPolicy' in manifest
+    require(('reviewedScoutBatchPolicy' in session) == batch
+            and (settings.get('reviewed_scout_batch', False) is True) == batch,
+            'Cached batch startup authority differs from its original policy session')
+    if batch:
+        require(batch_policy_matches(manifest['reviewedScoutBatchPolicy'], profile)
+                and session['reviewedScoutBatchPolicy'] == manifest['reviewedScoutBatchPolicy']
+                and 'hybrid_legs' not in settings and settings.get('action_hold_ms') == 50
+                and not any(key in manifest for key in ('inspectedObstacleRecoveryPolicy','inspectedSourceGapRecoveryPolicy')),
+                'Cached batch policy, hold or automatic-recovery exclusion changed')
     from native_ground_control import policy as ground_policy,SOURCE_NAMES as ground_source_names
     ground_required='scoutGroundControlPolicy' in manifest
     require(('scoutGroundControlPolicy' in session)==ground_required
@@ -514,7 +593,7 @@ def verify_policy_reuse(run, run_path, proof_path):
             and settings.get('p2p_fast_start') is True and settings.get('goal_intent')=='ground-navigation'
             and settings.get('observation_profile')=='p2p-native-hamming-192-v1'
             and settings.get('max_observation_age_ms')==150
-            and settings.get('hybrid_legs')==1 and run.get('observationProfile')==settings['observation_profile'],
+            and (batch or settings.get('hybrid_legs')==1) and run.get('observationProfile')==settings['observation_profile'],
             'The cached policy changed its reviewed preprocessing or action limits')
     worker,owner=session.get('worker'),session.get('owner')
     require(isinstance(worker,dict) and isinstance(owner,dict) and worker==reuse.get('worker') and owner==reuse.get('owner'),
@@ -528,13 +607,23 @@ def verify_policy_reuse(run, run_path, proof_path):
     require(request_path.parent==source.parent/'requests' and request_path.stem==reuse['requestId'],
             'The cached run is not bound to its original explicit request')
     request,request_sha=document(request_path,16384)
+    request_spec = parse_reviewed_route(request['routeSpec']) if 'routeSpec' in request else None
+    require((type(request_spec) is ReviewedScoutBatch) == batch,
+            'Cached request geometry changed its batch or single-leg authority')
     require(request_sha==reuse.get('requestSha256') and request.get('sessionId')==reuse['sessionId']
             and request.get('requestId')==reuse['requestId'] and request.get('modelConfigurationSha256')==fingerprint
-            and type(request.get('maximumLegs')) is int and request['maximumLegs']==1
+            and type(request.get('maximumLegs')) is int and request['maximumLegs']==reviewed_leg_count(request_spec)
             and request.get('navigationProfile')==reuse.get('navigationProfile')==profile
             and request.get('routeId')==reuse.get('routeId'),
             'The fresh reviewed request changed before reuse audit')
     declarations=(manifest,session,request,reuse)
+    require(all(('reviewedScoutBatchPolicy' in value) == batch for value in (*declarations, run)),
+            'Batch authority is missing or undeclared in the original proof chain')
+    if batch:
+        require(all(batch_policy_matches(value['reviewedScoutBatchPolicy'], profile) for value in (*declarations, run))
+                and executed_history and ground_required
+                and all(not any(key in value for key in ('obstacleRecovery','sourceGapRecovery')) for value in declarations),
+                'Batch proof changed its guard, history or no-retry scope')
     if executed_history:
         require(all(value.get('historyCommitMode')==EXECUTED_HISTORY_MODE
                     and type(value.get('actionHoldMs')) is int and value['actionHoldMs']==hold for value in declarations),
@@ -579,7 +668,7 @@ def verify_policy_reuse(run, run_path, proof_path):
                 'Historical scout retains undeclared source-gap recovery authority')
     spec=None
     if 'routeSpec' in reuse or 'routeSpec' in request:
-        spec=ReviewedScoutRoute.from_document(request.get('routeSpec'))
+        spec=parse_reviewed_route(request.get('routeSpec'))
         require(session.get('reviewedScoutRoutePolicy')==reviewed_route_policy(profile) and spec.profile_id==profile
                 and reuse.get('routeSpec')==request['routeSpec']==spec.document()
                 and reuse.get('routeSpecSha256')==request.get('routeSpecSha256')==spec.sha256
@@ -1457,6 +1546,59 @@ def audit_bypasses(events, attempts, frames, accepted, receipts, route_id, epoch
     return teachings, replays
 
 
+def verify_reviewed_batch(spec, starts, endpoints, decisions, frames):
+    """Replay the ordered polyline, original leg clocks and no-input endpoint barriers."""
+    require(type(spec) is ReviewedScoutBatch and len(starts) == 1
+            and len(endpoints) == reviewed_leg_count(spec), 'Batch lacks its exact start and all reviewed endpoints')
+    goals = {'waypoint-'+str(index):point for index,point in enumerate(spec.points[1:],1)}
+    prior_at = starts[0]['atMs']
+    for count, endpoint in enumerate(endpoints, 1):
+        target = 'waypoint-' + str(count)
+        end_at = endpoint['samples'][-1]['atMs']
+        arrival = frames.get(endpoint.get('arrivalFrameId')) or {}
+        require(endpoint.get('batchLegIndex') == count-1 and endpoint.get('routeSpecSha256') == spec.sha256
+                and endpoint.get('routeId') == spec.route_id
+                and 0 < end_at-prior_at <= 35000
+                and abs(endpoint.get('legElapsedMs', -1)-(end_at-prior_at)) < .01
+                and arrival.get('frameWorldReadiness', {}).get('ready') is True
+                and math.dist((arrival.get('navigationPose', {}).get('x', math.inf),
+                               arrival.get('navigationPose', {}).get('y', math.inf)), goals[target]) <= 1.1
+                and prior_at <= observation_timestamp(arrival) <= endpoint['releaseAtMs']
+                and type(endpoint.get('releaseEpoch')) is int
+                and endpoint['releaseEpoch'] == arrival['frameWorldReadiness'].get('epoch', -2)+1,
+                'Batch endpoint order, original leg clock or arrival/release join changed')
+        require(endpoint.get('completedLegs') == count and endpoint.get('endpoint') == target
+                and type(endpoint.get('samples')) is list and len(endpoint['samples']) == 3,
+                'Batch endpoint sequence or stable sample count changed')
+        for sample in endpoint['samples']:
+            frame = frames.get(sample.get('frameId')) or {}
+            gate = frame.get('frameWorldReadiness') or {}
+            require(gate.get('ready') is True and gate.get('epoch') == endpoint['releaseEpoch']
+                    and (gate.get('sourceFrame') or {}).get('captureEpoch') == endpoint.get('sourceEpoch'),
+                    'Batch endpoint samples changed the acknowledged release generation')
+        prior_at = end_at
+    require(0 < prior_at-starts[0]['atMs'] <= 60000, 'Batch exceeded its original total native interval')
+    # No decision may skip a waypoint or occur during endpoint release/confirmation.
+    for decision in decisions:
+        at = decision.get('observationTimestampMs')
+        index = sum(endpoint['samples'][-1]['atMs'] < at for endpoint in endpoints)
+        require(index < len(endpoints), 'Batch input followed its final verified endpoint')
+        beginning = starts[0]['atMs'] if index == 0 else endpoints[index-1]['samples'][-1]['atMs']
+        arrival = frames[endpoints[index]['arrivalFrameId']]
+        selected = decision.get('hybridNavigation') or {}
+        pose = (frames.get(decision.get('frameId')) or {}).get('navigationPose') or {}
+        require((at >= beginning if index == 0 else at > beginning) and at < observation_timestamp(arrival)
+                and selected.get('completedLegs') == index and selected.get('target') == 'waypoint-'+str(index+1)
+                and selected.get('pose') == pose
+                and selected.get('reason') in ('nativeHeading','modelIdleOrOffRoute','modelRouteCompatible'),
+                'Batch decision escaped its exact active leg or endpoint no-input interval')
+        a, b = spec.points[index:index+2]
+        dx, dy = b[0]-a[0], b[1]-a[1]
+        x, y, length = pose['x']-a[0], pose['y']-a[1], math.dist(a,b)
+        require(abs(x*dy-y*dx)/length <= 4 and -3 <= (x*dx+y*dy)/length <= length+3,
+                'Batch action source left its original leg corridor')
+
+
 def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_passages=0,
           minimum_climb_passages=0, minimum_bypass_replays=0, minimum_bypass_rebinds=0, minimum_circuits=0,
           camera_checkpoint=None, minimum_calibrated_actions=0, shadow_checkpoint=None,
@@ -1488,12 +1630,13 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
     reuse=verify_policy_reuse(run,run_path,policy_reuse_proof)
     spec=reviewed_scout_route
     if spec is not None:
-        require(type(spec) is ReviewedScoutRoute and reuse is not None
+        require(type(spec) in (ReviewedScoutRoute, ReviewedScoutBatch) and reuse is not None
                 and reuse.get('routeSpec')==spec.document() and reuse.get('routeSpecSha256')==spec.sha256,
                 'Independent reviewed geometry does not match this run\'s cached request')
-        require(not failure_prefix and edges is None and minimum_legs==1,'Reviewed geometry is one complete directed scout leg')
+        require(not failure_prefix and edges is None and minimum_legs==reviewed_leg_count(spec),'Reviewed geometry requires its exact complete leg count')
     else:
         require(reuse is None or 'routeSpec' not in reuse,'Reviewed geometry must be supplied explicitly for independent replay')
+    batch = type(spec) is ReviewedScoutBatch
     require(run.get('inputRequested') is True,'Expected an input-enabled trial')
     parts, frames = [], {}
     for entry in run['segments']:
@@ -1519,6 +1662,7 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
                 require(row['frameId'] not in frames, 'Duplicate original frame identity')
                 frames[row['frameId']] = row
     require(bool(parts), 'No recorded segments')
+    if batch:require(len(parts) == 1, 'A bounded batch must retain one complete recording segment')
     verify_scout_guard(run,parts,frames,run['segments'],recordings,reuse)
     executed_history=verify_executed_history(run,parts,frames,run['segments'],recordings,reuse)
     lease = tuple(parts[0]['hello'][k] for k in ('sessionId', 'ownerEpoch'))
@@ -1540,11 +1684,11 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
     if reuse is not None:
         require(route_id==reuse['routeId'] and expected_profile in SCOUT_PROFILES
                 and expected_profile==reuse.get('navigationProfile')
-                and len(endpoints)==1 and run.get('endReason')=='hybridLegLimit',
+                and len(endpoints)==reviewed_leg_count(spec) and run.get('endReason')=='hybridLegLimit',
                 'Cached policy source observations belong to another reviewed scout route')
-        samples=endpoints[0].get('samples')
+        samples=endpoints[-1].get('samples')
         require(isinstance(samples,list) and len(samples)==3,'Cached scout endpoint lacks its three original samples')
-        require(0<=samples[-1]['atMs']-starts[0]['atMs']<=35000,
+        require(0<=samples[-1]['atMs']-starts[0]['atMs']<=(60000 if batch else 35000),
                 'Cached scout leg exceeded its unchanged 35-second deadline')
     navigation_profile=parts[0]['hybridNavigation'].get('profileId',COURTYARD_PROFILE)
     require(all(part['hybridNavigation'].get('profileId',COURTYARD_PROFILE)==navigation_profile for part in parts),
@@ -1562,11 +1706,11 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
     require(all(p['hybridNavigation'].get('routeId', COURTYARD_ROUTE) == route_id for p in parts),
             'Fixed route changed within the run')
     if spec is not None:
-        require(route_id==spec.route_id and starts[0]['target']=='end'
+        require(route_id==spec.route_id and starts[0]['target']==('waypoint-1' if batch else 'end')
                 and all(row.get('routeSpec')==spec.document() and row.get('routeSpecSha256')==spec.sha256
                         for row in [starts[0],*(part['hybridNavigation'] for part in parts)]),
                 'Controller geometry or its directed starting endpoint differs from the explicit review')
-    start, end = spec.points if spec is not None else route_points(route_id)
+    start, end = spec.points[:2] if spec is not None else route_points(route_id)
     patrol = route_id == STREET_PATROL_ROUTE
     if edges is not None:
         closed=run.get('endReason')=='destinationQueueFinished'
@@ -1577,7 +1721,8 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
                 or failure_prefix and len(endpoints)<=len(edges)),
                 'Destination run has missing or surplus edges, or an unexpected stop')
         start = PATROL_STATIONS[edges[0][0]]
-    goals = PATROL_STATIONS if patrol else dict(start=start, end=end)
+    goals = ({'waypoint-'+str(index):point for index,point in enumerate(spec.points[1:],1)} if batch
+             else PATROL_STATIONS if patrol else dict(start=start, end=end))
     target = starts[0]['target']
     require(target in goals, 'Starting target is unknown')
     prior_frame, prior_at = starts[0]['frameId'], starts[0]['atMs']
@@ -1591,6 +1736,7 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
             and math.dist((pose['x'], pose['y']), end if not patrol and target == 'start' else start) <= 2,
             'Admission frame does not match the reviewed starting endpoint')
     for count, endpoint in enumerate(endpoints, 1):
+        if batch:target = 'waypoint-' + str(count)
         if patrol:
             target = edges[count-1][1] if edges is not None else PATROL_ORDER[(count-1)%4+1]
         require(endpoint['completedLegs'] == count and endpoint['endpoint'] == target,
@@ -1620,9 +1766,13 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
             require(allows_pose_scope(pose,navigation_profile) and .99 <= pose['positionConfidence'] <= 1
                     and .2 <= pose['yawConfidence'] <= 1, 'Unqualified native match')
             require(frame.get('frameWorldReadiness', {}).get('ready') is True, 'Endpoint is not a world frame')
+            if batch:
+                require(frame['frameWorldReadiness'].get('epoch') == endpoint['releaseEpoch'],
+                        'Batch endpoint samples changed the acknowledged release generation')
             prior_frame, prior_at = sample['frameId'], sample['atMs']
         target = 'end' if target == 'start' else 'start'
     decisions = [d for p in parts for d in p.get('decisions', [])]
+    if batch:verify_reviewed_batch(spec, starts, endpoints, decisions, frames)
     accepted = {d['acceptance']['requestId']: d for d in decisions if d.get('acceptance', {}).get('type') == 'accepted'}
     receipts = {r['requestId']: r for p in parts for r in p.get('receipts', [])}
     climb_actions = {a['requestId']: a for p in parts for a in p.get('navigationClimbActions', [])
@@ -1732,7 +1882,9 @@ def audit(run_path, recordings, *, repository, minimum_legs=1, minimum_obstacle_
     if reuse is not None:result['policyReuse']=reuse
     if executed_history is not None:result['executedHistory']=executed_history
     if spec is not None:
-        result.update(scope='reviewed-scout-endpoint-and-software-input-joins',routeSpec=spec.document(),routeSpecSha256=spec.sha256)
+        result.update(scope=('reviewed-scout-batch-endpoint-and-software-input-joins' if batch
+                             else 'reviewed-scout-endpoint-and-software-input-joins'),
+                      routeSpec=spec.document(),routeSpecSha256=spec.sha256)
     return result
 
 

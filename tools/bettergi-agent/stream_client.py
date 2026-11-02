@@ -1361,6 +1361,8 @@ def parse_arguments(argv=None):
                         help='Choose a surveyed fixed route; defaults to the original courtyard segment')
     parser.add_argument('--reviewed-scout-route',metavar='JSON',
                         help='Explicit scout geometry; requires a reviewed cached-session request')
+    parser.add_argument('--reviewed-scout-batch', action='store_true', default=argparse.SUPPRESS,
+                        help='Explicit whole-polyline batch; requires the matching private reviewed worker admission')
     parser.add_argument('--steering-shadow', metavar='CHECKPOINT',
                         help='Record a trained steering prediction after each hybrid decision has settled')
     parser.add_argument('--landmark-shadow', metavar='CHECKPOINT',
@@ -1458,7 +1460,7 @@ def parse_arguments(argv=None):
         from resident_runtime import parse_series_binding
         passive_pose = not args.enable_input and ((args.model == 'observe' and args.navigation_guidance)
                                                   or args.combat_shadow)
-        bounded_extension = (args.hybrid_navigation and (args.hybrid_route in ROUTE_IDS or args.reviewed_scout_route is not None) and 1 <= args.hybrid_legs <= 4
+        bounded_extension = (args.hybrid_navigation and (args.hybrid_route in ROUTE_IDS or args.reviewed_scout_route is not None) and 1 <= args.hybrid_legs <= (8 if getattr(args, 'reviewed_scout_batch', False) else 4)
                              and args.max_observation_age_ms <= 150 and args.action_hold_ms is not None
                              and args.action_hold_ms <= 100)
         if not (args.resident and (passive_pose or bounded_extension
@@ -1702,6 +1704,7 @@ def run_episode(args, policy=None, control=None):
     from p2p_executed_history import (MODE as EXECUTED_HISTORY_MODE, ExecutedHistoryCadence, ExecutedHistoryRecorder,
         encode_controller_step, executed_history_policy, source_after_terminal, validate_executed_history_options)
     executed_history = validate_executed_history_options(args, policy, control, require_bound=True)
+    batch = getattr(args, 'reviewed_scout_batch', False)
     combat_binding = validate_combat_trial_options(args, policy, control)
     combat_guard = None
     combat_source_recovery = bool(combat_binding and 'sourceStaleRecoveryPolicy' in combat_binding['policy'])
@@ -2374,12 +2377,25 @@ def run_episode(args, policy=None, control=None):
                             for receipt in pending_hybrid_receipts:
                                 hybrid.receipt(receipt)
                             hybrid.bypass.acknowledge_stale_hold(hybrid, released, last_hybrid_action)
+            reset_before = (policy.executed_history_counters() if batch else None)
             if policy is not None and hasattr(policy, 'reset'):
                 policy.reset()
+            reset_after = (policy.executed_history_counters() if batch else None)
             if progress:
                 progress.reset()
             transition = {'type': 'controlTransition', 'state': 'held', 'reason': reason,
                           'clientTimeNs': time.perf_counter_ns(), 'frameId': previous}
+            if batch:
+                # Preserve the existing endpoint reset, with its exact settled receipt and release provenance.
+                transition['executedHistoryReset'] = dict(version=1,
+                    routeSpecSha256=args.reviewed_scout_route.sha256, endpointOrdinal=hybrid.legs+1,
+                    arrivalFrameId=hybrid.arrival_frame, before=reset_before, after=reset_after,
+                    previousReceipt=None if history_predecessor is None else
+                        {key:history_predecessor[key] for key in ('requestId','endedAtMs')},
+                    release=copy.deepcopy(released))
+                if (reason != 'hybridEndpoint' or released is None
+                        or any(reset_after[key] != 0 for key in ('afterFrames','afterIndex','afterValidTokens','validFrames'))):
+                    raise RuntimeError('Batch endpoint history reset was not positively accounted')
             if warm:
                 transition['warmRequestId'] = warm.current['id']
                 if reason == 'hybridEndpoint':

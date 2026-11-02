@@ -31,7 +31,9 @@ from resident_runtime import OPEN_P2P_SHA256
 from map_owner import load_map_owner
 from navigation_profiles import SCOUT_PROFILE, SCOUT_PROFILES, allows_pose_scope, required_profile, scout_scope
 from run_patrol_series import SeriesGuard
-from reviewed_scout_route import ReviewedScoutRoute,reviewed_route_policy,require_navigation_review_scene
+from reviewed_scout_route import (ReviewedScoutRoute, ReviewedScoutBatch, reviewed_route_policy,
+    reviewed_batch_policy, batch_policy_matches, reviewed_leg_count, parse_reviewed_route, require_batch_review,
+    require_navigation_review_scene)
 from scout_encounter_guard import binding_from_review,guard_policy,supported_guard_policies,declared_guard_policies
 from native_combat import scene_capability,validate_frame as validate_combat_frame
 from native_ground_control import (policy as ground_policy,scene_capability as ground_scene_capability,
@@ -92,8 +94,12 @@ def read_json(path, maximum=1024*1024):
 
 def immutable_arguments(args):
     """Only route, output and bounded lease bookkeeping may vary between cached-policy calls."""
+    excluded = PER_LEG_FIELDS
+    if getattr(args, 'reviewed_scout_batch', False):
+        # Only the stamped batch count is per-request bookkeeping; v1 fingerprints retain every old field.
+        excluded = excluded | {'hybrid_legs'}
     return {key:str(value) if isinstance(value,Path) else value
-            for key,value in vars(args).items() if key not in PER_LEG_FIELDS}
+            for key,value in vars(args).items() if key not in excluded}
 
 
 def model_contract(args):
@@ -322,6 +328,14 @@ def leg_arguments(settings, owner, route, folder, binding, remaining_mib, review
         runtime.atomic_json(folder/'reviewed-route.json',reviewed_route.document())
         index=argv.index('--hybrid-route')
         argv[index:index+2]=['--reviewed-scout-route',str(folder/'reviewed-route.json')]
+    if type(reviewed_route) is ReviewedScoutBatch:
+        require(getattr(settings, 'allow_reviewed_batches', False) is True,
+                'This worker did not opt into reviewed batches')
+        argv[argv.index('--seconds')+1] = '60'
+        # One existing recording segment outlasts the input lease; its byte/queue limits stay unchanged.
+        argv[argv.index('--segment-seconds')+1] = '90'
+        argv[argv.index('--hybrid-legs')+1] = str(reviewed_leg_count(reviewed_route))
+        argv.append('--reviewed-scout-batch')
     if binding:argv.append('--patrol-series-binding='+binding)
     args=client.parse_arguments(argv)
     args.patrol_series_binding=runtime.parse_series_binding(binding) if binding else None
@@ -371,7 +385,7 @@ def review_evidence(path, manifest, after_ns):
     spec=None
     if 'routeSpec' in review:
         require(manifest.get('reviewedScoutRoutePolicy')==reviewed_route_policy(profile),'This worker did not authorize reviewed geometry')
-        spec=ReviewedScoutRoute.from_document(review['routeSpec'])
+        spec=parse_reviewed_route(review['routeSpec'])
         require(spec.profile_id==profile and route==spec.route_id and review.get('points')==spec.document()['points']
                 and review.get('routeSpecSha256',spec.sha256)==spec.sha256,'Reviewed scout geometry or identity changed')
         points=spec.points
@@ -380,8 +394,17 @@ def review_evidence(path, manifest, after_ns):
                 'The reviewed route is not in this worker\'s frozen scout registry')
         require('routeSpecSha256' not in review,'Reviewed geometry digest has no specification')
         points=manifest['routes'][route]
+    batch = type(spec) is ReviewedScoutBatch
+    require(batch == ('reviewedScoutBatchPolicy' in manifest), 'Batch and single-leg worker authority differ')
+    if batch:
+        require(batch_policy_matches(manifest['reviewedScoutBatchPolicy'], profile)
+                and manifest.get('historyCommitMode') == EXECUTED_HISTORY_MODE
+                and type(manifest.get('actionHoldMs')) is int and manifest['actionHoldMs'] == 50
+                and not any(key in manifest for key in ('inspectedObstacleRecoveryPolicy', 'inspectedSourceGapRecoveryPolicy')),
+                'This worker did not authorize the exact no-recovery batch policy')
+    require_batch_review(review, spec)
     require(review.get('attacksAllowed') is False and type(review.get('maximumLegs')) is int
-            and review['maximumLegs']==1,'A scout review cannot authorize attacks or multiple legs')
+            and review['maximumLegs']==reviewed_leg_count(spec),'Scout review changed its exact leg count or attacks scope')
     require(type(review.get('inspectedHealth')) is int and type(review.get('inspectedMaximumHealth')) is int
             and 0<review['inspectedHealth']<=review['inspectedMaximumHealth']
             and isinstance(review.get('visualReview'),str) and review['visualReview'].strip(),'Missing explicit scene/health review')
@@ -455,6 +478,7 @@ def review_evidence(path, manifest, after_ns):
                   imageSha256=review['imageSha256'],imageMetadataSha256=metadata_sha,
                   scoutEncounterGuard=guard_binding)
     if spec is not None:evidence.update(routeSpec=spec.document(),routeSpecSha256=spec.sha256)
+    if batch:evidence['reviewedScoutBatchPolicy'] = reviewed_batch_policy(profile)
     return evidence
 
 
@@ -462,6 +486,8 @@ def validate_request(path, manifest, after_id, after_ns):
     """Consume only a single fresh request for this session, configuration and prior completed leg."""
     request,digest=read_json(path,16384)
     fields=REQUEST_FIELDS|{'routeSpec','routeSpecSha256'} if 'routeSpec' in request else REQUEST_FIELDS
+    spec = parse_reviewed_route(request['routeSpec']) if 'routeSpec' in request else None
+    if type(spec) is ReviewedScoutBatch:fields = fields | {'reviewedScoutBatchPolicy'}
     history=manifest_history_declaration(manifest)
     fields=fields|set(history)
     require(all(request.get(key)==value and type(request.get(key)) is type(value) for key,value in history.items()),
@@ -480,7 +506,7 @@ def validate_request(path, manifest, after_id, after_ns):
             and path.stem==request['requestId'], 'Invalid scout request identity')
     require(request['afterRequestId']==after_id and request['modelConfigurationSha256']==manifest['modelConfigurationSha256']
             and request['navigationProfile']==session_profile(manifest) and type(request['maximumLegs']) is int
-            and request['maximumLegs']==1,'The request changed its predecessor, model or navigation scope')
+            and request['maximumLegs']==reviewed_leg_count(spec),'The request changed its predecessor, model or navigation scope')
     evidence=review_evidence(request['reviewFile'],manifest,after_ns)
     require(('routeSpec' in request)==('routeSpec' in evidence),'Request geometry is absent from the fresh review')
     require(all(request[key]==value for key,value in evidence.items()),'The reviewed request evidence changed')
@@ -499,6 +525,10 @@ def submit(directory, review):
         afterRequestId=state['afterRequestId'],navigationProfile=session_profile(manifest),maximumLegs=1,
         modelConfigurationSha256=manifest['modelConfigurationSha256'],reviewFile=str(live_path(review)),
         **review_evidence(review,manifest,state['reviewAfterUnixNs']),**manifest_history_declaration(manifest))
+    if 'reviewedScoutBatchPolicy' in request:
+        request['maximumLegs'] = reviewed_leg_count(parse_reviewed_route(request['routeSpec']))
+        require(state.get('pendingObstacleRecovery') is None and state.get('pendingSourceGapRecovery') is None,
+                'A batch cannot resume an inspected failed goal or source gap')
     if state.get('pendingObstacleRecovery') is not None:
         request['obstacleRecovery']=copy.deepcopy(state['pendingObstacleRecovery'])
         verify_recovery_request(request,request['obstacleRecovery'],manifest['owner'])
@@ -515,10 +545,10 @@ def submit(directory, review):
 def audit_leg(folder, request):
     """Require the unchanged independent route/source/input audit plus the opt-in cached-policy proof."""
     from audit_hybrid_run import audit
-    report=audit(folder/'patrol.json',folder/'patrol-recording',repository=ROOT,minimum_legs=1,
+    report=audit(folder/'patrol.json',folder/'patrol-recording',repository=ROOT,minimum_legs=request['maximumLegs'],
                  policy_reuse_proof=Path(str(folder/'patrol.json')+'.reuse.json'),
-                 reviewed_scout_route=ReviewedScoutRoute.from_document(request['routeSpec']) if 'routeSpec' in request else None)
-    require(report.get('passed') is True and report.get('verifiedLegs')==1
+                 reviewed_scout_route=parse_reviewed_route(request['routeSpec']) if 'routeSpec' in request else None)
+    require(report.get('passed') is True and report.get('verifiedLegs')==request['maximumLegs']
             and report.get('routeId')==request['routeId'] and report.get('controllerLeases')==1,
             'The reviewed scout leg failed its independent audit')
     if 'obstacleRecovery' in request:
@@ -577,6 +607,15 @@ def account_session(state):
 def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_factory=SessionWatch, auditor=audit_leg,
                 prefix_auditor=audit_failed_prefix, source_gap_auditor=None):
     """Load once, run only reviewed one-leg requests, and remain bridge-free between successful runs."""
+    batch_enabled = getattr(settings, 'allow_reviewed_batches', False)
+    require(type(batch_enabled) is bool, 'Batch startup requires an explicit boolean')
+    if batch_enabled:
+        require(getattr(settings, 'allow_reviewed_routes', False) is True
+                and getattr(settings, 'p2p_executed_history', False) is True
+                and type(getattr(settings, 'action_hold_ms', None)) is int and settings.action_hold_ms == 50
+                and not settings.routes and not getattr(settings, 'allow_inspected_obstacle_recovery', False)
+                and not getattr(settings, 'allow_inspected_source_gap_recovery', False),
+                'Batch startup requires reviewed 50ms history and no automatic recovery')
     owner=load_map_owner(settings.owner_from)
     if getattr(settings,'allow_inspected_source_gap_recovery',False):
         require(getattr(settings,'p2p_executed_history',False) is True
@@ -604,7 +643,8 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
                 'This worker requires explicit reviewed routes, not the original fixed routes')
         routes=[]
         # This geometry supplies loader arguments only; it is never submitted or executed by the worker.
-        bootstrap_spec=ReviewedScoutRoute(((anchor['x'],anchor['y']),(anchor['x']+1,anchor['y'])),profile)
+        route_type = ReviewedScoutBatch if batch_enabled else ReviewedScoutRoute
+        bootstrap_spec=route_type(((anchor['x'],anchor['y']),(anchor['x']+1,anchor['y'])),profile)
         bootstrap_route=bootstrap_spec.route_id
     # Establish the real, non-extending owner/deadline binding before parsing loader-only geometry.
     # Construction starts read-only identity monitoring; startup failures must retire it too.
@@ -625,6 +665,7 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
             scoutGroundControlPolicy=ground_policy())
         manifest.update(history_declaration(base))
         if getattr(settings,'allow_reviewed_routes',False):manifest['reviewedScoutRoutePolicy']=reviewed_route_policy(profile)
+        if batch_enabled:manifest['reviewedScoutBatchPolicy'] = reviewed_batch_policy(profile)
         if getattr(settings,'allow_inspected_obstacle_recovery',False):
             manifest.update(inspectedObstacleRecoveryPolicy=recovery_policy(),recoverySourceSha256=source_contract())
         if getattr(settings,'allow_inspected_source_gap_recovery',False):
@@ -655,7 +696,10 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
         route_allowed=(args.hybrid_route in manifest['routes'] if spec is None else
                        manifest.get('reviewedScoutRoutePolicy')==reviewed_route_policy(profile)
                        and spec.profile_id==profile and args.hybrid_route==spec.route_id)
-        require(args.navigation_profile==profile and route_allowed and args.seconds==35,
+        expected_batch = type(spec) is ReviewedScoutBatch
+        require(expected_batch == batch_enabled and args.hybrid_legs == reviewed_leg_count(spec),
+                'Cached batch count or worker mode changed')
+        require(args.navigation_profile==profile and route_allowed and args.seconds==(60 if batch_enabled else 35),
                 'Cached scout scope or leg deadline changed')
         require(file_stamp(args.checkpoint)==checkpoint_stamp and file_sha(args.goal_embedding)==configuration['goalSha256'],
                 'Cached checkpoint or instruction bytes changed')
@@ -693,6 +737,7 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
                    scoutGroundControlPolicy=ground_policy())
         proof.update(history_declaration(base))
         if 'reviewedScoutRoutePolicy' in manifest:proof['reviewedScoutRoutePolicy']=manifest['reviewedScoutRoutePolicy']
+        if batch_enabled:proof['reviewedScoutBatchPolicy'] = manifest['reviewedScoutBatchPolicy']
         if 'inspectedObstacleRecoveryPolicy' in manifest:
             proof.update(inspectedObstacleRecoveryPolicy=manifest['inspectedObstacleRecoveryPolicy'],
                          recoverySourceSha256=manifest['recoverySourceSha256'])
@@ -733,7 +778,7 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
             require(remaining>=1,'Scout session recording budget exhausted')
             folder=directory/'legs'/request['requestId']
             folder.mkdir(parents=True,exist_ok=False)
-            spec=ReviewedScoutRoute.from_document(request['routeSpec']) if 'routeSpec' in request else None
+            spec=parse_reviewed_route(request['routeSpec']) if 'routeSpec' in request else None
             args=leg_arguments(settings,owner,request['routeId'],folder,watch.binding(),remaining,spec)
             args.scout_encounter_guard=copy.deepcopy(request['scoutEncounterGuard'])
             verify_configuration(args)
@@ -751,6 +796,7 @@ def run_session(settings, *, lifecycle=None, loader=None, runner=None, watch_fac
                 scoutEncounterGuard=copy.deepcopy(request['scoutEncounterGuard']))
             reuse.update(history_declaration(args))
             if spec is not None:reuse.update(routeSpec=spec.document(),routeSpecSha256=spec.sha256)
+            if batch_enabled:reuse['reviewedScoutBatchPolicy'] = request['reviewedScoutBatchPolicy']
             if pending_recovery is not None:reuse['obstacleRecovery']=copy.deepcopy(pending_recovery)
             if pending_source_recovery is not None:reuse['sourceGapRecovery']=copy.deepcopy(pending_source_recovery)
 
@@ -895,6 +941,8 @@ def options(argv=None):
     run.add_argument('--route',dest='routes',action='append',choices=SCOUT_ROUTES)
     run.add_argument('--navigation-profile',choices=SCOUT_PROFILES,default=SCOUT_PROFILE)
     run.add_argument('--allow-reviewed-routes',action='store_true',help='Allow fresh explicit two-point scout reviews within the existing scope')
+    run.add_argument('--allow-reviewed-batches', action='store_true', default=argparse.SUPPRESS,
+                     help='Require whole-polyline review for each no-retry, at-most-eight-leg 60-second batch')
     run.add_argument('--allow-inspected-obstacle-recovery',action='store_true',
                      help='Retain only the loaded policy after at most one fully audited geometric stop; require a new reviewed route')
     run.add_argument('--allow-inspected-source-gap-recovery',action='store_true',
@@ -919,11 +967,18 @@ def options(argv=None):
     geometry.add_argument('--start',type=float,nargs=2,required=True)
     geometry.add_argument('--end',type=float,nargs=2,required=True)
     geometry.add_argument('--navigation-profile',choices=SCOUT_PROFILES,default=SCOUT_PROFILE)
+    batch = modes.add_parser('batch-spec', help='Describe an explicit ordered batch without launching or submitting it')
+    batch.add_argument('--waypoint', type=float, nargs=2, action='append', required=True)
+    batch.add_argument('--navigation-profile', choices=SCOUT_PROFILES, default=SCOUT_PROFILE)
     args=parser.parse_args(argv)
     if args.command=='run':
         args.action_hold_ms=args.action_hold_ms or (50 if args.p2p_executed_history else 100)
         if args.action_hold_ms not in ((50,60) if args.p2p_executed_history else (100,)):
             parser.error('Executed history requires 50 or 60 ms holds; existing scouts retain 100 ms')
+        if getattr(args, 'allow_reviewed_batches', False) and (
+                not args.allow_reviewed_routes or not args.p2p_executed_history or args.action_hold_ms != 50
+                or args.routes or args.allow_inspected_obstacle_recovery or args.allow_inspected_source_gap_recovery):
+            parser.error('Reviewed batches require explicit reviewed routes, 50ms executed history and no recovery')
         if args.p2p_executed_history and args.allow_inspected_obstacle_recovery:
             parser.error('Executed history excludes inspected-obstacle recovery')
         if args.allow_inspected_source_gap_recovery and not args.p2p_executed_history:
@@ -941,8 +996,9 @@ def main():
     """Keep the worker inside its original bounded ordinary RDP command; never detach or restart it."""
     args=options()
     if args.command=='run':return run_session(args)
-    if args.command=='route-spec':
-        spec=ReviewedScoutRoute((args.start,args.end),args.navigation_profile)
+    if args.command in ('route-spec', 'batch-spec'):
+        spec=(ReviewedScoutBatch(args.waypoint,args.navigation_profile) if args.command=='batch-spec'
+              else ReviewedScoutRoute((args.start,args.end),args.navigation_profile))
         print(json.dumps(dict(routeId=spec.route_id,points=spec.document()['points'],routeSpec=spec.document(),routeSpecSha256=spec.sha256)))
         return 0
     if args.command=='submit':print(json.dumps(submit(args.session,args.review)))

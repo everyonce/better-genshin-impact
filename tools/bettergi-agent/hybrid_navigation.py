@@ -17,7 +17,7 @@ from hybrid_routes import (COURTYARD_ROUTE, PATROL_SEGMENTS, PATROL_STATIONS, ST
 PROFILE = COURTYARD_ROUTE
 START, END = route_points(COURTYARD_ROUTE)
 from navigation_profiles import validate_capability,allows_pose_scope,required_profile
-from reviewed_scout_route import ReviewedScoutRoute
+from reviewed_scout_route import ReviewedScoutRoute, ReviewedScoutBatch, reviewed_leg_count
 from navigation_profiles import SCOUT_PROFILE
 
 
@@ -47,19 +47,22 @@ class HybridNavigation:
         self.require_ground_controls=require_ground_controls
         validate_capability(capability,navigation_profile)
         self.reviewed_scout_route=reviewed_scout_route
+        self.batch = type(reviewed_scout_route) is ReviewedScoutBatch
         if reviewed_scout_route is not None:
-            if (type(reviewed_scout_route) is not ReviewedScoutRoute or route_id!=reviewed_scout_route.route_id
+            if (type(reviewed_scout_route) not in (ReviewedScoutRoute, ReviewedScoutBatch) or route_id!=reviewed_scout_route.route_id
                     or navigation_profile!=reviewed_scout_route.profile_id or remember_bypass or itinerary_destinations is not None):
                 raise ValueError('Reviewed scout geometry cannot change scope or enable another route mode')
         elif required_profile(route_id)!=navigation_profile:
             raise ValueError('Fixed route and explicit navigation profile differ')
         self.navigation_profile=navigation_profile
         self.route_id = route_id
-        self.start, self.end = reviewed_scout_route.points if reviewed_scout_route is not None else route_points(route_id)
+        if self.batch and (action_hold_ms != 50 or require_ground_controls is not True):
+            raise ValueError('Reviewed batch controller requires 50ms steps and native ground controls')
+        self.start, self.end = reviewed_scout_route.points[:2] if reviewed_scout_route is not None else route_points(route_id)
         self.bypass = HybridBypass(route_id) if remember_bypass else None
         self.phase = 'admitting'
         self.target = self.end
-        self.target_name = 'end'
+        self.target_name = 'waypoint-1' if self.batch else 'end'
         self.samples = []
         self.last_frame_id = None
         self.source_epoch = None
@@ -128,6 +131,7 @@ class HybridNavigation:
         if self.reviewed_scout_route is not None:
             result.update(routeSpec=self.reviewed_scout_route.document(),routeSpecSha256=self.reviewed_scout_route.sha256)
         if self.require_ground_controls:result['requireGroundControls']=True
+        if self.batch:result.update(batchLegCount=reviewed_leg_count(self.reviewed_scout_route))
         if self.destinations:
             result.update(completedDestinations=self.completed_destinations, **self.segment)
         elif self.segment:
@@ -377,7 +381,7 @@ class HybridNavigation:
         # its readiness gate; releasedAtMs is an evidence-event field, not wire data.
         if self.bypass:
             self.bypass.released(self, response)
-        if self.segment:
+        if self.segment or self.batch:
             gate = response.get('worldReadiness') or {}
             epoch = gate.get('epoch')
             if (self.phase != 'releaseRequired' or type(self.arrival_epoch) is not int or type(epoch) is not int
@@ -581,7 +585,7 @@ class HybridNavigation:
                 admission.update(routeSpec=self.reviewed_scout_route.document(),routeSpecSha256=self.reviewed_scout_route.sha256)
             if self.segment:
                 admission.update(station=self.segment['fromStation'], **self.segment)
-            else:
+            elif not self.batch:
                 self.target_name = 'end' if math.hypot(x - self.start[0], y - self.start[1]) <= 2 else 'start'
                 self.target = self.end if self.target_name == 'end' else self.start
             self.phase = 'walking'
@@ -613,7 +617,7 @@ class HybridNavigation:
         if self.phase == 'verifying':
             if at < self.release_at + 80:
                 return 'waitingAfterRelease'
-            if self.segment:
+            if self.segment or self.batch:
                 gate = frame.get('frameWorldReadiness') or {}
                 if (gate.get('epoch') != self.release_epoch or gate.get('ready') is not True
                         or (gate.get('sourceFrame') or {}).get('captureEpoch') != epoch):
@@ -631,7 +635,16 @@ class HybridNavigation:
                     self.events[-1]['releaseEpoch'] = self.bypass.release_epoch
                 self.bypass.endpoint(self)
             finished = False
-            if self.segment:
+            if self.batch:
+                self.events[-1].update(routeId=self.route_id, arrivalFrameId=self.arrival_frame,
+                    releaseEpoch=self.release_epoch, routeSpecSha256=self.reviewed_scout_route.sha256,
+                    batchLegIndex=self.legs-1)
+                finished = self.legs == reviewed_leg_count(self.reviewed_scout_route)
+                if not finished:
+                    # Advance only after the original release and three fresh stable endpoint samples.
+                    self.start, self.end = self.reviewed_scout_route.points[self.legs:self.legs+2]
+                    self.target, self.target_name = self.end, 'waypoint-' + str(self.legs+1)
+            elif self.segment:
                 self.events[-1].update(routeId=self.route_id, station=self.target_name, arrivalFrameId=self.arrival_frame,
                                        releaseEpoch=self.release_epoch, **self.segment)
                 if self.release_retry is not None:
@@ -654,7 +667,7 @@ class HybridNavigation:
                         completedCircuits=self.legs // len(PATROL_SEGMENTS)))
                 if not finished and self.photo_hold is None:
                     self._set_patrol_leg(self.target_name)
-            else:
+            elif not self.batch:
                 self.target_name = 'start' if self.target_name == 'end' else 'end'
                 self.target = self.start if self.target_name == 'start' else self.end
             self.phase = 'complete' if finished else 'walking'
@@ -667,7 +680,7 @@ class HybridNavigation:
             self.movements.clear()
             return 'endpointVerified'
         if distance <= 1.1 and (not self.bypass or self.bypass.waypoint is None):
-            if self.segment:
+            if self.segment or self.batch:
                 self.arrival_frame = pose['frameId']
                 gate = frame.get('frameWorldReadiness') or {}
                 self.arrival_epoch = gate.get('epoch')
@@ -680,7 +693,7 @@ class HybridNavigation:
 
     def choose(self, frame, proposal):
         """Accept route-compatible model walking; otherwise use measured native correction."""
-        if self.destinations and self.phase not in ('walking', 'recovering'):
+        if (self.destinations or self.batch) and self.phase not in ('walking', 'recovering'):
             raise RuntimeError('Itinerary input requires a verified active leg')
         if self.photo_resume_after is not None and (frame['frameId'] <= self.photo_resume_after
                                                      or frame['frameId'] != self.last_pose['frameId']):

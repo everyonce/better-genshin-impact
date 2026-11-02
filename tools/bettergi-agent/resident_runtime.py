@@ -356,6 +356,15 @@ def run_resident(args, load_policy, run_episode, *, policy_reuse=None):
         if (not isinstance(policy_reuse,dict) or policy_reuse.get('routeSpec')!=route.document()
                 or policy_reuse.get('routeSpecSha256')!=route.sha256 or policy_reuse.get('routeId')!=route.route_id):
             raise ValueError('Reviewed geometry requires its matching cached-session request proof')
+    from reviewed_scout_route import ReviewedScoutBatch, reviewed_batch_policy, batch_policy_matches
+    batch = type(getattr(args, 'reviewed_scout_route', None)) is ReviewedScoutBatch
+    if batch:
+        batch_policy = reviewed_batch_policy(args.navigation_profile)
+        if (not batch_policy_matches(policy_reuse.get('reviewedScoutBatchPolicy'), args.navigation_profile)
+                or any(key in policy_reuse for key in ('obstacleRecovery', 'sourceGapRecovery'))):
+            raise ValueError('Batch lease requires its exact reviewed cached-session authority without recovery')
+    elif isinstance(policy_reuse, dict) and 'reviewedScoutBatchPolicy' in policy_reuse:
+        raise ValueError('Legacy single-leg lease cannot claim batch authority')
     binding = getattr(args, 'patrol_series_binding', None)
     if binding and (socket.gethostname().split('.')[0].upper() != 'SIREN' or time.monotonic_ns() >= binding[4]):
         raise RuntimeError('Series lease is outside its SIREN host or time bound')
@@ -386,10 +395,14 @@ def run_resident(args, load_policy, run_episode, *, policy_reuse=None):
                     or getattr(args,'navigation_profile',None) not in SCOUT_PROFILES
                     or policy_reuse.get('navigationProfile')!=args.navigation_profile
                     or args.max_observation_age_ms!=150
-                    or (not executed_history and args.action_hold_ms!=100) or args.seconds>35):
+                    or (not executed_history and args.action_hold_ms!=100) or args.seconds>(60 if batch else 35)):
                 raise ValueError('Cached scout requires its unchanged reviewed encounter guard and limits')
             control.scout_encounter_guard=ScoutEncounterGuard(guard_binding)
             summary['scoutEncounterGuard']=guard_binding
+            if batch:
+                control.scout_batch_policy = copy.deepcopy(batch_policy)
+                control.scout_batch_route_sha256 = args.reviewed_scout_route.sha256
+                summary['reviewedScoutBatchPolicy'] = copy.deepcopy(batch_policy)
             if executed_history:summary.update(historyCommitMode=MODE,actionHoldMs=args.action_hold_ms)
         control.publish(state='loading', inputRequested=args.enable_input)
         loading_started = time.monotonic()

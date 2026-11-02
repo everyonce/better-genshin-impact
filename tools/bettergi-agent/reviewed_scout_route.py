@@ -82,18 +82,103 @@ class ReviewedScoutRoute:
         return 'reviewed-scout-v1-'+self.sha256
 
 
+def reviewed_batch_policy(profile=SCOUT_PROFILE):
+    """Declare an optional finite waypoint lease; the original one-leg policy is unchanged."""
+    scout_scope(profile)
+    return dict(version=1, profileId=profile, maximumLegs=8, maximumLengthPerLeg=40,
+                maximumSeconds=60, legDeadlineSeconds=35, actionHoldMs=50,
+                sourceFreshnessMs=150, wholePolylineReviewRequired=True,
+                endpointHistory='acknowledged-release-reset', automaticRecovery=False, recordingSegmentSeconds=90)
+
+
+def batch_policy_matches(value, profile=SCOUT_PROFILE):
+    """Compare every fixed descriptor field with its exact scalar type, including booleans."""
+    expected = reviewed_batch_policy(profile)
+    return (type(value) is dict and set(value) == set(expected)
+            and all(type(value[key]) is type(item) and value[key] == item for key, item in expected.items()))
+
+
+@dataclass(frozen=True)
+class ReviewedScoutBatch(ReviewedScoutRoute):
+    """Own one explicitly reviewed polyline of at most eight existing bounded scout legs."""
+    def __post_init__(self):
+        """Reuse each v1 segment's finite-coordinate, geofence and length validation."""
+        if not isinstance(self.points, (tuple, list)) or not 2 <= len(self.points) <= 9:
+            raise ValueError('A reviewed scout batch requires two to nine ordered waypoints')
+        segments = [ReviewedScoutRoute((a, b), self.profile_id)
+                    for a, b in zip(self.points, self.points[1:])]
+        object.__setattr__(self, 'points', (segments[0].points[0], *(leg.points[1] for leg in segments)))
+
+    @classmethod
+    def from_document(cls, document):
+        """Keep batch geometry explicit; a v1 document cannot acquire extra destinations."""
+        if (not isinstance(document, dict) or set(document) != {'version', 'profileId', 'points'}
+                or type(document['version']) is not int or document['version'] != 2
+                or document['profileId'] not in SCOUT_PROFILES):
+            raise ValueError('Unexpected reviewed scout batch schema or profile')
+        return cls(document['points'], document['profileId'])
+
+    def document(self):
+        """Bind the complete ordered polyline, including its final endpoint, as version two."""
+        return dict(version=2, profileId=self.profile_id, points=[list(point) for point in self.points])
+
+    @property
+    def route_id(self):
+        """Keep batch identities disjoint from every consumed single-leg identity."""
+        return 'reviewed-scout-batch-v1-' + self.sha256
+
+
+def parse_reviewed_route(document):
+    """Parse geometry only; startup, review and private resident admission still grant authority."""
+    kind = ReviewedScoutBatch if isinstance(document, dict) and document.get('version') == 2 else ReviewedScoutRoute
+    return kind.from_document(document)
+
+
+def reviewed_leg_count(route):
+    """Return the exact immutable batch count, retaining the original one-leg default."""
+    return len(route.points) - 1 if type(route) is ReviewedScoutBatch else 1
+
+
+def require_batch_review(review, route):
+    """Require the authorized reviewer to inspect the entire exact polyline, separate from the start image."""
+    if type(route) is not ReviewedScoutBatch:
+        if any(key in review for key in ('wholePolylineReviewed', 'polylineReview')):
+            raise ValueError('Whole-polyline authority requires an explicit batch specification')
+        return
+    text = review.get('polylineReview')
+    if (review.get('wholePolylineReviewed') is not True or not isinstance(text, str)
+            or not text.strip() or len(text) > 2000 or review.get('routeSpecSha256') != route.sha256):
+        raise ValueError('An explicit whole-polyline review of the exact batch is required')
+
+
 def load_reviewed_route(path):
     """Load one bounded explicit specification once; later file edits cannot mutate the route object."""
     path=Path(path).absolute()
     if path.resolve(strict=True)!=path or path.stat().st_size>4096:
         raise ValueError('Reviewed scout specification must be a small unlinked local file')
-    return ReviewedScoutRoute.from_document(json.loads(path.read_bytes()))
+    return parse_reviewed_route(json.loads(path.read_bytes()))
 
 
 def validate_reviewed_options(args):
     """Keep this optional route seam confined to one bounded ordinary resident scout lease."""
     route=getattr(args,'reviewed_scout_route',None)
+    batch = type(route) is ReviewedScoutBatch
+    if getattr(args, 'reviewed_scout_batch', False) is not batch:
+        raise ValueError('Batch geometry requires its explicit reviewed-scout-batch opt-in')
     if route is None:return None
+    if batch:
+        if (args.hybrid_route != route.route_id or args.navigation_profile != route.profile_id
+                or not args.resident or not args.enable_input or args.model != 'open-p2p'
+                or not args.hybrid_navigation or type(args.hybrid_legs) is not int
+                or args.hybrid_legs != reviewed_leg_count(route) or not 0 < args.seconds <= 60
+                or args.max_observation_age_ms != 150 or type(args.action_hold_ms) is not int
+                or args.action_hold_ms != 50 or getattr(args, 'p2p_executed_history', False) is not True
+                or type(getattr(args, 'segment_seconds', None)) not in (int, float) or args.segment_seconds != 90
+                or args.patrol_series_binding is None or any(getattr(args, key, False) for key in
+                    ('navigation_climb_recovery', 'allow_inspected_obstacle_recovery',
+                     'allow_inspected_source_gap_recovery', 'remember_hybrid_bypass'))):
+            raise ValueError('Batch input requires its pinned 60-second, eight-leg, 50ms executed-history scope')
+        return route
     executed_history=getattr(args,'p2p_executed_history',False)
     # A shorter hold belongs only to the separately reviewed, receipt-verified history mode.
     holds=(50,60) if executed_history is True else (100,)

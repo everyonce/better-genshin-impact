@@ -222,6 +222,8 @@ public sealed partial class ExternalControlService
         var result = AddAgentStreamStatus(status) with { NavigationReset = _navigationResetOwner.Snapshot(includeDiagnostics: false),
             NavigationBaseline = _navigationBaselineOwner.Snapshot(),
             AutomationEnabled = CommandLineOptions.Instance.AutomationMode,
+            ConfiguredTriggerPolicyVersion = TaskTriggerDispatcher.ConfiguredTriggerPolicyVersion,
+            ConfiguredTriggersSuppressed = _serviceProvider.GetRequiredService<TaskTriggerDispatcher>().ConfiguredTriggersSuppressed,
             ChildStartupIntentVersion = _instances.Context.IsRoot ? 1 : 0,
             IdleRestartVersion = 2,
             ReadbackVersion = 1, ReadbackModes = ["blocking", "poll_single_v1"],

@@ -21,6 +21,7 @@ using BetterGenshinImpact.GameTask.Common.BgiVision;
 using BetterGenshinImpact.GameTask.Runtime;
 using Fischless.GameCapture.Graphics;
 using BetterGenshinImpact.Service;
+using BetterGenshinImpact.Service.Instance;
 using BetterGenshinImpact.Service.Model;
 using BetterGenshinImpact.Service.Model.OverlayMetric;
 using Vanara.PInvoke;
@@ -38,6 +39,12 @@ namespace BetterGenshinImpact.GameTask
         /// 配置根，触发器创建时一并传入
         /// </summary>
         private readonly AllConfig _config;
+
+        /// <summary>Version of the process-lifetime exclusion for configured automatic triggers.</summary>
+        public const int ConfiguredTriggerPolicyVersion = 1;
+
+        /// <summary>Automation children exclude configured triggers before the first runtime starts; explicit task leases remain available.</summary>
+        public bool ConfiguredTriggersSuppressed { get; }
 
         private readonly System.Timers.Timer _timer = new();
         private int _inferencePauseCount;
@@ -136,12 +143,29 @@ namespace BetterGenshinImpact.GameTask
         private DateTime PrevGameUiChangeTime = DateTime.Now; // 上一次UI变化时间
         
 
+        /// <summary>Bind the configured-trigger policy to the existing immutable startup context before capture starts.</summary>
         public TaskTriggerDispatcher(
             ILogger<TaskTriggerDispatcher> logger,
             OverlayMetricsService metricsService,
             IMaskWindowHost maskWindowHost,
-            AllConfig config)
+            AllConfig config,
+            InstanceBootstrap? bootstrap = null)
+            : this(logger, metricsService, maskWindowHost, config,
+                bootstrap is not null && CommandLineOptions.Instance.AutomationMode,
+                bootstrap?.Context.InstanceType ?? BetterGiInstanceType.Primary)
         {
+        }
+
+        /// <summary>Construct the same policy from inert startup values for dispatcher lifecycle tests.</summary>
+        internal TaskTriggerDispatcher(
+            ILogger<TaskTriggerDispatcher> logger,
+            OverlayMetricsService metricsService,
+            IMaskWindowHost maskWindowHost,
+            AllConfig config,
+            bool automationMode,
+            BetterGiInstanceType instanceType)
+        {
+            ConfiguredTriggersSuppressed = automationMode && instanceType == BetterGiInstanceType.ChildSession;
             _logger = logger;
             _metricsService = metricsService;
             _maskWindowHost = maskWindowHost;
@@ -626,7 +650,9 @@ namespace BetterGenshinImpact.GameTask
                 }
                 else
                 {
-                    shouldBeActive = trigger.IsEnabledByConfig;
+                    // Ending an owned task must not reactivate user-configured input in an automation child.
+                    // Keep preferences intact and leave task leases, capture, and liveness housekeeping unchanged.
+                    shouldBeActive = !ConfiguredTriggersSuppressed && trigger.IsEnabledByConfig;
                 }
 
                 // 参数按引用比较；参数变了等同于重新启用，运行状态随之重置

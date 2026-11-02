@@ -567,6 +567,12 @@ internal sealed record ExternalControlStatus
     /// <summary>Explicit machine-mode opt-in for this process.</summary>
     [JsonPropertyName("automationEnabled")]
     public bool AutomationEnabled { get; init; }
+    /// <summary>Version of the configured-trigger exclusion contract; independent of task or capture state.</summary>
+    [JsonPropertyName("configuredTriggerPolicyVersion")]
+    public int ConfiguredTriggerPolicyVersion { get; init; }
+    /// <summary>True when this process excludes configured automatic triggers for its lifetime; explicit task leases remain possible.</summary>
+    [JsonPropertyName("configuredTriggersSuppressed")]
+    public bool ConfiguredTriggersSuppressed { get; init; }
     /// <summary>Product version, for human diagnostics.</summary>
     [JsonPropertyName("appVersion")]
     public string AppVersion { get; init; } = string.Empty;

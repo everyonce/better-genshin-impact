@@ -111,8 +111,59 @@
     return { kind: 'advance', key: 'VK_SPACE', durationMs: 60 };
   }
 
+  // Close only the positively observed empty Lv.3 Worship panel; never offer or infer hidden health.
+  function worshipCloseAction(o, now, session, state) {
+    var h = o && o.hud, stamp = h && h.captureStamp;
+    if (!state || state.session !== session || state.purpose !== 'inventory-protection' ||
+        state.worshipCloseAttempted !== false || typeof state.advanceAttempted !== 'boolean' ||
+        typeof state.leaveAttempted !== 'boolean' || !Number.isInteger(state.lastInputFrame) || state.lastInputFrame < -1 ||
+        !(state.afterInputAt === null || Number.isFinite(state.afterInputAt)) ||
+        !o || o.session !== session || !Number.isInteger(o.frameId) || o.frameId <= 0 || o.frameId <= state.lastInputFrame ||
+        !Number.isFinite(now) || !Number.isFinite(o.timestamp) || o.timestamp > now ||
+        !stamp || stamp.session !== session || stamp.frameId !== o.frameId || stamp.source !== 'game-capture-start' ||
+        !Number.isFinite(stamp.capturedAt) || stamp.capturedAt <= 0 || stamp.capturedAt > o.timestamp ||
+        now < stamp.capturedAt || now - stamp.capturedAt > FRESH_MS ||
+        state.afterInputAt !== null && stamp.capturedAt <= state.afterInputAt || o.map !== null ||
+        h.world !== false || h.groundControls !== false || h.auto !== false || h.dialogueReady !== false ||
+        h.choice !== false || h.journal !== false || h.bigMap !== false || h.climbing !== false ||
+        h.objectiveChanged !== false || h.tutorialStep != null || h.health != null || h.party === true ||
+        h.objectiveVisible === true || h.menu === true || h.confirm === true ||
+        h.loading !== undefined && h.loading !== false || h.unknownHud !== undefined && h.unknownHud !== false ||
+        !Array.isArray(h.enemyBars) || h.enemyBars.length ||
+        !Array.isArray(o.ocr)) return null;
+    // Generic observations may omit loading/unknownHud; the complete positive panel evidence is mandatory.
+    var rows = o.ocr, ids = rows.filter(function (r) {
+      var text = r && String(r.text || '').trim();
+      return r && (/^UID\s*:?\s*\d{9}$/i.test(text) ||
+        Number.isFinite(r.x) && Number.isFinite(r.y) && r.x >= 1600 && r.y >= 1030 &&
+        (/^UID\b/i.test(text) || /^\d{9}$/.test(text)));
+    }), uid = ids[0];
+    if (ids.length !== 1 || !/^(?:UID\s*:?\s*)?693306810$/.test(String(uid.text || '').trim()) ||
+        !validRow(uid) || uid.x < 1600 || uid.y < 1030 || uid.x + uid.width > 1920 || uid.y + uid.height > 1080)
+      return null;
+    function one(text, x1, x2, y1, y2) {
+      var matches = rows.filter(function (r) { return r && String(r.text || '').trim() === text; });
+      if (matches.length !== 1) return false;
+      var r = matches[0];
+      return validRow(r) && r.x >= x1 && r.x <= x2 && r.y >= y1 && r.y <= y2 &&
+        r.x + r.width <= 1920 && r.y + r.height <= 1080;
+    }
+    if (!one('Lv.', 1550, 1660, 50, 100) || !one('3', 1550, 1660, 95, 150) ||
+        !one('Worship Statue', 1300, 1500, 170, 230) || !one('Anemoculus 0/4', 1700, 1900, 170, 230) ||
+        !one("Statue's Rewards", 1450, 1750, 230, 290) ||
+        !one('Current Stamina Limit: 114/240', 1400, 1800, 320, 370) ||
+        !one('Required Anemoculus', 1450, 1750, 820, 880) || !one('Owned', 1400, 1530, 870, 910) ||
+        !one('x 0', 1400, 1530, 900, 950) || !one('Offer', 1380, 1530, 980, 1040) ||
+        !one('Offer All', 1650, 1800, 980, 1040) ||
+        rows.some(function (r) { return /\b(?:loading|log\s*in|authentication|auth|verification|verify|confirm(?:ation)?|purchase|cancel|blessing|leave|auto)\b/i.test(String(r && r.text || '')); }))
+      return null;
+    return { kind: 'worship-close', key: 'VK_ESCAPE', durationMs: 60 };
+  }
+
   // Current-party recovery has its own source/account contract; entry cleanup never pretends to have pressed F.
   function recoveryAction(o, now, session, state) {
+    var worship = worshipCloseAction(o, now, session, state);
+    if (worship) return worship;
     var stamp = o && o.hud && o.hud.captureStamp;
     if (!state || state.session !== session ||
         (state.purpose !== 'healer-intro' && state.purpose !== 'inventory-protection') ||

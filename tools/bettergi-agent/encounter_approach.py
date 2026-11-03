@@ -22,10 +22,12 @@ import uuid
 from hybrid_navigation import HybridNavigation, yaw_error
 from native_combat import validate_capability as validate_combat_capability, validate_frame as combat_frame
 from native_ground_control import (CAPABILITY as GROUND_CAPABILITY, require_ground_frame,
-                                   validate_capability as validate_ground_capability, verify_image_crops)
+                                   validate_capability as validate_ground_capability, validate_frame as ground_frame, verify_image_crops)
 from navigation_profiles import SCOUT_PROFILE, allows_pose_scope, scout_scope, validate_capability
 from observation_timing import observation_timestamp
 from reviewed_scout_route import ReviewedScoutRoute, require_navigation_review_scene
+# Load the already-qualified pure verifier before lease creation, never on the bounded hold path.
+from scout_batch_source_hold import _idle_input_tail
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -299,7 +301,7 @@ def validate_claim(claim, run_id, plan_sha):
 class ApproachController:
     """One serial movement owner with a fresh native planner and immutable reviewed limits."""
 
-    def __init__(self, binding, hello, started_ns, *, deadline_ns=None):
+    def __init__(self, binding, hello, started_ns, *, deadline_ns=None, source_reacquisition=False):
         """A new phase starts with no prior action/history and cannot inherit a tripped guard."""
         initial_acquisition = (binding.get('policy') or {}).get('version') == 2
         require(binding.get('version') == (2 if initial_acquisition else 1)
@@ -337,11 +339,174 @@ class ApproachController:
         self.actions = 0
         self.trip = None
         self.complete = False
+        # New episodes explicitly retain this capability; old recordings replay the original stop.
+        require(type(source_reacquisition) is bool, 'Invalid source reacquisition switch')
+        self.source_reacquisition_enabled = source_reacquisition and initial_acquisition
+        self.source_hold = None
 
     def fail(self, reason):
         """Latch the first failure permanently; later healthy frames cannot resume this lease."""
         self.trip = self.trip or str(reason)
         raise RuntimeError(self.trip)
+
+    def source_reacquisition(self):
+        """Retain one bounded idle hold without inventing a new input or scene lease."""
+        return dict(version=1, maximumHolds=1, maximumWaitMs=500, postReleaseDelayMs=60,
+                    sessionId=self.hello['sessionId'], ownerEpoch=self.hello['ownerEpoch'],
+                    goalVersion=self.hello['goalVersion'], used=int(self.source_hold is not None),
+                    hold=copy.deepcopy(self.source_hold))
+
+    def waiting_for_source(self):
+        """Fence movement preparation while release or fresh post-release pixels are unresolved."""
+        return self.source_hold is not None and self.source_hold['phase'] != 'completed'
+
+    def _source_hold_observation(self, frame, now_ns, round_trip_ms):
+        """Recognize only an exact repeated, previously qualified idle source; never reuse its HUD."""
+        if not self.source_reacquisition_enabled:
+            return None
+        if (not self.waiting_for_source() and finite(frame.get('sourceFrameAgeMs'))
+                and frame['sourceFrameAgeMs'] + round_trip_ms <= 150):
+            return None
+        source = frame.get('sourceFrame') or {}
+        at = observation_timestamp(frame)
+        require(type(frame.get('frameId')) is int and frame['frameId'] > 0
+                and type(source.get('timestamp100ns')) is int and source['timestamp100ns'] > 0
+                and source.get('captureEpoch') == self.source_epoch
+                and frame.get('sourceTimestampKind') == 'wgc_reported_compositor_qpc'
+                and finite(frame.get('serverNowMs')) and finite(frame.get('sourceFrameAgeMs'))
+                and 0 <= frame['sourceFrameAgeMs']
+                and abs(frame['serverNowMs'] - at - frame['sourceFrameAgeMs']) <= .01,
+                'Source hold identity or native clock is malformed')
+        # Current readiness is only a hazard check, never a replacement for missing frame pixels.
+        current = frame.get('worldReadiness') or {}
+        require(type(current.get('epoch')) is int and current['epoch'] == self.world_epoch
+                and (current.get('sourceFrame') or {}).get('captureEpoch') == self.source_epoch,
+                'Source hold current readiness changed')
+        if self.waiting_for_source():
+            hold = self.source_hold
+            require(now_ns >= hold['startedAtClientNs']
+                    and frame['serverNowMs'] >= hold['triggerServerNowMs'], 'Source hold clock regressed')
+            require(frame['frameId'] >= hold['triggerFrameId']
+                    and source['timestamp100ns'] >= hold['triggerSource']['timestamp100ns']
+                    and at >= hold['triggerSourceFreshnessAtMs'], 'Source hold source regressed')
+            if frame['frameId'] == hold['triggerFrameId'] and hold['phase'] == 'awaitingRelease':
+                self._same_held_source(frame)
+            elif frame['frameId'] > hold['triggerFrameId']:
+                require(source['timestamp100ns'] > hold['triggerSource']['timestamp100ns']
+                        and at > hold['triggerSourceFreshnessAtMs'], 'New source reused the held source identity')
+            if hold['phase'] == 'awaitingSource':
+                require(now_ns >= hold['releaseReceivedAtClientNs']
+                        and frame['serverNowMs'] >= hold['releaseServerNowMs'], 'Source hold release clock regressed')
+        if self.waiting_for_source() and self.source_hold['phase'] == 'awaitingSource':
+            hold, gate = self.source_hold, frame.get('frameWorldReadiness') or {}
+            waiting_reasons = ('client_release', 'world_confirming', 'world_observation_invalidated')
+            require(type(current.get('ready')) is bool and type(gate.get('ready')) is bool
+                    and type(gate.get('epoch')) is int
+                    and gate.get('sourceFrameId') == frame['frameId'] and gate.get('sourceFrame') == source
+                    and type(frame.get('inputAvailable')) is bool, 'Source hold frame readiness is malformed')
+            # A cached pre-release frame may retain its previous epoch; it cannot authorize input.
+            require(gate['epoch'] == self.world_epoch or
+                    (gate['epoch'] == self.world_epoch - 1 and gate['ready'] is True
+                     and at <= hold['releaseServerNowMs']), 'Source hold frame readiness changed epoch')
+            for readiness in (current, gate):
+                require((readiness['ready'] and readiness.get('reason') in (None, 'world_ready')) or
+                        (not readiness['ready'] and readiness.get('reason') in waiting_reasons),
+                        'Source hold readiness reason changed')
+                if readiness.get('reason') == 'world_observation_invalidated':
+                    invalidated = readiness.get('sourceFrame') or {}
+                    require(readiness['ready'] is False and readiness['epoch'] == self.world_epoch
+                            and invalidated.get('captureEpoch') == self.source_epoch
+                            and finite(invalidated.get('freshnessAtMs'))
+                            and invalidated['freshnessAtMs'] <= hold['releaseServerNowMs'],
+                            'Source hold invalidation is not bound to the owned release')
+            positive = current['ready'] and gate['ready'] and gate['epoch'] == self.world_epoch
+            require(frame['inputAvailable'] is positive, 'Source hold release readiness is inconsistent')
+            if not positive:
+                # AgentStreamSession masks cached motion while either readiness snapshot is closed.
+                motion = frame.get('motionEvidence') or {}
+                projection = dict(status='unknown', reason='world_not_ready', method='native_key_tip_templates_v1',
+                                  recognitionMs=0, spaceKeyMatched=None, xKeyMatched=None)
+                require(motion == projection and finite(motion.get('recognitionMs')),
+                        'Source hold motion is not the native readiness projection')
+                evidence, ground = combat_frame(frame, self.binding['nativeCombatObservation']), ground_frame(frame)
+                for value in (evidence, ground):
+                    require(value is not None and (value['state'] == 'valid' or
+                            (value['state'] == 'unavailable' and value['reason'] == 'world_not_ready'
+                             and gate['ready'] is False and gate['epoch'] == self.world_epoch)),
+                            'Source hold HUD is not a known readiness transition')
+                if ground['state'] == 'valid':
+                    require_ground_frame(frame)
+                if frame['frameId'] == hold['triggerFrameId']:
+                    self._same_held_source(frame, motion_projected=True)
+                return 'waitingForReacquiredSource'
+            if frame['frameId'] == hold['triggerFrameId']:
+                self._same_held_source(frame)
+        require(current.get('ready') is True and frame.get('inputAvailable') is True,
+                'Source hold current readiness changed')
+        motion = frame.get('motionEvidence') or {}
+        require(motion.get('status') == 'normal' and motion.get('spaceKeyMatched') is False,
+                'Climbing, swimming, flying or unknown movement')
+        require_ground_frame(frame)
+        if self.waiting_for_source():
+            hold = self.source_hold
+            if hold['phase'] == 'awaitingRelease':
+                return 'sourceReacquisitionReleaseRequired'
+            if frame['frameId'] <= hold['triggerFrameId'] or at <= hold['releaseServerNowMs'] + 60:
+                # Old/pre-release pixels may arrive after the ACK. They grant no pose/health/bar authority.
+                return 'waitingForReacquiredSource'
+            require(source['timestamp100ns'] > hold['triggerSource']['timestamp100ns'],
+                    'Reacquired source timestamp did not advance')
+            return None
+        require(self.source_hold is None and self.armed and self.pending is None
+                and self.receipts and set(self.accepted) == set(self.receipts)
+                and all(row['status'] == 'completed' for row in self.receipts.values()),
+                'Stale source is not eligible for one settled idle hold')
+        self._same_held_source(frame)
+        require(self.last is not None and now_ns >= self.last[1]
+                and frame['serverNowMs'] >= self.last[0]['serverNowMs'], 'Source hold clock regressed')
+        deadline = min(self.deadline_ns, now_ns + 500_000_000)
+        if self.first_target_at_ns is None:
+            deadline = min(deadline, self.initial_target_deadline_ns)
+        else:
+            remaining_ms = self.target_seen_at + 750 - frame['serverNowMs'] - round_trip_ms
+            require(remaining_ms > 0, 'target_absence_deadline')
+            deadline = min(deadline, now_ns + int(remaining_ms * 1_000_000))
+        predecessor = max(self.receipts.values(), key=lambda row: row['endedAtMs'])
+        self.source_hold = dict(phase='awaitingRelease', startedAtClientNs=now_ns,
+            deadlineClientNs=deadline, triggerFrameId=frame['frameId'], triggerSource=copy.deepcopy(source),
+            triggerSourceFreshnessAtMs=at, triggerServerNowMs=frame['serverNowMs'],
+            triggerAgeUpperMs=frame['sourceFrameAgeMs'] + round_trip_ms,
+            predecessorRequestId=predecessor['requestId'], releaseServerNowMs=None,
+            releaseReceivedAtClientNs=None, reacquiredFrameId=None, reacquiredAtClientNs=None)
+        self.last = None
+        self.check(now_ns)
+        return 'sourceReacquisitionReleaseRequired'
+
+    def _same_held_source(self, frame, *, motion_projected=False):
+        """A stale source is wait-only if all its immutable evidence exactly matches prior qualification."""
+        require(self.last_distinct is not None and all(canonical(frame.get(key)) == canonical(self.last_distinct.get(key))
+            for key in ('frameId', 'sourceFrame', 'capturedAtMs', 'sourceTimestampKind', 'combatEvidence',
+                        'groundControlEvidence', 'motionEvidence', 'navigationPose', 'frameWorldReadiness')
+            if key != 'motionEvidence' or not motion_projected),
+            'Stale repeated source changed its immutable evidence')
+
+    def source_reacquisition_released(self, response, payload, now_ns):
+        """Require the existing finite software-call tail and one exact world-epoch transition."""
+        self.check(now_ns)
+        require(self.source_reacquisition_enabled and self.waiting_for_source()
+                and self.source_hold['phase'] == 'awaitingRelease', 'Unexpected source reacquisition release')
+        hold, gate = self.source_hold, response.get('worldReadiness') or {}
+        require(type(now_ns) is int and now_ns >= hold['startedAtClientNs'], 'Source hold release clock regressed')
+        require(gate.get('ready') is False and gate.get('reason') == 'client_release'
+                and type(gate.get('epoch')) is int and gate['epoch'] == self.world_epoch + 1
+                and (gate.get('sourceFrame') or {}).get('captureEpoch') == self.source_epoch,
+                'Source reacquisition release changed its native epoch')
+        _idle_input_tail(response.get('executionContext'), self.receipts[hold['predecessorRequestId']],
+                         response.get('serverNowMs'), release_after=hold['triggerServerNowMs'])
+        self.released(response, payload)
+        self.world_epoch = gate['epoch']
+        hold.update(phase='awaitingSource', releaseServerNowMs=response['serverNowMs'],
+                    releaseReceivedAtClientNs=now_ns)
 
     def check(self, now_ns):
         """Bound every wait path as well as dispatch; there is no automatic renewal."""
@@ -351,6 +516,8 @@ class ApproachController:
             self.fail('approach_deadline')
         if self.initial_target_deadline_ns is not None and self.target_seen_at is None and now_ns >= self.initial_target_deadline_ns:
             self.fail('initial_target_acquisition_deadline')
+        if self.waiting_for_source() and now_ns >= self.source_hold['deadlineClientNs']:
+            self.fail('source_reacquisition_deadline')
 
     def observe(self, frame, received_ns, round_trip_ms):
         """Inspect all polls, including unchanged frames; only distinct complete frames advance navigation."""
@@ -364,6 +531,7 @@ class ApproachController:
         self.check(received_ns)
         require(finite(round_trip_ms) and round_trip_ms >= 0, 'Invalid transport measurement')
         if frame.get('type') != 'frame':
+            require(not self.waiting_for_source() or frame.get('type') == 'waiting', 'Malformed source-hold response')
             if self.armed:
                 self.fail('armed_native_frame_unavailable')
             return 'waitingForNativeFrame'
@@ -374,9 +542,13 @@ class ApproachController:
                 self.fail('health_stop')
             if evidence['redMaskOverloaded'] or len(evidence['enemyBarCandidates']) > self.binding['maximumEnemyBarCandidates']:
                 self.fail('enemy_evidence_stop')
-        if not self.armed and ((frame.get('worldReadiness') or {}).get('ready') is not True
+        if not self.armed and not self.waiting_for_source() and ((frame.get('worldReadiness') or {}).get('ready') is not True
                               or frame.get('inputAvailable') is not True):
             return 'waitingForReadiness'
+        if self.source_reacquisition_enabled and self.last_distinct is not None:
+            held = self._source_hold_observation(frame, received_ns, round_trip_ms)
+            if held is not None:
+                return held
         try:
             evidence, _, pose = qualify_frame(frame, self.binding['baselineHealthFraction'], self.binding['maximumEnemyBarCandidates'],
                                               capability=self.binding['nativeCombatObservation'])
@@ -424,6 +596,9 @@ class ApproachController:
             self.fail('target_absence_deadline')
         if self.after_release is not None and source['freshnessAtMs'] <= self.after_release:
             return 'waitingAfterRelease'
+        if self.waiting_for_source():
+            self.source_hold.update(phase='completed', reacquiredFrameId=frame['frameId'],
+                                    reacquiredAtClientNs=received_ns)
         self.last = (copy.deepcopy(frame), received_ns, round_trip_ms)
         self.last_distinct = copy.deepcopy(frame)
         try:
@@ -442,7 +617,7 @@ class ApproachController:
     def next_action(self, now_ns):
         """Choose only native horizontal correction or W; recheck age after all recording/other work."""
         self.check(now_ns)
-        if self.complete or self.pending is not None or not self.armed or self.navigation.phase != 'walking':
+        if self.waiting_for_source() or self.complete or self.pending is not None or not self.armed or self.navigation.phase != 'walking':
             return None
         dispatch_deadline = self.deadline_ns
         if self.initial_target_deadline_ns is not None and self.target_seen_at is None:
@@ -482,6 +657,7 @@ class ApproachController:
         if (self.initial_target_deadline_ns is not None and self.target_seen_at is None
                 and self.initial_target_deadline_ns - now_ns < 200_000_000):
             self.fail('approach_dispatch_budget')
+        require(not self.waiting_for_source(), 'Source reacquisition is still pending')
         require(self.pending is not None and not self.pending['transmissionAttempted'], 'Unexpected second transmission')
         value = self.pending
         age = value['frame']['sourceFrameAgeMs'] + value['roundTripMs'] + (now_ns - value['receivedAtClientNs']) / 1e6
@@ -653,7 +829,7 @@ class EvidenceJournal:
 def run_episode(bridge, binding, directory, *, clock=time.perf_counter_ns, sleep=time.sleep,
                 check=lambda: None, deadline_ns=None):
     """Run the pure planner through an injected bridge; fixtures use no Windows/model/input."""
-    controller = ApproachController(binding, bridge.hello, clock(), deadline_ns=deadline_ns)
+    controller = ApproachController(binding, bridge.hello, clock(), deadline_ns=deadline_ns, source_reacquisition=True)
     journal = EvidenceJournal(directory)
     report = dict(version=1, kind=KIND, status='failed', navigationVerified=False, meleeArrivalVerified=False,
                   combatSuccess=False, modelLoaded=False, attacksAllowed=False, releaseAcknowledged=False,
@@ -689,6 +865,15 @@ def run_episode(bridge, binding, directory, *, clock=time.perf_counter_ns, sleep
             if controller.complete:
                 report.update(status='completed', navigationVerified=True)
                 break
+            if outcome == 'sourceReacquisitionReleaseRequired':
+                check()
+                controller.check(clock())
+                response, payload = bridge.request('release')
+                received = clock()
+                journal.event(dict(type='sourceReacquisitionRelease', response=response,
+                                   payloadBytes=len(payload), clientReceivedNs=received))
+                controller.source_reacquisition_released(response, payload, received)
+                continue
             if outcome == 'releaseRequired' and controller.pending is None:
                 response, payload = bridge.request('release')
                 journal.event(dict(type='endpointRelease', response=response, payloadBytes=len(payload)))
@@ -761,6 +946,7 @@ def run_episode(bridge, binding, directory, *, clock=time.perf_counter_ns, sleep
                       physicalInputDeliveryVerified=False, nativeInputJournalComplete=False)
         if controller.initial_target_deadline_ns is not None:
             report['initialTargetAcquisition'] = controller.initial_target_acquisition()
+            report['sourceReacquisition'] = controller.source_reacquisition()
         if not report['receiptsComplete'] or not report['releaseAcknowledged'] or not report['stopAcknowledged']:
             report['status'] = 'failed'
         try:

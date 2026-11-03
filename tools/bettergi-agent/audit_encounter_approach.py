@@ -46,7 +46,10 @@ def audit_recording(directory, binding, episode):
             and hello.get('observationProfile') == approach.PROFILE, 'Input lease contract changed')
     require(type(episode.get('startedAtClientNs')) is int and type(episode.get('deadlineClientNs')) is int,
             'Original controller clock bounds are missing')
-    replay = approach.ApproachController(binding, hello, episode['startedAtClientNs'], deadline_ns=episode['deadlineClientNs'])
+    source_hold = 'sourceReacquisition' in episode
+    require(not source_hold or binding['policy']['version'] == 2, 'Source reacquisition requires the explicit v2 review')
+    replay = approach.ApproachController(binding, hello, episode['startedAtClientNs'],
+        deadline_ns=episode['deadlineClientNs'], source_reacquisition=source_hold)
     replay_stop = None
     replay_outcome = None
     route = approach.route_geometry(binding['route'])
@@ -214,6 +217,13 @@ def audit_recording(directory, binding, episode):
             abandoned[key] = event
             replay_stop = event['reason']
             pending = None
+        elif kind == 'sourceReacquisitionRelease':
+            require(source_hold and replay_stop is None and replay_outcome == 'sourceReacquisitionReleaseRequired',
+                    'Unexplained source reacquisition release')
+            require(event.get('payloadBytes') == 0 and type(event.get('clientReceivedNs')) is int,
+                    'Source reacquisition release lacks its exact reception clock')
+            terminal(event['response'])
+            replay.source_reacquisition_released(event['response'], b'', event['clientReceivedNs'])
         elif kind in ('endpointRelease', 'release', 'stop'):
             response = event['response']
             require(event.get('payloadBytes') == 0 and response.get('type') == ('stopped' if kind == 'stop' else 'released'),
@@ -254,6 +264,9 @@ def audit_recording(directory, binding, episode):
     if initial_target_deadline is not None:
         require(episode.get('initialTargetAcquisition') == replay.initial_target_acquisition(),
                 'Initial target acquisition clock or original native observation differs')
+    if source_hold:
+        require(approach.canonical(episode['sourceReacquisition']) == approach.canonical(replay.source_reacquisition()),
+                'Source reacquisition evidence or original bounds differ')
     if episode.get('status') == 'completed':
         require(initial_target_deadline is None or (replay.first_target_at_ns is not None
                 and episode['startedAtClientNs'] <= replay.first_target_at_ns < initial_target_deadline),

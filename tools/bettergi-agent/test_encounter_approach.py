@@ -1339,5 +1339,478 @@ class InitialTargetAcquisitionTests(unittest.TestCase):
         self.assertEqual(audit_recording(folder, bound, report)['episodeStatus'], 'completed')
 
 
+def settled_release(controller, at, epoch=None):
+    """Build a typed inert native ledger for all settled calls and this one client release."""
+    rows = []
+    call_id = 0
+    def pair(origin, identity, operation, key, mouse_x, begin, end, terminal):
+        nonlocal call_id
+        call_id += 1
+        for stage, stamp in (('started', begin), (terminal, end)):
+            rows.append(dict(sequence=len(rows) + 1, atMs=stamp, requestId=identity[0], modelId=identity[1],
+                frameId=identity[2], stepIndex=identity[3], origin=origin,
+                call=dict(callId=call_id, operation=operation, stage=stage, key=key,
+                          mouseDx=mouse_x, mouseDy=0, error=None)))
+    for receipt in sorted(controller.receipts.values(), key=lambda row: row['acceptedAtMs']):
+        step = receipt['appliedSteps'][0]
+        identity = (receipt['requestId'], receipt['modelId'], receipt['frameId'], 0)
+        if step['keys']:
+            pair('dispatch', identity, 'keyDown', 'W', 0, step['startedAtMs'], step['startedAtMs'] + .001, 'returned')
+        if step['mouseDx']:
+            pair('dispatch', identity, 'mouseMove', None, step['mouseDx'], step['startedAtMs'], step['startedAtMs'] + .001, 'returned')
+        pair('release:horizon_complete', identity, 'releaseAll', None, 0,
+             receipt['endedAtMs'], receipt['endedAtMs'] + .001, 'returned_unverified')
+    pair('release:client_release', (None, None, None, None), 'releaseAll', None, 0, at - .2, at - .1, 'returned_unverified')
+    response = release_ack(at, controller.world_epoch + 1 if epoch is None else epoch)
+    response['worldReadiness']['reason'] = 'client_release'
+    response['executionContext'].update(version=1, clock='monotonic milliseconds since session start',
+        observesBlockedCallConcurrently=False, physicalExecutionProven=False, sampledAtMs=at + .001,
+        firstSequence=1, lastSequence=len(rows), evictedEvents=0, events=rows, lastInputEvent=copy.deepcopy(rows[-1]))
+    return response
+
+
+def readiness_projection(frame):
+    """Model the exact native response mask; it never changes the captured source or HUD."""
+    current, gate = frame['worldReadiness'], frame['frameWorldReadiness']
+    frame['inputAvailable'] = current['ready'] and gate['ready'] and current['epoch'] == gate['epoch']
+    if not frame['inputAvailable']:
+        frame['motionEvidence'] = dict(status='unknown', reason='world_not_ready',
+            method='native_key_tip_templates_v1', recognitionMs=0, spaceKeyMatched=None, xKeyMatched=None)
+    return frame
+
+
+def confirming_source(index=4, at=500, *, current_ready=False, reason='world_confirming', unavailable=False):
+    """Retain source-bound native confirmation evidence, optionally with its unavailable HUD schema."""
+    frame = sample(index, at, candidates=0, epoch=1)
+    frame['worldReadiness'].update(ready=current_ready, reason='world_ready' if current_ready else reason)
+    frame['frameWorldReadiness'].update(ready=False, reason=reason)
+    if unavailable:
+        frame['combatEvidence'].update(state='unavailable', reason='world_not_ready', playerHealthColor='unknown',
+            playerHealthFractionEstimate=None, playerHealthMatchingPixels=0, enemyBarCandidates=[], redMaskOverloaded=False)
+        frame['groundControlEvidence'].update(state='unavailable', reason='world_not_ready', groundControlsConfirmed=False,
+            swimHintPixels=0, spaceKeyMatched=None, xKeyMatched=None, eKey=None, qKey=None, crops=[])
+    return readiness_projection(frame)
+
+
+
+class SourceReacquisitionTests(unittest.TestCase):
+    """A repeated stale source permits one idle wait, never stale movement or a renewed lease."""
+
+    def ready(self, *, first_acquisition=False, target=False, enabled=True, started=0, deadline=None):
+        """Use the original v2 review and real planner alignment before one settled fake action."""
+        bound = approach.bind_review(*InitialTargetAcquisitionTests().parts())
+        controller = approach.ApproachController(bound, HELLO, started, deadline_ns=deadline,
+                                                  source_reacquisition=enabled)
+        for index in (1, 2, 3):
+            frame = sample(index, index * 100, candidates=int(target))
+            if index == 3 and first_acquisition:
+                source = copy.deepcopy(frame['sourceFrame'])
+                source.update(acquiredAtMs=284.1965, freshnessAtMs=284.1965, freshnessClockKind='first_acquisition_qpc')
+                def bind_source(value):
+                    if isinstance(value, dict):
+                        if 'sourceFrame' in value: value['sourceFrame'] = copy.deepcopy(source)
+                        for child in value.values(): bind_source(child)
+                    elif isinstance(value, list):
+                        for child in value: bind_source(child)
+                bind_source(frame)
+                frame.update(serverNowMs=304.1965, sourceFrameAgeMs=20)
+            controller.observe(frame, started + index * 100_000_000, 1)
+        request = controller.next_action(started + 300_000_000)
+        complete(controller, request)
+        return controller
+
+    def trigger(self, controller, *, now=470_000_000, age=163.0292, rtt=.9615):
+        """Repeat exactly the retained source while current readiness advances independently."""
+        frame = copy.deepcopy(controller.last_distinct)
+        frame.update(serverNowMs=frame['sourceFrame']['freshnessAtMs'] + age, sourceFrameAgeMs=age)
+        frame['worldReadiness'] = sample(4, 400, epoch=controller.world_epoch)['worldReadiness']
+        outcome = controller.observe(frame, now, rtt)
+        return frame, outcome
+
+    def release(self, controller, *, at=470, now=475_000_000):
+        """A successful software release is retained without claiming physical delivery."""
+        ack = settled_release(controller, at)
+        controller.source_reacquisition_released(ack, b'', now)
+        return ack
+
+    def test_original_acquisition_clock_not_fresher_compositor_drives_hold(self):
+        controller = self.ready(first_acquisition=True)
+        frame, outcome = self.trigger(controller)
+        self.assertEqual(outcome, 'sourceReacquisitionReleaseRequired')
+        self.assertAlmostEqual(frame['serverNowMs'] - frame['sourceFrame']['capturedAtMs'], 147.2257)
+        self.assertAlmostEqual(controller.source_hold['triggerAgeUpperMs'], 163.9907)
+        self.assertIsNone(controller.last)
+        self.assertIsNone(controller.next_action(471_000_000))
+        self.release(controller)
+        fresh = sample(4, 540, candidates=1, epoch=1)
+        controller.observe(fresh, 550_000_000, 1)
+        self.assertEqual(controller.source_hold['phase'], 'completed')
+        self.assertEqual(controller.initial_target_deadline_ns, 1_500_000_000)
+        self.assertEqual(controller.next_action(550_000_000)['frameId'], 4)
+
+    def test_pending_unknown_or_unsettled_action_never_enters_hold(self):
+        for state in ('prepared', 'transmitted', 'accepted', 'cancelled'):
+            controller = self.ready()
+            if state == 'cancelled':
+                next(iter(controller.receipts.values()))['status'] = 'cancelled'
+            else:
+                controller.observe(sample(4, 400, candidates=0), 400_000_000, 1)
+                request = controller.next_action(400_000_000)
+                if state in ('transmitted', 'accepted'): controller.transmitting(400_000_000)
+                if state == 'accepted': controller.admission(dict(type='accepted', requestId=request['requestId'], acceptedAtMs=410), b'')
+            with self.subTest(state=state), self.assertRaisesRegex(RuntimeError, 'settled idle hold'):
+                self.trigger(controller, now=570_000_000)
+            self.assertIsNone(controller.source_hold)
+
+    def test_stale_identity_clock_and_immutable_changes_remain_terminal(self):
+        for change in ('capture', 'timestampType', 'clockArithmetic', 'frameId', 'pose', 'crop', 'worldEpoch'):
+            controller = self.ready()
+            frame = copy.deepcopy(controller.last_distinct)
+            frame.update(sourceFrameAgeMs=163, serverNowMs=463)
+            if change == 'capture': frame['sourceFrame']['captureEpoch'] = 'foreign'
+            elif change == 'timestampType': frame['sourceFrame']['timestamp100ns'] = True
+            elif change == 'clockArithmetic': frame['serverNowMs'] += 1
+            elif change == 'frameId': frame['frameId'] = 4
+            elif change == 'pose': frame['navigationPose']['x'] += .01
+            elif change == 'crop': frame['combatEvidence']['playerHealthMatchingPixels'] += 1
+            else: frame['worldReadiness']['epoch'] += 1
+            with self.subTest(change=change), self.assertRaises(RuntimeError): controller.observe(frame, 470_000_000, 1)
+            self.assertIsNone(controller.source_hold)
+
+    def test_positive_hazards_win_during_reacquisition(self):
+        for change in ('health', 'enemy', 'motion', 'readiness', 'ground'):
+            controller = self.ready()
+            self.trigger(controller); self.release(controller)
+            frame = sample(4, 500, candidates=0, epoch=1)
+            if change == 'health': frame['combatEvidence']['playerHealthFractionEstimate'] = .5
+            elif change == 'enemy': frame['combatEvidence']['redMaskOverloaded'] = True
+            elif change == 'motion': frame['motionEvidence']['spaceKeyMatched'] = True
+            elif change == 'readiness': frame['worldReadiness'].update(ready=False, reason='foreign_pause')
+            else: frame['groundControlEvidence']['groundControlsConfirmed'] = False
+            with self.subTest(change=change), self.assertRaises(RuntimeError): controller.observe(frame, 510_000_000, 1)
+            self.assertEqual(controller.actions, 1)
+
+    def test_release_requires_owned_tail_empty_state_and_exact_next_epoch(self):
+        for change in ('active', 'held', 'tail', 'foreignReceipt', 'epoch', 'capture', 'earlyRelease', 'earlyClient', 'duplicate'):
+            controller = self.ready(); self.trigger(controller)
+            ack = settled_release(controller, 470)
+            now = 475_000_000
+            if change == 'active': ack['executionContext']['active'] = {}
+            elif change == 'held': ack['executionContext']['trackedState']['heldKeys'] = ['W']
+            elif change == 'tail': ack['executionContext']['events'] = []
+            elif change == 'foreignReceipt': ack['executionContext']['events'][0]['requestId'] = 'foreign'
+            elif change == 'epoch': ack['worldReadiness']['epoch'] += 1
+            elif change == 'capture': ack['worldReadiness']['sourceFrame']['captureEpoch'] = 'foreign'
+            elif change == 'earlyRelease': ack['executionContext']['events'][-2]['atMs'] = 460
+            elif change == 'earlyClient': now = 469_000_000
+            else: controller.source_reacquisition_released(ack, b'', now)
+            with self.subTest(change=change), self.assertRaises((ValueError, RuntimeError, TypeError)):
+                controller.source_reacquisition_released(ack, b'', now)
+            self.assertEqual(controller.actions, 1)
+
+    def test_post_release_floor_never_promotes_old_or_pre_margin_pixels(self):
+        controller = self.ready(); original, _ = self.trigger(controller); self.release(controller)
+        original.update(serverNowMs=480, sourceFrameAgeMs=180)
+        original['worldReadiness'] = sample(4, 470, epoch=1)['worldReadiness']
+        readiness_projection(original)
+        for frame, now in ((original, 485_000_000), (sample(4, 530, candidates=0, epoch=1), 540_000_000)):
+            self.assertEqual(controller.observe(frame, now, 1), 'waitingForReacquiredSource')
+            self.assertIsNone(controller.next_action(now))
+            self.assertIsNone(controller.target_seen_at)
+            self.assertEqual(controller.last_distinct['frameId'], 3)
+        controller.observe(sample(5, 531, candidates=1, epoch=1), 541_000_000, 1)
+        self.assertEqual(controller.source_hold['reacquiredFrameId'], 5)
+
+    def test_pre_margin_frame_cannot_change_or_reuse_held_source_identity(self):
+        for change in ('sameIdChangedTime', 'newIdSameTime', 'regressedId', 'regressedClient', 'regressedServer'):
+            controller = self.ready(); old, _ = self.trigger(controller); self.release(controller)
+            frame = sample(4, 500, candidates=0, epoch=1)
+            now = 510_000_000
+            if change == 'sameIdChangedTime': frame['frameId'] = 3
+            elif change == 'newIdSameTime': frame['sourceFrame']['timestamp100ns'] = old['sourceFrame']['timestamp100ns']
+            elif change == 'regressedId': frame['frameId'] = 2
+            elif change == 'regressedClient': now = 474_000_000
+            else: frame.update(serverNowMs=460, sourceFrameAgeMs=-40)
+            with self.subTest(change=change), self.assertRaises(RuntimeError): controller.observe(frame, now, 1)
+            self.assertEqual(controller.actions, 1)
+
+    def test_fresh_source_still_requires_complete_pose_ground_and_150ms_age(self):
+        for change in ('pose', 'ground', 'freshness', 'timestamp', 'capture'):
+            controller = self.ready(); self.trigger(controller); self.release(controller)
+            frame = sample(4, 540, candidates=1, epoch=1)
+            if change == 'pose': frame['navigationPose']['positionConfidence'] = .5
+            elif change == 'ground': frame['groundControlEvidence']['groundControlsConfirmed'] = False
+            elif change == 'freshness': frame.update(serverNowMs=690, sourceFrameAgeMs=150)
+            elif change == 'timestamp': frame['sourceFrame']['timestamp100ns'] = controller.last_distinct['sourceFrame']['timestamp100ns']
+            else: frame['sourceFrame']['captureEpoch'] = 'foreign'
+            with self.subTest(change=change), self.assertRaises(RuntimeError): controller.observe(frame, 700_000_000, 1)
+            self.assertEqual(controller.actions, 1)
+
+    def test_hold_clips_original_acquisition_lease_and_target_loss_deadlines(self):
+        for kind in ('500ms', 'acquisition', 'lease', 'targetLoss'):
+            controller = self.ready(target=kind == 'targetLoss', deadline=800_000_000 if kind == 'lease' else None)
+            now = 1_200_000_000 if kind == 'acquisition' else 470_000_000
+            age = 600 if kind == 'targetLoss' else 163.0292
+            self.trigger(controller, now=now, age=age, rtt=1)
+            expected = {'500ms': 970_000_000, 'acquisition': 1_500_000_000,
+                        'lease': 800_000_000, 'targetLoss': 619_000_000}[kind]
+            self.assertEqual(controller.source_hold['deadlineClientNs'], expected)
+            with self.subTest(kind=kind), self.assertRaises(RuntimeError): controller.check(expected)
+
+    def test_waiting_duplicate_and_unavailable_polls_never_renew_hold(self):
+        controller = self.ready(); original, _ = self.trigger(controller); self.release(controller)
+        deadline = controller.source_hold['deadlineClientNs']
+        for index in range(3):
+            frame = copy.deepcopy(original)
+            frame.update(serverNowMs=480 + index * 20, sourceFrameAgeMs=180 + index * 20)
+            frame['worldReadiness'] = sample(4, 470, epoch=1)['worldReadiness']
+            readiness_projection(frame)
+            controller.observe(frame, 485_000_000 + index * 20_000_000, 1)
+            controller.observe(dict(type='waiting'), 495_000_000 + index * 20_000_000, 1)
+            self.assertEqual(controller.source_hold['deadlineClientNs'], deadline)
+        with self.assertRaisesRegex(RuntimeError, 'source_reacquisition_deadline'):
+            controller.observe(dict(type='waiting'), deadline, 1)
+
+    def test_second_stale_hold_is_refused_and_first_use_is_retained(self):
+        controller = self.ready(); self.trigger(controller); self.release(controller)
+        controller.observe(sample(4, 540, candidates=1, epoch=1), 550_000_000, 1)
+        with self.assertRaisesRegex(RuntimeError, 'settled idle hold'): self.trigger(controller, now=710_000_000)
+        self.assertEqual(controller.source_reacquisition()['used'], 1)
+        self.assertEqual(controller.source_hold['reacquiredFrameId'], 4)
+
+    def test_historical_and_v1_stale_behavior_is_unchanged(self):
+        for kind in ('historicalV2', 'v1'):
+            controller = self.ready(enabled=False) if kind == 'historicalV2' else approach.ApproachController(binding(), HELLO, 0, source_reacquisition=True)
+            if kind == 'v1':
+                for index in (1, 2, 3): controller.observe(sample(index, index * 100), index * 100_000_000, 1)
+                request = controller.next_action(300_000_000); complete(controller, request)
+            with self.subTest(kind=kind), self.assertRaisesRegex(RuntimeError, 'Native source stale or malformed'):
+                self.trigger(controller)
+            self.assertIsNone(controller.source_hold)
+
+    def test_reacquisition_does_not_reset_final_dispatch_headroom(self):
+        controller = self.ready(); self.trigger(controller, now=1_100_000_000)
+        self.release(controller, now=1_105_000_000)
+        controller.observe(sample(4, 540, candidates=0, epoch=1), 1_250_000_000, 1)
+        request = controller.next_action(1_250_000_000)
+        self.assertIsNotNone(request)
+        with self.assertRaisesRegex(RuntimeError, 'approach_dispatch_budget'): controller.transmitting(1_301_000_000)
+        self.assertFalse(controller.pending['transmissionAttempted'])
+        self.assertEqual(controller.abandon_prepared('budget')['transmissionAttempted'], False)
+
+    def episode(self, *, timeout=False, stop=False, producer_wait=False):
+        """Run the real recorder/controller/auditor boundary with only a synthetic bridge and clock."""
+        clock = Clock()
+        bound = approach.bind_review(*InitialTargetAcquisitionTests().parts())
+        captured = {}
+        base_controller = approach.ApproachController
+        def construct(*args, **kwargs):
+            captured['controller'] = base_controller(*args, **kwargs)
+            return captured['controller']
+        class HoldBridge(FakeBridge):
+            def __init__(self):
+                super().__init__(clock)
+                self.last_frame = None
+                self.held = False
+            def request(self, command, **arguments):
+                if command == 'frame' and (self.number == 3 or timeout and self.held):
+                    self.calls.append((command, {}))
+                    clock.sleep(.1)
+                    self.number += 1
+                    frame = copy.deepcopy(self.last_frame)
+                    frame.update(serverNowMs=self.number * 100 + 63, sourceFrameAgeMs=self.number * 100 + 63 - 300)
+                    frame['worldReadiness'] = sample(self.number, self.number * 100, epoch=self.epoch)['worldReadiness']
+                    frame['receipts'], self.pending = self.pending, []
+                    if self.held: readiness_projection(frame)
+                    return frame, bytes([30, 45, 65]) * (192 * 192)
+                if command == 'release' and captured['controller'].waiting_for_source() and not self.held:
+                    self.calls.append((command, {}))
+                    clock.sleep(.001)
+                    self.epoch += 1
+                    self.held = True
+                    return settled_release(captured['controller'], self.number * 100 + 70, self.epoch), b''
+                frame, pixels = super().request(command, **arguments)
+                if command == 'frame':
+                    if self.number <= 5: frame['combatEvidence']['enemyBarCandidates'] = []
+                    if producer_wait and self.held and self.number in (5, 6):
+                        frame['frameWorldReadiness'].update(ready=False, reason='world_confirming')
+                        frame['worldReadiness'].update(ready=self.number == 6,
+                            reason='world_ready' if self.number == 6 else 'world_confirming')
+                        readiness_projection(frame)
+                    self.last_frame = copy.deepcopy(frame)
+                return frame, pixels
+        bridge = HoldBridge()
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        folder = Path(temporary.name) / 'recording'
+        def check():
+            if stop and bridge.held: raise RuntimeError('external_STOP')
+        with patch.object(approach, 'ApproachController', construct):
+            report = approach.run_episode(bridge, bound, folder, clock=clock, sleep=clock.sleep, check=check)
+        return bound, bridge, folder, report
+
+    def test_real_episode_reacquires_and_full_audit_preserves_all_receipts(self):
+        from audit_encounter_approach import audit_recording
+        bound, bridge, folder, report = self.episode()
+        self.assertEqual(report['status'], 'completed', report)
+        self.assertEqual(report['sourceReacquisition']['hold']['reacquiredFrameId'], 6)
+        self.assertEqual(report['acceptedActions'], report['terminalReceipts'])
+        self.assertEqual(sum(name == 'release' for name, _ in bridge.calls), 3)
+        self.assertEqual(audit_recording(folder, bound, report)['episodeStatus'], 'completed')
+
+    def test_real_episode_timeout_and_stop_never_send_after_hold(self):
+        from audit_encounter_approach import audit_recording
+        for kind in ('timeout', 'STOP'):
+            bound, bridge, folder, report = self.episode(timeout=kind == 'timeout', stop=kind == 'STOP')
+            self.assertEqual(report['status'], 'failed', report)
+            self.assertEqual(report['acceptedActions'], 1)
+            self.assertEqual(report['terminalReceipts'], 1)
+            self.assertTrue(report['releaseAcknowledged'] and report['stopAcknowledged'])
+            self.assertEqual(audit_recording(folder, bound, report)['episodeStatus'], 'failed')
+
+    def test_audit_refuses_changed_hold_clocks_proofs_and_coherent_marker_removal(self):
+        from audit_encounter_approach import audit_recording
+        bound, _, folder, report = self.episode()
+        self.assertEqual(report['status'], 'completed', report)
+        original = (folder / 'events.jsonl').read_bytes()
+        rows = [json.loads(row) for row in original.splitlines()]
+        for change in ('deadline', 'releaseClock', 'releaseEpoch', 'summaryRemoved', 'bothRemoved'):
+            altered, events = copy.deepcopy(report), copy.deepcopy(rows)
+            if change == 'deadline': altered['sourceReacquisition']['hold']['deadlineClientNs'] += 1
+            elif change == 'releaseClock': next(row for row in events if row['type'] == 'sourceReacquisitionRelease')['clientReceivedNs'] = 1
+            elif change == 'releaseEpoch': next(row for row in events if row['type'] == 'sourceReacquisitionRelease')['response']['worldReadiness']['epoch'] += 1
+            else:
+                altered.pop('sourceReacquisition')
+                if change == 'bothRemoved':
+                    events = [row for row in events if row['type'] != 'sourceReacquisitionRelease'
+                              and not (row['type'] == 'navigation' and row.get('outcome') in
+                                       ('sourceReacquisitionReleaseRequired', 'waitingForReacquiredSource'))]
+            (folder / 'events.jsonl').write_bytes(b''.join(approach.canonical(row) + b'\n' for row in events))
+            with self.subTest(change=change), self.assertRaises((ValueError, RuntimeError)):
+                audit_recording(folder, bound, altered)
+        (folder / 'events.jsonl').write_bytes(original)
+
+    def test_owned_release_old_cached_motion_projection_is_wait_only(self):
+        controller = self.ready(); old, _ = self.trigger(controller); ack = self.release(controller)
+        old.update(serverNowMs=480, sourceFrameAgeMs=180)
+        old['worldReadiness'] = copy.deepcopy(ack['worldReadiness'])
+        readiness_projection(old)
+        original = copy.deepcopy(controller.last_distinct)
+        self.assertEqual(controller.observe(old, 485_000_000, 1), 'waitingForReacquiredSource')
+        self.assertEqual(controller.last_distinct, original)
+        self.assertIsNone(controller.next_action(485_000_000))
+        self.assertEqual(controller.actions, 1)
+
+    def test_native_two_confirmation_states_wait_without_promoting_health_pose_or_bars(self):
+        controller = self.ready(); self.trigger(controller); self.release(controller)
+        deadline = controller.source_hold['deadlineClientNs']
+        for frame in (confirming_source(unavailable=True), confirming_source(current_ready=True)):
+            self.assertEqual(controller.observe(frame, 510_000_000, 1), 'waitingForReacquiredSource')
+            self.assertEqual(controller.last_distinct['frameId'], 3)
+            self.assertIsNone(controller.target_seen_at)
+            self.assertIsNone(controller.next_action(510_000_000))
+            self.assertEqual(controller.source_hold['deadlineClientNs'], deadline)
+        controller.observe(sample(5, 540, candidates=1, epoch=1), 550_000_000, 1)
+        self.assertEqual(controller.source_hold['reacquiredFrameId'], 5)
+        self.assertEqual(controller.next_action(550_000_000)['frameId'], 5)
+
+    def test_invalidated_source_must_be_at_or_before_exact_owned_ack(self):
+        for at in (460, 470):
+            controller = self.ready(); self.trigger(controller); self.release(controller)
+            frame = confirming_source(at=at, reason='world_observation_invalidated')
+            frame.update(serverNowMs=480, sourceFrameAgeMs=480-at)
+            self.assertEqual(controller.observe(frame, 490_000_000, 1), 'waitingForReacquiredSource')
+        for location in ('current', 'frame'):
+            controller = self.ready(); self.trigger(controller); self.release(controller)
+            frame = confirming_source(reason='world_observation_invalidated')
+            if location == 'current':
+                frame['frameWorldReadiness']['reason'] = 'world_confirming'
+            else:
+                frame['worldReadiness']['reason'] = 'world_confirming'
+            with self.subTest(location=location), self.assertRaisesRegex(RuntimeError, 'invalidation'):
+                controller.observe(frame, 510_000_000, 1)
+
+    def test_confirmation_foreign_epoch_capture_reason_or_identity_stays_terminal(self):
+        for change in ('currentEpoch', 'frameEpoch', 'capture', 'currentReason', 'frameReason',
+                       'frameSource', 'frameId', 'available', 'oldEpochNewSource'):
+            controller = self.ready(); self.trigger(controller); self.release(controller)
+            frame = confirming_source()
+            if change == 'currentEpoch': frame['worldReadiness']['epoch'] += 1
+            elif change == 'frameEpoch': frame['frameWorldReadiness']['epoch'] += 1
+            elif change == 'capture': frame['worldReadiness']['sourceFrame']['captureEpoch'] = 'foreign'
+            elif change == 'currentReason': frame['worldReadiness']['reason'] = 'world_observation_stale'
+            elif change == 'frameReason': frame['frameWorldReadiness']['reason'] = 'foreign_pause'
+            elif change == 'frameSource': frame['frameWorldReadiness']['sourceFrame']['timestamp100ns'] += 1
+            elif change == 'frameId': frame['frameWorldReadiness']['sourceFrameId'] += 1
+            elif change == 'available': frame['inputAvailable'] = True
+            else: frame['frameWorldReadiness'].update(epoch=0, ready=True, reason='world_ready')
+            with self.subTest(change=change), self.assertRaises(RuntimeError):
+                controller.observe(frame, 510_000_000, 1)
+            self.assertEqual(controller.actions, 1)
+
+    def test_confirmation_cannot_mask_positive_hazards_or_arbitrary_unavailable_evidence(self):
+        for change in ('health', 'enemy', 'ground', 'motion', 'projectionExtra', 'projectionBool',
+                       'hudReason', 'groundReason', 'missingHud'):
+            controller = self.ready(); self.trigger(controller); self.release(controller)
+            frame = confirming_source(unavailable=change in ('hudReason', 'groundReason'))
+            if change == 'health': frame['combatEvidence']['playerHealthFractionEstimate'] = .5
+            elif change == 'enemy': frame['combatEvidence']['redMaskOverloaded'] = True
+            elif change == 'ground': frame['groundControlEvidence']['groundControlsConfirmed'] = False
+            elif change == 'motion': frame['motionEvidence']['status'] = 'climbing'
+            elif change == 'projectionExtra': frame['motionEvidence']['extra'] = True
+            elif change == 'projectionBool': frame['motionEvidence']['recognitionMs'] = False
+            elif change == 'hudReason': frame['combatEvidence']['reason'] = 'recognition_failed'
+            elif change == 'groundReason': frame['groundControlEvidence']['reason'] = 'recognition_failed'
+            else: frame.pop('combatEvidence')
+            with self.subTest(change=change), self.assertRaises(RuntimeError):
+                controller.observe(frame, 510_000_000, 1)
+            self.assertEqual(controller.actions, 1)
+
+    def test_masked_old_frame_still_requires_every_other_immutable_byte(self):
+        for change in ('pose', 'hud', 'ground', 'frameGate'):
+            controller = self.ready(); old, _ = self.trigger(controller); ack = self.release(controller)
+            old.update(serverNowMs=480, sourceFrameAgeMs=180)
+            old['worldReadiness'] = copy.deepcopy(ack['worldReadiness'])
+            readiness_projection(old)
+            if change == 'pose': old['navigationPose']['x'] += .01
+            elif change == 'hud': old['combatEvidence']['playerHealthMatchingPixels'] += 1
+            elif change == 'ground': old['groundControlEvidence']['recognitionMs'] += .01
+            else: old['frameWorldReadiness']['epoch'] = 1
+            with self.subTest(change=change), self.assertRaises(RuntimeError):
+                controller.observe(old, 485_000_000, 1)
+
+    def test_confirmation_polls_do_not_extend_original_clipped_clocks(self):
+        for kind in ('hold', 'acquisition', 'lease', 'targetLoss'):
+            controller = self.ready(target=kind == 'targetLoss', deadline=800_000_000 if kind == 'lease' else None)
+            now = 1_200_000_000 if kind == 'acquisition' else 470_000_000
+            self.trigger(controller, now=now, age=600 if kind == 'targetLoss' else 163.0292, rtt=1)
+            # The synthetic native clock must remain later than the triggering envelope.
+            ack_at = 910 if kind == 'targetLoss' else 470
+            self.release(controller, at=ack_at, now=now+5_000_000)
+            deadline = controller.source_hold['deadlineClientNs']
+            frame = confirming_source(at=ack_at+30)
+            self.assertEqual(controller.observe(frame, now+10_000_000, 1), 'waitingForReacquiredSource')
+            self.assertEqual(controller.source_hold['deadlineClientNs'], deadline)
+            with self.subTest(kind=kind), self.assertRaises(RuntimeError): controller.observe(frame, deadline, 1)
+            self.assertEqual(controller.actions, 1)
+
+    def test_real_episode_and_auditor_accept_only_complete_post_confirmation_source(self):
+        from audit_encounter_approach import audit_recording
+        bound, bridge, folder, report = self.episode(producer_wait=True)
+        self.assertEqual(report['status'], 'completed', report)
+        self.assertEqual(report['sourceReacquisition']['hold']['reacquiredFrameId'], 7)
+        self.assertEqual(report['acceptedActions'], report['terminalReceipts'])
+        rows = [json.loads(line) for line in (folder / 'events.jsonl').read_bytes().splitlines()]
+        waiting = [row for row in rows if row.get('type') == 'observation'
+                   and row['frame'].get('motionEvidence', {}).get('reason') == 'world_not_ready']
+        self.assertEqual([row['frame']['frameId'] for row in waiting], [5, 6])
+        self.assertEqual(audit_recording(folder, bound, report)['episodeStatus'], 'completed')
+        original = (folder / 'events.jsonl').read_bytes()
+        waiting[0]['frame']['worldReadiness']['reason'] = 'foreign_pause'
+        (folder / 'events.jsonl').write_bytes(b''.join(approach.canonical(row)+b'\n' for row in rows))
+        with self.assertRaises((RuntimeError, ValueError)): audit_recording(folder, bound, report)
+        (folder / 'events.jsonl').write_bytes(original)
+
+
 if __name__ == '__main__':
     unittest.main()

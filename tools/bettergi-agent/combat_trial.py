@@ -899,7 +899,8 @@ def arm_reviewed_paused(preparation_path):
     exclusive_json(folder / 'ARM-REQUESTED.json', dict(runId=preparation['runId'], requestId=request_id,
         preparationSha256=bundle['preparationSha256'], preparedSha256=bundle['readySha256']))
     try:
-        verify_reviewed_preparation(preparation, folder)
+        # The plan below is only in memory. Its final verifier freshly replays the
+        # complete preparation before publication; do not duplicate that I/O here.
         reviewed_liveness(preparation, ready['hostClaim'])
         plan = {name: copy.deepcopy(preparation[name]) for name in paused_review.COMMON_PLAN_FIELDS}
         plan.update(version=1, kind=paused_review.PLAN_KIND, createdAtUnixNs=time.time_ns(),

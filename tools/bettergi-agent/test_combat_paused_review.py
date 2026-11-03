@@ -240,6 +240,78 @@ class PausedReviewTrialTests(unittest.TestCase):
             path.write_bytes(raw)
             os.utime(path, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
 
+    def test_reviewed_arm_has_one_final_fresh_preparation_replay(self):
+        """The real ARM call retains its last full replay before any plan or ARM is published."""
+        self.capture_and_pause()
+        self.prepare()
+        observed = []
+        def armed(ready):
+            """Count only this API call; independent worker admission remains outside the patch."""
+            with patch.object(trial, 'verify_reviewed_preparation', wraps=trial.verify_reviewed_preparation) as full:
+                self.arm(ready)
+            observed.append(full.call_count)
+            self.assertEqual(full.call_count, 1)
+            self.assertTrue((self.folder / 'plan.json').exists())
+            self.assertTrue((self.folder / 'ARM.json').exists())
+            raise ValueError('inert ARM replay count finished')
+        self.assertEqual(self.worker(arm=armed), 1)
+        self.assertEqual(observed, [1], self.report().get('error'))
+        self.assertEqual(self.report()['error'], 'inert ARM replay count finished')
+        self.assertEqual((self.loads, self.lifecycle.starts, self.episodes), (1, 0, 0))
+
+    def assert_arm_construction_mutation_refused(self, mutate, message):
+        """Change synthetic evidence during pure plan construction, immediately before the retained replay."""
+        self.capture_and_pause()
+        self.prepare()
+        original_scope_fields = trial.scope_fields
+        changes = []
+        def changed(scope):
+            """The scope hook models a concurrent change without replacing the actual verifier."""
+            result = original_scope_fields(scope)
+            mutate()
+            changes.append(True)
+            return result
+        def armed(ready):
+            """Keep the mutation inside this ARM call and let the real worker preserve its failure."""
+            with patch.object(trial, 'scope_fields', side_effect=changed):
+                self.arm(ready)
+        self.assertEqual(self.worker(arm=armed), 1)
+        self.assertEqual(changes, [True], self.report().get('error'))
+        self.assertRegex(self.report()['error'], message)
+        self.assertTrue((self.folder / 'ARM-REQUESTED.json').exists())
+        self.assertFalse((self.folder / 'plan.json').exists())
+        self.assertFalse((self.folder / 'ARM.json').exists())
+        self.assertFalse((self.folder / 'READY-TO-RESUME.json').exists())
+        self.assertEqual((self.loads, self.lifecycle.starts, self.episodes), (1, 0, 0))
+
+    def test_reviewed_arm_final_replay_refuses_changed_source_bytes(self):
+        """Removing the earlier replay cannot admit a current source changed before final verification."""
+        def mutate():
+            """Change only this fixture's unimported source copy."""
+            self.code.write_bytes(self.code.read_bytes() + b'\n')
+        self.assert_arm_construction_mutation_refused(mutate, 'Source bytes changed')
+
+    def test_reviewed_arm_final_replay_refuses_foreign_preparation_snapshot(self):
+        """A substituted preparation cannot reuse the earlier ready witness or the in-memory plan."""
+        def mutate():
+            """Keep the JSON well formed but replace its exact original owner identity."""
+            value = json.loads(self.plan_path.read_bytes())
+            value['owner']['child']['processId'] += 1
+            self.plan_path.write_bytes(canonical(value))
+        self.assert_arm_construction_mutation_refused(mutate, 'Prepared worker identity or authority changed')
+
+    def test_reviewed_arm_final_replay_keeps_stop_after_plan_construction(self):
+        """A STOP arriving between the early liveness check and final replay still prevents publication."""
+        self.assert_arm_construction_mutation_refused(
+            lambda: (self.folder / 'STOP').write_text('inert stop', encoding='utf-8'), 'was stopped')
+
+    def test_reviewed_arm_final_replay_keeps_original_scene_expiry(self):
+        """The original scene clock is never reset when in-memory construction consumes its budget."""
+        def expire():
+            """Advance only the existing fixture clock past its original scene deadline."""
+            self.clock_offset = self.preparation['pausedReview']['chain']['originalSceneDeadlineClientNs'] + 1 - self.qpc_ns
+        self.assert_arm_construction_mutation_refused(expire, 'Native reviewed scene is stale or future-dated')
+
     def test_reviewed_plan_uses_one_complete_preparation_replay(self):
         """Only this exact paused format skips duplicate common I/O; its complete verifier still runs."""
         def inspect(plan):

@@ -3467,7 +3467,7 @@ function createActOneAdapter(sessionId,options) {
             if(value.mission==='questStep'&&['lionFieldCombat','lionFieldProbe'].indexOf(value.step)>=0)names.push('lion-field-combat.js','world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&value.step==='lionFieldProbe')names.push('paused-navigation-anchor.js','lisa-climb-release.js');
             if(value.mission==='questStep'&&value.step==='lisaStatueRecovery')names.push('lisa-statue-recovery.js','world-inventory.js','local-pause.js');
-            if(value.mission==='questStep'&&value.step==='combatStatueRetreat')names.push('combat-statue-retreat.js','world-inventory.js','local-pause.js');
+            if(value.mission==='questStep'&&['combatStatueRetreat','actTwoStarfellInventoryTeleport'].indexOf(value.step)>=0)names.push('combat-statue-retreat.js','world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&value.step==='combatStatueHeal')names.push('combat-statue-retreat.js','combat-statue-heal.js','combat-statue-panel.js','world-inventory.js','local-pause.js','statue-dialogue.js');
             if(value.mission==='questStep'&&value.step==='worldInventoryClose')names.push('world-inventory.js');
             if(value.mission==='questStep'&&(value.step==='lionStart'||value.step==='lionPartyStart'))names.push('lion-entry.js');
@@ -5838,22 +5838,58 @@ function createActOneAdapter(sessionId,options) {
         },
         runLisaWindriseTeleport: async function(initial,observe){
             var protector=loadLocalPause(),current=initial,attempted=false,result=null,operationError=null;
-            var actTwoTeleport=request&&['actTwoGateTeleport','actTwoCityTeleport','actTwoWindriseTeleport','actTwoLionTeleport','actTwoNorthTeleport','actTwoStarfellTeleport','actTwoCoastTeleport','actTwoSpringvaleTeleport'].indexOf(request.step)>=0,city=request&&request.step==='actTwoCityTeleport',lion=request&&request.step==='actTwoLionTeleport',north=request&&request.step==='actTwoNorthTeleport',destination=request&&request.step==='actTwoGateTeleport'?{x:-1122.173,y:2197.455}:city?{x:-867.68,y:2281.38}:lion?{x:-1436.901,y:1659.013}:north?{x:-1508.909,y:2298.307}:request.step==='actTwoCoastTeleport'?{x:-1636.902,y:2679.84}:request.step==='actTwoStarfellTeleport'?{x:-1323.474,y:2566.115}:request.step==='actTwoSpringvaleTeleport'?{x:-867.23413,y:1992.874}:{x:-1265.917,y:1928.381};
+            var inventoryTeleport=request&&request.step==='actTwoStarfellInventoryTeleport';
+            var actTwoTeleport=request&&['actTwoGateTeleport','actTwoCityTeleport','actTwoWindriseTeleport','actTwoLionTeleport','actTwoNorthTeleport','actTwoStarfellTeleport','actTwoCoastTeleport','actTwoSpringvaleTeleport'].indexOf(request.step)>=0,city=request&&request.step==='actTwoCityTeleport',lion=request&&request.step==='actTwoLionTeleport',north=request&&request.step==='actTwoNorthTeleport',destination=request&&request.step==='actTwoGateTeleport'?{x:-1122.173,y:2197.455}:city?{x:-867.68,y:2281.38}:lion?{x:-1436.901,y:1659.013}:north?{x:-1508.909,y:2298.307}:request.step==='actTwoCoastTeleport'?{x:-1636.902,y:2679.84}:(request.step==='actTwoStarfellTeleport'||inventoryTeleport)?{x:-1323.474,y:2566.115}:request.step==='actTwoSpringvaleTeleport'?{x:-867.23413,y:1992.874}:{x:-1265.917,y:1928.381};
             var rows=initial&&initial.ocr||[],proof=actOneLocalPauseProof(initial,Date.now(),request.session);
-            if(!request||request.mission!=='questStep'||(!actTwoTeleport&&request.step!=='lisaWindriseTeleport')||actTwoTeleport&&!actTwoOriginalAccount(rows)||
+            // This explicit entry consumes recognized inventory evidence without sending Escape or M.
+            // The native teleport API owns its existing bounded map/teleport operation.
+            var inventorySource=inventoryTeleport?lastObservation:null,
+                inventorySeal=inventorySource?combatRetreatSeal(inventorySource):null,
+                inventoryGate=inventoryTeleport?combatRetreatModule():null,
+                inventoryPermission=inventoryTeleport?eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;'):null;
+            // Reuse the retreat's original capture clock and exact UID, plus the current private observation.
+            function inventoryReady(){
+                if(inventoryUiOnly||!request||request.mission!=='questStep'||!inventorySource||
+                   inventorySource!==lastObservation||!initial||initial.session!==request.session||
+                   initial.frameId!==inventorySource.frameId||initial.timestamp!==inventorySource.timestamp||
+                   initial.screenshotPath!==inventorySource.screenshotPath||
+                   !Number.isInteger(request.expectedFrameId)||initial.frameId<=request.expectedFrameId||
+                   combatRetreatSeal(initial)!==inventorySeal||combatRetreatSeal(inventorySource)!==inventorySeal||
+                   events.some(function(e){return e.type==='actTwoStarfellInventoryTeleport';})||
+                   !inventoryGate.fresh(inventorySource,Date.now(),request.session,-1)||
+                   inventorySource.hud.captureStamp.capturedAt!==inventorySource.capturedAt||
+                   !inventoryGate.originalUid(inventorySource)||actOneEnterGameAuthPrompt(inventorySource.ocr)||
+                   actOneEnterGameUnknownUi(inventorySource.ocr))return false;
+                var paused=actOneLocalPauseProof(inventorySource,Date.now(),request.session);
+                return !!(paused&&paused.kind==='inventory'&&inventoryPermission(inventorySource,Date.now(),request.session));
+            }
+            var inventoryRefusal={status:'stopped',step:'actTwoStarfellInventoryTeleport',
+                reason:'Fresh original-account inventory required',teleportAttempted:false,questComplete:false};
+            if(inventoryTeleport&&!inventoryReady())return inventoryRefusal;
+            if(!inventoryTeleport&&(!request||request.mission!=='questStep'||(!actTwoTeleport&&request.step!=='lisaWindriseTeleport')||actTwoTeleport&&!actTwoOriginalAccount(rows)||
                !proof||proof.kind!=='map'||
                !rows.some(function(r){return /^(Starfell Valley|Starfell Valleyale|Galesong\s*Hill)$/.test(r.text.trim())||actTwoTeleport&&r.text.trim()==='Windwail Highland';})||
-               request.step==='actTwoSpringvaleTeleport'&&!rows.some(function(r){return r.text.trim()==='Galesong Hill'&&r.x>=1500&&r.y>=950;}))
+               request.step==='actTwoSpringvaleTeleport'&&!rows.some(function(r){return r.text.trim()==='Galesong Hill'&&r.x>=1500&&r.y>=950;})))
                 return {status:'stopped',step:'lisaWindriseTeleport',reason:'Fresh Windrise regional map required',teleportAttempted:false,questComplete:false};
             var lastInputFrame=initial.frameId,event=null;
             try{
-                checkStop();ready();attempted=true;
+                checkStop();ready();
+                // Helper reads and heartbeat checks cannot extend the original 1000 ms source admission.
+                if(inventoryTeleport&&!inventoryReady())return inventoryRefusal;
+                attempted=true;
                 event={type:request.step,frameId:initial.frameId,x:destination.x,y:destination.y,startedAt:Date.now()};events.push(event);
+                if(inventoryTeleport)event.source={session:inventorySource.session,frameId:inventorySource.frameId,
+                    capturedAt:inventorySource.capturedAt,timestamp:inventorySource.timestamp,screenshotPath:inventorySource.screenshotPath};
                 try{await genshin.tp(destination.x,destination.y,false);}finally{event.finishedAt=Date.now();}
                 var arrived=false;
                 for(var poll=0;poll<8;poll++){
                     checkStop();await sleep(350);current=await observe();
-                    if((actTwoTeleport?actTwoOriginalAccount(current.ocr)&&current.hud.world&&current.hud.groundControls&&current.hud.health&&!current.hud.climbing:actOneLionFalconWaypointReady(current,Date.now(),request.session))&&current.map&&
+                    // Only this inventory entry adds explicit living numeric HP and the fixed Teyvat map.
+                    if((inventoryTeleport?inventoryGate.fresh(current,Date.now(),request.session,lastInputFrame)&&
+                        inventoryGate.originalUid(current)&&current.hud.world===true&&current.hud.groundControls===true&&
+                        current.hud.health&&Number.isInteger(current.hud.health.current)&&Number.isInteger(current.hud.health.max)&&
+                        current.hud.health.current>0&&current.hud.health.max>0&&current.hud.health.current<=current.hud.health.max&&
+                        current.map&&current.map.map==='Teyvat'&&current.hud.climbing===false:actTwoTeleport?actTwoOriginalAccount(current.ocr)&&current.hud.world&&current.hud.groundControls&&current.hud.health&&!current.hud.climbing:actOneLionFalconWaypointReady(current,Date.now(),request.session))&&current.map&&
                        Math.hypot(current.map.x-destination.x,current.map.y-destination.y)<=20){arrived=true;break;}
                     if(actOneLocalPauseProof(current,Date.now(),request.session))break;
                 }
@@ -5863,6 +5899,7 @@ function createActOneAdapter(sessionId,options) {
                     nativeTeleportMs:event.finishedAt-event.startedAt};
             }catch(e){operationError=String(e&&e.message||e);}
             if(attempted)return await finishWithLocalPause(protector,this,initial,observe,lastInputFrame,result,operationError);
+            if(inventoryTeleport&&operationError){inventoryRefusal.reason=operationError;return inventoryRefusal;}
             return result;
         },
         // Fixed retreat from a recognized pause. The existing protector owns final pause input.

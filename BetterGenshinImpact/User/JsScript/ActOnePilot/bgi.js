@@ -2482,6 +2482,8 @@ function createActOneAdapter(sessionId,options) {
     var worldInventoryCloseAttempted=false;
     // A new request cannot inherit another request's positive before-frame or B attempt.
     var inventoryUiPauseBefore=null,inventoryUiPauseAdmittedAt=null,inventoryUiPauseAttempted=false;
+    // A request may reread its own UID pixels once before B, never after an input attempt.
+    var inventoryUiPauseUidCropAttempted=false;
     var expectedSession = Number(sessionId), held = null, request = null, events = [], lastObservation = null, navLastAcceptedPosition = null, heartbeat = null, focusRecoveryAttempted = false, wolfInfoAttempted = false, lionDomainStartAttempted=false, lionPartyStartAttempted=false, lionFalconWaypointAttempted=false, wolfContinueAttempted = false, wolfInventoryContinueAttempted = false, wolfInventoryOpenAttempted = false, wolfKaeyaFoodAttempted = false, wolfFeedKaeyaAttempted = false, wolfRecoveryFoodUseAttempted=false, wolfRecoveryFoodSelectAttempted=false, wolfRecoveryFoodFeedAttempted=false, wolfRecoveryFoodCloseAttempted=false, wolfExitFlameAttempted=false, wolfWindContinueAttempted=false, wolfWindSpaceAttempted=false, wolfWindRideContinueAttempted=false, wolfWindRideSpaceAttempted=false, wolfGlideContinueAttempted=false, wolfGlideMoves=0, wolfGlideLastMoveFrame=null, wolfGlideBaseline=null, wolfDefensiveCryoAttempted = false, wolfAimCryoAttempted = false, wolfCloseFoodAttempted = false, wolfCloseFoodCompletedAt = null, wolfCloseFoodLookAttempted = false, wolfCloseFoodForwardAttempted = false, wolfCloseFoodSkillAttempted = false, wolfTurretSkillAttempted = false, wolfTurretForwardAttempted = false, wolfTurretSkillFinishedAt = null, wolfTurretBaseline = null, wolfConsoleContinueAttempted=false, wolfConsoleInteractAttempted=false, wolfApproachContinueAttempted=false, wolfApproachMoveAttempted=false, wolfApproachHydroFrame=null,wolfApproachHydroReceiptId=null,wolfCombatSeekForwards=0,wolfCombatSeekTurns=0,wolfCombatSeekFrames=[],wolfBurstContinueAttempted=false,wolfBurstQAttempted=false,wolfBurstPauseAttempted=false,wolfCryoContinueAttempted=false,wolfCryoResumeConfirmedAt=null,wolfCryoBaseline=null,wolfCryoSkillAttempted=false,wolfCryoPauseAttempted=false,wolfCryoWaitMs=6500,wolfCryoWaitPlan=null,wolfReviveContinueAttempted=false,wolfReviveContinueFrame=null,wolfReviveSelectAttempted=false,wolfReviveAmberBaseline=null,wolfReviveRecoverySelectAttempted=false,wolfReviveRecoveryConfirmAttempted=false,wolfReviveRecoverySelectFrame=null,wolfReviveRecoveryConfirmFrame=null,wolfReviveRecoveryAmberBaseline=null,ocrPrimitiveMs=0,ocrReadCount=0;
     function dispose(v) { if (v && typeof v.dispose === 'function') v.dispose(); }
     var wolfCryoLastInputFrame = null;
@@ -3431,7 +3433,7 @@ function createActOneAdapter(sessionId,options) {
             statueDialogueState={advanceAttempted:false,leaveAttempted:false,lastInputFrame:-1};
             lisaNavigationState={active:false,lastInputFrame:-1,lastField:null};
             worldInventoryCloseAttempted=false;
-            inventoryUiPauseBefore=null;inventoryUiPauseAdmittedAt=null;inventoryUiPauseAttempted=false;
+            inventoryUiPauseBefore=null;inventoryUiPauseAdmittedAt=null;inventoryUiPauseAttempted=false;inventoryUiPauseUidCropAttempted=false;
             lionDomainStartAttempted=false;lionPartyStartAttempted=false;lionFalconWaypointAttempted=false;
             wolfClosingState={begun:false,inputs:0,lastFrame:-1,lastFinishedAt:null};
             wolfChestAttempted=false;
@@ -8795,7 +8797,12 @@ function createActOneAdapter(sessionId,options) {
                     actTwoAutoCropNeeded(rows))
                     rows=actOneMergeControlCropRows(rows,scaledRows(img,90,20,100,65),90,20);
                 if(actTwoMapResinCropNeeded(rows))rows=actOneMergeControlCropRows(rows,scaledRows(img,1615,25,140,45),1615,25);
-                if(request&&(request.mission==='navigation'&&['Explore for Adventure Rank','Talk to Kaeya','Speak to Lynn','Give the Chicken-Mushroom Skewer to Lynn','Talk to Amber','Go to the exam point'].indexOf(request.objective)>=0||/^actTwo/.test(request.step||''))&&!actTwoOriginalAccount(rows)){
+                // The UI pause can reuse this fixed same-capture crop only after a positive
+                // engine-admitted before-frame. Keep all original rows: no UID digit is inferred.
+                var inventoryUiPauseUidCrop=inventoryUiOnly&&request&&request.mission==='questStep'&&
+                    request.step==='worldInventory'&&inventoryUiPauseBefore&&!inventoryUiPauseAttempted&&!inventoryUiPauseUidCropAttempted;
+                if(request&&(request.mission==='navigation'&&['Explore for Adventure Rank','Talk to Kaeya','Speak to Lynn','Give the Chicken-Mushroom Skewer to Lynn','Talk to Amber','Go to the exam point'].indexOf(request.objective)>=0||/^actTwo/.test(request.step||'')||inventoryUiPauseUidCrop)&&!actTwoOriginalAccount(rows)){
+                    if(inventoryUiPauseUidCrop)inventoryUiPauseUidCropAttempted=true;
                     rows=actOneMergeControlCropRows(rows,scaledRows(img,1680,1040,/^actTwo(?:WorldMap|MapClose|CityTeleport|WindriseTeleport|LionTeleport|NorthTeleport|StarfellTeleport|CoastTeleport)$/.test(request.step||'')?190:240,40),1680,1040);
                 }
                 var fullOcrMs = Date.now() - o0,reviveStockOcrMs=0;

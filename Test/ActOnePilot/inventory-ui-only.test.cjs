@@ -342,3 +342,139 @@ test('actual main refuses incompatible automatic entry before adapter constructi
  await assert.rejects(runMain({autoEnterGame:true}),/requires autoEnterGame=false/);
  await assert.rejects(runMain({inventoryUiOnlyV1:'true'}),/must be a boolean/);
 });
+
+
+// The saved observations are immutable; only the fixture's capture/OCR boundaries are mocked.
+const uidPauseFixture=require('./fixtures/inventory-ui-pause-r74-uid.fixture.json');
+function uidPauseActual(options={}){
+ const saved=uidPauseFixture.observations,before=clone(saved.failedBefore.ocr),bad=clone(saved.failedInput.ocr);
+ const fieldRows=options.fieldRowsSequence||[before,bad,bad,bad,bad,bad];
+ const f=actual({step:'worldInventory',initialScreen:'field',throwGps:true,fieldRowsSequence:fieldRows,...options});
+ const Original=f.context.ImageRegion,originalNow=f.context.Date.now;let offset=0,uidCrops=0,partyCrops=0;
+ f.context.Date.now=()=>originalNow()+offset;
+ const cropUid=options.uidRows===undefined?[row('UID: 693306810',12,30,570,70)]:options.uidRows;
+ const cropParty=saved.recoveryInput.ocr.filter(r=>['Lumina','Amber','Kaeya','Lisa'].includes(r.text)).map(r=>
+  ({text:r.text,x:(r.x-1640)*3,y:(r.y-240)*3,width:r.width*3,height:r.height*3}));
+ f.context.ImageRegion=class extends Original{
+  findMulti(ro){
+   const rect=this.srcMat.rect;let rows=null;
+   if(rect&&rect.x===1680&&rect.y===1040&&rect.w===240&&rect.h===40){
+    uidCrops++;offset+=options.uidCostMs||0;rows=cropUid;
+    if(options.stopInUidCrop)f.getVirtualFiles().set('stop.json',JSON.stringify({session:'lion-adapter-test',createdAt:f.getNow()}));
+    if(options.loseFocusInUidCrop)f.setForeground(false);
+   }else if(rect&&rect.x===900&&rect.y===990&&rect.w===125&&rect.h===40){
+    rows=f.metrics.captures===2&&options.inputHealthRows!==undefined?options.inputHealthRows:[row('1001/1001',0,0,300,60)];
+   }else if(rect&&rect.x===1640&&rect.y===240&&rect.w===140&&rect.h===350){
+    partyCrops++;rows=options.partyRows===undefined?cropParty:options.partyRows;
+   }
+   if(rows===null)return super.findMulti(ro);
+   const result=rows.filter(r=>r.x>=ro.x&&r.x<ro.x+ro.w&&r.y>=ro.y&&r.y<ro.y+ro.h).map(r=>({...r}));
+   result.count=result.length;return result;
+  }
+ };
+ f.uidCrops=()=>uidCrops;f.uidPartyCrops=()=>partyCrops;
+ return f;
+}
+
+// Exercise the actual Engine, adapter, mission and receipt writer without native calls.
+async function uidPauseRun(options={}){
+ const f=uidPauseActual(options),runner=engine.create(f.adapter,{session:'lion-adapter-test',enableInput:true,inventoryUiOnlyV1:true});
+ const before=await runner.observe();
+ const request={id:'same-capture-uid-pause',mission:'questStep',step:'worldInventory',session:'lion-adapter-test',expectedFrameId:1,createdAt:f.getNow()};
+ let status,error=null;
+ try{status=await runner.process(request,()=>require(path.join(packageDir,'mission.js')));}catch(e){error=e;}
+ const receipt=JSON.parse(f.getVirtualFiles().get('receipts/lion-adapter-test/same-capture-uid-pause.json'));
+ // A focus exception may occur before Engine publishes this source; retain that absence.
+ const inputBytes=f.getVirtualFiles().get('observations/lion-adapter-test/frame-0002.json');
+ const input=inputBytes===undefined?null:JSON.parse(inputBytes);
+ return {f,runner,before,request,status,error,receipt,input};
+}
+
+test('retained combat05 input loses UID and party evidence while separate recovery is positive',()=>{
+ const {failedInput,recoveryInput}=uidPauseFixture.observations;
+ assert.equal(context.actTwoOriginalAccount(failedInput.ocr),false);assert.equal(visible(failedInput),false);
+ assert.equal(context.actOneInventoryUiPartyCropNeeded(failedInput.ocr,failedInput.hud),false);
+ assert.equal(context.actTwoOriginalAccount(recoveryInput.ocr),true);assert.equal(visible(recoveryInput),true);
+});
+
+test('same-capture UID reread repairs the retained failure without another capture or request',async()=>{
+ const r=await uidPauseRun({uidCostMs:20});assert.equal(r.error,null);assert.equal(r.status,'completed');
+ assert.equal(r.f.uidCrops(),1);assert.equal(r.f.uidPartyCrops(),1);assert.equal(r.f.metrics.captures,4);
+ assert.equal(r.f.metrics.mapCalls,0);assert.equal(r.f.metrics.orientationCalls,0);
+ assert.equal(r.input.hud.world,true);assert.deepEqual(r.input.hud.health,{current:1001,max:1001});
+ assert(r.input.ocr.some(row=>row.text==='UID:69330681'));assert(r.input.ocr.some(row=>row.text==='UID: 693306810'));
+ assert(r.input.ocr.some(row=>row.text==='umina'));assert(r.input.ocr.some(row=>row.text==='Lumina'));
+ assert.deepEqual(r.receipt.details.inputEvents.map(e=>e.type),['controllerRevision','key']);
+ const key=r.receipt.details.inputEvents[1];assert.equal(key.key,'VK_B');assert.equal(key.durationMs,60);assert.equal(key.frameId,2);
+ assert.equal(key.startedAt-r.input.uiObservation.observationStartedAtUnixMs,20);
+ assert.deepEqual(clone(r.f.inputs.filter(e=>e.kind==='down').map(e=>e.key)),['VK_B']);
+ assert.equal([...r.f.getVirtualFiles().keys()].filter(p=>p.startsWith('receipts/')).length,1);
+});
+
+test('unreadable or still truncated UID crop is attempted once and never permits B',async()=>{
+ for(const uidRows of [[],[row('UID:69330681',12,30,480,60)]]){
+  const r=await uidPauseRun({uidRows});assert.equal(r.error,null);assert.equal(r.status,'stopped');
+  assert.equal(r.f.uidCrops(),1);assert.equal(r.f.uidPartyCrops(),0);assert.equal(r.input.hud.world,false);
+  assert.equal(r.f.inputs.filter(e=>e.kind==='down').length,0);
+  assert.deepEqual(r.receipt.details.inputEvents.map(e=>e.type),['controllerRevision']);
+ }
+});
+
+test('foreign UID in either original or cropped rows remains a conflict and emits no B',async()=>{
+ const saved=uidPauseFixture.observations;
+ const foreign=clone(saved.failedInput.ocr);foreign.find(r=>r.text.startsWith('UID')).text='UID: 693306811';
+ for(const options of [{uidRows:[row('UID: 693306811',12,30,570,70)]},{fieldRowsSequence:[saved.failedBefore.ocr,foreign,foreign]}]){
+  const r=await uidPauseRun(options);assert.equal(r.status,'stopped');assert.equal(r.f.uidCrops(),1);
+  assert.equal(context.actTwoOriginalAccount(r.input.ocr),false);assert.equal(r.f.inputs.filter(e=>e.kind==='down').length,0);
+ }
+});
+
+test('repaired UID cannot replace absent party or original health and scene guards',async()=>{
+ const r=await uidPauseRun({partyRows:[]});assert.equal(r.status,'stopped');assert.equal(r.input.hud.world,false);
+ assert.equal(r.f.uidCrops(),1);assert.equal(r.f.inputs.filter(e=>e.kind==='down').length,0);
+ for(const inputHealthRows of [[],[row('0/1001',0,0,300,60)]]){
+  const q=await uidPauseRun({inputHealthRows});assert.equal(q.status,'stopped');
+  assert.equal(q.input.hud.world,false);assert.equal(q.f.inputs.filter(e=>e.kind==='down').length,0);
+ }
+ for(const mutate of [rows=>rows.push(row('Confirm',850,550)),rows=>rows.push(row('Space',1700,1020)),
+  rows=>rows.splice(rows.findIndex(r=>r.text==='E'),1),rows=>rows.push(row('Food',140,32))]){
+  const rows=clone(uidPauseFixture.observations.failedInput.ocr);mutate(rows);
+  const q=await uidPauseRun({fieldRowsSequence:[uidPauseFixture.observations.failedBefore.ocr,rows,rows]});
+  assert.equal(q.status,'stopped');assert.equal(q.f.inputs.filter(e=>e.kind==='down').length,0);
+ }
+});
+
+test('UID OCR cost cannot renew the original capture-start freshness budget',async()=>{
+ const r=await uidPauseRun({uidCostMs:1001});assert.equal(r.status,'stopped');assert.equal(r.f.uidCrops(),1);
+ assert.equal(r.input.timestamp-r.input.uiObservation.observationStartedAtUnixMs,1001);
+ assert.equal(r.f.inputs.filter(e=>e.kind==='down').length,0);
+ assert.deepEqual(r.receipt.details.inputEvents.map(e=>e.type),['controllerRevision']);
+});
+
+test('STOP or focus loss during UID reread preserves failure and zero key events',async()=>{
+ for(const options of [{stopInUidCrop:true},{loseFocusInUidCrop:true}]){
+  const r=await uidPauseRun(options);assert(r.error);assert.match(r.error.message,/Stop requested|foreground focus/);
+  assert.equal(r.receipt.status,'failed');assert.equal(r.f.uidCrops(),1);
+  assert.equal(r.f.inputs.filter(e=>e.kind==='down').length,0);
+  assert.deepEqual(r.receipt.details.inputEvents.map(e=>e.type),['controllerRevision']);
+ }
+});
+
+test('UID repair requires the admitted positive before-frame and does not affect other modes',async()=>{
+ const bad=uidPauseFixture.observations.failedInput.ocr;
+ const missing=await uidPauseRun({fieldRowsSequence:[bad,bad,bad]});assert.equal(missing.before.hud.world,false);
+ assert.equal(missing.status,'stopped');assert.equal(missing.f.uidCrops(),0);assert.equal(missing.f.inputs.filter(e=>e.kind==='down').length,0);
+ for(const mode of [{inventoryUiOnlyV1:false,throwGps:false,step:'worldInventory'},{step:'worldInventoryClose'},{step:'worldInventory',noAdmission:true}]){
+  const f=uidPauseActual(mode),before=await f.adapter.observe('lion-adapter-test',1);
+  if(!mode.noAdmission)f.adapter.beginMission({id:'other-mode',mission:'questStep',step:mode.step,session:'lion-adapter-test',expectedFrameId:1,createdAt:f.getNow()},before);
+  await f.adapter.observe('lion-adapter-test',2);
+  assert.equal(f.uidCrops(),0);assert.equal(f.inputs.filter(e=>e.kind==='down').length,0);
+ }
+});
+
+test('one UID crop cannot become a reread or B retry after the input attempt',async()=>{
+ const r=await uidPauseRun({blockPauseB:true});assert.equal(r.status,'stopped');assert.equal(r.f.uidCrops(),1);
+ assert.equal(r.receipt.details.inputEvents.filter(e=>e.type==='key').length,1);
+ assert.deepEqual(clone(r.f.inputs.filter(e=>e.kind==='down').map(e=>e.key)),['VK_B']);
+ assert.equal(await r.f.adapter.pauseWorldInventory(),false);assert.equal(r.f.uidCrops(),1);
+});

@@ -517,7 +517,8 @@ var ActOneMission = (function () {
         });
         if(name==='actTwoStarfellStatueOpen')return api.runActTwoNavigationWithPause(observation,observe,async function(field){
             var moves=0,turns=0,selection=eval(file.readTextSync('act-two-interaction.js')+'\nActTwoInteraction;');
-            function safe(o){var h=o&&o.hud,m=o&&o.map;return !!(m&&m.map==='Teyvat'&&Math.hypot(m.x+1323.474,m.y-2566.115)<15&&h&&h.world&&h.groundControls&&!h.climbing&&!h.auto&&!h.dialogueReady&&!h.choice&&h.health&&[1733,4015].indexOf(h.health.max)>=0&&h.health.current>=h.health.max*.7&&Array.isArray(h.enemyBars)&&!h.enemyBars.length&&!(h.objectives||[]).length);}
+            // Statue recovery admits living Kaeya; Amber keeps its original seventy-percent health floor.
+            function safe(o){var h=o&&o.hud,m=o&&o.map;return !!(m&&m.map==='Teyvat'&&Math.hypot(m.x+1323.474,m.y-2566.115)<15&&h&&h.world&&h.groundControls&&!h.climbing&&!h.auto&&!h.dialogueReady&&!h.choice&&h.health&&((h.health.max===1733&&h.health.current>=h.health.max*.7)||(h.health.max===4015&&Number.isInteger(h.health.current)&&h.health.current>0&&h.health.current<=h.health.max))&&Array.isArray(h.enemyBars)&&!h.enemyBars.length&&!(h.objectives||[]).length);}
             while(safe(field)&&moves<4&&turns<8){
                 api.checkStop();var m=field.map,dx=-1323.474-m.x,dy=2566.115-m.y,dist=Math.hypot(dx,dy);
                 if(selection.selection(field.ocr||[],'Statue of The Seven')==='selected')break;

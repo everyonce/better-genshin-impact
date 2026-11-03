@@ -11,6 +11,7 @@ from combat_trial_guard import (CombatTrialGuard, bind_review, canonical, propos
 from episode_split import read_split
 from native_combat import validate_capability,validate_frame
 import combat_paused_review_proof as paused_review
+import combat_paused_file_admission as file_admission
 from policy_rgb_archive import (JOURNAL_NAMES, RECORDING_FORMAT, read_policy_rgb, read_recording_jsonl,
                                 recording_journal_path, recording_metadata)
 
@@ -770,8 +771,11 @@ def verify_reviewed_episode_clocks(plan, wrapper, episode, events=None):
             and held.get('kind') == 'per-worker-held-immutable-admission-v1'
             and all(held.get(key) is True for key in ('denyWriteDelete', 'freshHashReadRequired', 'consumed', 'closed'))
             and held.get('checkpointContentHeld') is False and held.get('closeErrors') == []
-            # Historical declarations retain their own ceiling; only the finite R73 increase is added.
-            and type(held.get('maximumBytes')) is int and held['maximumBytes'] in (384 * 1024 * 1024, 448 * 1024 * 1024)
+            # Historical declarations keep their own ceiling; R75 additionally needs its exact archived chain.
+            and type(held.get('maximumBytes')) is int
+            and ((held['maximumBytes'] in (384 * 1024 * 1024, 448 * 1024 * 1024) and 'ownerBudget' not in held)
+                or (held['maximumBytes'] == 480 * 1024 * 1024
+                    and file_admission.validate_r75_budget(plan, held.get('immutableFiles'), held.get('ownerBudget')) == held['maximumBytes']))
             and (held.get('maximumFiles'), held.get('maximumFileBytes')) == (2304, 32 * 1024 * 1024)
             and type(held.get('fileCount')) is int and 0 < held['fileCount'] <= 2304
             and isinstance(held.get('immutableFiles'), dict) and len(held['immutableFiles']) == held['fileCount']

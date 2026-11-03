@@ -1,4 +1,5 @@
 """Observation retention under video backpressure; no model, native pipe or game."""
+import copy
 import io
 import json
 from pathlib import Path
@@ -43,6 +44,43 @@ def read_rows(path):
 
 
 class RecorderMetadataTests(unittest.TestCase):
+    def test_combat_receipt_intake_survives_async_queue_without_inference_or_aliasing(self):
+        """Keep absent, null, empty and populated envelopes distinct through actual disk IO."""
+        from combat_trial_guard import sensor_frame
+        with tempfile.TemporaryDirectory() as root, \
+                patch.object(client.subprocess, 'Popen', return_value=MemoryEncoder()):
+            recorder = HeldRecorder(Path(root) / 'episode', 'synthetic-encoder', 20, 1024 * 1024,
+                                    frame_capacity=4, retain_frame_receipts=True)
+            originals, expected = [], []
+            for index, receipts in enumerate((None, [], [{'requestId': 'original', 'steps': [{'keys': ['LBUTTON']}]}]), 1):
+                original = observed_frame(index)
+                original['receipts'] = receipts
+                originals.append(original)
+            absent = observed_frame(4)
+            absent.pop('receipts')
+            originals.append(absent)
+            try:
+                for original in originals:
+                    expected.append(copy.deepcopy(original))
+                    with patch.object(client.json, 'dumps', side_effect=AssertionError('Producer serialized JSON')):
+                        self.assertTrue(recorder.put(original, bytes(64 * 48 * 3)))
+                # The writer is still blocked, so this detects shallow-copy evidence corruption.
+                originals[2]['receipts'][0]['steps'][0]['keys'].append('W')
+                originals[2]['receipts'].append({'requestId': 'later'})
+                originals[1]['receipts'].append({'requestId': 'not-original'})
+            finally:
+                recorder.release_writer.set()
+                result = recorder.close()
+            self.assertTrue(result['complete'] and result['lossless'], result)
+            self.assertTrue(result['frameReceiptsRetained'])
+            for name in ('frames.jsonl', 'observations.jsonl'):
+                rows = read_rows(recorder.directory / name)
+                self.assertEqual(len(rows), 4)
+                for original, row in zip(expected, rows):
+                    self.assertEqual('receipts' in row, 'receipts' in original)
+                    self.assertEqual(sensor_frame(row, source_stale_recovery=True),
+                                     sensor_frame(original, source_stale_recovery=True))
+
     def test_rgb192_burst_is_drained_losslessly_and_exact_peak_is_retained(self):
         with tempfile.TemporaryDirectory() as root, \
                 patch.object(client.subprocess, 'Popen', return_value=MemoryEncoder()):

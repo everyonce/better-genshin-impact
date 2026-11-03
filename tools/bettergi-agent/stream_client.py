@@ -746,7 +746,7 @@ class RecordingFrameQueue(queue.Queue):
 class AsyncVideoRecorder:
     """Bound image, observation and event queues; only the worker performs recording IO."""
     def __init__(self, directory, ffmpeg, fps, max_bytes, frame_capacity=8, event_capacity=256, preview=False,
-                 metadata_capacity=256, shared_budget=None, retain_policy_rgb=False):
+                 metadata_capacity=256, shared_budget=None, retain_policy_rgb=False, retain_frame_receipts=False):
         from policy_rgb_archive import RECORDING_FORMAT
         if not math.isfinite(fps) or fps <= 0 or max_bytes <= 0 or min(frame_capacity, event_capacity, metadata_capacity) < 1:
             raise ValueError('Recording rate, budget, and queue capacities must be positive')
@@ -757,6 +757,8 @@ class AsyncVideoRecorder:
         self.ffmpeg, self.fps, self.max_bytes = ffmpeg, fps, max_bytes
         self.shared_budget = shared_budget
         self.retain_policy_rgb = retain_policy_rgb
+        # Combat replay needs the exact original receipt envelope, including an empty list.
+        self.retain_frame_receipts = retain_frame_receipts
         self.recording_format = RECORDING_FORMAT
         self.journal_files = {}
         self.policy_rgb_bytes = 0
@@ -816,11 +818,17 @@ class AsyncVideoRecorder:
             if self.closing.is_set():
                 return False
             # Headers retain source clocks/readiness even when image admission fails.
-            # They retain bounded native guard crops, omit policy pixels/receipts,
-            # and never claim a video index.
+            # They retain bounded native guard crops, omit inline policy pixels,
+            # and never claim a video index. Ordinary captures omit receipt envelopes.
             frame_metadata = dict(metadata)
-            for key in ('receipts', 'videoFrameIndex', 'videoPtsSeconds', 'videoQueueAccepted', 'policyRgb'):
+            for key in ('videoFrameIndex', 'videoPtsSeconds', 'videoQueueAccepted', 'policyRgb'):
                 frame_metadata.pop(key, None)
+            if self.retain_frame_receipts:
+                # Snapshot before queue admission so later list mutation cannot alter intake evidence.
+                if 'receipts' in frame_metadata:
+                    frame_metadata['receipts'] = copy.deepcopy(frame_metadata['receipts'])
+            else:
+                frame_metadata.pop('receipts', None)
             video_accepted = True
             try:
                 # Immutable bytes are shared, not recopied or encoded on the capture path.
@@ -851,6 +859,7 @@ class AsyncVideoRecorder:
                     'recordedBytes': self.recorded_bytes,
                     'recordingFormat': self.recording_format, 'journalFiles': dict(self.journal_files),
                     'policyRgbEnabled': self.retain_policy_rgb, 'policyRgbBytes': self.policy_rgb_bytes,
+                    'frameReceiptsRetained': self.retain_frame_receipts,
                     'policyRgbStoredBytes': self.policy_rgb_stored_bytes,
                     'policyRgbFrames': self.policy_rgb_frames,
                     'error': self.error, 'closed': self.closed,
@@ -2238,7 +2247,8 @@ def run_episode(args, policy=None, control=None):
             recorder = archive
         else:
             recorder = AsyncVideoRecorder(args.record_dir, args.ffmpeg, args.fps, args.record_max_mib*2**20,
-                                          preview=args.preview, retain_policy_rgb=getattr(args,'retain_policy_rgb',False)) if args.record_dir else None
+                                          preview=args.preview, retain_policy_rgb=getattr(args,'retain_policy_rgb',False),
+                                          retain_frame_receipts=combat_guard is not None) if args.record_dir else None
         if combat_guard is not None:
             recorder = CombatTrialRecorder(recorder)
         elif scout_guard is not None and scout_guard.ground_capability is not None and not executed_history:

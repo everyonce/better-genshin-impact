@@ -196,16 +196,18 @@ class CombatTrialStreamTests(unittest.TestCase):
         args.expected_process_id, args.expected_session_id = 22, 3
         return args
 
-    def run_inert(self, folder, bridge, policy, recorder, *, seconds=1.5, control=None, args=None):
+    def run_inert(self, folder, bridge, policy, recorder, *, seconds=1.5, control=None, args=None, recorder_factory=None, real_images=False):
         """Run all real stream admission/intake/dispatch logic while replacing only external resources."""
         args = self.arguments(folder, seconds=seconds) if args is None else args
         control = dormant_control(folder, frozen_goal=True) if control is None else control
         control.set_initial_goal(dict(instruction='fixed combat'), 'stationary')
         with ExitStack() as stack:
-            stack.enter_context(patch.dict(sys.modules, {'PIL': SimpleNamespace(
-                Image=SimpleNamespace(frombytes=lambda mode, shape, pixels: pixels))}))
+            # The real disk recorder needs Pillow's context-managed image and PNG writer.
+            if not real_images:
+                stack.enter_context(patch.dict(sys.modules, {'PIL': SimpleNamespace(
+                    Image=SimpleNamespace(frombytes=lambda mode, shape, pixels: pixels))}))
             stack.enter_context(patch.object(client, 'Bridge', return_value=bridge))
-            stack.enter_context(patch.object(client, 'AsyncVideoRecorder', return_value=recorder))
+            stack.enter_context(patch.object(client, 'AsyncVideoRecorder', return_value=recorder, side_effect=recorder_factory))
             verified = stack.enter_context(patch('resident_runtime.verify_bridge_identity'))
             stack.enter_context(redirect_stdout(io.StringIO()))
             result = client.run_episode(args, policy, control)

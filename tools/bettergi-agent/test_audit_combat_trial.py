@@ -344,6 +344,49 @@ class CombatTrialAuditTests(unittest.TestCase):
         self.assertEqual(replay['state']['acceptedActions'], 0)
         self.assertEqual(replay['counts']['combatTrialLocalRefusal'], 1)
 
+    def test_recovery_stream_real_async_recording_passes_original_exact_intake_audit(self):
+        """Exercise production recorder creation and the unchanged auditor with empty/nonempty receipts."""
+        from unittest.mock import patch
+        import stream_client as client
+        from policy_rgb_archive import read_recording_jsonl
+        from test_combat_trial_stream import CombatStaleRecoveryStreamTests, StaleRecoveryBridge, TrialPolicy
+        from test_recorder_metadata import MemoryEncoder
+        real_recorder = client.AsyncVideoRecorder
+        created = []
+
+        def factory(*args, **kwargs):
+            """Use the real constructor arguments supplied by the combat stream."""
+            recorder = real_recorder(*args, **kwargs)
+            created.append(recorder)
+            return recorder
+
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(client.subprocess, 'Popen', return_value=MemoryEncoder()):
+            folder = Path(directory)
+            harness, policy = CombatStaleRecoveryStreamTests(), TrialPolicy()
+            args = harness.recovery_arguments(folder, policy)
+            # Match the live20FPS capture rate instead of the memory-only100FPS fixture.
+            args.fps = args.decision_hz = 20
+            result = harness.run_inert(folder, StaleRecoveryBridge(interrupt=False), policy, None,
+                                       args=args, recorder_factory=factory, real_images=True)
+            report = json.loads((folder / 'run.json').read_bytes())
+            self.assertEqual(result, 0, report.get('error'))
+            self.assertEqual(len(created), 1)
+            self.assertTrue(report['recording']['frameReceiptsRetained'])
+            recording = folder / 'recording'
+            frames = read_recording_jsonl(recording, 'frames.jsonl')[0]
+            events = read_recording_jsonl(recording, 'events.jsonl')[0]
+            audited = audit_episode(report, events, frames, recording, args.combat_trial_binding)
+            self.assertTrue(audited['trialCompleteVerified'])
+            self.assertTrue(any(row.get('receipts') == [] for row in frames))
+            self.assertTrue(any(row.get('receipts') for row in frames))
+            # Losing only this field must still trigger the original exact-intake refusal.
+            missing = copy.deepcopy(frames)
+            for row in missing:
+                row.pop('receipts', None)
+            with self.assertRaisesRegex(ValueError, 'exact original guard intake'):
+                audit_episode(report, events, missing, recording, args.combat_trial_binding)
+
     def test_actual_stream_event_order_is_replayable(self):
         """Run the real stream loop against inert resources, then independently replay its output."""
         from test_combat_trial_stream import CombatTrialStreamTests, TrialBridge, TrialPolicy

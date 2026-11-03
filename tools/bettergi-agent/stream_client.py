@@ -26,7 +26,7 @@ import uuid
 from observation_timing import frame_timing, observation_timestamp
 from host_observation import HostObservationContract
 from hybrid_routes import COURTYARD_ROUTE, EXECUTABLE_ROUTE_IDS, PATROL_STATIONS, ROUTE_IDS, STAIR_POST_ROUTE, STREET_PATROL_ROUTE, SURFACE_ROUTES
-from navigation_profiles import COURTYARD_PROFILE,SURFACE_PROFILE,NAVIGATION_PROFILES,validate_capability,required_profile
+from navigation_profiles import COURTYARD_PROFILE,SURFACE_PROFILE,SCOUT_PROFILE,NAVIGATION_PROFILES,validate_capability,required_profile
 from navigation_idle_recovery import (GOAL_INTENTS, NavigationIdleRecovery, RecoverySuperseded,
                                       capture_context, eligible_frame, fresh_frame)
 from observation_profiles import (LEGACY, P2P_NATIVE, PROFILES, FrameProfileError,
@@ -1205,17 +1205,22 @@ def validate_combat_trial_options(args, policy, control):
     """Keep the explicit single-lease combat authority separate from navigation and scout reuse."""
     binding = getattr(args, 'combat_trial_binding', None)
     if binding is None:
-        if getattr(control, 'combat_trial_guard', None) is not None:
+        if (getattr(control, 'combat_trial_guard', None) is not None
+                or getattr(args, 'combat_trial_control_profile', None) is not None
+                or getattr(policy, 'combat_trial_control_profile', None) is not None):
             raise ValueError('Combat trial authority cannot be removed or reused')
         return None
     from combat_trial_guard import (validate_binding, canonical, combat_scope, SINGLE_SCOPE, scope_maximum,
-                                    source_stale_recovery_enabled)
+                                    source_stale_recovery_enabled, ground_combat_enabled, GROUND_PROFILE)
     validate_binding(binding)
+    ground = ground_combat_enabled(binding)
     # The opt-in is frozen by preparation and stamped only after the worker reopens
     # its exact armed review. A candidate count alone cannot widen input authority.
     scope = combat_scope(binding)
     group = scope != SINGLE_SCOPE
     for authority in (args, policy):
+        if getattr(authority, 'combat_trial_control_profile', None) != (GROUND_PROFILE if ground else None):
+            raise ValueError('Ground-combat control profile differs from its separately prepared authority')
         recovery_stamp = getattr(authority, 'combat_trial_source_stale_recovery_policy', None)
         expected_recovery = binding['policy'].get('sourceStaleRecoveryPolicy')
         if canonical(recovery_stamp) != canonical(expected_recovery):
@@ -1236,11 +1241,23 @@ def validate_combat_trial_options(args, policy, control):
                  'combat_shadow', 'hybrid_navigation', 'hybrid_observe', 'navigation_guidance', 'navigation_progress',
                  'navigation_climb_recovery', 'navigation_idle_reset_seconds', 'warm_photo_plan',
                  'camera_calibration', 'steering_shadow', 'landmark_shadow', 'photo_station')
+    if ground:
+        # Localization is read-only here; no navigation controller, recovery or resident authority is inherited.
+        forbidden = tuple(key for key in forbidden if key != 'navigation_guidance') + (
+            'p2p_executed_history', 'batch_source_hold', 'reviewed_scout_batch', 'reviewed_scout_route',
+            'inspected_source_gap_recovery', 'inspected_obstacle_recovery')
+        if (args.navigation_guidance is not True or args.navigation_profile != SCOUT_PROFILE
+                or getattr(args, 'require_ground_control_layout', False) is not True
+                or args.goal_intent != 'unspecified' or args.history != 41
+                or args.seconds != 5
+                or getattr(args, 'p2p_mouse_sampling', None) is not None
+                or getattr(args, 'p2p_temperature', 1.0) != 1.0):
+            raise ValueError('Ground combat requires the fixed original lease, native pose/layout and unchanged H41 policy')
     if (any(getattr(args, key, None) for key in forbidden) or args.execution_context != 'off'
             or not args.enable_input or not args.native_combat_observation or not args.require_world_ready
-            or args.observation_profile != P2P_NATIVE or args.input_keys != 'LBUTTON'
-            or args.max_input_actions != 3 or not 0 < args.seconds <= 5
-            or not 0 < args.max_observation_age_ms <= 150 or args.action_hold_ms != 100
+            or args.observation_profile != P2P_NATIVE or args.input_keys != ('W,A,S,D,LBUTTON' if ground else 'LBUTTON')
+            or args.max_input_actions != (20 if ground else 3) or not 0 < args.seconds <= 5
+            or not 0 < args.max_observation_age_ms <= 150 or args.action_hold_ms != (50 if ground else 100)
             or not args.record_dir or not args.retain_policy_rgb or not 0 < args.record_max_mib <= 160
             or not args.p2p_execution_feedback or not args.p2p_prewarm or not args.soft_cadence):
         raise ValueError('Combat trial requires one recorded bounded pure-LBUTTON lease without other controllers')
@@ -2006,6 +2023,10 @@ def run_episode(args, policy=None, control=None):
     combat_binding = validate_combat_trial_options(args, policy, control)
     combat_guard = None
     combat_source_recovery = bool(combat_binding and 'sourceStaleRecoveryPolicy' in combat_binding['policy'])
+    ground_combat = bool(combat_binding and combat_binding.get('controlProfile') == 'reviewed-ground-combat-microtrial-v1')
+    ground_clock = None
+    if ground_combat and (getattr(args, 'lease_deadline', None) is None or not math.isfinite(args.lease_deadline)):
+        raise ValueError('Ground combat requires its original outer deadline before opening a native connection')
     hybrid_observe = validate_hybrid_observe_options(args)
     navigation_profile = validate_navigation_scope_options(args)
     native_combat_enabled = getattr(args,'native_combat_observation',False)
@@ -2048,7 +2069,17 @@ def run_episode(args, policy=None, control=None):
     if combat_binding is not None:
         try:
             from combat_trial_guard import CombatTrialGuard
-            combat_guard = CombatTrialGuard(combat_binding, args.combat_trial_owner, bridge.hello, time.perf_counter_ns())
+            started = time.perf_counter_ns()
+            guard_options = {}
+            if ground_combat:
+                # QPC first and monotonic second make this conversion conservative; neither clock is renewed.
+                monotonic = time.monotonic_ns()
+                lease_deadline = int(args.lease_deadline * 1e9)
+                ground_clock = dict(clientNs=started, monotonicNs=monotonic,
+                    leaseDeadlineMonotonicNs=lease_deadline,
+                    originalOuterDeadlineClientNs=started + lease_deadline - monotonic)
+                guard_options['outer_deadline_ns'] = ground_clock['originalOuterDeadlineClientNs']
+            combat_guard = CombatTrialGuard(combat_binding, args.combat_trial_owner, bridge.hello, started, **guard_options)
             control.combat_trial_guard = combat_guard
         except Exception:
             bridge.handle.close()
@@ -2106,6 +2137,8 @@ def run_episode(args, policy=None, control=None):
     if combat_guard is not None:
         report['combatTrialGuard'] = combat_binding
         report['combatTrialGuardState'] = combat_guard.snapshot()
+        if ground_combat:
+            report['combatGroundClock'] = ground_clock
     if execution_mode != 'off':
         report['executionContext'] = {'mode': execution_mode, 'schema': 'execution-context-v1',
                                       'knowledgeClock': 'client_perf_counter_ns',
@@ -2203,9 +2236,9 @@ def run_episode(args, policy=None, control=None):
                 validate_combat_capability(native_combat_capability,scout_guard.native_capability)
             report['nativeCombatObservation'] = copy.deepcopy(native_combat_capability)
             report['nativeCombatEvidenceFrames'] = 0
-        if getattr(args,'require_ground_control_layout',False) and (scout_guard is None or scout_guard.ground_capability is None):
+        if getattr(args,'require_ground_control_layout',False) and not ground_combat and (scout_guard is None or scout_guard.ground_capability is None):
             raise RuntimeError('Ground-only scout input requires its immutable reviewed control-layout binding')
-        if scout_guard is not None and scout_guard.ground_capability is not None:
+        if ground_combat or scout_guard is not None and scout_guard.ground_capability is not None:
             from native_ground_control import negotiate as negotiate_ground
             report['nativeGroundControlObservation'],report['nativeGroundControlGate']=negotiate_ground(bridge)
         if getattr(args, 'inspect_junction_map', False) or getattr(args,'recover_junction_map',False):
@@ -3151,8 +3184,14 @@ def run_episode(args, policy=None, control=None):
                     if state['trip'] is not None:
                         from combat_trial_guard import CombatTrialStop
                         raise CombatTrialStop('Combat trial stopped: ' + state['trip']['reason'])
+                    if ground_combat and state['phase'] != 'complete':
+                        completed_window = combat_guard.complete_ground_window(time.perf_counter_ns())
+                        if completed_window is not None:
+                            recorder.event(completed_window)
+                            state = completed_window['state']
+                            report['combatTrialGuardState'] = state
                     if state['trialComplete']:
-                        report['endReason'] = 'combatTrialComplete'
+                        report['endReason'] = 'combatGroundWindowDrained' if ground_combat else 'combatTrialComplete'
                         break
                     if state['phase'] == 'awaitingStaleRelease':
                         from combat_trial_guard import STALE_RELEASE_REASON
@@ -3168,7 +3207,8 @@ def run_episode(args, policy=None, control=None):
                         last_readiness_epoch = released['worldReadiness']['epoch']
                         latest.clear()
                         state = combat_guard.snapshot()
-                    if state['phase'] != 'ready' or not state['evidenceReady']:
+                    if state['phase'] != 'ready' or not state['evidenceReady'] or (ground_combat
+                            and (state['groundCombat']['dispatchClosed'] or state['acceptedActions'] >= 20)):
                         # No inference, superseding action, generic release or automatic resume
                         # can overtake the owned terminal receipt and post-release source barrier.
                         cadence.advance(time.perf_counter())
@@ -3419,8 +3459,12 @@ def run_episode(args, policy=None, control=None):
                 result['warmRequestId'] = warm.current['id']
             if args.action_hold_ms is not None and result.get('parseValid') and len(result.get('steps', [])) == 1:
                 result['rawPolicySteps'] = [dict(step) for step in result['steps']]
-                result['steps'] = [dict(result['steps'][0], durationMs=args.action_hold_ms)]
-                result['controllerResampling'] = 'explicit-bounded-key-hold; mouse applied once'
+                if ground_combat:
+                    # OpenP2P already emits50ms. An incompatible raw duration is refused, never repaired.
+                    result['controllerResampling'] = 'none; unchanged native50ms policy step'
+                else:
+                    result['steps'] = [dict(result['steps'][0], durationMs=args.action_hold_ms)]
+                    result['controllerResampling'] = 'explicit-bounded-key-hold; mouse applied once'
             action_model_id = args.model
             if hybrid:
                 selection = hybrid.choose(frame, result)
@@ -3529,7 +3573,13 @@ def run_episode(args, policy=None, control=None):
                             result['startBeforeMs'] = arguments['startBeforeMs']
                             evidence.update(expiresAtMs=arguments['expiresAtMs'], startBeforeMs=arguments['startBeforeMs'])
                         with (host_timing.native_call('action', request_id, frame['frameId']) if host_timing is not None else nullcontext()):
-                            response = transmit_bound_action(bridge,warm,report,arguments,'unacknowledgedAction',evidence)
+                            transmission = combat_guard.transmitting(time.perf_counter_ns()) if ground_combat else None
+                            try:
+                                response = transmit_bound_action(bridge,warm,report,arguments,'unacknowledgedAction',evidence)
+                            finally:
+                                # Retain the pre-wire gate after the call, so journal serialization cannot consume its reserve.
+                                if transmission is not None:
+                                    recorder.event(transmission)
                         if executed_history and action_response_accepted(response[0], request_id, response[1]):
                             # Register while intake is excluded, before a fast terminal reply can be collected.
                             history_requests[request_id] = copy.deepcopy(executed_request)
@@ -3827,7 +3877,7 @@ def run_episode(args, policy=None, control=None):
             if state['trip'] is not None or not state['trialComplete']:
                 report.setdefault('error', 'Combat trial incomplete: ' + (state['trip']['reason'] if state['trip'] else state['phase']))
             else:
-                report['endReason'] = 'combatTrialComplete'
+                report['endReason'] = 'combatGroundWindowDrained' if ground_combat else 'combatTrialComplete'
         report.setdefault('endReason', 'noUsableFrames' if report.get('captureError') else
                           'streamError' if report.get('streamError') else 'error' if report.get('error') else
                           'durationElapsed' if time.perf_counter() >= deadline else 'stopped')

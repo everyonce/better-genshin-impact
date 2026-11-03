@@ -9,11 +9,18 @@ It does not confer scout authority, prove enemy identity, or evaluate damage/kil
 import copy
 import hashlib
 import json
+import math
+import io
+import base64
 import threading
 from collections import OrderedDict
 from types import MappingProxyType
 
 from native_combat import finite, scene_capability, validate_capability, validate_frame
+from native_ground_control import (require_ground_frame, validate_frame as ground_frame,
+    validate_capability as ground_capability, scene_capability as ground_scene_capability)
+from navigation_profiles import SCOUT_PROFILE, allows_pose_scope, scout_scope, validate_capability as navigation_capability
+from reviewed_scout_route import ReviewedScoutRoute, require_navigation_review_scene
 
 
 MODEL = 'open-p2p'
@@ -26,6 +33,8 @@ FOUR_SCOPE = 'reviewed-group-up-to-four-v1'
 # A separately reviewed policy permits one released freshness interruption, never an action retry.
 STALE_RECOVERY_MODE = 'released-source-stale-once-v1'
 STALE_RELEASE_REASON = 'sourceStaleReacquisition'
+# This additional mode never changes the existing stationary policies.
+GROUND_PROFILE = 'reviewed-ground-combat-microtrial-v1'
 
 
 def stale_recovery_policy():
@@ -47,9 +56,114 @@ def source_stale_recovery_enabled(value):
     return True
 
 
+def ground_combat_policy():
+    """Declare the selected fixed movement/camera bounds, separate from enemy-count scope."""
+    return dict(kind=GROUND_PROFILE, minimumNumericHealthPercent=90, actionHoldMs=50,
+        finalDrainHeadroomMs=650, navigationProfile=SCOUT_PROFILE, maximumDistance=6,
+        corridorHalfWidth=1, startRadius=.35, maximumStartYawError=3,
+        maximumAbsoluteMouseDx=50, maximumCumulativeAbsoluteMouseDx=200,
+        mouseDy=0, requireGroundControlLayout=True, mixedActionsAllowed=False,
+        staleRecoveryAllowed=False)
+
+
+def ground_combat_enabled(value):
+    """Require all explicit mode markers and refuse partial, mixed or tunable authority."""
+    require(isinstance(value, dict) and isinstance(value.get('policy'), dict), 'Missing combat policy')
+    policy = value['policy']
+    if not any(key in value for key in ('controlProfile', 'groundCombat')) and 'groundCombatPolicy' not in policy:
+        return False
+    require(value.get('controlProfile') == GROUND_PROFILE and combat_scope(value) == FOUR_SCOPE
+        and canonical(policy.get('groundCombatPolicy')) == canonical(ground_combat_policy())
+        and 'sourceStaleRecoveryPolicy' not in policy, 'Invalid explicit ground-combat policy')
+    return True
+
+
+def ground_route(value):
+    """Reuse the existing strict two-point local route format and reviewed corridor bounds."""
+    route = ReviewedScoutRoute.from_document(value)
+    require(route.profile_id == SCOUT_PROFILE, 'Ground combat requires the local combat-scout pose scope')
+    length = math.dist(*route.points)
+    require(4 < length <= 6, 'Ground-combat corridor must be longer than4 and no longer than6 units')
+    bounds, _ = scout_scope(SCOUT_PROFILE)
+    require(all(bounds['minX'] + 1 <= x <= bounds['maxX'] - 1
+        and bounds['minY'] + 1 <= y <= bounds['maxY'] - 1 for x, y in route.points),
+        'Ground-combat corridor crosses the retained local map bounds')
+    return route
+
+
+def qualify_ground_frame(frame, route, *, replay_pixels=False):
+    """Require original same-frame ground, motion and localized corridor evidence without changing HP rules."""
+    require_ground_frame(frame, replay_pixels=replay_pixels)
+    motion = frame.get('motionEvidence') or {}
+    require(motion.get('status') == 'normal' and motion.get('spaceKeyMatched') is False,
+        'Ground-combat movement is climbing, swimming, flying or unknown')
+    pose = frame.get('navigationPose') or {}
+    require(pose.get('state') == 'valid' and pose.get('frameId') == frame.get('frameId')
+        and allows_pose_scope(pose, SCOUT_PROFILE) and pose.get('layerId') == 'MapBack_2'
+        and all(finite(pose.get(k)) for k in ('x', 'y', 'yawDegrees', 'positionConfidence', 'yawConfidence'))
+        and .99 <= pose['positionConfidence'] <= 1 and .2 <= pose['yawConfidence'] <= 1
+        and 0 <= pose['yawDegrees'] < 360, 'Ground combat requires a fresh qualified same-frame surface pose')
+    start, end = route.points
+    length = math.dist(start, end)
+    dx, dy = end[0] - start[0], end[1] - start[1]
+    px, py = pose['x'] - start[0], pose['y'] - start[1]
+    projection, cross = (px * dx + py * dy) / length, abs(px * dy - py * dx) / length
+    require(cross <= 1 and -.35 <= projection <= length and math.hypot(px, py) <= 6,
+        'Ground-combat pose left the separately reviewed corridor')
+    return pose
+
+
+def bind_ground_review(review, plan, scene, selected, image, baseline, maximum_candidates):
+    """Bind only an independently inspected anchored corridor and its real full-resolution ground crops."""
+    require_navigation_review_scene(plan, scene)
+    require(review.get('clearSurfaceCorridor') is True and review.get('fenceOpeningReviewed') is True,
+        'Ground combat requires a separately reviewed clear corridor and fence opening')
+    route = ground_route(review.get('route'))
+    require(plan.get('navigationProfile') == SCOUT_PROFILE and isinstance(plan.get('anchor'), list)
+        and len(plan['anchor']) == 2 and all(finite(x) for x in plan['anchor'])
+        and math.dist(plan['anchor'], route.points[0]) <= .35, 'Ground-combat capture anchor differs from reviewed start')
+    ground = ground_scene_capability(scene, required=True)
+    navigation_capability(scene.get('capability') or {}, SCOUT_PROFILE)
+    samples = scene.get('stableSamples')
+    require(isinstance(samples, list) and len(samples) == 3, 'Ground combat requires three original stable samples')
+    for row in [selected] + samples:
+        require(row in scene.get('observations', []) and (row.get('executionContext') or {}).get('lastSequence') == 0,
+            'Ground-combat passive source contains input or detached samples')
+        evidence = validate_frame(row, scene_capability(scene))
+        require(evidence is not None and evidence['state'] == 'valid'
+            and health_reason(evidence, baseline, maximum_candidates) is None
+            and 1 <= len(evidence['enemyBarCandidates']) <= maximum_candidates
+            and finite(row.get('sourceFrameAgeMs')) and 0 <= row['sourceFrameAgeMs'] < 150
+            and row.get('inputAvailable') is True
+            and row.get('frameWorldReadiness', {}).get('ready') is True
+            and row.get('worldReadiness', {}).get('ready') is True,
+            'Ground-combat review lacks fresh healthy native target evidence')
+        pose = qualify_ground_frame(row, route, replay_pixels=True)
+        require(math.dist((pose['x'], pose['y']), route.points[0]) <= .35, 'Ground-combat reviewed start moved')
+    for first, second in zip(samples, samples[1:]):
+        a, b = first['sourceFrame'], second['sourceFrame']
+        require(a['captureEpoch'] == b['captureEpoch'] and a['timestamp100ns'] < b['timestamp100ns']
+            and first['frameId'] < second['frameId'] and 80 <= b['freshnessAtMs'] - a['freshnessAtMs'] <= 250
+            and first['frameWorldReadiness']['epoch'] == second['frameWorldReadiness']['epoch']
+            and math.dist(tuple(first['navigationPose'][k] for k in ('x', 'y')),
+                          tuple(second['navigationPose'][k] for k in ('x', 'y'))) <= .35
+            and abs((first['navigationPose']['yawDegrees'] - second['navigationPose']['yawDegrees'] + 180) % 360 - 180) <= 3,
+            'Ground-combat stable sources changed pose, clock or readiness')
+    from PIL import Image
+    with Image.open(io.BytesIO(image)) as picture:
+        require(picture.format == 'PNG' and picture.size == (1920, 1080), 'Ground combat requires an original full-resolution PNG')
+        rgb = picture.convert('RGB')
+        for crop in selected['groundControlEvidence']['crops']:
+            require(rgb.crop((crop['x'], crop['y'], crop['x'] + crop['width'], crop['y'] + crop['height'])).tobytes()
+                == base64.b64decode(crop['rgbBase64'], validate=True), 'Ground-combat crops differ from reviewed pixels')
+    return dict(route=route.document(), nativeGroundControlObservation=ground,
+                navigationCapability=copy.deepcopy(scene['capability']))
+
+
 def validated_trial_policy(value):
     """Join the named scope and optional recovery to every unchanged fixed policy field."""
-    result = trial_policy(combat_scope(value), source_stale_recovery=source_stale_recovery_enabled(value))
+    result = trial_policy(combat_scope(value), source_stale_recovery=source_stale_recovery_enabled(value),
+                          ground_combat=ground_combat_enabled(value))
     require(canonical(value.get('policy')) == canonical(result), 'Combat policy differs from its fixed bounds')
     return result
 
@@ -93,7 +207,7 @@ def inspected_count(value, scope):
     return count
 
 
-def trial_policy(scope=SINGLE_SCOPE, *, source_stale_recovery=False):
+def trial_policy(scope=SINGLE_SCOPE, *, source_stale_recovery=False, ground_combat=False):
     """Return a named fixed scope; both earlier policies remain byte-for-byte unchanged."""
     result = dict(version=1, maximumSeconds=5, maximumActions=3, maximumSourceAgeMs=150,
                 minimumHoldMs=33, maximumHoldMs=100, stopTemperatureC=78,
@@ -109,6 +223,12 @@ def trial_policy(scope=SINGLE_SCOPE, *, source_stale_recovery=False):
     if source_stale_recovery:
         require(scope == FOUR_SCOPE, 'Combat stale-source recovery requires the reviewed four-enemy scope')
         result.update(version=3, sourceStaleRecoveryPolicy=stale_recovery_policy())
+    require(type(ground_combat) is bool, 'Ground-combat opt-in must be boolean')
+    if ground_combat:
+        require(scope == FOUR_SCOPE and not source_stale_recovery,
+                'Ground combat requires explicit four-enemy scope without stale recovery')
+        result.update(version=4, maximumActions=20, minimumHoldMs=50, maximumHoldMs=50,
+            allowedKeys=['W', 'A', 'S', 'D', 'LBUTTON'], groundCombatPolicy=ground_combat_policy())
     return result
 
 
@@ -139,13 +259,15 @@ def retained(value):
     return repr(value)
 
 
-def sensor_frame(frame, *, source_stale_recovery=False):
+def sensor_frame(frame, *, source_stale_recovery=False, ground_combat=False):
     """Retain source, readiness and HUD proof without copying policy pixels or unrelated telemetry."""
     keys = ('type', 'frameId', 'capturedAtMs', 'sourceWidth', 'sourceHeight', 'sourceFrame',
             'sourceTimestampKind', 'sourceFrameAgeMs', 'serverNowMs', 'droppedReceipts', 'combatEvidence', 'frameWorldReadiness',
             'worldReadiness', 'inputAvailable')
     if source_stale_recovery:
         keys += ('receipts', 'executionContext')
+    if ground_combat:
+        keys += ('groundControlEvidence', 'navigationPose', 'motionEvidence')
     return retained({key: frame[key] for key in keys if key in frame}) if isinstance(frame, dict) else retained(frame)
 
 
@@ -185,6 +307,7 @@ def bind_review(review_bytes, plan_bytes, scene_bytes, sidecar_bytes, image_byte
                                        (review_bytes, plan_bytes, scene_bytes, sidecar_bytes, goal_bytes)]
     require(all(isinstance(item, dict) for item in (review, plan, scene, sidecar, goal)), 'Invalid combat review objects')
     scope = combat_scope(review)
+    ground = ground_combat_enabled(review)
     maximum_candidates = scope_maximum(scope)
     visible_count = inspected_count(review, scope)
     require(review.get('kind') == REVIEW_KIND and review.get('sceneLabel') == 'enemy-visible'
@@ -194,6 +317,7 @@ def bind_review(review_bytes, plan_bytes, scene_bytes, sidecar_bytes, image_byte
     require(isinstance(note, str) and 20 <= len(note.strip()) <= 2000, 'Combat review needs an inspection note')
     hp, maximum = review.get('inspectedHealth'), review.get('inspectedMaximumHealth')
     require(type(hp) is int and type(maximum) is int and 0 < hp <= maximum, 'Invalid inspected combat health')
+    require(not ground or hp * 100 >= maximum * 90, 'Ground-combat numeric admission must be at least90 percent')
     owner = review.get('owner')
     validate_owner(owner)
     require(canonical(plan.get('owner')) == canonical(owner) and plan.get('enableInput') is False
@@ -215,7 +339,7 @@ def bind_review(review_bytes, plan_bytes, scene_bytes, sidecar_bytes, image_byte
     # Every copy must still describe the same pixels, readiness and HUD evidence.
     for row in rows:
         require(all(canonical(row.get(key)) == canonical(frame.get(key)) for key in (*fields, 'frameWorldReadiness'))
-                and canonical(CombatTrialGuard._evidence_identity(row)) == canonical(CombatTrialGuard._evidence_identity(frame)),
+                and canonical(CombatTrialGuard._evidence_identity(row, ground=ground)) == canonical(CombatTrialGuard._evidence_identity(frame, ground=ground)),
                 'Selected combat observation has contradictory repeated-source evidence')
     require(all(canonical(frame.get(key)) == canonical(sidecar.get(key)) for key in fields)
             and sidecar.get('freshnessContractVersion') == 2 and sidecar.get('evidence') == 'WorldHud'
@@ -235,7 +359,10 @@ def bind_review(review_bytes, plan_bytes, scene_bytes, sidecar_bytes, image_byte
             'Reviewed combat image lacks fresh world evidence')
     binding = dict(kind=KIND, policy=validated_trial_policy(review), owner=owner, inspectedHealth=hp,
                    inspectedMaximumHealth=maximum, baselineHealthFraction=hp / maximum,
-                   reviewedFrame=sensor_frame(frame), imageName=review['imageName'], **scope_fields(scope))
+                   reviewedFrame=sensor_frame(frame, ground_combat=ground), imageName=review['imageName'], **scope_fields(scope))
+    if ground:
+        binding.update(controlProfile=GROUND_PROFILE,
+            groundCombat=bind_ground_review(review, plan, scene, frame, image_bytes, hp / maximum, visible_count))
     if visible_count is not None:
         binding['inspectedVisibleEnemyCount'] = visible_count
     for name, blob in zip(('review', 'plan', 'scene', 'sidecar', 'image', 'goal'), blobs):
@@ -264,9 +391,19 @@ def validate_binding(binding):
     require(evidence is not None and evidence['state'] == 'valid'
             and health_reason(evidence, hp / maximum, maximum_candidates) is None
             and 1 <= len(evidence['enemyBarCandidates']) <= (visible_count or 1), 'Invalid reviewed combat target or health')
+    if ground_combat_enabled(binding):
+        require(hp * 100 >= maximum * 90, 'Ground-combat numeric admission must be at least90 percent')
+        ground = binding.get('groundCombat')
+        require(isinstance(ground, dict) and set(ground) == {'route', 'nativeGroundControlObservation', 'navigationCapability'},
+                'Ground-combat binding is incomplete or tunable')
+        ground_capability(ground['nativeGroundControlObservation'])
+        navigation_capability(ground['navigationCapability'], SCOUT_PROFILE)
+        route = ground_route(ground['route'])
+        pose = qualify_ground_frame(frame, route, replay_pixels=True)
+        require(math.dist((pose['x'], pose['y']), route.points[0]) <= .35, 'Ground-combat bound start differs')
 
 
-def proposal_rejection(proposal):
+def proposal_rejection(proposal, *, ground_combat=False):
     """Accept an unchanged single normal-attack step; never project mixed actions into attacks."""
     if not isinstance(proposal, dict) or proposal.get('parseValid') is not True or proposal.get('scrollUnsupported', False) is not False:
         return 'invalidProposal'
@@ -274,6 +411,24 @@ def proposal_rejection(proposal):
     if not isinstance(steps, list) or len(steps) != 1 or not isinstance(steps[0], dict):
         return 'notOneStep'
     step = steps[0]
+    if ground_combat:
+        if set(step) != {'keys', 'mouseDx', 'mouseDy', 'durationMs'} or not isinstance(step['keys'], list):
+            return 'invalidGroundStep'
+        keys = step['keys']
+        if any(type(key) is not str for key in keys) or len(set(keys)) != len(keys):
+            return 'invalidGroundKeys'
+        if type(step['durationMs']) is not int or step['durationMs'] != 50:
+            return 'groundHoldMustBe50'
+        if any(type(step[key]) is not int for key in ('mouseDx', 'mouseDy')) or step['mouseDy'] != 0 or abs(step['mouseDx']) > 50:
+            return 'groundCameraOutsideBounds'
+        if keys == ['LBUTTON'] and step['mouseDx'] == 0:
+            return None
+        if (len(keys) in (1, 2) and set(keys) <= set('WASD') and step['mouseDx'] == 0
+                and not ({'W', 'S'} <= set(keys) or {'A', 'D'} <= set(keys))):
+            return None
+        if not keys and step['mouseDx'] != 0:
+            return None
+        return 'unsupportedGroundAction'
     if set(step) != {'keys', 'mouseDx', 'mouseDy', 'durationMs'} or step['keys'] != ['LBUTTON']:
         return 'notPureNormalAttack'
     if any(type(step[key]) is not int or step[key] != 0 for key in ('mouseDx', 'mouseDy')):
@@ -287,22 +442,47 @@ class CombatTrialStop(RuntimeError):
     """A terminal trial latch; its retained trigger must be saved before reader failure."""
 
 
+def ground_frame_reference(frame, binding_sha256):
+    """Bind immutable native pixels/ground/pose to their already-retained causal observation."""
+    original = dict(frameId=frame['frameId'], capturedAtMs=frame['capturedAtMs'],
+                    source=CombatTrialGuard._evidence_identity(frame, ground=True))
+    return dict(version=1, kind='ground-combat-frame-reference-v1', bindingSha256=binding_sha256,
+                frameId=frame['frameId'], capturedAtMs=frame['capturedAtMs'], sha256=digest(canonical(original)))
+
+
+def ground_release_reference(release, binding_sha256):
+    """Hash one complete already-acknowledged release, never once per later frame snapshot."""
+    return dict(version=1, kind='ground-combat-release-reference-v1', bindingSha256=binding_sha256,
+                clientTimeNs=release['clientTimeNs'], sha256=digest(canonical(release)))
+
+
 class CombatTrialGuard:
     """Gate one lease, one outstanding attack and all terminal/post-release evidence."""
 
-    def __init__(self, binding, owner, hello, started_ns):
+    def __init__(self, binding, owner, hello, started_ns, *, outer_deadline_ns=None):
         """Pin separate reviewed authority and the authenticated native lease before intake starts."""
         validate_binding(binding)
         require(type(started_ns) is int and started_ns >= 0, 'Invalid combat start clock')
         self.intake_lock = threading.RLock()
         self._binding = copy.deepcopy(binding)
+        self._ground = ground_combat_enabled(binding)
+        require(self._ground or outer_deadline_ns is None, 'Legacy combat cannot override its original guard deadline')
+        self._maximum_actions = 20 if self._ground else 3
+        if self._ground:
+            require(type(outer_deadline_ns) is int and started_ns < outer_deadline_ns <= started_ns + 5_000_000_000,
+                    'Ground combat requires its original conservative outer lease deadline')
+            self._ground_route = ground_route(binding['groundCombat']['route'])
+            self._outer_deadline = outer_deadline_ns
+            self._dispatch_cutoff = outer_deadline_ns - 650_000_000
+            self._camera_reserved = 0
+            self._dispatch_closed = False
         self._maximum_candidates = scope_maximum(combat_scope(binding))
         self._native_capability=validate_capability(hello.get('combatObservation') if isinstance(hello,dict) else None)
         validate_frame(self._binding['reviewedFrame'],self._native_capability)
         self._sha = digest(canonical(binding))
         self._hello = self._identity(owner, hello)
         self._started = started_ns
-        self._deadline = started_ns + 5_000_000_000
+        self._deadline = outer_deadline_ns if self._ground else started_ns + 5_000_000_000
         self._phase, self._reason = 'awaitingEvidence', 'awaitingFreshTarget'
         self._trip = self._last = self._release = self._pending = None
         self._armed = self._target_confirmed = self._eligible = False
@@ -310,6 +490,8 @@ class CombatTrialGuard:
         self._last_frame_id = 0
         self._world_epoch = None
         self._completed, self._requests = [], set()
+        # Only the new20-action profile projects recurring history; full causal/private records remain intact.
+        self._ground_completed_projection, self._ground_release_reference = [], None
         self._stale_recovery_enabled = source_stale_recovery_enabled(binding)
         self._stale_recovery = dict(policy=stale_recovery_policy(), used=0, pending=None, completed=[], existingHistoryResets=[])
         self._frames = OrderedDict()
@@ -322,6 +504,10 @@ class CombatTrialGuard:
                 and hello.get('observationProfile') == PROFILE and type(hello.get('goalVersion')) is int
                 and hello['goalVersion'] == 1 and 'LBUTTON' in hello.get('allowedKeys', []), 'Invalid combat input lease')
         validate_capability(hello.get('combatObservation'),self._native_capability)
+        if self._ground:
+            require(set(('W', 'A', 'S', 'D', 'LBUTTON')) <= set(hello.get('allowedKeys', []))
+                and SCOUT_PROFILE in hello.get('navigationProfiles', []), 'Ground combat native capabilities are incomplete')
+            ground_capability(hello.get('groundControlObservation'))
         require(all(isinstance(hello.get(key), str) and bool(hello[key]) for key in ('sessionId', 'ownerEpoch')), 'Missing combat lease identity')
         return {key: hello[key] for key in ('sessionId', 'ownerEpoch', 'goalVersion')}
 
@@ -331,12 +517,17 @@ class CombatTrialGuard:
             result = dict(bindingSha256=self._sha, phase=self._phase, reason=self._reason,
                 armed=self._armed, evidenceReady=self._eligible, startedNs=self._started, deadlineNs=self._deadline,
                 lease=self._hello, acceptedActions=self._accepted, completedActions=len(self._completed),
-                confirmationSources=self._sources, pending=self._pending, completed=self._completed,
+                confirmationSources=self._sources, pending=self._pending,
+                completed=self._ground_completed_projection if self._ground else self._completed,
                 lastObservation=self._last, lastRelease=self._release, trip=self._trip,
                 trialComplete=self._phase == 'complete', enemyIdentityVerified=False,
                 damageVerified=False, killVerified=False)
             if self._stale_recovery_enabled:
                 result['sourceStaleRecovery'] = self._stale_recovery
+            if self._ground:
+                result['groundCombat'] = dict(controlProfile=GROUND_PROFILE, outerDeadlineNs=self._outer_deadline,
+                    dispatchCutoffNs=self._dispatch_cutoff, finalDrainHeadroomMs=650,
+                    dispatchClosed=self._dispatch_closed, cumulativeAbsoluteMouseDxReserved=self._camera_reserved)
             return copy.deepcopy(result)
 
     def _event(self, kind, now_ns, **data):
@@ -364,7 +555,27 @@ class CombatTrialGuard:
                 self._stop('invalidClientClock', now_ns)
             elif now_ns >= self._deadline and self._phase not in ('complete', 'stopped'):
                 self._stop('trialDeadline', now_ns, pending=self._pending)
+            elif self._ground and now_ns >= self._dispatch_cutoff:
+                self._dispatch_closed = True
             return self.snapshot()
+
+    def complete_ground_window(self, now_ns):
+        """Close only a fresh, fully drained bounded window; this never extends the outer deadline."""
+        with self.intake_lock:
+            require(self._ground, 'Only the explicit ground profile has bounded-window completion')
+            self._live(now_ns)
+            if self._phase == 'complete' or not (self._dispatch_closed or self._accepted == 20):
+                return None
+            if (self._pending is not None or self._armed or self._phase != 'ready' or not self._eligible
+                    or self._last is None or not 0 <= self._age(self._last, now_ns) < 150
+                    or len(self._completed) != self._accepted):
+                return None
+            self._phase, self._reason, self._eligible = 'complete', 'groundWindowDrained', False
+            return self._event('WindowEnd', now_ns, outcome='bounded-ground-window-drained')
+
+    def _source_identity(self, frame):
+        """Keep legacy identity exact while binding the new same-pixel ground and pose fields."""
+        return self._evidence_identity(frame, ground=self._ground)
 
     def _live(self, now_ns):
         """Recheck the latch under the intake lock immediately before any dispatch boundary."""
@@ -373,13 +584,20 @@ class CombatTrialGuard:
             raise CombatTrialStop('Combat trial stopped: ' + self._trip['reason'])
 
     @staticmethod
-    def _evidence_identity(frame):
+    def _evidence_identity(frame, *, ground=False):
         """Exclude only poll latency and recognition duration from immutable pixel evidence."""
         evidence = copy.deepcopy(frame['combatEvidence'])
         evidence.pop('frameId', None)
         evidence.pop('recognitionMs', None)
-        return dict(sourceFrame=frame['sourceFrame'], evidence=evidence,
-                    sourceWidth=frame['sourceWidth'], sourceHeight=frame['sourceHeight'])
+        result = dict(sourceFrame=frame['sourceFrame'], evidence=evidence,
+                      sourceWidth=frame['sourceWidth'], sourceHeight=frame['sourceHeight'])
+        if ground:
+            for key in ('groundControlEvidence', 'navigationPose', 'motionEvidence'):
+                value = copy.deepcopy(frame.get(key))
+                if isinstance(value, dict):
+                    value.pop('recognitionMs', None)
+                result[key] = value
+        return result
 
     @staticmethod
     def _age(observation, now_ns):
@@ -462,7 +680,7 @@ class CombatTrialGuard:
         age, now = frame.get('sourceFrameAgeMs'), frame.get('serverNowMs')
         checked = current.get('checkedAtMs')
         require(frame.get('frameId') == prior['frameId'] and frame.get('capturedAtMs') == prior['capturedAtMs']
-                and canonical(self._evidence_identity(frame)) == canonical(self._evidence_identity(prior))
+                and canonical(self._source_identity(frame)) == canonical(self._source_identity(prior))
                 and frame.get('sourceTimestampKind') == 'wgc_reported_compositor_qpc'
                 and gate.get('ready') is True and gate.get('reason') == 'world_ready'
                 and type(gate.get('epoch')) is int and gate['epoch'] == self._world_epoch and gate.get('sourceFrameId') == frame['frameId']
@@ -550,7 +768,7 @@ class CombatTrialGuard:
         """Latch hazards before publication and return trigger metadata without throwing it away."""
         with self.intake_lock:
             self.tick(received_ns)
-            raw = sensor_frame(frame, source_stale_recovery=self._stale_recovery_enabled)
+            raw = sensor_frame(frame, source_stale_recovery=self._stale_recovery_enabled, ground_combat=self._ground)
             if self._trip is not None or self._phase == 'complete':
                 return self._event('Observation', received_ns, frame=raw, roundTripMs=round_trip_ms)
             self._eligible = False
@@ -568,6 +786,12 @@ class CombatTrialGuard:
                         self._stop('targetLost', received_ns, frame=raw)
                 if self._trip is None:
                     self._stale_source_transition(frame, received_ns)
+                if self._ground and self._trip is None:
+                    layout = ground_frame(frame)
+                    motion = frame.get('motionEvidence') or {}
+                    if (layout is not None and layout['state'] == 'valid' and not layout['groundControlsConfirmed']
+                            or motion.get('status') in ('climbing', 'swimming', 'flying') or motion.get('spaceKeyMatched') is True):
+                        self._stop('groundControlLost', received_ns, frame=raw)
                 available = evidence is not None and evidence['state'] == 'valid'
                 gate, current = frame.get('frameWorldReadiness'), frame.get('worldReadiness')
                 available = (available and isinstance(gate, dict) and isinstance(current, dict)
@@ -584,6 +808,13 @@ class CombatTrialGuard:
                         self._reason = 'awaitingFreshTarget'
                         self._sources = 0
                     return self._event('Observation', received_ns, frame=raw, roundTripMs=round_trip_ms)
+                if self._ground:
+                    pose = qualify_ground_frame(frame, self._ground_route)
+                    if not self._requests:
+                        origin = self._binding['reviewedFrame']['navigationPose']
+                        require(math.dist((pose['x'], pose['y']), self._ground_route.points[0]) <= .35
+                            and abs((pose['yawDegrees'] - origin['yawDegrees'] + 180) % 360 - 180) <= 3,
+                            'Ground-combat original reviewed start changed')
                 source = frame['sourceFrame']
                 require(frame['frameId'] >= self._last_frame_id, 'Combat frame id moved backwards')
                 self._last_frame_id = frame['frameId']
@@ -608,13 +839,13 @@ class CombatTrialGuard:
                     require(source['captureEpoch'] == prior['captureEpoch'] and source['timestamp100ns'] >= prior['timestamp100ns']
                             and source['freshnessAtMs'] >= prior['freshnessAtMs'], 'Combat capture identity or clock changed')
                     if source['timestamp100ns'] == prior['timestamp100ns']:
-                        require(canonical(self._evidence_identity(frame)) == canonical(self._evidence_identity(self._last['frame'])),
+                        require(canonical(self._source_identity(frame)) == canonical(self._source_identity(self._last['frame'])),
                                 'Combat cached-source evidence changed')
                 distinct = self._last is None or source['timestamp100ns'] != self._last['frame']['sourceFrame']['timestamp100ns']
                 observation = dict(frame=raw, clientTimeNs=received_ns, ageAtReceiptMs=age, roundTripMs=round_trip_ms)
                 if frame['frameId'] in self._frames:
                     previous = self._frames[frame['frameId']]
-                    require(canonical(self._evidence_identity(frame)) == canonical(self._evidence_identity(previous['frame']))
+                    require(canonical(self._source_identity(frame)) == canonical(self._source_identity(previous['frame']))
                             and frame['capturedAtMs'] == previous['frame']['capturedAtMs'], 'Combat frame id was reused')
                 else:
                     self._frames[frame['frameId']] = observation
@@ -648,9 +879,16 @@ class CombatTrialGuard:
                     self._reason = 'awaitingFreshTarget' if not target else 'awaitingPostReleaseFrame'
                 elif self._phase == 'awaitingPostFrame' and distinct:
                     self._pending['postFrame'] = raw
+                    if self._ground:
+                        projection = copy.deepcopy({key:value for key,value in self._pending.items()
+                                                    if key not in ('frame', 'postFrame', 'release')})
+                        projection.update(frame=ground_frame_reference(self._pending['frame'], self._sha),
+                            postFrame=ground_frame_reference(raw, self._sha),
+                            release=copy.deepcopy(self._ground_release_reference))
+                        self._ground_completed_projection.append(projection)
                     self._completed.append(self._pending)
                     self._pending = None
-                    self._phase = 'complete' if len(self._completed) == 3 else 'ready'
+                    self._phase = 'complete' if not self._ground and len(self._completed) == 3 else 'ready'
                     self._reason = 'boundedTrialDrained' if self._phase == 'complete' else 'freshPostActionTarget'
                 elif self._phase == 'awaitingEvidence' and distinct:
                     self._sources += 1
@@ -667,25 +905,29 @@ class CombatTrialGuard:
             self._live(now_ns)
             refused_proposal = ({key: proposal[key] for key in ('parseValid', 'scrollUnsupported', 'steps') if key in proposal}
                                 if isinstance(proposal, dict) else proposal)
-            refusal_proof = dict(frame=sensor_frame(frame), requestId=request_id, proposal=refused_proposal,
+            refusal_proof = dict(frame=sensor_frame(frame, ground_combat=self._ground), requestId=request_id, proposal=refused_proposal,
                                  transmissionAttempted=False)
             try:
                 require(self._identity(owner, hello) == self._hello, 'Combat native lease changed')
             except (ValueError, TypeError) as error:
                 self._stop('ownerOrLeaseChanged', now_ns, validationError=str(error))
                 self._live(now_ns)
-            reason = proposal_rejection(proposal)
+            reason = proposal_rejection(proposal, ground_combat=self._ground)
             if self._phase != 'ready' or not self._eligible:
                 reason = 'awaitingTerminalOrEvidence'
+            if self._ground and (now_ns > self._dispatch_cutoff or self._accepted >= 20):
+                reason = 'groundDispatchWindowClosed'
+            if self._ground and reason is None and self._camera_reserved + abs(proposal['steps'][0]['mouseDx']) > 200:
+                reason = 'groundCameraBudgetExceeded'
             if reason:
                 return self._event('LocalRefusal', now_ns, reason=reason, **refusal_proof)
             record = self._frames.get(frame.get('frameId')) if isinstance(frame, dict) else None
             try:
-                require(record is not None and canonical(self._evidence_identity(frame)) == canonical(self._evidence_identity(record['frame']))
+                require(record is not None and canonical(self._source_identity(frame)) == canonical(self._source_identity(record['frame']))
                         and frame.get('capturedAtMs') == record['frame']['capturedAtMs'], 'Unobserved or changed combat source')
                 require(isinstance(request_id, str) and bool(request_id) and request_id not in self._requests, 'Repeated combat request id')
             except (ValueError, TypeError, KeyError) as error:
-                self._stop('invalidDispatchSource', now_ns, frame=sensor_frame(frame), validationError=str(error))
+                self._stop('invalidDispatchSource', now_ns, frame=sensor_frame(frame, ground_combat=self._ground), validationError=str(error))
                 self._live(now_ns)
             selected_evidence = record['frame']['combatEvidence']
             if (selected_evidence['state'] != 'valid'
@@ -696,16 +938,37 @@ class CombatTrialGuard:
                 return self._event('LocalRefusal', now_ns, reason='staleCombatSource', **refusal_proof)
             if self._release is not None and frame['sourceFrame']['freshnessAtMs'] < self._release['response']['serverNowMs'] + 60:
                 return self._event('LocalRefusal', now_ns, reason='preReleaseCombatSource', **refusal_proof)
+            if self._ground:
+                qualify_ground_frame(record['frame'], self._ground_route)
+                qualify_ground_frame(self._last['frame'], self._ground_route)
+                self._camera_reserved += abs(proposal['steps'][0]['mouseDx'])
             source_at = frame['sourceFrame']['freshnessAtMs']
             step = copy.deepcopy(proposal['steps'][0])
             arguments = dict(requestId=request_id, frameId=frame['frameId'], observedAtMs=frame['capturedAtMs'],
                 modelId=MODEL, steps=[step], startBeforeMs=source_at + 150, expiresAtMs=source_at + 150 + step['durationMs'])
             self._requests.add(request_id)
-            self._pending = dict(arguments=arguments, frame=sensor_frame(frame), dispatchClientNs=now_ns,
+            self._pending = dict(arguments=arguments, frame=sensor_frame(frame, ground_combat=self._ground), dispatchClientNs=now_ns,
                                  admission=None, receipt=None, release=None, postFrame=None)
             self._armed = True
             self._phase, self._reason = 'awaitingAdmission', 'actionReserved'
             return self._event('Dispatch', now_ns, arguments=arguments)
+
+    def transmitting(self, now_ns):
+        """Recheck new-profile source and650ms outer headroom immediately before its sole wire attempt."""
+        with self.intake_lock:
+            require(self._ground, 'Only the explicit ground profile uses this added send gate')
+            self._live(now_ns)
+            require(self._phase == 'awaitingAdmission' and self._pending is not None
+                and 'transmittedAtNs' not in self._pending, 'Ground transmission is not an unused reserved action')
+            if now_ns > self._dispatch_cutoff:
+                self._stop('groundDrainHeadroomExpired', now_ns, pending=self._pending)
+                self._live(now_ns)
+            source = self._frames.get(self._pending['arguments']['frameId'])
+            if source is None or any(not 0 <= self._age(item, now_ns) < 150 for item in (source, self._last)):
+                self._stop('groundTransmissionSourceStale', now_ns, pending=self._pending)
+                self._live(now_ns)
+            self._pending['transmittedAtNs'] = now_ns
+            return self._event('Transmission', now_ns, requestId=self._pending['arguments']['requestId'])
 
     def admission(self, response, payload_bytes, now_ns):
         """Bind the exact acceptance; rejection or an uncertain result ends this trial without replay."""
@@ -715,7 +978,9 @@ class CombatTrialGuard:
             if expected:
                 self._pending['admission'] = retained(response)
             action = self._pending['arguments'] if self._pending else {}
-            valid = (expected and isinstance(response, dict) and type(payload_bytes) is int and payload_bytes == 0
+            valid = (expected and (not self._ground or type(self._pending.get('transmittedAtNs')) is int
+                and self._pending['transmittedAtNs'] <= now_ns)
+                and isinstance(response, dict) and type(payload_bytes) is int and payload_bytes == 0
                 and response.get('type') == 'accepted' and response.get('requestId') == action.get('requestId')
                 and finite(response.get('receivedAtMs')) and finite(response.get('acceptedAtMs'))
                 and self._pending['frame']['sourceFrame']['freshnessAtMs'] <= response['receivedAtMs'] <= response['acceptedAtMs'] < action['startBeforeMs'])
@@ -746,7 +1011,8 @@ class CombatTrialGuard:
                 require(isinstance(steps, list) and len(steps) == 1 and isinstance(steps[0], dict), 'Combat receipt step count differs')
                 step, expected = steps[0], action['steps'][0]
                 require(type(step.get('index')) is int and step['index'] == 0 and step.get('keys') == expected['keys']
-                    and all(type(step.get(key)) is int and step[key] == 0 for key in ('mouseDx', 'mouseDy')), 'Combat receipt action differs')
+                    and all(type(step.get(key)) is int and step[key] == (expected[key] if self._ground else 0)
+                            for key in ('mouseDx', 'mouseDy')), 'Combat receipt action differs')
                 start, end, accepted = step.get('startedAtMs'), receipt.get('endedAtMs'), receipt.get('acceptedAtMs')
                 require(all(finite(value) for value in (start, end, accepted))
                     and accepted == self._pending['admission']['acceptedAtMs']
@@ -789,6 +1055,8 @@ class CombatTrialGuard:
                 self._world_epoch = gate['epoch']
                 self._release = dict(response=copy.deepcopy(response), payloadBytes=payload_bytes,
                                      clientTimeNs=now_ns, reason=reason)
+                if self._ground:
+                    self._ground_release_reference = ground_release_reference(self._release, self._sha)
                 self._sources = 0
                 if self._trip is None:
                     if self._phase == 'awaitingStaleRelease':

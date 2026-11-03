@@ -7,9 +7,10 @@ import math
 from pathlib import Path
 
 from combat_trial_guard import (CombatTrialGuard, bind_review, canonical, proposal_rejection, sensor_frame, trial_policy,
-                               combat_scope, validated_trial_policy, source_stale_recovery_enabled)
+                               combat_scope, validated_trial_policy, source_stale_recovery_enabled, ground_combat_enabled)
 from episode_split import read_split
 from native_combat import validate_capability,validate_frame
+import native_ground_control
 import combat_paused_review_proof as paused_review
 import combat_paused_file_admission as file_admission
 from policy_rgb_archive import (JOURNAL_NAMES, RECORDING_FORMAT, read_policy_rgb, read_recording_jsonl,
@@ -73,7 +74,9 @@ def replay_events(binding, hello, events):
     trace = [row for row in events if str(row.get('type', '')).startswith('combatTrial')]
     require(bool(trace), 'Missing combat guard events')
     started = trace[0].get('state', {}).get('startedNs')
-    guard = CombatTrialGuard(binding, binding['owner'], hello, started)
+    options = ({'outer_deadline_ns': trace[0].get('state', {}).get('groundCombat', {}).get('outerDeadlineNs')}
+               if ground_combat_enabled(binding) else {})
+    guard = CombatTrialGuard(binding, binding['owner'], hello, started, **options)
     previous = started
     counts = {}
     for row in trace:
@@ -92,6 +95,10 @@ def replay_events(binding, hello, events):
         elif kind == 'combatTrialLocalRefusal':
             replayed = guard.prepare_action(row['frame'], row['proposal'], row['requestId'], now,
                                             owner=binding['owner'], hello=hello)
+        elif kind == 'combatTrialTransmission':
+            replayed = guard.transmitting(now)
+        elif kind == 'combatTrialWindowEnd':
+            replayed = guard.complete_ground_window(now)
         elif kind == 'combatTrialAdmission':
             replayed = guard.admission(row['response'], row['payloadBytes'], now)
         elif kind == 'combatTrialReceipt':
@@ -115,26 +122,30 @@ def replay_events(binding, hello, events):
     return dict(state=guard.snapshot(), counts=counts, eventCount=len(trace))
 
 
-def frame_identity(row):
+def frame_identity(row, *, ground_combat=False):
     """Compare immutable native pixels and HUD evidence across repeated poll envelopes."""
     evidence = dict(row.get('combatEvidence') or {})
     evidence.pop('recognitionMs', None)
-    return dict(frameId=row.get('frameId'), capturedAtMs=row.get('capturedAtMs'),
+    result = dict(frameId=row.get('frameId'), capturedAtMs=row.get('capturedAtMs'),
                 sourceFrame=row.get('sourceFrame'), sourceWidth=row.get('sourceWidth'),
                 sourceHeight=row.get('sourceHeight'), combatEvidence=evidence,
                 frameWorldReadiness=row.get('frameWorldReadiness'))
+    if ground_combat:
+        result['groundSource'] = CombatTrialGuard._evidence_identity(row, ground=True)
+    return result
 
 
 def verify_frozen_goal(episode):
     """Reject late raw goal requests even if a derived completion summary was cleared."""
     run_id = episode.get('residentRunId')
+    ground = isinstance(episode.get('combatTrialGuard'), dict) and ground_combat_enabled(episode['combatTrialGuard'])
     require(isinstance(run_id, str) and bool(run_id)
             and episode.get('combatTrialFinalControl') == dict(version=1, runId=run_id, command='run')
             and episode.get('goalChanges') == [], 'Combat control or goal changed')
     first, last = episode.get('initialGoalState'), episode.get('finalGoalState')
     require(isinstance(first, dict) and isinstance(last, dict), 'Missing combat goal snapshots')
     for state in (first, last):
-        require(state.get('policyGoalVersion') == 0 and state.get('goalIntent') == 'stationary'
+        require(state.get('policyGoalVersion') == 0 and state.get('goalIntent') == ('unspecified' if ground else 'stationary')
                 and all(state.get(key) is None for key in ('appliedGoalRequestId', 'goalRequestId', 'goalRequestStatus', 'goalError')),
                 'Combat goal was requested to change')
     require(first.get('controlEpoch') == last.get('controlEpoch')
@@ -143,9 +154,38 @@ def verify_frozen_goal(episode):
     return first.get('goalMetadata')
 
 
+def verify_ground_clock(episode):
+    """Join the guard to the one original outer monotonic lease using its conservative QPC conversion."""
+    pair = episode.get('combatGroundClock')
+    state = episode.get('combatTrialGuardState') or {}
+    require(isinstance(pair, dict) and set(pair) == {'clientNs', 'monotonicNs', 'leaseDeadlineMonotonicNs',
+            'originalOuterDeadlineClientNs'} and all(type(value) is int and value > 0 for value in pair.values()),
+            'Ground combat lacks its original clock pair')
+    outer = pair['clientNs'] + pair['leaseDeadlineMonotonicNs'] - pair['monotonicNs']
+    require(pair['originalOuterDeadlineClientNs'] == outer == state.get('deadlineNs')
+        and state.get('startedNs') == pair['clientNs'] < outer <= pair['clientNs'] + 5_000_000_000
+        and state.get('groundCombat', {}).get('outerDeadlineNs') == outer
+        and state['groundCombat'].get('dispatchCutoffNs') == outer - 650_000_000,
+        'Ground combat renewed or changed its original outer dispatch/drain window')
+    return pair
+
+
 def audit_episode(episode, events, frames, recording_folder, binding):
     """Join replayed authority, actual proposal records, terminal receipts and exact retained RGB."""
     recording = episode.get('recording', {})
+    ground = ground_combat_enabled(binding)
+    if ground:
+        verify_ground_clock(episode)
+        from native_ground_control import validate_capability as ground_capability
+        from navigation_profiles import validate_capability as navigation_capability, SCOUT_PROFILE
+        ground_capability(episode.get('nativeGroundControlObservation'))
+        gate = episode.get('nativeGroundControlGate') or {}
+        require(gate.get('type') == 'groundControlLayout' and gate.get('requiredForInput') is True,
+                'Ground combat lacks its native input-layout gate acknowledgement')
+        ground_capability(gate.get('capability'))
+        navigation_capability(episode.get('navigationGuidance') or {}, SCOUT_PROFILE)
+    else:
+        require('combatGroundClock' not in episode, 'Legacy combat cannot carry new ground clock authority')
     seal = recording_metadata(recording_folder,recording)
     if seal.get('recordingFormat') == RECORDING_FORMAT:
         require(all(row.get('recordingFormat') == RECORDING_FORMAT for row in events if row.get('type') == 'episodeStart'),
@@ -159,6 +199,9 @@ def audit_episode(episode, events, frames, recording_folder, binding):
     for index, row in enumerate(frames):
         require(type(row.get('frameId')) is int and row['frameId'] not in by_frame, 'Repeated recorded RGB frame')
         validate_frame(row,capability)
+        if ground:
+            # Replay retained ground glyphs without promoting unavailable startup evidence.
+            native_ground_control.validate_frame(row,replay_pixels=True)
         read_policy_rgb(recording_folder,row.get('policyRgb'),index=index,frame_id=row['frameId'],recording=recording)
         require(row.get('videoFrameIndex') == index,
                 'Policy RGB reference belongs to another video or native frame')
@@ -171,13 +214,13 @@ def audit_episode(episode, events, frames, recording_folder, binding):
                 and row.get('frame', {}).get('type') == 'frame']
     for row in frames:
         joined = [event for event in observed if event['frame'].get('frameId') == row['frameId']
-                  and canonical(event['frame']) == canonical(sensor_frame(row, source_stale_recovery=source_stale_recovery_enabled(binding)))
+                  and canonical(event['frame']) == canonical(sensor_frame(row, source_stale_recovery=source_stale_recovery_enabled(binding), ground_combat=ground))
                   and event['clientTimeNs'] == row.get('clientReceivedNs')
                   and event['roundTripMs'] == row.get('transportRoundTripMs')]
         require(len(joined) == 1, 'Recorded pixels lack their exact original guard intake')
     for event in observed:
         source = by_frame.get(event['frame'].get('frameId'))
-        require(source is not None and canonical(frame_identity(source)) == canonical(frame_identity(event['frame'])),
+        require(source is not None and canonical(frame_identity(source, ground_combat=ground)) == canonical(frame_identity(event['frame'], ground_combat=ground)),
                 'A guard observation lacks its exact retained RGB frame')
     dispatches = [row for row in events if row.get('type') == 'combatTrialDispatch']
     accepted = [row for row in episode.get('decisions', []) if (row.get('acceptance') or {}).get('type') == 'accepted']
@@ -198,14 +241,23 @@ def audit_episode(episode, events, frames, recording_folder, binding):
         extra = [row for row in events if row.get('type') == kind]
         require(canonical(episode.get(field, [])) == canonical(extra), 'Combat recovery report differs from its exact journal')
         require(source_stale_recovery_enabled(binding) or field not in episode, 'Undeclared combat recovery report')
-    require(len(dispatches) <= 3 and len(accepted) <= 3, 'Combat action bound exceeded')
+    require(len(dispatches) <= (20 if ground else 3) and len(accepted) <= (20 if ground else 3), 'Combat action bound exceeded')
+    transmissions = [row for row in events if row.get('type') == 'combatTrialTransmission']
+    if ground:
+        sent_ids = [row['requestId'] for row in transmissions]
+        reserved_ids = [row['arguments']['requestId'] for row in dispatches]
+        require(len(set(sent_ids)) == len(sent_ids) and sent_ids == [key for key in reserved_ids if key in sent_ids]
+                and all(row['acceptance']['requestId'] in sent_ids for row in accepted),
+                'Ground combat lacks an exact pre-wire gate for its native admissions')
+    else:
+        require(not transmissions, 'Legacy combat cannot add a ground transmission gate')
     identities = set()
     for row in dispatches:
         args = row['arguments']
         require(args['requestId'] not in identities, 'Combat action request was replayed')
         identities.add(args['requestId'])
         source = by_frame.get(args['frameId'])
-        require(source is not None and canonical(frame_identity(source)) == canonical(frame_identity(row['state']['pending']['frame'])),
+        require(source is not None and canonical(frame_identity(source, ground_combat=ground)) == canonical(frame_identity(row['state']['pending']['frame'], ground_combat=ground)),
                 'Combat dispatch lacks its exact recorded source pixels')
     accepted_ids = [row['acceptance']['requestId'] for row in accepted]
     require(len(set(accepted_ids)) == len(accepted_ids)
@@ -214,29 +266,49 @@ def audit_episode(episode, events, frames, recording_folder, binding):
     for row, admission in zip(accepted, admissions):
         request = row['acceptance']['requestId']
         matched = [event for event in dispatches if event['arguments']['requestId'] == request]
-        require(len(matched) == 1 and proposal_rejection(row) is None, 'Accepted action lacks one pure model attack')
+        require(len(matched) == 1 and proposal_rejection(row, ground_combat=ground) is None, 'Accepted action lacks one unchanged allowed model step')
         marker = matched[0]
         require(canonical(row.get('combatTrialGuard')) == canonical(marker)
                 and canonical(row['steps']) == canonical(marker['arguments']['steps'])
                 and canonical(row['acceptance']) == canonical(admission)
                 and row['frameId'] == marker['arguments']['frameId'], 'Accepted proposal differs from guarded dispatch or admission')
         raw = row.get('rawPolicySteps')
-        require(proposal_rejection(dict(parseValid=True, steps=raw)) is None,
+        require(proposal_rejection(dict(parseValid=True, steps=raw), ground_combat=ground) is None,
                 'Raw policy proposal was not a pure normal attack')
-        require(canonical([dict(raw[0], durationMs=100)]) == canonical(row['steps'])
-                and row.get('controllerResampling') == 'explicit-bounded-key-hold; mouse applied once',
-                'Controller changed more than the explicit normal-attack hold')
+        if ground:
+            require(canonical(raw) == canonical(row['steps'])
+                and row.get('controllerResampling') == 'none; unchanged native50ms policy step',
+                'Ground controller rewrote the raw model proposal')
+            history = [event for event in events if event.get('type') == 'proposal'
+                       and (event.get('acceptance') or {}).get('requestId') == request]
+            fields = ('frameId', 'steps', 'rawPolicySteps', 'acceptance', 'combatTrialGuard',
+                      'controllerResampling', 'historyCommitted')
+            require(len(history) == 1 and history[0].get('proposalJournalVersion') == 2
+                and history[0].get('model') == 'open-p2p' and type(row.get('historyCommitted')) is bool
+                and all(canonical(history[0].get(field)) == canonical(row.get(field)) for field in fields),
+                'Ground accepted history lacks its exact original proposal journal')
+        else:
+            require(canonical([dict(raw[0], durationMs=100)]) == canonical(row['steps'])
+                    and row.get('controllerResampling') == 'explicit-bounded-key-hold; mouse applied once',
+                    'Controller changed more than the explicit normal-attack hold')
     terminal = replay['state']
     require(terminal['acceptedActions'] == episode.get('combatTrialGuardState', {}).get('acceptedActions'),
             'Recorded trace omits a known native admission')
     if episode.get('status') == 'completed':
         verify_frozen_goal(episode)
+        expected_count = len(accepted) if ground else 3
+        if ground:
+            require(all(row.get('historyCommitted') is True for row in accepted),
+                    'Completed ground window lacks actual accepted-history commits')
+            require(sum(row.get('type') == 'combatTrialWindowEnd' for row in events) == 1,
+                    'Ground window lacks its single explicit fully drained outcome')
         require(terminal['trialComplete'] is True and terminal['phase'] == 'complete' and terminal['trip'] is None
-                and terminal['acceptedActions'] == terminal['completedActions'] == len(accepted) == len(dispatches) == 3
+                and terminal['acceptedActions'] == terminal['completedActions'] == len(accepted) == len(dispatches) == expected_count
                 and terminal['pending'] is None and terminal['armed'] is False
                 and canonical(terminal) == canonical(episode.get('combatTrialGuardState')),
                 'Completed episode does not reproduce its full three-pulse drain')
-        require(episode.get('endReason') == 'combatTrialComplete' and episode.get('acceptedInputActions') == 3
+        require(episode.get('endReason') == ('combatGroundWindowDrained' if ground else 'combatTrialComplete')
+                and episode.get('acceptedInputActions') == expected_count
                 and not any(episode.get(key) for key in ('error', 'streamError', 'stopError', 'unacknowledgedAction')),
                 'Completed episode retains a control failure')
         require(canonical(receipts) == canonical([item['receipt'] for item in terminal['completed']])
@@ -246,8 +318,19 @@ def audit_episode(episode, events, frames, recording_folder, binding):
             require(sum(canonical(receipt) == canonical(completed['receipt']) for receipt in receipts) == 1,
                     'Completed pulse lacks its original terminal receipt')
             post = completed['postFrame']
-            require(post['frameId'] in by_frame and canonical(frame_identity(post)) == canonical(frame_identity(by_frame[post['frameId']])),
-                    'Completed pulse lacks exact post-release pixels')
+            if ground:
+                from combat_trial_guard import ground_frame_reference, ground_release_reference
+                for reference in (completed['frame'], post):
+                    original = by_frame.get(reference.get('frameId'))
+                    require(original is not None and canonical(reference) == canonical(
+                        ground_frame_reference(original, terminal['bindingSha256'])),
+                        'Ground completed proof lacks its exact original causal frame')
+                require(sum(canonical(completed['release']) == canonical(ground_release_reference(
+                    release, terminal['bindingSha256'])) for release in releases) == 1,
+                    'Ground completed proof lacks its exact original causal release')
+            else:
+                require(post['frameId'] in by_frame and canonical(frame_identity(post)) == canonical(frame_identity(by_frame[post['frameId']])),
+                        'Completed pulse lacks exact post-release pixels')
         recording = episode.get('recording', {})
         require(recording.get('complete') is True and recording.get('lossless') is True
                 and recording.get('workerRetired') is True and not recording.get('error'), 'Completed recording is incomplete')
@@ -740,6 +823,10 @@ def verify_source_archive(folder, plan, *, prepared=False, reviewed=False):
         raw = bounded_file(local_artifact(folder, Path('source-snapshot') / name), source_sha256=sha)
         require(digest(raw) == sha, 'Frozen combat source changed: ' + name)
     implementations = ['combat_trial_guard.py', 'native_combat.py']
+    if 'binding' in plan and ground_combat_enabled(plan['binding']):
+        # These pure geometry/crop helpers are semantic replay inputs only for the new profile.
+        implementations.extend(('native_ground_control.py', 'navigation_profiles.py',
+                                'reviewed_scout_route.py', 'hybrid_routes.py'))
     if prepared:
         implementations.append('combat_pause_proof.py')
     if 'workerRuntime' in plan:
@@ -804,12 +891,26 @@ def verify_reviewed_episode_clocks(plan, wrapper, episode, events=None):
         and pair['monotonicNs'] < wrapper['leaseDeadlineMonotonicNs'] <= min(claim['deadlineMonotonicNs'],
             pair['monotonicNs'] + 5_000_000_000, pair['monotonicNs'] + bound - pair['clientNs']),
         'Paused-review lease widened its source, worker or five-second budget')
+    # Historical clock-only callers predate full binding arguments; a new clock marker never may.
+    ground = 'binding' in plan and ground_combat_enabled(plan['binding'])
+    require(ground or 'combatGroundClock' not in episode, 'Ground clock proof requires its exact reviewed binding')
+    if ground:
+        ground_pair = verify_ground_clock(episode)
+        require(ground_pair['leaseDeadlineMonotonicNs'] == wrapper['leaseDeadlineMonotonicNs']
+            and pair['clientNs'] <= ground_pair['clientNs']
+            and ground_pair['originalOuterDeadlineClientNs'] <= min(bound,
+                pair['clientNs'] + wrapper['leaseDeadlineMonotonicNs'] - pair['monotonicNs']),
+            'Ground combat guard substituted or extended the original worker lease')
     if events is not None:
         # Receipts and cleanup may arrive later; every actual dispatch must still fit the original lease.
         cutoff = min(bound, pair['clientNs'] + wrapper['leaseDeadlineMonotonicNs'] - pair['monotonicNs'])
         require(all(paused_review.positive_clock(event.get('clientTimeNs')) and started <= event['clientTimeNs'] < cutoff
             for event in events if event.get('type') == 'combatTrialDispatch'),
             'Paused-review dispatch exceeded its original source, worker or five-second lease')
+        if ground:
+            require(all(started <= event['clientTimeNs'] <= ground_pair['originalOuterDeadlineClientNs'] - 650_000_000
+                for event in events if event.get('type') == 'combatTrialTransmission'),
+                'Ground transmission consumed the original final-drain reserve')
 
 
 def verify_reviewed_worker_owner(owner, observed):

@@ -916,5 +916,264 @@ class CombatStaleReacquisitionTests(unittest.TestCase):
         with self.assertRaises(ValueError): replay_events(self.authority, self.data['hello'], changed)
 
 
+
+
+def ground_review_parts():
+    """Use real synthetic PNG/crops and explicit offline corridor review, never live authority."""
+    from test_encounter_approach import review_parts as corridor_parts
+    from native_ground_control import CAPABILITY as GROUND
+    from combat_trial_guard import GROUND_PROFILE
+    parts = list(corridor_parts())
+    goal = canonical(dict(instruction='Attack the nearby enemy with normal attacks.'))
+    parts[0].update(kind=REVIEW_KIND, sceneLabel='enemy-visible', attacksAllowed=['LBUTTON'],
+        policy=trial_policy(FOUR_SCOPE, ground_combat=True), controlProfile=GROUND_PROFILE,
+        goalSha256=hashlib.sha256(goal).hexdigest(), **scope_fields(FOUR_SCOPE))
+    parts[2]['nativeGroundControlGate'] = dict(type='groundControlLayout', requiredForInput=True,
+                                              capability=copy.deepcopy(GROUND))
+    return parts + [goal]
+
+
+def ground_hello():
+    """Declare the actual native read-only geometry/ground protocol with no bridge construction."""
+    from native_ground_control import CAPABILITY as GROUND
+    from navigation_profiles import SCOUT_PROFILE
+    value = copy.deepcopy(HELLO)
+    value.update(allowedKeys=['W', 'A', 'S', 'D', 'LBUTTON'],
+                 navigationProfiles=[SCOUT_PROFILE], groundControlObservation=copy.deepcopy(GROUND))
+    return value
+
+
+def ground_proposal(keys=('W',), dx=0, dy=0, hold=50):
+    """Keep the exact raw proposal; no test or controller normalizes it into allowed input."""
+    return dict(parseValid=True, steps=[dict(keys=list(keys), mouseDx=dx, mouseDy=dy, durationMs=hold)])
+
+
+class GroundCombatGuardTests(unittest.TestCase):
+    """Exercise the explicit microtrial without model, native, UI or operating-system input."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Pin the common inert reviewed source before each isolated guard case."""
+        cls.authority = binding(ground_review_parts())
+
+    def setUp(self):
+        """Anchor the original outer deadline before the later guard starts."""
+        from test_encounter_approach import sample
+        self.sample = sample
+        self.guard = CombatTrialGuard(copy.deepcopy(self.authority), OWNER, ground_hello(), 50_000_000,
+                                      outer_deadline_ns=5_000_000_000)
+        self.current = sample(2, 200)
+        self.guard.observe(sample(1, 100), 110_000_000, round_trip_ms=1)
+        event = self.guard.observe(self.current, 210_000_000, round_trip_ms=1)
+        self.assertEqual(event['state']['phase'], 'ready', event['state'])
+        self.index, self.epoch = 2, 0
+
+    def dispatch(self, proposed=None, now=None):
+        """Reserve the exact inert request at a still-fresh current source."""
+        now = int((self.current['serverNowMs'] + 5) * 1e6) if now is None else now
+        return self.guard.prepare_action(self.current, ground_proposal() if proposed is None else proposed,
+            'ground-' + str(self.guard.snapshot()['acceptedActions']), now, owner=OWNER, hello=ground_hello())
+
+    def drain(self, proposed=None):
+        """Retain exact keys/camera, terminal ACK, release and a fresh post-response source."""
+        event = self.dispatch(proposed)
+        args, at = event['arguments'], self.current['sourceFrame']['freshnessAtMs'] + 20
+        self.guard.transmitting(event['clientTimeNs'] + 1)
+        response = dict(type='accepted', requestId=args['requestId'], receivedAtMs=at - 1, acceptedAtMs=at)
+        self.guard.admission(response, 0, int((at + 1) * 1e6))
+        receipt = dict(requestId=args['requestId'], frameId=args['frameId'], modelId='open-p2p',
+            status='completed', reason='horizon_complete', acceptedAtMs=at, endedAtMs=at + 50,
+            appliedSteps=[dict(index=0, startedAtMs=at + 1,
+                **{key:args['steps'][0][key] for key in ('keys', 'mouseDx', 'mouseDy')})])
+        self.guard.receipt(receipt, int((at + 55) * 1e6))
+        self.epoch += 1
+        release = dict(type='released', serverNowMs=at + 55, worldReadiness=dict(ready=False, epoch=self.epoch))
+        self.guard.acknowledge_release(release, 0, int((at + 56) * 1e6), 'completedCombatPulse')
+        self.index += 1
+        self.current = self.sample(self.index, at + 115, epoch=self.epoch)
+        self.guard.observe(self.current, int(self.current['serverNowMs'] * 1e6), round_trip_ms=1)
+        self.assertIsNone(self.guard.snapshot()['trip'])
+        return args, receipt
+
+    def test_explicit_review_and_legacy_policies_remain_separate(self):
+        """No observation count or missing half of the descriptor can confer movement authority."""
+        from combat_trial_guard import validate_binding, ground_combat_enabled
+        self.assertTrue(ground_combat_enabled(self.authority))
+        for scope in (SINGLE_SCOPE, GROUP_SCOPE, FOUR_SCOPE):
+            self.assertEqual(trial_policy(scope)['maximumActions'], 3)
+            self.assertNotIn('groundCombatPolicy', trial_policy(scope))
+        for mutate in (lambda x:x.pop('controlProfile'), lambda x:x['policy'].pop('groundCombatPolicy'),
+                       lambda x:x.pop('groundCombat'), lambda x:x['policy'].update(maximumActions=21),
+                       lambda x:x.update(controlProfile='anything-else')):
+            changed = copy.deepcopy(self.authority); mutate(changed)
+            with self.subTest(mutate=mutate), self.assertRaises(ValueError): validate_binding(changed)
+        with self.assertRaises(ValueError): trial_policy(FOUR_SCOPE, ground_combat=True, source_stale_recovery=True)
+        with self.assertRaises(ValueError): trial_policy(GROUP_SCOPE, ground_combat=True)
+
+    def test_numeric_admission_and_existing_eight_point_drop(self):
+        """Admission is90%; native color/estimate still has the same8-point combat stop."""
+        parts = ground_review_parts(); parts[0].update(inspectedHealth=900, inspectedMaximumHealth=1000)
+        self.assertEqual(binding(parts)['baselineHealthFraction'], .9)
+        parts[0]['inspectedHealth'] = 899
+        with self.assertRaises(ValueError): binding(parts)
+        event = self.guard.observe(self.sample(3, 250, health=.92), 260_000_000, round_trip_ms=1)
+        self.assertEqual(event['state']['trip']['reason'], 'healthFractionDrop')
+
+    def test_shape_is_exact_and_never_rewrites_raw_proposals(self):
+        """Only nonopposing movement, pure attack, or isolated horizontal camera is admitted."""
+        allowed = [ground_proposal(('W',)), ground_proposal(('W','A')), ground_proposal(('S','D')),
+                   ground_proposal(('LBUTTON',)), ground_proposal((), dx=50), ground_proposal((), dx=-50)]
+        for item in allowed:
+            self.assertIsNone(proposal_rejection(item, ground_combat=True))
+            if item['steps'][0]['keys'] != ['LBUTTON']:
+                self.assertIsNotNone(proposal_rejection(item))
+        denied = [ground_proposal(('SPACE',)), ground_proposal(('E',)), ground_proposal(('Q',)),
+                  ground_proposal(('W','S')), ground_proposal(('A','D')), ground_proposal(('W','A','D')),
+                  ground_proposal(('W','LBUTTON')), ground_proposal(('LBUTTON',), dx=1),
+                  ground_proposal(('W',), dx=1), ground_proposal((), dy=1), ground_proposal((), dx=51),
+                  ground_proposal(()), ground_proposal(hold=49), ground_proposal(hold=100)]
+        for item in denied:
+            before=canonical(item)
+            with self.subTest(item=item):
+                self.assertIsNotNone(proposal_rejection(item, ground_combat=True))
+                self.assertEqual(canonical(item), before)
+
+    def test_one_pending_and_exact_camera_receipt_and_cumulative_reservation(self):
+        """A nonzero horizontal footprint is retained exactly and all attempts consume finite budget."""
+        for index in range(4):
+            args, receipt=self.drain(ground_proposal((), dx=50 if index % 2 == 0 else -50))
+            self.assertEqual(receipt['appliedSteps'][0]['mouseDx'], args['steps'][0]['mouseDx'])
+        self.assertEqual(self.guard.snapshot()['groundCombat']['cumulativeAbsoluteMouseDxReserved'], 200)
+        self.assertEqual(self.dispatch(ground_proposal((), dx=1))['reason'], 'groundCameraBudgetExceeded')
+        self.dispatch()
+        self.assertEqual(self.dispatch()['reason'], 'awaitingTerminalOrEvidence')
+
+    def test_maximum_twenty_and_completion_requires_real_drain(self):
+        """Twenty is an upper bound; completion follows actual terminal/release/post-source joins."""
+        for _ in range(20): self.drain()
+        now=int(self.current['serverNowMs'] * 1e6)
+        self.assertFalse(self.guard.snapshot()['trialComplete'])
+        end=self.guard.complete_ground_window(now)
+        self.assertEqual(end['state']['completedActions'],20)
+        self.assertTrue(end['state']['trialComplete'])
+        self.assertIsNone(end['state']['pending'])
+        self.assertFalse(end['state']['armed'])
+
+    def test_window_can_end_drained_with_zero_without_claiming_attacks(self):
+        """The original cutoff ends a fresh safe window without inventing an action or damage."""
+        self.current=self.sample(3, 4350)
+        self.guard.observe(self.current,4_360_000_000,round_trip_ms=1)
+        end=self.guard.complete_ground_window(4_360_000_000)
+        self.assertEqual(end['state']['acceptedActions'],0)
+        self.assertFalse(end['state']['damageVerified'])
+        self.assertFalse(end['state']['killVerified'])
+        self.assertEqual(end['state']['deadlineNs'],5_000_000_000)
+
+    def test_final_send_rechecks_original_headroom_after_preparation(self):
+        """A fresh proposal can lose drain headroom before the wire call; it must stop locally."""
+        self.current=self.sample(3,4330)
+        self.guard.observe(self.current,4_340_000_000,round_trip_ms=1)
+        self.dispatch(now=4_345_000_000)
+        with self.assertRaises(CombatTrialStop): self.guard.transmitting(4_351_000_000)
+        self.assertEqual(self.guard.snapshot()['trip']['reason'],'groundDrainHeadroomExpired')
+        self.assertEqual(self.guard.snapshot()['acceptedActions'],0)
+        self.assertNotIn('transmittedAtNs',self.guard.snapshot()['pending'])
+
+    def test_pending_or_stale_final_drain_cannot_be_declared_success(self):
+        """The650ms reserve is conservative, never a guarantee or deadline extension."""
+        self.dispatch();self.guard.transmitting(216_000_000)
+        self.assertIsNone(self.guard.complete_ground_window(4_400_000_000))
+        self.assertEqual(self.guard.tick(5_000_000_000)['trip']['reason'],'trialDeadline')
+
+    def test_ground_pose_target_and_foreign_source_fail_closed(self):
+        """Positive danger, missing localization and route escape cannot become idle authority."""
+        mutations=[lambda x:x['motionEvidence'].update(status='climbing',spaceKeyMatched=True),
+            lambda x:x['navigationPose'].update(x=x['navigationPose']['x']+7),
+            lambda x:x['navigationPose'].update(layerId='City_102'),
+            lambda x:x['navigationPose'].update(frameId=99),lambda x:x.pop('groundControlEvidence'),
+            lambda x:x['combatEvidence'].update(enemyBarCandidates=[])]
+        for mutate in mutations:
+            self.setUp(); row=self.sample(3,250);mutate(row)
+            with self.subTest(mutate=mutate):
+                self.assertIsNotNone(self.guard.observe(row,260_000_000,round_trip_ms=1)['state']['trip'])
+        self.setUp();row=self.sample(3,250,age=150)
+        event=self.guard.observe(row,400_000_000,round_trip_ms=1)
+        self.assertFalse(event['state']['evidenceReady'])
+        self.assertEqual(self.dispatch()['reason'],'awaitingTerminalOrEvidence')
+
+    def test_review_cannot_strip_ground_gate_or_fabricate_crops_corridor(self):
+        """Exact pixels, passive source evidence and fixed geometry are required before runtime."""
+        changes=[lambda p:p[2].pop('nativeGroundControlGate'),lambda p:p[0].update(clearSurfaceCorridor=False),
+            lambda p:p[0]['route']['points'][1].__setitem__(0,p[0]['route']['points'][0][0]+6.01),
+            lambda p:p[1].update(inspectionMode='current-scene'),
+            lambda p:p[2]['stableSamples'][0]['executionContext'].update(lastSequence=1)]
+        for mutate in changes:
+            parts=ground_review_parts();mutate(parts)
+            with self.subTest(mutate=mutate),self.assertRaises(ValueError):binding(parts)
+
+
+
+    def test_completed_projection_is_cached_without_losing_private_causal_proofs(self):
+        """Only recurring public snapshots shrink; the original private release/frame/receipt stays complete."""
+        from unittest.mock import patch
+        import combat_trial_guard as module
+        with patch.object(module,'ground_release_reference',wraps=module.ground_release_reference) as release_hash, \
+                patch.object(module,'ground_frame_reference',wraps=module.ground_frame_reference) as frame_hash:
+            self.drain()
+            self.assertEqual((release_hash.call_count,frame_hash.call_count),(1,2))
+            for _ in range(5):self.guard.snapshot()
+            self.guard.observe(self.sample(self.index+1,self.current['capturedAtMs']+50,epoch=self.epoch),
+                int((self.current['serverNowMs']+50)*1e6),round_trip_ms=1)
+            self.assertEqual((release_hash.call_count,frame_hash.call_count),(1,2))
+        private=self.guard._completed[0];public=self.guard.snapshot()['completed'][0]
+        self.assertIn('combatEvidence',private['frame']);self.assertIn('groundControlEvidence',private['postFrame'])
+        self.assertIn('response',private['release']);self.assertEqual(private['receipt'],public['receipt'])
+        self.assertEqual(public['frame']['kind'],'ground-combat-frame-reference-v1')
+        self.assertEqual(public['release']['kind'],'ground-combat-release-reference-v1')
+        public['frame']['sha256']='0'*64
+        self.assertNotEqual(public['frame'],self.guard.snapshot()['completed'][0]['frame'])
+
+    def test_reviewed_anchor_cannot_drift_before_the_first_owned_request(self):
+        """Earlier valid polls do not permit unowned displacement before any model input."""
+        from test_encounter_approach import START
+        shifted=self.sample(3,250,point=(START[0]+1,START[1]))
+        self.assertEqual(self.guard.observe(shifted,260_000_000,round_trip_ms=1)['state']['trip']['reason'],'invalidNativeEvidence')
+        self.setUp();self.drain()
+        moved=self.sample(self.index+1,self.current['capturedAtMs']+50,epoch=self.epoch,point=(START[0]+1,START[1]))
+        self.assertIsNone(self.guard.observe(moved,int(moved['serverNowMs']*1e6),round_trip_ms=1)['state']['trip'])
+
+    def test_camera_terminal_footprint_cannot_be_substituted_with_a_key(self):
+        """The actual receipt must repeat the admitted horizontal-only step exactly."""
+        event=self.dispatch(ground_proposal((),dx=50));args=event['arguments']
+        self.guard.transmitting(216_000_000)
+        response=dict(type='accepted',requestId=args['requestId'],receivedAtMs=219,acceptedAtMs=220)
+        self.guard.admission(response,0,221_000_000)
+        wrong=dict(requestId=args['requestId'],frameId=args['frameId'],modelId='open-p2p',status='completed',
+            reason='horizon_complete',acceptedAtMs=220,endedAtMs=270,
+            appliedSteps=[dict(index=0,keys=['W'],mouseDx=50,mouseDy=0,startedAtMs=221)])
+        state=self.guard.receipt(wrong,275_000_000)['state']
+        self.assertIsNotNone(state['trip']);self.assertEqual(state['completedActions'],0)
+
+    def test_no_native_target_cannot_become_a_successful_idle_ground_window(self):
+        """The zero-action outcome still requires fresh positive target/ground/pose admission."""
+        self.guard=CombatTrialGuard(copy.deepcopy(self.authority),OWNER,ground_hello(),50_000_000,outer_deadline_ns=5_000_000_000)
+        for index,at in ((1,100),(2,4350)):
+            self.guard.observe(self.sample(index,at,candidates=0),int((at+10)*1e6),round_trip_ms=1)
+        self.assertIsNone(self.guard.complete_ground_window(4_360_000_000))
+        self.assertEqual(self.guard.tick(5_000_000_000)['trip']['reason'],'trialDeadline')
+
+    def test_actual_combat07_raw_shapes_remain_unedited_and_not_live_authority(self):
+        """Replay37 retained raw proposals only: no old pixels acquire new ground/corridor authority."""
+        # Exact decision-summary SHA543813ba24e5c34426c78e5b9981cff486f7e5a04b2bc6e6d20f49b021e1e1f3.
+        steps=[[{'durationMs': 50, 'keys': ['D', 'W'], 'mouseDx': 0, 'mouseDy': 3}], [{'durationMs': 50, 'keys': [], 'mouseDx': 0, 'mouseDy': 0}], [{'durationMs': 50, 'keys': ['W'], 'mouseDx': 0, 'mouseDy': 0}], [{'durationMs': 50, 'keys': ['W'], 'mouseDx': 0, 'mouseDy': 0}], [{'durationMs': 50, 'keys': ['W'], 'mouseDx': 0, 'mouseDy': 0}], [{'durationMs': 50, 'keys': ['A', 'W'], 'mouseDx': 0, 'mouseDy': 0}], [{'durationMs': 50, 'keys': [], 'mouseDx': 0, 'mouseDy': 0}], [{'durationMs': 50, 'keys': [], 'mouseDx': -34, 'mouseDy': 41}], [{'durationMs': 50, 'keys': [], 'mouseDx': 0, 'mouseDy': 0}], [{'durationMs': 50, 'keys': [], 'mouseDx': 0, 'mouseDy': 0}], [{'durationMs': 50, 'keys': ['SPACE'], 'mouseDx': 0, 'mouseDy': 0}], [{'durationMs': 50, 'keys': ['W'], 'mouseDx': -10, 'mouseDy': 3}], [{'durationMs': 50, 'keys': ['W'], 'mouseDx': 0, 'mouseDy': 0}], [{'durationMs': 50, 'keys': ['SPACE'], 'mouseDx': 0, 'mouseDy': 0}], [{'durationMs': 50, 'keys': ['W'], 'mouseDx': -3, 'mouseDy': -1}], [{'durationMs': 50, 'keys': ['W'], 'mouseDx': 0, 'mouseDy': 0}], [{'durationMs': 50, 'keys': [], 'mouseDx': 1, 'mouseDy': -1}], [{'durationMs': 50, 'keys': ['A', 'W'], 'mouseDx': 0, 'mouseDy': 0}], [{'durationMs': 50, 'keys': [], 'mouseDx': 0, 'mouseDy': 0}], [{'durationMs': 50, 'keys': [], 'mouseDx': 0, 'mouseDy': 0}], [{'durationMs': 50, 'keys': [], 'mouseDx': 0, 'mouseDy': 0}], [{'durationMs': 50, 'keys': [], 'mouseDx': 0, 'mouseDy': 0}], [{'durationMs': 50, 'keys': ['SPACE', 'W'], 'mouseDx': 0, 'mouseDy': 0}], [{'durationMs': 50, 'keys': [], 'mouseDx': 23, 'mouseDy': -31}], [{'durationMs': 50, 'keys': [], 'mouseDx': 0, 'mouseDy': 0}], [{'durationMs': 50, 'keys': [], 'mouseDx': 0, 'mouseDy': 0}], [{'durationMs': 50, 'keys': [], 'mouseDx': 0, 'mouseDy': 0}], [{'durationMs': 50, 'keys': ['SPACE', 'W'], 'mouseDx': -2, 'mouseDy': -2}], [{'durationMs': 50, 'keys': [], 'mouseDx': 0, 'mouseDy': 0}], [{'durationMs': 50, 'keys': ['W'], 'mouseDx': 10, 'mouseDy': 1}], [{'durationMs': 50, 'keys': ['A'], 'mouseDx': 0, 'mouseDy': 0}], [{'durationMs': 50, 'keys': [], 'mouseDx': 0, 'mouseDy': 0}], [{'durationMs': 50, 'keys': [], 'mouseDx': 0, 'mouseDy': 0}], [{'durationMs': 50, 'keys': [], 'mouseDx': 0, 'mouseDy': 0}], [{'durationMs': 50, 'keys': [], 'mouseDx': 0, 'mouseDy': 0}], [{'durationMs': 50, 'keys': ['A'], 'mouseDx': 0, 'mouseDy': 0}], [{'durationMs': 50, 'keys': ['LBUTTON'], 'mouseDx': 0, 'mouseDy': 0}]]
+        before=canonical(steps)
+        results=[proposal_rejection(dict(parseValid=True,steps=row),ground_combat=True) for row in steps]
+        self.assertEqual((len(results),results.count(None)),(37,10))
+        self.assertEqual(sum(proposal_rejection(dict(parseValid=True,steps=row)) is None for row in steps),1)
+        self.assertEqual(canonical(steps),before)
+        # Combat07 has no reviewed ground/pose corridor; the old binding itself remains legacy-only.
+        self.assertNotIn('groundCombat',binding())
+
+
 if __name__ == '__main__':
     unittest.main()

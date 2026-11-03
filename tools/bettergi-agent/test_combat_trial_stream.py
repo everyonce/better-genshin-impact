@@ -775,5 +775,167 @@ class CombatStaleRecoveryStreamTests(unittest.TestCase):
                 self.assertEqual(bridge.commands, [])
 
 
+
+
+class GroundTrialBridge(TrialBridge):
+    """Expose existing native ground/pose APIs and exact synthetic50ms receipts without a pipe."""
+    def __init__(self, transform=None, hold_terminal=False):
+        """Keep the original single owner/session and one pending request."""
+        from test_combat_trial_guard import ground_hello
+        from test_hybrid_navigation import capability
+        super().__init__(hold_terminal=hold_terminal)
+        self.hello.update(ground_hello()); self.hello['navigationGuidance']=capability()
+        self.ground_transform=transform
+
+    def request(self, command, **arguments):
+        """Only add read-only localization/layout negotiation to the existing inert native commands."""
+        from test_combat_trial_guard import ground_review_parts
+        from test_encounter_approach import sample
+        if command=='requireGroundControlLayout':
+            self.commands.append(command)
+            return copy.deepcopy(ground_review_parts()[2]['nativeGroundControlGate']),b''
+        if command=='enableNavigationGuidance':
+            self.commands.append(command)
+            return dict(type='navigationGuidance',enabled=True,capability=ground_review_parts()[2]['capability']),b''
+        row,pixels=super().request(command,**arguments)
+        if command=='action':
+            self.pending['appliedSteps'][0].update({key:arguments['steps'][0][key] for key in ('keys','mouseDx','mouseDy')})
+        if command=='frame':
+            shaped=sample(row['frameId'],row['sourceFrame']['freshnessAtMs'],epoch=self.epoch,age=1)
+            for key in ('groundControlEvidence','navigationPose','motionEvidence'):
+                row[key]=copy.deepcopy(shaped[key])
+            if 'combatEvidence' in row: row['combatEvidence']=copy.deepcopy(shaped['combatEvidence'])
+            if self.ground_transform: row=self.ground_transform(row,self)
+        return row,pixels
+
+
+class GroundCombatStreamTests(unittest.TestCase):
+    """Run actual intake/dispatch/drain logic with synthetic native/model boundaries only."""
+    arguments=CombatTrialStreamTests.arguments
+
+    def configured(self, folder, policy, *, lifetime=1.5):
+        """Select exact50ms through the existing fixed configuration, never rewrite a returned step."""
+        from combat_trial_guard import GROUND_PROFILE
+        from navigation_profiles import SCOUT_PROFILE
+        from test_combat_trial_guard import ground_review_parts
+        args=self.arguments(folder,seconds=5)
+        parts=ground_review_parts(); args.combat_trial_binding=binding(parts)
+        Path(args.goal_embedding).write_bytes(parts[5]); policy.combat_trial_goal_sha256=args.combat_trial_binding['goalSha256']
+        args.action_hold_ms,args.max_input_actions,args.input_keys=50,20,'W,A,S,D,LBUTTON'
+        args.navigation_guidance,args.navigation_profile,args.require_ground_control_layout=True,SCOUT_PROFILE,True
+        args.goal_intent='unspecified';args.history=41;args.lease_deadline=time.monotonic()+lifetime
+        for authority in (args,policy):
+            authority.combat_trial_scope=FOUR_SCOPE;authority.combat_trial_maximum_enemy_candidates=4
+            authority.combat_trial_control_profile=GROUND_PROFILE
+        return args
+
+    def run_ground(self, folder, bridge, policy, recorder, args):
+        """Retain real stream code, clock, reader and control while replacing external resources."""
+        control=dormant_control(folder,frozen_goal=True)
+        control.set_initial_goal(dict(instruction='fixed combat'),'unspecified')
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(client,'Bridge',return_value=bridge))
+            stack.enter_context(patch.object(client,'AsyncVideoRecorder',return_value=recorder))
+            stack.enter_context(patch('resident_runtime.verify_bridge_identity'))
+            stack.enter_context(redirect_stdout(io.StringIO()))
+            result=client.run_episode(args,policy,control)
+        return result,json.loads(Path(args.output).read_bytes())
+
+    def test_real_loop_keeps_exact_movement_camera_attack_and_drained_outcome(self):
+        """Accepted50ms raw steps remain unchanged; pending and final reserve gates remain real."""
+        from test_combat_trial_guard import ground_proposal
+        from audit_combat_trial import replay_events
+        class SequencePolicy(TrialPolicy):
+            """Emit a finite repeated shape sequence without any model load."""
+            def predict(self,image,size,**kwargs):
+                shapes=[ground_proposal(('W',)),ground_proposal((),dx=20),ground_proposal(('LBUTTON',))]
+                self.proposed=shapes[len(self.images)%3]
+                return super().predict(image,size,**kwargs)
+        with tempfile.TemporaryDirectory() as folder:
+            policy=SequencePolicy();bridge=GroundTrialBridge();recorder=CapturingRecorder()
+            args=self.configured(folder,policy)
+            code,report=self.run_ground(folder,bridge,policy,recorder,args)
+            self.assertEqual((code,report.get('error')),(0,None),report)
+            self.assertEqual(report['endReason'],'combatGroundWindowDrained')
+            self.assertGreaterEqual(len(bridge.actions),3);self.assertLessEqual(len(bridge.actions),20)
+            self.assertEqual(len(bridge.actions),len(bridge.completed));self.assertEqual(policy.feedback.count(True),len(bridge.actions))
+            accepted=[row for row in report['decisions'] if row.get('acceptance',{}).get('type')=='accepted']
+            self.assertEqual([row['steps'] for row in accepted],[row['steps'] for row in bridge.actions])
+            self.assertTrue(all(row['steps']==row['rawPolicySteps'] and row['steps'][0]['durationMs']==50 for row in accepted))
+            self.assertEqual(replay_events(args.combat_trial_binding,bridge.hello,recorder.events)['state'],report['combatTrialGuardState'])
+            self.assertEqual(report['combatGroundClock']['leaseDeadlineMonotonicNs'],int(args.lease_deadline*1e9))
+            self.assertTrue(bridge.handle.close.called);self.assertEqual(bridge.commands[-1],'stop')
+
+    def test_wrong_raw_duration_is_not_rewritten_and_zero_count_can_drain(self):
+        """A100ms proposal cannot be turned into50ms input; an idle window is not combat success."""
+        from test_combat_trial_guard import ground_proposal
+        with tempfile.TemporaryDirectory() as folder:
+            policy=TrialPolicy(proposed=ground_proposal(('LBUTTON',),hold=100));bridge=GroundTrialBridge()
+            args=self.configured(folder,policy,lifetime=1.1)
+            code,report=self.run_ground(folder,bridge,policy,CapturingRecorder(),args)
+            self.assertEqual((code,report['acceptedInputActions'],bridge.actions),(0,0,[]),report.get('error'))
+            self.assertTrue(report['decisions']);self.assertTrue(all(row['steps'][0]['durationMs']==100 for row in report['decisions']))
+            self.assertFalse(report['combatTrialGuardState']['damageVerified'])
+            self.assertEqual(report['endReason'],'combatGroundWindowDrained')
+
+    def test_foreign_or_mixed_configuration_refuses_before_native_connection(self):
+        """No partial descriptor, stale recovery or resident/navigation controller inherits this opt-in."""
+        changes=[lambda a,p:delattr(a,'combat_trial_control_profile'),lambda a,p:setattr(p,'combat_trial_control_profile','foreign'),
+            lambda a,p:setattr(a,'action_hold_ms',100),lambda a,p:setattr(a,'max_input_actions',21),
+            lambda a,p:setattr(a,'batch_source_hold',True),lambda a,p:setattr(a,'p2p_executed_history',True),
+            lambda a,p:setattr(a,'combat_trial_source_stale_recovery_policy',{}),lambda a,p:setattr(a,'lease_deadline',None),
+            lambda a,p:setattr(a,'hybrid_navigation',True),lambda a,p:setattr(a,'goal_intent','stationary')]
+        for change in changes:
+            with self.subTest(change=change),tempfile.TemporaryDirectory() as folder:
+                policy=TrialPolicy();args=self.configured(folder,policy);change(args,policy)
+                control=dormant_control(folder,frozen_goal=True)
+                control.set_initial_goal(dict(instruction='fixed combat'),'unspecified')
+                with patch.object(client,'Bridge') as connect,self.assertRaises((ValueError,TypeError)):
+                    client.run_episode(args,policy,control)
+                connect.assert_not_called()
+
+    def test_fresh_ground_danger_stops_without_any_model_action(self):
+        """Positive climbing remains terminal even though horizontal movement is now allowed."""
+        def danger(row,_bridge):
+            row['motionEvidence'].update(status='climbing',spaceKeyMatched=True)
+            return row
+        with tempfile.TemporaryDirectory() as folder:
+            policy=TrialPolicy();bridge=GroundTrialBridge(transform=danger);args=self.configured(folder,policy)
+            with self.assertRaisesRegex(CombatTrialStop,'groundControlLost'):
+                self.run_ground(folder,bridge,policy,CapturingRecorder(),args)
+            report=json.loads(Path(args.output).read_bytes())
+            self.assertEqual(report['status'],'failed');self.assertEqual(bridge.actions,[])
+            self.assertEqual(report['combatTrialGuardState']['trip']['reason'],'groundControlLost')
+            self.assertTrue(bridge.handle.close.called)
+
+    def test_unknown_terminal_never_becomes_a_drained_window(self):
+        """The650ms reserve is not a guarantee; an unfinished accepted request remains failed."""
+        from test_combat_trial_guard import ground_proposal
+        with tempfile.TemporaryDirectory() as folder:
+            policy=TrialPolicy(proposed=ground_proposal());bridge=GroundTrialBridge(hold_terminal=True)
+            args=self.configured(folder,policy,lifetime=1.2)
+            code,report=self.run_ground(folder,bridge,policy,CapturingRecorder(),args)
+            self.assertEqual(code,1);self.assertEqual(len(bridge.actions),1)
+            self.assertFalse(report['combatTrialGuardState']['trialComplete'])
+            self.assertEqual(report['combatTrialGuardState']['completedActions'],0)
+            self.assertTrue(bridge.handle.close.called);self.assertEqual(bridge.commands[-1],'stop')
+
+    def test_mid_request_route_escape_preserves_failure_and_serial_cleanup(self):
+        """A fresh but foreign position cannot authorize another action after a real admission."""
+        from test_combat_trial_guard import ground_proposal
+        def outside(row,bridge):
+            if bridge.actions: row['navigationPose']['x']+=7
+            return row
+        with tempfile.TemporaryDirectory() as folder:
+            policy=TrialPolicy(proposed=ground_proposal());bridge=GroundTrialBridge(transform=outside)
+            args=self.configured(folder,policy)
+            with self.assertRaisesRegex(CombatTrialStop,'invalidNativeEvidence'):
+                self.run_ground(folder,bridge,policy,CapturingRecorder(),args)
+            report=json.loads(Path(args.output).read_bytes())
+            self.assertEqual(report['status'],'failed');self.assertEqual(len(bridge.actions),1)
+            self.assertEqual(report['combatTrialGuardState']['trip']['reason'],'invalidNativeEvidence')
+            self.assertFalse(report['combatTrialGuardState']['trialComplete']);self.assertTrue(bridge.handle.close.called)
+
+
 if __name__ == '__main__':
     unittest.main()

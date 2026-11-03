@@ -1074,5 +1074,270 @@ class AuditClockTests(unittest.TestCase):
             verify_episode_clocks(*parts)
 
 
+class InitialTargetAcquisitionTests(unittest.TestCase):
+    """Explicit v2 permits one bounded acquisition opportunity, never blind arrival or renewed input."""
+
+    def parts(self):
+        """Construct v2-only synthetic review data without changing shared v1 fixtures."""
+        review, plan, scene, sidecar, image = review_parts()
+        review.update(kind=approach.ACQUISITION_REVIEW_KIND, policy=approach.policy(initial_target_acquisition=True))
+        for frame in scene['observations'] + scene['stableSamples']:
+            frame['combatEvidence']['enemyBarCandidates'] = []
+        return review, plan, scene, sidecar, image
+
+    def ready(self):
+        """Spend the original three-frame alignment interval with genuine zero-candidate fixtures."""
+        bound = approach.bind_review(*self.parts(), expected_owner=OWNER)
+        controller = approach.ApproachController(bound, HELLO, 0)
+        for index in (1, 2, 3):
+            controller.observe(sample(index, index * 100, candidates=0), index * 100_000_000, 1)
+        self.assertEqual(controller.navigation.phase, 'walking')
+        return controller
+
+    def test_v2_is_explicit_and_changes_only_fixed_initial_acquisition_policy(self):
+        v1, v2 = approach.policy(), approach.policy(initial_target_acquisition=True)
+        self.assertEqual(v2.pop('initialTargetAcquisitionMs'), 1500)
+        v2['version'] = 1
+        self.assertEqual(v2, v1)
+        parts = list(self.parts())
+        bound = approach.bind_review(*parts)
+        self.assertEqual(bound['version'], 2)
+        self.assertEqual(bound['reviewedFrame']['combatEvidence']['enemyBarCandidates'], [])
+        for change in ('oldKind', 'oldPolicy', 'longer', 'automatic', 'bindingVersion'):
+            changed = copy.deepcopy(parts)
+            if change == 'oldKind':
+                changed[0]['kind'] = approach.REVIEW_KIND
+            elif change == 'oldPolicy':
+                changed[0]['policy'] = approach.policy()
+            elif change == 'longer':
+                changed[0]['policy']['initialTargetAcquisitionMs'] = 1501
+            elif change == 'automatic':
+                changed[0]['policy']['automaticRecovery'] = True
+            else:
+                invalid = copy.deepcopy(bound)
+                invalid['version'] = 1
+                with self.assertRaisesRegex(ValueError, 'policy changed'):
+                    approach.ApproachController(invalid, HELLO, 0)
+                continue
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                approach.bind_review(*changed)
+
+    def test_zero_initial_review_still_requires_one_to_four_visually_inspected_enemies(self):
+        for count in (0, 5, True, None):
+            parts = list(self.parts())
+            parts[0]['inspectedVisibleEnemyCount'] = count
+            with self.subTest(count=count), self.assertRaisesRegex(ValueError, 'enemy-group'):
+                approach.bind_review(*parts)
+        old_parts = list(self.parts())
+        old_parts[0].update(kind=approach.REVIEW_KIND, policy=approach.policy())
+        with self.assertRaisesRegex(ValueError, 'start/group'):
+            approach.bind_review(*old_parts)
+
+    def test_startup_idle_and_duplicate_polls_cannot_extend_the_original_window(self):
+        for mode in ('bootstrap', 'duplicate', 'noObservation'):
+            controller = self.ready() if mode == 'duplicate' else approach.ApproachController(approach.bind_review(*self.parts()), HELLO, 0)
+            self.assertEqual(controller.initial_target_acquisition()['deadlineClientNs'], 1_500_000_000)
+            controller.check(1_499_999_999)
+            with self.subTest(mode=mode), self.assertRaisesRegex(RuntimeError, 'initial_target_acquisition_deadline'):
+                if mode == 'noObservation':
+                    controller.check(1_500_000_000)
+                else:
+                    frame = sample(3, 300, candidates=0) if mode == 'duplicate' else dict(type='waiting')
+                    controller.observe(frame, 1_500_000_000, 0)
+            with self.assertRaisesRegex(RuntimeError, 'initial_target_acquisition_deadline'):
+                controller.observe(sample(4, 1501), 1_501_000_000, 0)
+
+    def test_camera_and_zero_frames_do_not_restart_the_acquisition_clock(self):
+        controller = self.ready()
+        for index in (4, 5):
+            controller.observe(sample(index, index * 100, candidates=0, yaw=200), index * 100_000_000, 1)
+            request = controller.next_action(index * 100_000_000 + 1_000_000)
+            self.assertEqual(request['steps'][0]['keys'], [])
+            self.assertNotEqual(request['steps'][0]['mouseDx'], 0)
+            complete(controller, request)
+        self.assertIsNone(controller.initial_target_acquisition()['firstObservedFrameId'])
+        with self.assertRaisesRegex(RuntimeError, 'initial_target_acquisition_deadline'):
+            controller.check(1_500_000_000)
+
+    def test_first_qualified_bar_retires_only_initial_clock_and_preserves_target_loss(self):
+        controller = self.ready()
+        controller.observe(sample(4, 400, candidates=1), 400_000_000, 1)
+        self.assertEqual(controller.initial_target_acquisition(), dict(startedAtClientNs=0,
+            deadlineClientNs=1_500_000_000, firstObservedAtClientNs=400_000_000, firstObservedFrameId=4))
+        controller.observe(sample(5, 1100, candidates=0), 1_100_000_000, 1)
+        with self.assertRaisesRegex(RuntimeError, 'target_absence_deadline'):
+            controller.observe(sample(6, 1200, candidates=0), 1_200_000_000, 1)
+        late = self.ready()
+        with self.assertRaisesRegex(RuntimeError, 'initial_target_acquisition_deadline'):
+            late.observe(sample(4, 1490, candidates=1), 1_500_000_000, 1)
+
+    def test_zero_bar_mode_keeps_positive_danger_source_pose_and_corridor_guards(self):
+        for change in ('red', 'loss', 'fiveBars', 'missingGround', 'stale', 'capture', 'world', 'pose', 'corridor'):
+            controller = self.ready()
+            frame = sample(4, 400, candidates=0)
+            if change == 'red': frame['combatEvidence']['playerHealthColor'] = 'red'
+            elif change == 'loss': frame['combatEvidence']['playerHealthFractionEstimate'] = .97
+            elif change == 'fiveBars': frame = sample(4, 400, candidates=5)
+            elif change == 'missingGround': frame.pop('groundControlEvidence')
+            elif change == 'stale': frame = sample(4, 400, candidates=0, age=151)
+            elif change == 'capture': frame = sample(4, 400, candidates=0, capture='foreign')
+            elif change == 'world': frame = sample(4, 400, candidates=0, epoch=1)
+            elif change == 'pose': frame['navigationPose']['state'] = 'unavailable'
+            else: frame = sample(4, 400, candidates=0, point=(START[0] + 1, START[1] + 1.01))
+            with self.subTest(change=change), self.assertRaises(RuntimeError):
+                controller.observe(frame, 400_000_000, 1)
+            self.assertEqual(controller.actions, 0)
+
+    def test_original_dispatch_headroom_pending_and_final_transmission_checks_remain(self):
+        controller = self.ready()
+        request = controller.next_action(301_000_000)
+        self.assertEqual(request['steps'], [dict(keys=['W'], mouseDx=0, mouseDy=0, durationMs=50)])
+        self.assertIsNone(controller.next_action(302_000_000))
+        with self.assertRaisesRegex(RuntimeError, 'initial_target_acquisition_deadline'):
+            controller.transmitting(1_500_000_000)
+        self.assertFalse(controller.pending['transmissionAttempted'])
+        headroom = self.ready()
+        headroom.observe(sample(4, 1350, candidates=0), 1_350_000_000, 1)
+        with self.assertRaisesRegex(RuntimeError, 'approach_dispatch_budget'):
+            headroom.next_action(1_351_000_000)
+
+    def episode(self, *, acquire_at=4, bootstrap_bar=False, camera_until=0):
+        """Use the real episode writer and auditor with only native RPC/pixels/clock injected."""
+        clock = Clock()
+        def change(frame, bridge):
+            if bridge.number < acquire_at:
+                frame['combatEvidence']['enemyBarCandidates'] = []
+            if bootstrap_bar and bridge.number == 1:
+                frame['combatEvidence']['enemyBarCandidates'] = sample(1, 100)['combatEvidence']['enemyBarCandidates']
+                frame['worldReadiness']['ready'] = False
+                frame['inputAvailable'] = False
+            if 5 <= bridge.number < camera_until:
+                frame['navigationPose']['yawDegrees'] = 200
+        bound = approach.bind_review(*self.parts())
+        bridge = FakeBridge(clock, change=change)
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        folder = Path(temp.name) / 'recording'
+        report = approach.run_episode(bridge, bound, folder, clock=clock, sleep=clock.sleep)
+        return bound, bridge, folder, report
+
+    def test_real_episode_and_audit_acquire_once_then_complete_without_attack(self):
+        from audit_encounter_approach import audit_recording
+        bound, bridge, folder, report = self.episode()
+        self.assertEqual(report['status'], 'completed', report)
+        self.assertEqual(report['acceptedActions'], 5)
+        self.assertEqual(report['initialTargetAcquisition']['firstObservedFrameId'], 4)
+        self.assertEqual(audit_recording(folder, bound, report)['episodeStatus'], 'completed')
+        for field in ('deadlineClientNs', 'firstObservedAtClientNs', 'firstObservedFrameId'):
+            altered = copy.deepcopy(report)
+            altered['initialTargetAcquisition'][field] += 1
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, 'acquisition clock'):
+                audit_recording(folder, bound, altered)
+        self.assertTrue(all(set(args['steps'][0]['keys']) <= {'W'} for command, args in bridge.calls if command == 'action'))
+
+    def test_early_endpoint_without_any_native_bar_is_failed_and_cleanup_is_auditable(self):
+        from audit_encounter_approach import audit_recording
+        bound, bridge, folder, report = self.episode(acquire_at=999)
+        self.assertEqual(report['status'], 'failed')
+        self.assertIn(report['error'], ('initial_target_not_acquired', 'initial_target_acquisition_deadline', 'approach_dispatch_budget'))
+        self.assertFalse(report['navigationVerified'])
+        self.assertIsNone(report['initialTargetAcquisition']['firstObservedFrameId'])
+        self.assertEqual(audit_recording(folder, bound, report)['episodeStatus'], 'failed')
+        self.assertEqual(bridge.calls[-1][0], 'stop')
+
+    def test_auditor_independently_refuses_a_zero_bar_proposal_after_initial_expiry(self):
+        from audit_encounter_approach import audit_recording
+        bound, _, folder, report = self.episode()
+        path = folder / 'events.jsonl'
+        events = [json.loads(row) for row in path.read_bytes().splitlines()]
+        proposal = next(row for row in events if row['type'] == 'proposal')
+        proposal['clientTimeNs'] = report['initialTargetAcquisition']['deadlineClientNs']
+        path.write_bytes(b''.join(approach.canonical(row) + b'\n' for row in events))
+        with self.assertRaisesRegex(ValueError, 'Initial target acquisition exceeded'):
+            audit_recording(folder, bound, report)
+
+    def test_actual_v2_prepare_verify_round_trip_refuses_mixed_outer_authority(self):
+        """The stored plan and reconstructed reviewed binding must declare the same finite policy."""
+        parts = self.parts()
+        with tempfile.TemporaryDirectory() as temporary, ExitStack() as stack:
+            stack.enter_context(patch(__name__ + '.review_parts', return_value=parts))
+            folder, _, plan = PrepareTests().prepare_fixture(temporary, stack)
+            self.assertEqual(plan['version'], 2)
+            self.assertEqual(plan['policy'], plan['binding']['policy'])
+            self.assertEqual(approach.verify_plan(folder / 'plan.json')[0], plan)
+            for change in ('outerVersion', 'outerPolicy', 'bothOuter', 'innerVersion'):
+                altered = copy.deepcopy(plan)
+                if change in ('outerVersion', 'bothOuter'): altered['version'] = 1
+                if change in ('outerPolicy', 'bothOuter'): altered['policy'] = approach.policy()
+                if change == 'innerVersion': altered['binding']['version'] = 1
+                (folder / 'plan.json').write_bytes(approach.canonical(altered))
+                with self.subTest(change=change), self.assertRaises(ValueError):
+                    approach.verify_plan(folder / 'plan.json')
+
+
+    def test_fresh_prepared_action_losing_initial_headroom_is_abandoned_before_native_send(self):
+        """Real episode and audit must reject a late send even though its source is still fresh."""
+        from audit_encounter_approach import audit_recording
+        clock = Clock()
+        clock.now = 0
+        calls = []
+        class FreshBridge:
+            def __init__(self):
+                self.hello, self.number = copy.deepcopy(HELLO), 0
+            def request(self, command, **arguments):
+                calls.append(command)
+                if command == 'frame':
+                    clock.sleep(.01)
+                    self.number += 1
+                    frame = sample(self.number, clock() / 1e6, candidates=0)
+                    return frame, bytes([30, 45, 65]) * (192 * 192)
+                if command == 'release':
+                    return release_ack(clock() / 1e6), b''
+                if command == 'stop':
+                    return dict(type='stopped', receipts=[]), b''
+                raise AssertionError('No native action may be called after losing initial headroom')
+        bridge = FreshBridge()
+        def before_work():
+            # Three fresh low-RTT sources qualify at1090/1190/1290ms. No clock moves backward.
+            clock.now = max(clock.now, (1080, 1180, 1280, 1300)[min(bridge.number, 3)] * 1_000_000)
+        original_event = approach.EvidenceJournal.event
+        def delayed_event(journal, event):
+            original_event(journal, event)
+            if event['type'] == 'proposal': clock.sleep(.05)
+        bound = approach.bind_review(*self.parts())
+        with tempfile.TemporaryDirectory() as temporary, patch.object(approach.EvidenceJournal, 'event', delayed_event):
+            folder = Path(temporary) / 'recording'
+            report = approach.run_episode(bridge, bound, folder, clock=clock, sleep=clock.sleep, check=before_work)
+            self.assertEqual(report['error'], 'approach_dispatch_budget')
+            self.assertEqual(report['actionProposals'], 1)
+            self.assertEqual(report['actionsAttempted'], 0)
+            self.assertNotIn('action', calls)
+            self.assertEqual(next(iter(report['actionAttempts'].values()))['state'], 'abandoned_before_transmission')
+            self.assertEqual(audit_recording(folder, bound, report)['episodeStatus'], 'failed')
+            path = folder / 'events.jsonl'
+            events = [json.loads(row) for row in path.read_bytes().splitlines()]
+            observation = next(row for row in reversed(events) if row['type'] == 'observation')
+            age = observation['frame']['sourceFrameAgeMs'] + observation['roundTripMs'] + (1_350_000_000 - observation['clientReceivedNs']) / 1e6
+            self.assertLess(age, 150)
+            # A deliberately forged late admission must hit the real replayed transmitting gate.
+            proposal = next(row for row in events if row['type'] == 'proposal')
+            at = next(i for i, row in enumerate(events) if row['type'] == 'proposalAbandoned')
+            events[at] = dict(type='admission', requestId=proposal['request']['requestId'], payloadBytes=0,
+                response=dict(type='accepted', requestId=proposal['request']['requestId'], acceptedAtMs=1350),
+                clientTimeNs=1_350_000_000, dispatchedAtClientNs=1_350_000_000, sourceAgeAtDispatchMs=age)
+            path.write_bytes(b''.join(approach.canonical(row) + b'\n' for row in events))
+            with self.assertRaisesRegex(RuntimeError, 'approach_dispatch_budget'):
+                audit_recording(folder, bound, report)
+
+
+    def test_unready_bootstrap_bar_never_satisfies_acquisition_or_audit_target_history(self):
+        from audit_encounter_approach import audit_recording
+        bound, _, folder, report = self.episode(acquire_at=12, bootstrap_bar=True, camera_until=12)
+        self.assertEqual(report['status'], 'completed', report)
+        self.assertEqual(report['initialTargetAcquisition']['firstObservedFrameId'], 12)
+        self.assertLess(report['initialTargetAcquisition']['firstObservedAtClientNs'] - report['startedAtClientNs'], 1_500_000_000)
+        self.assertEqual(audit_recording(folder, bound, report)['episodeStatus'], 'completed')
+
+
 if __name__ == '__main__':
     unittest.main()

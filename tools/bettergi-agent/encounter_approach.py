@@ -32,6 +32,7 @@ ROOT = Path(__file__).resolve().parents[2]
 LIVE = ROOT / 'artifacts/live'
 KIND = 'encounter-approach-v1'
 REVIEW_KIND = 'encounter-approach-review-v1'
+ACQUISITION_REVIEW_KIND = 'encounter-approach-review-v2'
 PROFILE = 'p2p-native-hamming-192-v1'
 MODEL_ID = 'encounter-approach-native-v1'
 MAX_REVIEW_SECONDS = 120
@@ -39,15 +40,18 @@ HOST_SECONDS = 40
 MAX_RECORD_BYTES = 80 * 1024 * 1024
 
 
-def policy():
+def policy(*, initial_target_acquisition=False):
     """Return a fresh closed declaration; callers cannot widen another run's limits."""
-    return dict(version=1, maximumDistance=6, maximumSeconds=10, holdMs=50, maximumActions=80,
+    declaration = dict(version=1, maximumDistance=6, maximumSeconds=10, holdMs=50, maximumActions=80,
                 maximumOutstanding=1, sourceFreshnessMs=150, maximumHealthFractionDrop=.02,
                 minimumDispatchBudgetMs=200,
                 maximumEnemyBarCandidates=4, allowedKeys=['W'], maximumHorizontalMouseDelta=350,
                 verticalCameraAllowed=False, attacksAllowed=False, automaticRecovery=False,
                 corridorHalfWidth=1, navigationCorridorHalfWidth=4, endpointRadius=2, maximumTargetAbsenceMs=750,
                 navigationProfile=SCOUT_PROFILE, enemyIdentityVerified=False, meleeArrivalVerified=False)
+    if initial_target_acquisition:
+        declaration.update(version=2, initialTargetAcquisitionMs=1500)
+    return declaration
 
 
 def require(value, message):
@@ -177,7 +181,10 @@ def qualify_frame(frame, baseline, maximum_candidates, *, replay_pixels=False, c
 
 def bind_review(review, native_plan, scene, sidecar, image, *, expected_owner=None):
     """Bind an explicit clear-corridor review to original passive source pixels, never create that review."""
-    require(review.get('kind') == REVIEW_KIND and canonical(review.get('policy')) == canonical(policy()),
+    initial_acquisition = review.get('kind') == ACQUISITION_REVIEW_KIND
+    declaration = policy(initial_target_acquisition=initial_acquisition)
+    require(review.get('kind') in (REVIEW_KIND, ACQUISITION_REVIEW_KIND)
+            and canonical(review.get('policy')) == canonical(declaration),
             'A separate fixed encounter-approach review is required')
     require(type(review.get('reviewedAtUnixNs')) is int and review['reviewedAtUnixNs'] > 0,
             'The original visual review time is required')
@@ -228,7 +235,7 @@ def bind_review(review, native_plan, scene, sidecar, image, *, expected_owner=No
         require(frame in scene.get('observations', []) and (frame.get('executionContext') or {}).get('lastSequence') == 0,
                 'Passive review contains input or synthetic observations')
         evidence, _, pose = qualify_frame(frame, hp / maximum, count, replay_pixels=True, capability=combat_capability)
-        require(1 <= len(evidence['enemyBarCandidates']) <= count
+        require((0 if initial_acquisition else 1) <= len(evidence['enemyBarCandidates']) <= count
                 and math.dist((pose['x'], pose['y']), route.points[0]) <= .35, 'Reviewed start/group differs')
     for a, b in zip(samples, samples[1:]):
         x, y = a['sourceFrame'], b['sourceFrame']
@@ -249,7 +256,7 @@ def bind_review(review, native_plan, scene, sidecar, image, *, expected_owner=No
         for crop in selected['groundControlEvidence']['crops']:
             require(rgb.crop((crop['x'], crop['y'], crop['x'] + crop['width'], crop['y'] + crop['height'])).tobytes()
                     == base64.b64decode(crop['rgbBase64'], validate=True), 'Ground-control crops differ from reviewed pixels')
-    return dict(version=1, kind=KIND, policy=policy(), owner=copy.deepcopy(owner), route=route.document(),
+    return dict(version=2 if initial_acquisition else 1, kind=KIND, policy=declaration, owner=copy.deepcopy(owner), route=route.document(),
                 baselineHealthFraction=hp / maximum, inspectedHealth=hp, inspectedMaximumHealth=maximum,
                 maximumEnemyBarCandidates=count, nativeCombatObservation=combat_capability,
                 reviewedAtUnixNs=review['reviewedAtUnixNs'],
@@ -294,7 +301,10 @@ class ApproachController:
 
     def __init__(self, binding, hello, started_ns, *, deadline_ns=None):
         """A new phase starts with no prior action/history and cannot inherit a tripped guard."""
-        require(canonical(binding.get('policy')) == canonical(policy()), 'Approach policy changed')
+        initial_acquisition = (binding.get('policy') or {}).get('version') == 2
+        require(binding.get('version') == (2 if initial_acquisition else 1)
+                and canonical(binding.get('policy')) == canonical(policy(initial_target_acquisition=initial_acquisition)),
+                'Approach policy changed')
         require(hello.get('inputEnabled') is True and hello.get('supportsRelease') is True
                 and hello.get('supportsStartBeforeMs') is True and hello.get('observationProfile') == PROFILE
                 and 'W' in hello.get('allowedKeys', []) and hello.get('sessionId') and hello.get('ownerEpoch')
@@ -313,6 +323,10 @@ class ApproachController:
         self.last = None
         self.last_distinct = None
         self.target_seen_at = None
+        # Bootstrap, alignment, camera corrections and idle share this original one-use clock.
+        self.initial_target_deadline_ns = started_ns + 1_500_000_000 if initial_acquisition else None
+        self.first_target_at_ns = None
+        self.first_target_frame_id = None
         self.armed = False
         self.after_release = None
         self.pending = None
@@ -335,6 +349,8 @@ class ApproachController:
             raise RuntimeError(self.trip)
         if now_ns >= self.deadline_ns:
             self.fail('approach_deadline')
+        if self.initial_target_deadline_ns is not None and self.target_seen_at is None and now_ns >= self.initial_target_deadline_ns:
+            self.fail('initial_target_acquisition_deadline')
 
     def observe(self, frame, received_ns, round_trip_ms):
         """Inspect all polls, including unchanged frames; only distinct complete frames advance navigation."""
@@ -400,8 +416,11 @@ class ApproachController:
             if source['timestamp100ns'] <= old['sourceFrame']['timestamp100ns']:
                 self.fail('new_frame_reused_old_source')
         if evidence['enemyBarCandidates']:
+            if self.first_target_at_ns is None:
+                self.first_target_at_ns, self.first_target_frame_id = received_ns, frame['frameId']
             self.target_seen_at = source['freshnessAtMs']
-        elif self.target_seen_at is None or source['freshnessAtMs'] - self.target_seen_at > 750:
+        elif ((self.target_seen_at is None and self.initial_target_deadline_ns is None)
+              or (self.target_seen_at is not None and source['freshnessAtMs'] - self.target_seen_at > 750)):
             self.fail('target_absence_deadline')
         if self.after_release is not None and source['freshnessAtMs'] <= self.after_release:
             return 'waitingAfterRelease'
@@ -412,6 +431,8 @@ class ApproachController:
         except (ValueError, RuntimeError) as error:
             self.fail(str(error))
         if self.navigation.legs >= 1:
+            if self.target_seen_at is None:
+                self.fail('initial_target_not_acquired')
             self.complete = True
             return 'endpointVerified'
         if self.navigation.phase == 'walking':
@@ -423,7 +444,10 @@ class ApproachController:
         self.check(now_ns)
         if self.complete or self.pending is not None or not self.armed or self.navigation.phase != 'walking':
             return None
-        if self.deadline_ns - now_ns < 200_000_000:
+        dispatch_deadline = self.deadline_ns
+        if self.initial_target_deadline_ns is not None and self.target_seen_at is None:
+            dispatch_deadline = min(dispatch_deadline, self.initial_target_deadline_ns)
+        if dispatch_deadline - now_ns < 200_000_000:
             self.fail('approach_dispatch_budget')
         frame, received, rtt = self.last
         require(now_ns >= received, 'Client clock regressed')
@@ -455,6 +479,9 @@ class ApproachController:
     def transmitting(self, now_ns):
         """Mark the exact point after final checks and immediately before the only native action call."""
         self.check(now_ns)
+        if (self.initial_target_deadline_ns is not None and self.target_seen_at is None
+                and self.initial_target_deadline_ns - now_ns < 200_000_000):
+            self.fail('approach_dispatch_budget')
         require(self.pending is not None and not self.pending['transmissionAttempted'], 'Unexpected second transmission')
         value = self.pending
         age = value['frame']['sourceFrameAgeMs'] + value['roundTripMs'] + (now_ns - value['receivedAtClientNs']) / 1e6
@@ -536,6 +563,13 @@ class ApproachController:
                 self.pending = None
             if not completed and not final:
                 self.fail('action_cancelled_before_complete_horizon')
+
+    def initial_target_acquisition(self):
+        """Expose only the original clock and first fully qualified live native bar for replay."""
+        if self.initial_target_deadline_ns is None:
+            return None
+        return dict(startedAtClientNs=self.started_ns, deadlineClientNs=self.initial_target_deadline_ns,
+                    firstObservedAtClientNs=self.first_target_at_ns, firstObservedFrameId=self.first_target_frame_id)
 
     def released(self, response, payload, *, endpoint=False):
         """Acknowledge released held state and require wholly new source evidence before endpoint verification."""
@@ -725,6 +759,8 @@ def run_episode(bridge, binding, directory, *, clock=time.perf_counter_ns, sleep
                       navigation=controller.navigation.snapshot(), recordedFrames=len(journal.frames),
                       recordedBytes=journal.total, recordEvents=journal.count,
                       physicalInputDeliveryVerified=False, nativeInputJournalComplete=False)
+        if controller.initial_target_deadline_ns is not None:
+            report['initialTargetAcquisition'] = controller.initial_target_acquisition()
         if not report['receiptsComplete'] or not report['releaseAcknowledged'] or not report['stopAcknowledged']:
             report['status'] = 'failed'
         try:
@@ -852,8 +888,8 @@ def prepare(output, review_path, scene_directory, owner_from, executable):
         target.parent.mkdir(parents=True, exist_ok=True)
         with target.open('xb') as stream:
             stream.write(payload)
-    plan = dict(version=1, kind=KIND, runId=uuid.uuid4().hex, createdAtUnixNs=time.time_ns(),
-                policy=policy(), owner=owner, originalOwner=pins, runtime=runtime, sourceContract=sources,
+    plan = dict(version=binding['version'], kind=KIND, runId=uuid.uuid4().hex, createdAtUnixNs=time.time_ns(),
+                policy=copy.deepcopy(binding['policy']), owner=owner, originalOwner=pins, runtime=runtime, sourceContract=sources,
                 evidence=files, binding=binding, maximumHostSeconds=HOST_SECONDS,
                 inputEnabledOnlyInWorker=True, modelLoaded=False, preparationStartsInput=False, explicitLaunchRequired=True)
     recent_review(review, binding)
@@ -867,10 +903,11 @@ def verify_plan(path, *, fresh=True, current_sources=True):
     require(path.name == 'plan.json', 'Expected the sealed approach plan')
     folder = path.parent
     plan, sha = document(path)
-    require(plan.get('version') == 1 and plan.get('kind') == KIND and re.fullmatch('[0-9a-f]{32}', plan.get('runId', ''))
+    require(type(plan.get('version')) is int and plan['version'] in (1, 2)
+            and plan.get('kind') == KIND and re.fullmatch('[0-9a-f]{32}', plan.get('runId', ''))
             and plan.get('maximumHostSeconds') == HOST_SECONDS and plan.get('modelLoaded') is False
             and plan.get('preparationStartsInput') is False and plan.get('explicitLaunchRequired') is True
-            and canonical(plan.get('policy')) == canonical(policy()),
+            and canonical(plan.get('policy')) == canonical(policy(initial_target_acquisition=plan['version'] == 2)),
             'Approach plan contract changed')
     files = plan.get('evidence')
     require(isinstance(files, dict) and set(files) == {'review', 'nativePlan', 'nativeScene', 'imageSidecar', 'image', 'captureHelper'},
@@ -887,6 +924,7 @@ def verify_plan(path, *, fresh=True, current_sources=True):
     binding = bind_review(parsed['review'], parsed['nativePlan'], parsed['nativeScene'], parsed['imageSidecar'],
                           raw['image'], expected_owner=owner)
     require(canonical(binding) == canonical(plan.get('binding'))
+            and plan['version'] == binding['version'] and canonical(plan['policy']) == canonical(binding['policy'])
             and digest(raw['captureHelper']) == parsed['nativePlan']['captureHelperSha256'], 'Sealed binding differs from original raw proof')
     for relative, expected in plan['sourceContract'].items():
         saved = local_path(folder / 'sources' / relative, root=folder / 'sources')

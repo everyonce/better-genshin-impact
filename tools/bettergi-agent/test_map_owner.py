@@ -1290,17 +1290,17 @@ class MapOwnerTest(unittest.TestCase):
         with patch.object(self,'create_r66_successor',return_value=fixture):regression()
 
 
-    def test_r73_replays_exact_original_root_and_game_but_rejects_r74(self):
+    def test_r74_replays_exact_original_root_and_game_but_rejects_r75(self):
         """Only one new finite handoff is permitted, even with a fabricated later package present."""
-        prior,folder,result,game=self.create_r73_successor()
+        prior,folder,result,game=self.create_r74_successor()
         receipt=owner.replacement(prior,folder);path=folder/'map-owner-lineage.json'
         write(path,receipt)
         self.assertEqual(owner.load_map_owner(path),dict(root=self.ids['root'],child=owner.identity(result['child'])))
         self.assertEqual(receipt['protectedGame'],game)
         self.assertEqual(receipt['priorLineageSha256'],hashlib.sha256(prior.read_bytes()).hexdigest())
-        later,_=self.create_next_handoff(path,result,game,74)
+        later,_=self.create_next_handoff(path,result,game,75)
         with self.assertRaisesRegex(ValueError,'bounded'):owner.replacement(path,later)
-        with self.assertRaisesRegex(ValueError,'Unsupported map release'):owner.target_package(74)
+        with self.assertRaisesRegex(ValueError,'Unsupported map release'):owner.target_package(75)
 
 
     def test_r73_rejects_changed_or_missing_game_lifetime(self):
@@ -1343,6 +1343,108 @@ class MapOwnerTest(unittest.TestCase):
 
 
 
+
+
+    def create_r74_successor(self):
+        """Seal R73 and prepare exactly its next fresh English, explicitly released successor."""
+        previous,folder,result,game=self.create_r73_successor()
+        prior=folder/'map-owner-lineage.json'
+        write(prior,owner.replacement(previous,folder))
+        folder,result=self.create_next_handoff(prior,result,game,74)
+        result['child'].update(configuredTriggerPolicyVersion=1, configuredTriggersSuppressed=True)
+        build,_=owner.target_package(74)
+        write(Path(build['targetDirectory'])/'User/config.json',owner.R62_CLEAN_CAPTURE)
+        digest=owner.check_clean_target(build)
+        preflight=json.loads((folder/'preflight.json').read_bytes())
+        preflight['targetConfigSha256']=digest
+        result['replacementEvidence']['existingTargetConfigSha256']=digest
+        write(folder/'preflight.json',preflight)
+        write(folder/'ensure-child.json',result)
+        return prior,folder,result,game
+
+
+    def test_r74_requires_exact_child_configured_trigger_policy(self):
+        """An idle child needs its own typed startup-policy proof; a root claim cannot substitute."""
+        prior,folder,result,_=self.create_r74_successor()
+        build,_=owner.target_package(74)
+        package=Path(build['targetDirectory']).resolve()
+        original=deepcopy(result['child'])
+        mutations=[{}, {'configuredTriggerPolicyVersion':1}, {'configuredTriggersSuppressed':True},
+                   {'configuredTriggerPolicyVersion':1,'configuredTriggersSuppressed':False},
+                   {'configuredTriggerPolicyVersion':True,'configuredTriggersSuppressed':True},
+                   {'configuredTriggerPolicyVersion':1.0,'configuredTriggersSuppressed':True},
+                   {'configuredTriggerPolicyVersion':2,'configuredTriggersSuppressed':True},
+                   {'configuredTriggerPolicyVersion':1,'configuredTriggersSuppressed':1},
+                   {'configuredTriggerPolicyVersion':1,'configuredTriggersSuppressed':'true'}]
+        for fields in mutations:
+            child={k:v for k,v in original.items() if k not in ('configuredTriggerPolicyVersion','configuredTriggersSuppressed')}
+            child.update(fields)
+            root=dict(result['root'],configuredTriggerPolicyVersion=1,configuredTriggersSuppressed=True)
+            with self.subTest(fields=fields),self.assertRaisesRegex(ValueError,'configured automatic triggers'):
+                owner.checked_pair(root,child,package,build['dllSha256'],strict_release=True)
+        # The sealed replacement path must enforce the same policy, not merely the direct helper.
+        result['child']['configuredTriggersSuppressed']=False
+        write(folder/'ensure-child.json',result)
+        with self.assertRaisesRegex(ValueError,'configured automatic triggers'):
+            owner.replacement(prior,folder)
+
+
+    def test_r74_trigger_policy_survives_explicitly_retired_child_states(self):
+        """The policy is required after completed/faulted/stopped ownership release as well as idle."""
+        _,_,result,_=self.create_r74_successor()
+        build,_=owner.target_package(74);package=Path(build['targetDirectory']).resolve()
+        for state in ('idle','completed','faulted','stopped'):
+            child=dict(result['child'],pilotState=state,serviceOwnsPilot=False)
+            with self.subTest(state=state):
+                self.assertEqual(owner.checked_pair(result['root'],child,package,build['dllSha256'],strict_release=True)['child'],owner.identity(child))
+                child['configuredTriggersSuppressed']=False
+                with self.assertRaisesRegex(ValueError,'configured automatic triggers'):
+                    owner.checked_pair(result['root'],child,package,build['dllSha256'],strict_release=True)
+
+
+    def assert_r74_retains(self,regression):
+        """Replay an unchanged adversarial contract on the actual additional predecessor depth."""
+        fixture=self.create_r74_successor()
+        with patch.object(self,'create_r66_successor',return_value=fixture):regression()
+
+
+    def test_r74_rejects_changed_or_missing_game_lifetime(self):
+        """Coherently changed reports still cannot replace the original Genshin lifetime."""
+        self.assert_r74_retains(self.test_r66_rejects_coherently_changed_or_missing_game_lifetime)
+
+
+    def test_r74_rejects_changed_root_stale_source_or_reused_destination(self):
+        """The source and destination must retain distinct exact authenticated identities."""
+        self.assert_r74_retains(self.test_r66_rejects_changed_root_stale_source_or_reused_destination)
+
+
+    def test_r74_requires_explicit_idle_at_both_endpoints(self):
+        """Missing, active and non-boolean ownership cannot qualify either owner."""
+        self.assert_r74_retains(self.test_r66_requires_explicitly_released_root_and_child_at_both_endpoints)
+
+
+    def test_r74_rejects_skipped_circular_or_rewritten_predecessors(self):
+        """The one extra hop must still replay each exact original immutable report."""
+        self.assert_r74_retains(self.test_r66_rejects_skipped_circular_or_rewritten_predecessors)
+
+
+    def test_r74_clean_target_requires_fresh_english_defaults(self):
+        """Only the same clean capture and English schema may enter the new child."""
+        _,_,result,_=self.create_r74_successor();build,_=owner.target_package(74)
+        config=Path(result['selectedPackage']['targetDirectory'])/'User/config.json'
+        self.assertEqual(owner.check_clean_target(build),hashlib.sha256(config.read_bytes()).hexdigest())
+        for changed in (owner.CLEAN_CAPTURE,dict(owner.R62_CLEAN_CAPTURE,extra=True),
+                dict(owner.R62_CLEAN_CAPTURE,otherConfig={'uiCultureInfoName':'en','gameCultureInfoName':'zh-Hans'}),
+                dict(owner.R62_CLEAN_CAPTURE,wgcV2ReadbackMode='nonblocking')):
+            write(config,changed)
+            with self.subTest(config=changed),self.assertRaisesRegex(ValueError,'Unexpected target capture settings'):
+                owner.check_clean_target(build)
+
+
+    def test_r74_source_and_target_witnesses_preserve_replay(self):
+        """Removed complete runtimes retain identity evidence; damaged live or witness bytes still refuse."""
+        prior,folder,result,_=self.create_r74_successor()
+        self.check_source_and_target_witnesses(prior,folder,result,(73,74))
 
 
 class PilotRetirementTest(unittest.TestCase):

@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 
@@ -9,12 +8,6 @@ namespace BetterGenshinImpact.Core.Script.Dependence;
 internal sealed class CaptureImageWriter
 {
     private static readonly object Gate = new();
-    private string? _lastHash;
-    private string? _lastPath;
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool CreateHardLink(string newName, string existingName, IntPtr reserved);
 
     internal static bool Applies(string root, string path) =>
         string.Equals(Path.GetFileName(Path.TrimEndingDirectorySeparator(root)), "ActOnePilot", StringComparison.OrdinalIgnoreCase) &&
@@ -36,24 +29,13 @@ internal sealed class CaptureImageWriter
             CaptureStorageBudget.Check(Path.Combine(root, "observations"), png.LongLength, availableBytes);
             if (File.Exists(path)) throw new IOException("Capture evidence already exists; overwriting is forbidden.");
             var hash = Convert.ToHexString(SHA256.HashData(png));
-            // Each frame retains its original path and metadata. Exact consecutive PNGs
-            // share immutable NTFS data; changed and transition frames keep their own bytes.
-            // Logical sizes still count toward the quota, even when physical bytes are shared.
-            bool previousMatches = false;
-            if (_lastHash == hash && _lastPath != null && File.Exists(_lastPath))
+            // Each frame retains its original path, metadata and exact PNG bytes.
+            // Even identical captures need independent file identities: strict evidence
+            // readers reject hard links. Logical storage quotas remain unchanged.
+            using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read))
             {
-                CaptureStorageBudget.AssertOrdinaryPath(_lastPath);
-                using var previous = File.OpenRead(_lastPath);
-                previousMatches = Convert.ToHexString(SHA256.HashData(previous)) == hash;
-            }
-            if (!previousMatches || _lastPath == null ||
-                !OperatingSystem.IsWindows() || !CreateHardLink(path, _lastPath, IntPtr.Zero))
-            {
-                using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
                 stream.Write(png);
             }
-            _lastHash = hash;
-            _lastPath = path;
             retention.Register(path, png.LongLength, hash);
         }
     }

@@ -1,6 +1,8 @@
 using BetterGenshinImpact.Core.Script.Dependence;
 using Xunit;
 using System.IO;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
 
 namespace BetterGenshinImpact.EnglishTest;
 
@@ -10,6 +12,38 @@ public sealed class CaptureStorageTests : IDisposable
     public CaptureStorageTests() => Directory.CreateDirectory(Path.Combine(_root, "observations", "session"));
     private string Frame(int number) => Path.Combine(_root, "observations", "session", $"frame-{number:0000}.png");
     private static long Plenty() => 8L * 1024 * 1024 * 1024;
+
+    /// <summary>Windows FILE_STANDARD_INFO layout for exact file-only link-count checks.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    private struct FileStandardInformation
+    {
+        /// <summary>Allocated storage, retained to match the native metadata layout.</summary>
+        public long AllocationSize;
+        /// <summary>Logical file length, retained to match the native metadata layout.</summary>
+        public long EndOfFile;
+        /// <summary>Number of directory entries referring to this file identity.</summary>
+        public uint NumberOfLinks;
+        /// <summary>Whether deletion is pending for the open file.</summary>
+        [MarshalAs(UnmanagedType.U1)] public bool DeletePending;
+        /// <summary>Whether the open handle refers to a directory.</summary>
+        [MarshalAs(UnmanagedType.U1)] public bool Directory;
+    }
+
+    /// <summary>Read metadata from an existing fixture handle without opening any application.</summary>
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetFileInformationByHandleEx(SafeFileHandle handle, int informationClass,
+        out FileStandardInformation information, uint bufferSize);
+
+    /// <summary>Use the real Windows metadata to detect shared capture-file identities.</summary>
+    private static uint LinkCount(string path)
+    {
+        using var handle = File.OpenHandle(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        // FileStandardInfo is information class 1; no runtime, capture or input is involved.
+        Assert.True(GetFileInformationByHandleEx(handle, 1, out var information,
+            (uint)Marshal.SizeOf<FileStandardInformation>()), $"File metadata failed: {Marshal.GetLastWin32Error()}");
+        return information.NumberOfLinks;
+    }
 
     [Fact]
     public void LowDiskRefusesWriteAndPreservesExistingEvidence()
@@ -30,6 +64,10 @@ public sealed class CaptureStorageTests : IDisposable
         writer.Write(_root, Frame(3), [4, 5, 6], Plenty);
         Assert.Equal(File.ReadAllBytes(Frame(1)), File.ReadAllBytes(Frame(2)));
         Assert.Equal(new byte[] { 4, 5, 6 }, File.ReadAllBytes(Frame(3)));
+        // Identical PNG payloads must still pass the strict single-link evidence readers.
+        Assert.Equal(1u, LinkCount(Frame(1)));
+        Assert.Equal(1u, LinkCount(Frame(2)));
+        Assert.Equal(1u, LinkCount(Frame(3)));
         Assert.Throws<IOException>(() => writer.Write(_root, Frame(1), [9], Plenty));
         Assert.Equal(new byte[] { 1, 2, 3 }, File.ReadAllBytes(Frame(1)));
     }

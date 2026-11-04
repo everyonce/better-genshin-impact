@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using OpenCvSharp;
@@ -35,7 +34,10 @@ public class BitBltSession : IDisposable
     private readonly int _bufferSize;
 
     // Bitmap 内存池
-    private readonly ConcurrentStack<IntPtr> _bufferPool = [];
+    private readonly BitBltBufferPool _bufferPool = new();
+
+    /// <summary>Prevents repeated native cleanup and capture after retirement.</summary>
+    private bool _disposed;
 
     // 窗口原宽高
     public int Width { get; }
@@ -156,42 +158,42 @@ public class BitBltSession : IDisposable
     {
         lock (_lockObject)
         {
+            if (_disposed) return null;
             // 截图
             var success = Gdi32.BitBlt(_hdcDest, 0, 0, Width, Height,
                 _hdcSrc, 0, 0, Gdi32.RasterOperationMode.SRCCOPY);
             if (!success || !Gdi32.GdiFlush()) return null;
 
             // 新Mat
-            var buffer = AcquireBuffer();
-            var step = Width * 3;
-            if (_stride == step)
+            var buffer = _bufferPool.Rent(_bufferSize);
+            try
             {
-                Buffer.MemoryCopy(_bitsPtr.ToPointer(), buffer.ToPointer(), _bufferSize, _bufferSize);
-            }
-            else
-            {
-                for (var i = 0; i < Height; i++)
+                var step = Width * 3;
+                if (_stride == step)
                 {
-                    Buffer.MemoryCopy((void*)(_bitsPtr + _stride * i), (void*)(buffer + step * i), step, step);
+                    Buffer.MemoryCopy(_bitsPtr.ToPointer(), buffer.ToPointer(), _bufferSize, _bufferSize);
                 }
+                else
+                {
+                    for (var i = 0; i < Height; i++)
+                    {
+                        Buffer.MemoryCopy((void*)(_bitsPtr + _stride * i), (void*)(buffer + step * i), step, step);
+                    }
+                }
+                return BitBltMat.FromPixelData(this, Height, Width, MatType.CV_8UC3, buffer, step);
             }
-            return BitBltMat.FromPixelData(this, Height, Width, MatType.CV_8UC3, buffer, step);
+            catch
+            {
+                // Ownership transfers only after the Mat wrapper was successfully constructed.
+                _bufferPool.Return(buffer);
+                throw;
+            }
         }
-    }
-
-    private IntPtr AcquireBuffer()
-    {
-        if (!_bufferPool.TryPop(out var buffer))
-        {
-            buffer = Marshal.AllocHGlobal(_bufferSize);
-        }
-
-        return buffer;
     }
 
     public void ReleaseBuffer(IntPtr buffer)
     {
-        _bufferPool.Push(buffer);
+        _bufferPool.Return(buffer);
     }
 
     /// <summary>
@@ -199,6 +201,9 @@ public class BitBltSession : IDisposable
     /// </summary>
     private void ReleaseResources()
     {
+        if (_disposed) return;
+        _disposed = true;
+        _bufferPool.Dispose();
         Gdi32.GdiFlush();
 
         if (!_oldBitmap.IsNull)
@@ -230,9 +235,5 @@ public class BitBltSession : IDisposable
 
         _bitsPtr = IntPtr.Zero;
 
-        foreach (var buffer in _bufferPool)
-        {
-            Marshal.FreeHGlobal(buffer);
-        }
     }
 }

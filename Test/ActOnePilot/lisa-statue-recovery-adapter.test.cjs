@@ -481,3 +481,178 @@ test('Act II coastal waypoint teleport is fixed to the previously unlocked coast
  assert.equal(result.teleportAttempted,true,JSON.stringify({result,initial}));assert.equal(result.pauseVerified,true);
  assert.deepEqual(JSON.parse(JSON.stringify(f.nativeCalls.filter(x=>x.kind==='tp').map(x=>[x.x,x.y,x.flag]))),[[-1636.902,2679.84,false]]);
 });
+
+// The new inventory entry uses real adapter/Engine code; all capture, time and native inputs are inert.
+function inventoryTeleportFixture(options={}){
+  const worldRows=[row('E',1550,1005,25,25),row('Q',1660,1005,25,25),
+    row('2098/2764',900,1002,120,24),row('Lumina',1680,325,100,30),
+    row('Amber',1680,415,80,35),row('Kaeya',1660,500,80,35),row('3',1860,500,25,35)];
+  const f=prepare({step:options.step||'actTwoStarfellInventoryTeleport',initialScreen:options.screen||'inventory',
+    healthText:'2098/2764',fieldRowsSequence:[worldRows],tpFailure:options.tpFailure,
+    mapRows:[row('Starfell Valley',1592,989,211,31),row('Exploration Progress: 0%',1509,1020,284,29),row('200/200',1616,30,129,35)]});
+  let offset=0;const clock=f.context.Date.now.bind(f.context.Date),capture=f.context.captureGameRegion;
+  f.context.Date.now=()=>clock()+offset;
+  f.context.captureGameRegion=()=>{
+    const image=capture(),find=image.findMulti.bind(image);
+    image.findMulti=region=>{
+      const rows=Array.from(find(region));
+      const uid=options.uid===false?[]:[row('UID: '+(options.uid||'693306810'),1690,1050,170,24)];
+      if(options.duplicateUid)uid.push(row('693306810',1690,1050,170,24));
+      for(const value of uid)if(value.x>=region.x&&value.x<region.x+region.w&&value.y>=region.y&&value.y<region.y+region.h)rows.push(value);
+      rows.count=rows.length;return rows;
+    };
+    return image;
+  };
+  f.context.genshin.getPositionFromMap=()=>{
+    if(f.getScreen()!=='field')throw Error('No position in paused UI');
+    return options.badArrival?{x:0,y:0}:{x:-1323.474,y:2566.115};
+  };
+  if(options.tpFailure){
+    f.context.genshin.tp=async(x,y,flag)=>{
+      f.nativeCalls.push({kind:'tp',x,y,flag});f.setScreen('field');throw Error('mock teleport failure after native entry');
+    };
+  }
+  f.context.file.pinCaptureEvidence=()=>{};
+  return {...f,advance:ms=>{offset+=ms;},initial:()=>f.observe(),
+    runInventory:async()=>f.adapter.runLisaWindriseTeleport(await f.observe(),f.observe)};
+}
+
+// A real original-account inventory permits exactly one fixed native call and no manual world/map key.
+test('Starfell inventory accepted source calls fixed native API once then protects inventory',async()=>{
+  const f=inventoryTeleportFixture(),initial=await f.initial();
+  assert.equal(initial.hud.health,null);assert.equal(initial.map,null);
+  const result=await f.adapter.runLisaWindriseTeleport(initial,f.observe);
+  assert.equal(result.status,'completed',JSON.stringify(result));assert.equal(result.destinationReached,true);
+  assert.equal(result.pauseVerified,true);assert.equal(result.pauseProof.kind,'inventory');
+  assert.deepEqual(JSON.parse(JSON.stringify(f.nativeCalls.filter(x=>x&&x.kind==='tp'))),[{kind:'tp',x:-1323.474,y:2566.115,flag:false}]);
+  assert.deepEqual(Array.from(f.inputs.filter(x=>x.kind==='down').map(x=>x.key)),['VK_B']);
+  const again=await f.adapter.runLisaWindriseTeleport(await f.observe(),f.observe);
+  assert.equal(again.teleportAttempted,false);assert.equal(f.nativeCalls.filter(x=>x&&x.kind==='tp').length,1);
+});
+
+// The public request goes through the real Engine and mission routing, including its immutable revision record.
+test('Starfell inventory real Engine receipt joins request source and all nine consumed revisions',async()=>{
+  const f=inventoryTeleportFixture(),pilot=path.resolve(__dirname,'../../BetterGenshinImpact/User/JsScript/ActOnePilot');
+  for(const name of ['engine.js','mission.js'])vm.runInNewContext(fs.readFileSync(path.join(pilot,name),'utf8'),f.context);
+  const runner=f.context.ActOnePilot.create(f.adapter,{session:'lion-adapter-test',enableInput:true});
+  const initial=await runner.observe();
+  const request={id:'starfell-inventory-engine',session:'lion-adapter-test',mission:'questStep',
+    step:'actTwoStarfellInventoryTeleport',expectedFrameId:initial.frameId,createdAt:f.context.Date.now()};
+  assert.equal(await runner.process(request,()=>f.context.ActOneMission),'completed');
+  const receipt=JSON.parse(f.getVirtualFiles().get('receipts/lion-adapter-test/starfell-inventory-engine.json'));
+  assert.equal(receipt.details.result.destinationReached,true);assert.equal(receipt.details.result.pauseVerified,true);
+  const revision=receipt.details.inputEvents.find(x=>x.type==='controllerRevision');
+  assert.deepEqual(Object.keys(revision.files).sort(),['bgi.js','combat-statue-retreat.js','combat.js','engine.js','local-pause.js','main.js','mission.js','recovery.js','world-inventory.js'].sort());
+  for(const [name,hash] of Object.entries(revision.files))assert.equal(f.getVirtualFiles().get('revisions/'+hash+'/'+name+'.txt'),fs.readFileSync(path.join(pilot,name),'utf8'));
+  const events=receipt.details.inputEvents.filter(x=>x.type==='actTwoStarfellInventoryTeleport');
+  assert.equal(events.length,1);assert.equal(events[0].source.session,request.session);
+  assert.ok(events[0].source.frameId>request.expectedFrameId);assert.ok(events[0].startedAt-events[0].source.capturedAt<=1000);
+  assert.equal(await runner.process(request,()=>f.context.ActOneMission),'rejected');
+  assert.equal(f.nativeCalls.filter(x=>x&&x.kind==='tp').length,1);
+});
+
+for(const options of [{uid:false},{uid:'123456789'},{duplicateUid:true}])
+test('Starfell inventory refuses missing foreign or ambiguous original UID '+JSON.stringify(options),async()=>{
+  const f=inventoryTeleportFixture(options),result=await f.runInventory();
+  assert.equal(result.teleportAttempted,false);assert.equal(f.nativeCalls.length,0);assert.equal(f.inputs.filter(x=>x.kind==='down').length,0);
+});
+
+for(const screen of ['map','journal','field'])
+test('Starfell inventory refuses another recognized source '+screen,async()=>{
+  const f=inventoryTeleportFixture({screen}),result=await f.runInventory();
+  assert.equal(result.teleportAttempted,false);assert.equal(f.nativeCalls.length,0);
+});
+
+test('Starfell inventory refuses expired original capture even with recent publication',async()=>{
+  const f=inventoryTeleportFixture(),initial=await f.initial();f.advance(1001);
+  initial.timestamp=f.context.Date.now();
+  const result=await f.adapter.runLisaWindriseTeleport(initial,f.observe);
+  assert.equal(result.teleportAttempted,false);assert.equal(f.nativeCalls.length,0);
+});
+
+test('Starfell inventory refuses a forged copy of the private observation',async()=>{
+  const f=inventoryTeleportFixture(),initial=JSON.parse(JSON.stringify(await f.initial()));
+  initial.ocr[0].text='Weapons';
+  const result=await f.adapter.runLisaWindriseTeleport(initial,f.observe);
+  assert.equal(result.teleportAttempted,false);assert.equal(f.nativeCalls.length,0);
+});
+
+for(const mode of ['age','stop'])
+test('Starfell inventory rechecks admission after helper reads '+mode,async()=>{
+  const f=inventoryTeleportFixture(),initial=await f.initial(),read=f.context.file.readTextSync;
+  f.context.file.readTextSync=name=>{
+    const raw=read(name);
+    if(name==='world-inventory.js'){
+      if(mode==='age')f.advance(1001);
+      else f.getVirtualFiles().set('stop.json',JSON.stringify({session:'lion-adapter-test',createdAt:f.context.Date.now()}));
+    }
+    return raw;
+  };
+  const result=await f.adapter.runLisaWindriseTeleport(initial,f.observe);
+  assert.equal(result.teleportAttempted,false);assert.equal(f.nativeCalls.length,0);
+  if(mode==='stop')assert.match(result.reason,/Stop requested/);
+});
+
+test('Starfell inventory rechecks the source after the final input-ready heartbeat',async()=>{
+  const f=inventoryTeleportFixture(),initial=await f.initial();
+  f.adapter.setHeartbeat(()=>f.advance(1001));
+  const result=await f.adapter.runLisaWindriseTeleport(initial,f.observe);
+  assert.equal(result.teleportAttempted,false);assert.equal(f.nativeCalls.length,0);
+});
+
+test('Starfell inventory still requires the exact RDP input-ready session',async()=>{
+  const f=inventoryTeleportFixture(),initial=await f.initial();f.context.genshin.windowsSessionId=4;
+  const result=await f.adapter.runLisaWindriseTeleport(initial,f.observe);
+  assert.equal(result.teleportAttempted,false);assert.match(result.reason,/pinned verified RDP/);assert.equal(f.nativeCalls.length,0);
+});
+
+test('Starfell inventory remains forbidden to the UI-only listener',()=>{
+  const f=inventoryTeleportFixture(),adapter=f.context.createActOneAdapter(5,{inventoryUiOnlyV1:true});
+  assert.throws(()=>adapter.beginMission({mission:'questStep',step:'actTwoStarfellInventoryTeleport',session:'lion-adapter-test',id:'x',expectedFrameId:1,createdAt:10000}),/Inventory UI-only/);
+  assert.equal(f.nativeCalls.length,0);
+});
+
+// The old Starfell operation still requires its regional map, even on valid original-account inventory.
+test('Starfell inventory does not admit inventory to the historical map step',async()=>{
+  const f=inventoryTeleportFixture({step:'actTwoStarfellTeleport'}),result=await f.runInventory();
+  assert.equal(result.teleportAttempted,false);assert.match(result.reason,/regional map required/);assert.equal(f.nativeCalls.length,0);
+});
+
+test('Starfell inventory native failure is not retried and still reaches local protection',async()=>{
+  const f=inventoryTeleportFixture({tpFailure:true}),result=await f.runInventory();
+  assert.equal(result.status,'stopped');assert.match(result.reason,/mock teleport failure/);
+  assert.equal(result.teleportAttempted,undefined);assert.equal(result.pauseVerified,true);assert.equal(result.pauseProof.kind,'inventory');
+  assert.equal(f.nativeCalls.filter(x=>x&&x.kind==='tp').length,1);
+  assert.deepEqual(Array.from(f.inputs.filter(x=>x.kind==='down').map(x=>x.key)),['VK_B']);
+});
+
+test('Starfell inventory does not claim arrival at an unrelated field position',async()=>{
+  const f=inventoryTeleportFixture({badArrival:true}),result=await f.runInventory();
+  assert.equal(result.status,'stopped');assert.equal(result.destinationReached,false);assert.equal(result.pauseVerified,true);
+  assert.equal(f.nativeCalls.filter(x=>x&&x.kind==='tp').length,1);
+});
+
+// Coherent arrival objects must not turn death, malformed HP or another map into success.
+for(const mutation of [
+  {name:'zero HP',health:{current:0,max:2764}},
+  {name:'zero maximum',health:{current:1,max:0}},
+  {name:'over maximum',health:{current:2765,max:2764}},
+  {name:'fractional current',health:{current:2098.5,max:2764}},
+  {name:'fractional maximum',health:{current:2098,max:2764.5}},
+  {name:'string current',health:{current:'2098',max:2764}},
+  {name:'other map',map:'Enkanomiya'}
+])test('Starfell inventory refuses nonliving or malformed arrival '+mutation.name,async()=>{
+  const f=inventoryTeleportFixture(),initial=await f.initial();
+  const observe=async()=>{
+    const current=await f.observe();
+    if(current.hud.world){
+      if(mutation.health)current.hud.health=mutation.health;
+      if(mutation.map)current.map.map=mutation.map;
+    }
+    return current;
+  };
+  const result=await f.adapter.runLisaWindriseTeleport(initial,observe);
+  assert.equal(result.status,'stopped');assert.equal(result.destinationReached,false);
+  assert.equal(result.fieldFrameId,null);assert.equal(result.fieldHealth,null);assert.equal(result.pauseVerified,true);
+  assert.equal(f.nativeCalls.filter(x=>x&&x.kind==='tp').length,1);
+});

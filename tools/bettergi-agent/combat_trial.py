@@ -30,7 +30,8 @@ import combat_paused_review_proof as paused_review
 import combat_paused_file_admission as file_admission
 from combat_trial_guard import (bind_review, canonical, proposal_rejection, trial_policy,
                                SINGLE_SCOPE, GROUP_SCOPE, FOUR_SCOPE, SCOPE_MAXIMUMS,
-                               combat_scope, scope_fields, scope_maximum, source_stale_recovery_enabled)
+                               combat_scope, scope_fields, scope_maximum, source_stale_recovery_enabled,
+                               GROUND_PROFILE, ground_combat_enabled)
 from episode_split import reserve_split, read_split
 from map_owner import load_map_owner
 from policy_rgb_archive import RGB192_BYTES
@@ -60,12 +61,27 @@ REVIEWED_MARKERS = ('READY-TO-RESUME.json', 'prechecked-inputs.json', 'RESUME-CO
                     'FINAL-ADMISSION.json', 'resume-candidate.json', 'baseline-pause', 'paused-review-evidence')
 
 
-def model_settings():
+def selected_ground_combat(value=None):
+    """Read profile authority only from a complete reviewed binding, including zero-input preparation."""
+    if value is None:
+        return False
+    binding = value if value.get('kind') == 'reviewed-combat-trial-v1' else (
+        value.get('binding') or value.get('reviewedCombat', {}).get('binding'))
+    return binding is not None and ground_combat_enabled(binding)
+
+
+def model_settings(value=None):
     """Expose the immutable measured model/controller settings in the reviewable plan."""
-    return dict(model='open-p2p', historyFrames=41, precision='float16', cudaGraph=True,
+    result = dict(model='open-p2p', historyFrames=41, precision='float16', cudaGraph=True,
         fastStart=True, prewarm=True, executionFeedback=True, executionContext='off',
         decisionHz=10, captureFps=20, holdMs=100, sourceAgeMs=150, seconds=5,
         maximumActions=3, inputKeys=['LBUTTON'], navigation=False, reconnect=False)
+    if selected_ground_combat(value):
+        from navigation_profiles import SCOUT_PROFILE
+        result.update(holdMs=50, maximumActions=20, inputKeys=['W', 'A', 'S', 'D', 'LBUTTON'],
+            navigation=True, navigationProfile=SCOUT_PROFILE, requireGroundControlLayout=True,
+            controlProfile=GROUND_PROFILE, rawProposalUnchanged=True, finalDrainHeadroomMs=650)
+    return result
 
 
 def require(condition, message):
@@ -261,6 +277,7 @@ def prepare(folder, owner_file, evidence, *, maximum_review_age=MAX_REVIEW_AGE_S
     require(digest(blobs['goal']) == GOAL_SHA256, 'The installed fixed combat goal differs')
     binding = bind_review(*(blobs[name] for name in EVIDENCE_NAMES))
     require(not source_stale_recovery_enabled(binding), 'Stale-source recovery requires reviewed-paused preparation')
+    require(not ground_combat_enabled(binding), 'Ground combat requires explicitly reviewed-paused preparation')
     require(combat_scope(binding) == scope and (_prepared is None
             or combat_scope(_prepared['preparation']) == scope), 'Review differs from the explicitly selected combat scope')
     require(binding['owner'] == owner, 'Review differs from the original sealed owner')
@@ -509,7 +526,7 @@ def retain_records(folder, paths, *, image=False):
     return result
 
 
-def prepare_reviewed_paused(folder, owner_file, paired_pause_path, evidence, *, source_stale_recovery=False):
+def prepare_reviewed_paused(folder, owner_file, paired_pause_path, evidence, *, source_stale_recovery=False, ground_combat=False):
     """Prepare only after actual paused review; the future worker's 90-second clock has not started."""
     folder = local_path(folder, root=LIVE, existing=False)
     require(not folder.exists(), 'Reviewed preparation requires a fresh directory')
@@ -532,6 +549,8 @@ def prepare_reviewed_paused(folder, owner_file, paired_pause_path, evidence, *, 
     binding, chain = paused_review.bind_reviewed_pause(blobs, record_blobs, owner, baseline_proof, pause_proof)
     require(type(source_stale_recovery) is bool and source_stale_recovery_enabled(binding) == source_stale_recovery,
             'Recovery opt-in differs from explicitly selected reviewed-paused mode')
+    require(type(ground_combat) is bool and ground_combat_enabled(binding) == ground_combat,
+            'Ground-combat opt-in differs from explicitly selected reviewed-paused mode')
     recent_review(binding, paused_review.document(blobs['review']), MAX_REVIEW_AGE_SECONDS)
     resources = installed_resources()
     for name, value in resources.items():
@@ -546,7 +565,7 @@ def prepare_reviewed_paused(folder, owner_file, paired_pause_path, evidence, *, 
         createdAtUnixNs=time.time_ns(), createdAtClientNs=time.perf_counter_ns(), owner=owner,
         ownerFile=str(owner_file), ownerSha256=digest(read_bytes(owner_file)),
         inputEnabled=False, attacksAllowed=False, maximumHostSeconds=HOST_SECONDS, maximumReviewAgeSeconds=MAX_REVIEW_AGE_SECONDS,
-        maximumPauseProofAgeSeconds=MAX_PAUSE_PROOF_AGE_SECONDS, modelConfiguration=model_settings(),
+        maximumPauseProofAgeSeconds=MAX_PAUSE_PROOF_AGE_SECONDS, modelConfiguration=model_settings(binding),
         goalSha256=GOAL_SHA256, resources=resources, checkpointSha256=runtime.OPEN_P2P_SHA256,
         checkpointStamp=file_stamp(CHECKPOINT), sourceFiles=snapshot_sources(folder),
         pause=retain_ui_proof(folder, paired['pause']['directory'], owner, 'pause'),
@@ -567,14 +586,14 @@ def load_reviewed_preparation(path):
     value, sha = document(path, 2 * 1024 * 1024)
     require(path.name == 'preparation.json', 'Expected reviewed preparation file')
     paused_review.validate_preparation(value, path.parent)
-    require(canonical(value['modelConfiguration']) == canonical(model_settings()), 'Reviewed model configuration changed')
+    require(canonical(value['modelConfiguration']) == canonical(model_settings(value)), 'Reviewed model configuration changed')
     return value, sha
 
 
 def verify_reviewed_preparation(preparation, folder, *, originals=True):
     """Replay all immutable baseline/capture/pause/review evidence while inventory remains paused."""
     paused_review.validate_preparation(preparation, folder)
-    require(canonical(preparation['modelConfiguration']) == canonical(model_settings()), 'Reviewed model configuration changed')
+    require(canonical(preparation['modelConfiguration']) == canonical(model_settings(preparation)), 'Reviewed model configuration changed')
     pair = verify_preparation(preparation, folder, originals=originals)
     record = preparation['pausedReview']
     require(record.get('version') == 1 and record.get('kind') == 'combat-reviewed-pause-binding-v1'
@@ -656,7 +675,7 @@ def read_prepared_ready(preparation, sha, *, require_waiting=True):
         and ready.get('runId') == preparation['runId'] and ready.get('preparationSha256') == sha
         and ready.get('owner') == preparation['owner'] and ready.get('goalSha256') == preparation['goalSha256']
         and ready.get('sourceFilesSha256') == digest(canonical(preparation['sourceFiles']))
-        and ready.get('modelConfigurationSha256') == digest(canonical(model_settings()))
+        and ready.get('modelConfigurationSha256') == digest(canonical(model_settings(preparation)))
         and ready.get('hostClaim') == claim and claim.get('planSha256') == sha
         and worker == dict(runId=preparation['runId'], planSha256=sha,
             processId=ready.get('worker', {}).get('processId'), parentProcessId=ready.get('worker', {}).get('parentProcessId')),
@@ -899,7 +918,8 @@ def arm_reviewed_paused(preparation_path):
     exclusive_json(folder / 'ARM-REQUESTED.json', dict(runId=preparation['runId'], requestId=request_id,
         preparationSha256=bundle['preparationSha256'], preparedSha256=bundle['readySha256']))
     try:
-        verify_reviewed_preparation(preparation, folder)
+        # The plan below is only in memory. Its final verifier freshly replays the
+        # complete preparation before publication; do not duplicate that I/O here.
         reviewed_liveness(preparation, ready['hostClaim'])
         plan = {name: copy.deepcopy(preparation[name]) for name in paused_review.COMMON_PLAN_FIELDS}
         plan.update(version=1, kind=paused_review.PLAN_KIND, createdAtUnixNs=time.time_ns(),
@@ -1074,6 +1094,14 @@ def episode_arguments(plan):
         '--native-combat-observation', '--require-world-ready', '--observation-profile=p2p-native-hamming-192-v1',
         '--retain-policy-rgb', '--record-max-mib=160', '--record-dir', str(folder / 'recording'),
         '--ffmpeg', resources['ffmpeg'], '--output', str(folder / 'native-episode.json')])
+    if selected_ground_combat(plan):
+        from navigation_profiles import SCOUT_PROFILE
+        require(plan.get('kind') in (paused_review.PREPARATION_KIND, paused_review.PLAN_KIND),
+                'Ground combat requires the original reviewed-paused handoff')
+        args.action_hold_ms, args.max_input_actions = 50, 20
+        args.input_keys, args.goal_intent = 'W,A,S,D,LBUTTON', 'unspecified'
+        args.navigation_guidance, args.navigation_profile, args.require_ground_control_layout = True, SCOUT_PROFILE, True
+        args.combat_trial_control_profile = GROUND_PROFILE
     if 'binding' in plan:
         args.combat_trial_binding = copy.deepcopy(plan['binding'])
         args.combat_trial_owner = copy.deepcopy(plan['owner'])
@@ -1102,7 +1130,7 @@ def publish_prepared_ready(preparation, preparation_sha, policy, identity, claim
         preparationSha256=preparation_sha, state='preparedPaused', inputEnabled=False, owner=preparation['owner'],
         worker=identity, hostClaim=claim, modelLoads=1, goalSha256=preparation['goalSha256'],
         sourceFilesSha256=digest(canonical(preparation['sourceFiles'])),
-        modelConfigurationSha256=digest(canonical(model_settings())), policyMetadata=copy.deepcopy(policy.metadata),
+        modelConfigurationSha256=digest(canonical(model_settings(preparation))), policyMetadata=copy.deepcopy(policy.metadata),
         modelPreparation=copy.deepcopy(model_preparation),
         preparedAtUnixNs=time.time_ns(), preparedAtClientNs=time.perf_counter_ns())
     ready.update(scope_fields(combat_scope(preparation)))
@@ -1358,17 +1386,20 @@ def terminal_outcome(episode, binding):
         and recording['encodedFrames'] == recording['policyRgbFrames'] == frames
         and recording['recordedObservations'] >= frames
         and recording['policyRgbBytes'] == frames * RGB192_BYTES)
-    complete = (episode.get('status') == 'completed' and episode.get('endReason') == 'combatTrialComplete'
+    ground = ground_combat_enabled(binding)
+    count = guard.get('acceptedActions') if ground else 3
+    complete = (type(count) is int and 0 <= count <= (20 if ground else 3)
+        and episode.get('status') == 'completed' and episode.get('endReason') == ('combatGroundWindowDrained' if ground else 'combatTrialComplete')
         and guard.get('phase') == 'complete' and guard.get('trialComplete') is True and guard.get('trip') is None
-        and guard.get('acceptedActions') == guard.get('completedActions') == 3 and len(completed) == 3
-        and episode.get('acceptedInputActions') == 3 and guard.get('pending') is None and guard.get('armed') is False
+        and guard.get('acceptedActions') == guard.get('completedActions') == count and len(completed) == count
+        and episode.get('acceptedInputActions') == count and guard.get('pending') is None and guard.get('armed') is False
         and not any(episode.get(key) for key in ('error', 'streamError', 'stopError', 'unacknowledgedAction', 'recordingFinalizationError'))
         and recording_verified)
     if complete:
         require(all(all(key in row for key in ('arguments', 'frame', 'admission', 'receipt', 'release', 'postFrame')) for row in completed),
                 'Completed combat pulses lack their retained drain evidence')
         return 'completed'
-    eligible = sum(proposal_rejection(row) is None for row in episode.get('decisions', []))
+    eligible = sum(proposal_rejection(row, ground_combat=ground) is None for row in episode.get('decisions', []))
     reason = (guard.get('trip') or {}).get('reason')
     evidence_error = any(episode.get(key) for key in ('streamError', 'stopError', 'unacknowledgedAction',
         'recordingFinalizationError', 'combatTrialReleaseError', 'captureError', 'episodeFailure'))
@@ -1450,7 +1481,8 @@ def run_worker(plan_path, *, lifecycle=None, loader=None, episode=None, identity
         require_idle(lifecycle, plan['owner'])
         control = runtime.ResidentControl(folder / 'patrol.json.control.json', folder / 'patrol.json.status.json',
                                           plan['runId'], frozen_goal=True)
-        control.set_initial_goal(dict(file=str(GOAL.resolve()), sha256=GOAL_SHA256), 'stationary')
+        control.set_initial_goal(dict(file=str(GOAL.resolve()), sha256=GOAL_SHA256),
+                                 'unspecified' if selected_ground_combat(plan) else 'stationary')
         watch = (watch_factory or make_watch)(folder, plan, claim, lifecycle, control)
         watch.start()
         require(file_sha(CHECKPOINT) == runtime.OPEN_P2P_SHA256, 'Worker checkpoint bytes differ')
@@ -1516,13 +1548,16 @@ def run_worker(plan_path, *, lifecycle=None, loader=None, episode=None, identity
         # This stamp is minted only after the original goal survived both sides
         # of loading; the stream checks it again before opening its pipe.
         policy.combat_trial_goal_sha256 = plan['binding']['goalSha256']
+        if selected_ground_combat(plan):
+            policy.combat_trial_control_profile = GROUND_PROFILE
         if source_stale_recovery_enabled(plan['binding']):
             policy.combat_trial_source_stale_recovery_policy = copy.deepcopy(plan['binding']['policy']['sourceStaleRecoveryPolicy'])
         if combat_scope(plan) != SINGLE_SCOPE:
             policy.combat_trial_scope = combat_scope(plan)
             policy.combat_trial_maximum_enemy_candidates = scope_maximum(combat_scope(plan))
         report['policyMetadata'] = copy.deepcopy(policy.metadata)
-        control.set_initial_goal(copy.deepcopy(policy.metadata.get('goal')), 'stationary')
+        control.set_initial_goal(copy.deepcopy(policy.metadata.get('goal')),
+                                 'unspecified' if selected_ground_combat(plan) else 'stationary')
         client.validate_combat_trial_options(args, policy, control)
         _, child = require_idle(lifecycle, plan['owner'])
         watch.check()
@@ -1856,6 +1891,8 @@ def main(argv=None):
     reviewed_parser.add_argument('--directory', type=Path, required=True)
     reviewed_parser.add_argument('--owner-from', type=Path, required=True)
     reviewed_parser.add_argument('--paired-pause', type=Path, required=True)
+    reviewed_parser.add_argument('--ground-combat', action='store_true',
+        help='Require the fixed reviewed ground-combat microtrial; no stale recovery or action rewriting')
     reviewed_parser.add_argument('--source-stale-recovery', action='store_true',
         help='Require the separately reviewed fixed released-source-stale-once-v1 policy; never renew deadlines')
     for name in EVIDENCE_NAMES[:-1]:
@@ -1908,7 +1945,8 @@ def main(argv=None):
         return 0
     if args.command == 'prepare-reviewed-paused':
         value = prepare_reviewed_paused(args.directory, args.owner_from, args.paired_pause,
-            {name: getattr(args, name) for name in EVIDENCE_NAMES[:-1]}, source_stale_recovery=args.source_stale_recovery)
+            {name: getattr(args, name) for name in EVIDENCE_NAMES[:-1]}, source_stale_recovery=args.source_stale_recovery,
+            ground_combat=args.ground_combat)
         print(json.dumps(dict(preparation=str(args.directory / 'preparation.json'), runId=value['runId'], inputEnabled=False)))
         return 0
     if args.command == 'arm-reviewed-paused':

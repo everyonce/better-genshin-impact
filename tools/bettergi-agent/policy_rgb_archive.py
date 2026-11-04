@@ -105,7 +105,7 @@ def recording_journal_decoded_size(directory, logical_name):
     return size
 
 
-def _journal_bytes(directory, logical_name, max_decoded_bytes, max_rows):
+def _journal_data(directory, logical_name, max_decoded_bytes, max_rows, *, retain_rows=False):
     """Verify a complete gzip member and its two hashes before exposing any replay rows."""
     _require(type(max_decoded_bytes) is int and 0 < max_decoded_bytes <= RECORDING_MAX_BYTES
              and type(max_rows) is int and max_rows > 0, 'Invalid recording decode bound')
@@ -142,11 +142,17 @@ def _journal_bytes(directory, logical_name, max_decoded_bytes, max_rows):
     if seal.get('recordingFormat') == RECORDING_FORMAT:
         _require((not raw or raw.endswith(b'\n')) and all(line.strip() for line in lines)
                  and len(lines) == seal['journalFiles'][logical_name]['rows'], 'Compressed journal row coverage differs')
-    if logical_name in ('events.jsonl','frames.jsonl'):
+    rows = []
+    validate_rows = logical_name in ('events.jsonl', 'frames.jsonl')
+    if validate_rows or retain_rows:
         for line in lines:
             if not line.strip():
                 continue
             row = json.loads(line)
+            if retain_rows:
+                rows.append(row)
+            if not validate_rows:
+                continue
             _require(isinstance(row,dict), 'Invalid recording journal row')
             declared = seal.get('recordingFormat') == RECORDING_FORMAT
             if logical_name == 'events.jsonl' and row.get('type') == 'episodeStart':
@@ -159,13 +165,14 @@ def _journal_bytes(directory, logical_name, max_decoded_bytes, max_rows):
                 _require((reference.get('encoding') == PNG_ENCODING) == declared
                          and (declared or not (_STORED_FIELDS & reference.keys())),
                          'Policy RGB reference differs from the journal recording format')
-    return raw
+    return raw, rows
 
 
 def read_recording_jsonl(directory, logical_name, *, max_decoded_bytes=JOURNAL_MAX_DECODED_BYTES, max_rows=JOURNAL_MAX_ROWS):
     """Return ordered original dictionaries and the decoded journal SHA256 under explicit bounds."""
-    raw = _journal_bytes(directory, logical_name, max_decoded_bytes, max_rows)
-    rows = [json.loads(line) for line in raw.splitlines() if line.strip()]
+    # Reuse the dictionaries already parsed for format validation. Transport and
+    # every row remain validated before any result escapes this call.
+    raw, rows = _journal_data(directory, logical_name, max_decoded_bytes, max_rows, retain_rows=True)
     _require(all(isinstance(row, dict) for row in rows), 'Invalid recording journal row')
     return rows, _sha(raw)
 
@@ -176,7 +183,7 @@ def open_recording_jsonl(path, *, max_decoded_bytes=JOURNAL_MAX_DECODED_BYTES, m
     name = path.name.removesuffix('.gz')
     _require(name in JOURNAL_NAMES and path.name in (name,recording_journal_path(path.parent,name).name),
              'Recording journal path differs from its declared transport')
-    raw = _journal_bytes(path.parent, name, max_decoded_bytes, max_rows)
+    raw, _ = _journal_data(path.parent, name, max_decoded_bytes, max_rows)
     return io.StringIO(raw.decode('utf-8'))
 
 

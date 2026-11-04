@@ -7,6 +7,21 @@ function actTwoAmberFinalChoice(rows) {
         one('UID: 693306810',1600,1800,1030,1080);
 }
 var ActOneMission = (function () {
+    // Autonomous exploration must see the result of a detector run on the current game capture.
+    function groundScanStopReason(observation, now) {
+        var hud = observation.hud, stamp = hud.captureStamp, scan = hud.enemyBarObservation;
+        if (!stamp || !scan || stamp.source !== 'game-capture-start' ||
+            scan.kind !== 'normal-ground-enemy-observation-v1' || scan.version !== 1 ||
+            stamp.session !== observation.session || scan.session !== observation.session ||
+            !Number.isInteger(observation.frameId) || stamp.frameId !== observation.frameId || scan.frameId !== observation.frameId ||
+            !Number.isInteger(stamp.capturedAt) || scan.capturedAt !== stamp.capturedAt ||
+            !(stamp.capturedAt <= observation.timestamp && observation.timestamp <= now && now - stamp.capturedAt <= 1000))
+            return 'Fresh ground enemy scan required';
+        if (scan.state === 'threat') return 'Enemy observed during exploration';
+        if (scan.state !== 'clear' || scan.candidateCount !== 0 || scan.acceptedCount !== 0 ||
+            !Array.isArray(hud.enemyBars) || hud.enemyBars.length) return 'Ground enemy scan did not establish clear ground';
+        return null;
+    }
     function normalize(degrees) { return (degrees % 360 + 360) % 360; }
     function bearing(from, to) { return normalize(Math.atan2(-(to.y - from.y), -(to.x - from.x)) * 180 / Math.PI); }
     function travelHoldMs(objective, distance, arrivalRadius, remaining) {
@@ -174,6 +189,11 @@ var ActOneMission = (function () {
                 if (climbSteps >= 12 && current && current.hud && !current.hud.climbing) return stop('Navigation-wide climb hold limit reached');
                 if (!safeTransientFrame(current)&&!statueHealingApproach(request,current)) return stop('Dialogue, objective, low-health, or missing navigation evidence');
                 if(exploring&&!statueHealingApproach(request,current)&&current.hud.health&&current.hud.health.current/current.hud.health.max<0.85)return stop('Exploration health threshold reached');
+                if (request.requireMeasuredGround && current.hud.world) {
+                    var groundStop = groundScanStopReason(current, api.now());
+                    if (groundStop) return stop(groundStop);
+                    if (current.hud.climbing) return stop('Exploration left measured ground');
+                }
                 if(exploring&&current.hud.climbing&&climbReleases===0&&typeof api.releaseClimb==='function') {
                     var ch=current.hud,cm=current.map,cp=ch.health;
                     var recentGround=afterForward&&afterForward.groundWitness;
@@ -230,6 +250,11 @@ var ActOneMission = (function () {
                     if(initialHealth.current-coordinateFrame.hud.health.current>initialHealth.max*0.1)
                         return stop('Health dropped more than 10% during map coordinate retry');
                     current=coordinateFrame;
+                }
+                // Coordinate retries can replace the starting frame. Check the final image before any route input.
+                if (request.requireMeasuredGround) {
+                    var scanStop = groundScanStopReason(current, api.now());
+                    if (scanStop) return stop(scanStop);
                 }
                 if(!plausibleMap(current,target)) {
                     if(current&&current.map&&current.map.map!==target.map) return stop('Waypoint map does not match current map');
@@ -517,7 +542,8 @@ var ActOneMission = (function () {
         });
         if(name==='actTwoStarfellStatueOpen')return api.runActTwoNavigationWithPause(observation,observe,async function(field){
             var moves=0,turns=0,selection=eval(file.readTextSync('act-two-interaction.js')+'\nActTwoInteraction;');
-            function safe(o){var h=o&&o.hud,m=o&&o.map;return !!(m&&m.map==='Teyvat'&&Math.hypot(m.x+1323.474,m.y-2566.115)<15&&h&&h.world&&h.groundControls&&!h.climbing&&!h.auto&&!h.dialogueReady&&!h.choice&&h.health&&[1733,4015].indexOf(h.health.max)>=0&&h.health.current>=h.health.max*.7&&Array.isArray(h.enemyBars)&&!h.enemyBars.length&&!(h.objectives||[]).length);}
+            // Statue recovery admits living Kaeya; Amber keeps its original seventy-percent health floor.
+            function safe(o){var h=o&&o.hud,m=o&&o.map;return !!(m&&m.map==='Teyvat'&&Math.hypot(m.x+1323.474,m.y-2566.115)<15&&h&&h.world&&h.groundControls&&!h.climbing&&!h.auto&&!h.dialogueReady&&!h.choice&&h.health&&((h.health.max===1733&&h.health.current>=h.health.max*.7)||(h.health.max===4015&&Number.isInteger(h.health.current)&&h.health.current>0&&h.health.current<=h.health.max))&&Array.isArray(h.enemyBars)&&!h.enemyBars.length&&!(h.objectives||[]).length);}
             while(safe(field)&&moves<4&&turns<8){
                 api.checkStop();var m=field.map,dx=-1323.474-m.x,dy=2566.115-m.y,dist=Math.hypot(dx,dy);
                 if(selection.selection(field.ocr||[],'Statue of The Seven')==='selected')break;
@@ -530,7 +556,7 @@ var ActOneMission = (function () {
             }
             for(var settle=0;settle<2&&safe(field)&&selection.selection(field.ocr||[],'Statue of The Seven')!=='selected';settle++){api.checkStop();await api.sleep(250);field=await observe();}
             if(!safe(field)||Math.hypot(field.map.x+1323.474,field.map.y-2566.115)>3||selection.selection(field.ocr||[],'Statue of The Seven')!=='selected')return {status:'stopped',reason:'Fresh selected Starfell Statue interaction required',moves:moves,turns:turns,fieldFrameId:field.frameId};
-            api.checkStop();await api.keyPress('VK_F');await api.sleep(900);var after=await observe();
+            api.checkStop();await api.keyPress('VK_F',field);await api.sleep(900);var after=await observe();
             for(var dialoguePoll=0;dialoguePoll<4&&!after.hud.dialogueReady&&!after.hud.choice;dialoguePoll++){api.checkStop();await api.sleep(250);after=await observe();}
             return {status:'stopped',step:name,reason:'Starfell Statue interaction sent; inspect offering options',moves:moves,turns:turns,fieldFrameId:after.frameId};
         });
@@ -786,6 +812,8 @@ var ActOneMission = (function () {
         if(name==='lisaWeaponSwitch')return api.runLisaWeaponSwitch(observation,observe);
         if(name==='lisaWeaponChoice')return api.runLisaWeaponChoice(observation,observe);
         if(name==='lisaTeamInspect')return api.runLisaTeamInspect(observation,observe);
+        // The fixed Starfell inventory entry has its own admission; legacy map steps remain unchanged.
+        if(name==='actTwoStarfellInventoryTeleport')return api.runLisaWindriseTeleport(observation,observe);
         if(name==='lisaWindriseTeleport'||name==='actTwoGateTeleport'||name==='actTwoCityTeleport'||name==='actTwoWindriseTeleport'||name==='actTwoLionTeleport'||name==='actTwoNorthTeleport'||name==='actTwoStarfellTeleport'||name==='actTwoCoastTeleport'||name==='actTwoSpringvaleTeleport')return api.runLisaWindriseTeleport(observation,observe);
         if(name==='lisaTempleMapInspect')return api.runLisaTempleMapInspect(observation,observe);
         if(name==='lisaTempleTeleport')return api.runLisaTempleTeleport(observation,observe);

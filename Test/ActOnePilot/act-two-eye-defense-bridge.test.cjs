@@ -1,16 +1,27 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const source=fs.readFileSync(process.env.BGI_MODULE||'BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js','utf8'),body=source.slice(source.indexOf('runActTwoField: async function'),source.indexOf('runActTwoWindriseSlime: async function'));
-const raw=require('./act-two-eye-closed-body.fixture.json'),threat=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-eye-threat.js');
+// Synthetic geometry and test-only account identity, never a live recording.
+const raw={session:'synthetic-eye',frameId:10,timestamp:1000,ocr:[{text:'Eye of the Storm',x:850,y:20},{text:'Restless Pure Elemental',x:850,y:50},{text:'UID: 123456789',x:1700,y:1040}],hud:{world:true,groundControls:true,climbing:false,health:{current:1733,max:1733},windSealBoss:{level:9,barFraction:1}}},threat=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-eye-threat.js');
+// Inject only the account constant in this module, preserving its exact-match guard.
+// Discover it from production so this fixture does not retain a real account ID.
+function syntheticModule(name){
+ const text=fs.readFileSync(path.join(__dirname,'../../BetterGenshinImpact/User/JsScript/ActOnePilot',name),'utf8');
+ if(name!=='act-two-eye-defense.js')return text;
+ const identities=text.match(/\/\d{9}\$\//g)||[];
+ assert.equal(new Set(identities).size,1,'one production identity must be mapped explicitly');
+ return text.replace(/\/\d{9}\$\//g,'/123456789$/');
+}
 function setup(mode){
  let now=raw.timestamp,keys=[],nativeCalls=0,observations=0;
  const w={...raw,hud:{...raw.hud,windSealThreat:threat.classify([{x:1069,y:279,width:234,height:241,area:21233.5}])}},id='mission-'+'a'.repeat(32),frame=raw.frameId+5;
+ if(mode==='wrongAccount')w.ocr=w.ocr.map(r=>r.text.startsWith('UID:')?{...r,text:'UID: 987654321'}:r);
  const p={reviewed:true,session:w.session,frameId:frame,witnessFrameId:w.frameId,createdAt:now,mode:'combat',actions:[],windSealCombat:true,nativeCombat:true,enemyLevel:9,nativeAvatar:'Amber',nativeWindows:1,regionMapFrameId:1,visualPositionReviewed:true,eyeDodgeProbe:true,dodgeDirection:'VK_A',escapeLandmark:'Reviewed flat open grass on left for three meters without rock or ledge',escapeWitnessFrameId:w.frameId,pauseTerminalId:id};
  if(mode==='observationFirstSupport'){Object.assign(p,{mode:'actions',actions:[{type:'key',key:'VK_3',ms:60}],windSealSupport:true,nativeCombat:false});delete p.eyeDodgeProbe;delete p.windSealCombat;}
  const prior={id,session:w.session,frameId:frame,details:{result:{pauseVerified:true,pauseProof:{verified:true,kind:'inventory',sourceFrameId:mode==='wrongPrior'?1:w.frameId}}}};
  let saved=JSON.stringify(p);
  const guard=`var ActTwoField={plan:()=>true,leyLineFrozen:()=>false,leyLineSwitchLocked:()=>false,regionalMap:()=>true,originalWitnessFailure:()=>null,cameraPlan:()=>false,eventReposition:()=>false,ready:o=>o.hud.world&&o.hud.health.current>=1474,failureReason:()=>"guard",run:async()=>{nativeCalls++;return{status:"stopped",nativeAttempted:true};}};`;
  const context={request:{id:'current',mission:'questStep',step:'actTwoField',session:w.session,expectedFrameId:frame},Date:{now:()=>now},nativeCalls:0,events:[],lastObservation:null,
-  file:{readTextSync:name=>name==='world-inventory.js'?'function actOneWorldInventoryClosePermission(){return true;}':name==='act-two-field.js'?guard:name==='act-two-field-request.json'?saved:name.startsWith('observations/')?JSON.stringify(name.endsWith('frame-0001.json')?{...w,frameId:1}:w):name.startsWith('receipts/')?JSON.stringify(prior):name==='field-progress.js'?'var FieldProgress={movement:()=>false};':name==='act-two-hideout-entry.js'?'var ActTwoHideoutEntry={entryHandoff:()=>false};':fs.readFileSync(path.join(__dirname,'../../BetterGenshinImpact/User/JsScript/ActOnePilot',name),'utf8'),writeTextSync:(_,v)=>{saved=v;return true;}},
+  file:{readTextSync:name=>name==='world-inventory.js'?'function actOneWorldInventoryClosePermission(){return true;}':name==='act-two-field.js'?guard:name==='act-two-field-request.json'?saved:name.startsWith('observations/')?JSON.stringify(name.endsWith('frame-0001.json')?{...w,frameId:1}:w):name.startsWith('receipts/')?JSON.stringify(prior):name==='field-progress.js'?'var FieldProgress={movement:()=>false};':name==='act-two-hideout-entry.js'?'var ActTwoHideoutEntry={entryHandoff:()=>false};':syntheticModule(name),writeTextSync:(_,v)=>{saved=v;return true;}},
   boundedKey:async(k,ms)=>{keys.push([k,ms,now-raw.timestamp]);now+=ms;},sleep:async ms=>now+=ms,checkStop(){},ready(){},release(){},keyUp(){},keyDown(){},actTwoFieldEntrySettled:o=>o.hud.world,loadLocalPause:()=>({}),finishWithLocalPause:async(a,b,c,d,e,r)=>({...r,pauseVerified:true})};
  vm.createContext(context);const api=vm.runInContext('({'+body+'})',context);
  const observe=async()=>{observations++;return context.lastObservation={...w,frameId:frame+2,timestamp:now,hud:{...w.hud,health:{current:mode==='damage'?1723:1733,max:1733},windSealThreat:{nearBodyWarning:mode==='stillNear',ambiguous:false}}};};
@@ -21,3 +32,5 @@ test('bridge sends bounded dodge before first capture, then attacks only on stab
 });
 test('bridge refuses mismatching source pause receipt without unpausing',async()=>{const s=setup('wrongPrior');await assert.rejects(s.api.runActTwoField(s.initial,s.observe),/paused (?:source|receipt) and reviewed (?:dodge|left) escape/);assert.deepEqual(s.keys,[]);assert.equal(s.observations(),0);});
 test('the observed VK_3 windSealSupport plan is refused before Escape or capture',async()=>{const s=setup('observationFirstSupport');await assert.rejects(s.api.runActTwoField(s.initial,s.observe),/Eye field entry requires guarded defensive resume/);assert.deepEqual(s.keys,[]);assert.equal(s.observations(),0);assert.equal(s.nativeCalls(),0);});
+
+test('synthetic account mismatch is rejected before unpause or capture',async()=>{const s=setup('wrongAccount');await assert.rejects(s.api.runActTwoField(s.initial,s.observe),/matching paused receipt and reviewed left escape/);assert.deepEqual(s.keys,[]);assert.equal(s.observations(),0);assert.equal(s.nativeCalls(),0);});

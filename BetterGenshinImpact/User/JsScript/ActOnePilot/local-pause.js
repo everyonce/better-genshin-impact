@@ -44,7 +44,6 @@
     if(!Number.isInteger(maxWaitMs)||maxWaitMs<5000||maxWaitMs>60000)return Promise.reject(new Error("local pause deadline must be 5000..60000ms"));
     var hardDeadlineAt=request.hardDeadlineAt;
     if(hardDeadlineAt!==undefined&&!Number.isFinite(hardDeadlineAt))return Promise.reject(new Error('Finite absolute pause deadline required'));
-    var expired=function(){return hardDeadlineAt!==undefined&&api.now()>=hardDeadlineAt;};
     var afterFrame = request.afterFrameId;
     if (!Number.isInteger(afterFrame) || afterFrame < 0)
       return Promise.reject(new Error('local pause requires a nonnegative integer afterFrameId'));
@@ -57,17 +56,26 @@
     var lastHeartbeat = -Infinity;
     var errors = [];
     var startedAt = api.now();
+    // Use one deadline for both the local budget and the caller's outer lease.
+    var deadlineAt = Math.min(startedAt + maxWaitMs, hardDeadlineAt === undefined ? Infinity : hardDeadlineAt);
     var seed = request.initialObservation || null;
 
     function note(where, error) {
       if (errors.length < 20) errors.push({ where: where, error: String(error && error.message || error) });
     }
-    function expired(){return api.now()-startedAt>=maxWaitMs;}
+    function expired(){return api.now()>=deadlineAt;}
     async function assertBudget(){
       if(!expired())return;
       await confirmedRelease();
+      await pending();
       var e=new Error('Pause protection exhausted: host call exceeded deadline; pause is UNVERIFIED');
       e.code='PAUSE_PROTECTION_EXHAUSTED';throw e;
+    }
+    // Never ask the host to sleep beyond the lease or pass a negative duration.
+    async function boundedSleep(ms) {
+      await assertBudget();
+      try { await api.sleep(Math.max(0, Math.min(ms, deadlineAt - api.now()))); }
+      finally { await assertBudget(); }
     }
     async function pending() {
       if (typeof api.pausePending !== 'function') return;
@@ -121,6 +129,8 @@
           throw exhausted;
         }
         var releasedThisCycle = await confirmedRelease();
+        await assertBudget();
+        var settledThisCycle = false;
         // A caller may hand off its just-observed post-action frame. It must
         // pass the same session/freshness checks, and adapter input readiness
         // still binds it to the current captured frame and foreground game.
@@ -137,19 +147,24 @@
           lastFrame = o.frameId;
           lastTimestamp = o.timestamp;
           var verified = await proofFor(o);
+          await assertBudget();
           if (verified) {
             if (releasedThisCycle) return verified;
           } else {
             await assertBudget();
-            if (releasedThisCycle && typeof api.pauseDialogueHandoff === 'function' && await api.pauseDialogueHandoff(o))
-              return freeze({conversationActive:true,session:session,frameId:o.frameId,timestamp:o.timestamp});
+            if (releasedThisCycle && typeof api.pauseDialogueHandoff === 'function') {
+              var conversationActive = await api.pauseDialogueHandoff(o);
+              await assertBudget();
+              if (conversationActive) return freeze({conversationActive:true,session:session,frameId:o.frameId,timestamp:o.timestamp});
+            }
 
-            if (!expired() && releasedThisCycle && now - lastInputAt >= INPUT_GAP_MS) {
+            if (!expired() && releasedThisCycle && api.now() - lastInputAt >= INPUT_GAP_MS) {
               var knownUiResult = null;
               var knownUiFailed = false;
               if (typeof api.pauseResolveKnownUi === 'function') {
                 // The hook may resolve a specific known UI state; it cannot establish pause proof.
                 verified = await proofFor(o);
+                await assertBudget();
                 if (verified) {
                   if (releasedThisCycle) return verified;
                 } else {
@@ -160,8 +175,11 @@
                     knownUiFailed = true;
                     await safeRecover('known UI resolution failed');
                   }
+                  await assertBudget();
                   if (knownUiResult === true) {
-                    lastInputAt = now;
+                    // Resolver input may occur late inside its host callback.
+                    // Conservatively start the gap when that callback finishes.
+                    lastInputAt = api.now();
                     sourceFrame = o.frameId;
                     knownUiFailed = true; // Always observe a new frame before any pause-key fallback.
                   }
@@ -171,18 +189,25 @@
               var ready = false;
               try { ready = !!(await api.pauseInputReady(o)); }
               catch (error) { note('pauseInputReady', error); }
+              await assertBudget();
               // Re-check pause recognition immediately before any input. A recognized menu is input-proof.
               verified = await proofFor(o);
+              await assertBudget();
               if (verified) {
                 if (releasedThisCycle) return verified;
               } else if (ready && !expired()) {
                 await assertBudget();
                 var key = KEYS[inputIndex++]; // Count before awaiting: a throwing key-down still consumes the key.
-                lastInputAt = now;
+                // Proof/readiness callbacks can advance time after observation.
+                lastInputAt = api.now();
                 sourceFrame = o.frameId;
                 try { await api.pauseKey(o, key, 60); }
                 catch (error) { note('pauseKey', error); }
-                if (reused) await api.sleep(650);
+                await assertBudget();
+                if (reused) {
+                  await boundedSleep(650);
+                  settledThisCycle = true;
+                }
                 // The next pass captures again before any other input.
               }
               }
@@ -193,7 +218,16 @@
         }
         await assertBudget();
         if (now - lastHeartbeat >= 5000) { lastHeartbeat = now; await pending(); }
-        try { await api.sleep(Math.min(maxWaitMs-(api.now()-startedAt),events < 8 ? 250 : events < 32 ? 1000 : 5000)); } catch (error) { note('sleep', error); }
+        await assertBudget();
+        // The seed key already waited for the menu response; capture next rather
+        // than adding another polling delay. The independent input gap stays intact.
+        if (!settledThisCycle) {
+          try { await boundedSleep(events < 8 ? 250 : events < 32 ? 1000 : 5000); }
+          catch (error) {
+            if (error && error.code === 'PAUSE_PROTECTION_EXHAUSTED') throw error;
+            note('sleep', error);
+          }
+        }
       }
     })();
   }

@@ -105,6 +105,8 @@ public class BitBltCapture : IGameCapture
 
                 // 窗口尺寸被改变，释放资源，然后重新创建会话
                 _session.Dispose();
+                // Construction may fail; never leave a retired session available for capture or cleanup.
+                _session = null;
             }
 
             _session = new BitBltSession(_hWnd, width, height);

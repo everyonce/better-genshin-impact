@@ -26,13 +26,82 @@ import uuid
 from observation_timing import frame_timing, observation_timestamp
 from host_observation import HostObservationContract
 from hybrid_routes import COURTYARD_ROUTE, EXECUTABLE_ROUTE_IDS, PATROL_STATIONS, ROUTE_IDS, STAIR_POST_ROUTE, STREET_PATROL_ROUTE, SURFACE_ROUTES
-from navigation_profiles import COURTYARD_PROFILE,SURFACE_PROFILE,NAVIGATION_PROFILES,validate_capability,required_profile
+from navigation_profiles import COURTYARD_PROFILE,SURFACE_PROFILE,SCOUT_PROFILE,NAVIGATION_PROFILES,validate_capability,required_profile
 from navigation_idle_recovery import (GOAL_INTENTS, NavigationIdleRecovery, RecoverySuperseded,
                                       capture_context, eligible_frame, fresh_frame)
 from observation_profiles import (LEGACY, P2P_NATIVE, PROFILES, FrameProfileError,
                                   validate_model_profile, verify_hello, verify_frame)
 from p2p_startup import validate_startup_options
 from bridge_transport import forbid_reconnect, is_transport_failure, transport_origin
+
+
+class BatchFeedbackTerminalProbe:
+    """Spend one read-only probe and retain its exact action/source diagnostics.
+
+    The existing receive lock owns this bounded state. It grants neither input nor
+    recovery: the original frame intake, receipts, hold and deadlines remain owners.
+    """
+    def __init__(self):
+        """Keep one attempt and two diagnostic source identities for the original batch."""
+        self.evidence = dict(version=1, maximumProbes=1, attempted=False,
+            requestId=None, observedSource=None)
+
+    @staticmethod
+    def source_identity(frame):
+        """Retain the original source clocks, never publication time or new authority."""
+        source = frame.get('sourceFrame') or {}
+        result = dict(frameId=frame.get('frameId'), captureEpoch=source.get('captureEpoch'),
+            timestamp100ns=source.get('timestamp100ns'), freshnessAtMs=source.get('freshnessAtMs'))
+        if (type(result['frameId']) is not int or result['frameId'] < 0
+                or not isinstance(result['captureEpoch'], str) or not result['captureEpoch']
+                or type(result['timestamp100ns']) is not int or result['timestamp100ns'] < 0
+                or type(result['freshnessAtMs']) not in (int, float)
+                or not math.isfinite(result['freshnessAtMs']) or result['freshnessAtMs'] < 0):
+            raise RuntimeError('Feedback terminal probe source identity is invalid')
+        return result
+
+    def eligible(self, hold, guard, current, request, accepted_ns, now_ns, receipts):
+        """Anticipate the normal 50 ms poll window only after W50's 10 ms native tick."""
+        if (self.evidence['attempted'] or request['requestId'] in receipts
+                or hold.used != 0 or hold.phase != 'idle' or not hold.inflight
+                or hold.last is None or guard.trip is not None or guard.reason != 'healthyNativeEvidence'
+                or type(accepted_ns) is not int or type(now_ns) is not int
+                or now_ns < accepted_ns + 60_000_000
+                or len(request.get('steps', [])) != 1
+                or type(request['steps'][0].get('durationMs')) is not int
+                or request['steps'][0].get('durationMs') != 50):
+            return None
+        last = hold.last
+        frame = last['frame']
+        if (current.get('type') != 'frame' or current.get('frameId') != frame.get('frameId')
+                or current.get('sourceFrame') != frame.get('sourceFrame')
+                or type(last.get('clientTimeNs')) is not int or now_ns < last['clientTimeNs']):
+            return None
+        age, rtt = frame.get('sourceFrameAgeMs'), last.get('roundTripMs')
+        if any(type(value) not in (int, float) or not math.isfinite(value) or value < 0
+               for value in (age, rtt)):
+            return None
+        upper = age + rtt + (now_ns-last['clientTimeNs'])/1e6
+        # This is a read-only preparation window, not a widened freshness gate.
+        if not 100 <= upper < 150:
+            return None
+        return dict(requestId=request['requestId'], acceptedAtClientNs=accepted_ns,
+            requestedAtClientNs=now_ns, sourceAgeUpperBoundMs=upper,
+            qualifyingSource=self.source_identity(frame), acceptedHorizonMs=50, nativeTickMs=10)
+
+    def reserve(self, *args):
+        """Consume before the fallible frame RPC, including a failed or empty reply."""
+        evidence = self.eligible(*args)
+        if evidence is None:
+            return False
+        self.evidence.update(evidence, attempted=True)
+        return True
+
+    def received(self, frame, now_ns, receipt_observed):
+        """Retain the reply; the unchanged post-terminal gate alone admits new pixels."""
+        self.evidence.update(observedSource=self.source_identity(frame),
+            receivedAtClientNs=now_ns, receiptObserved=receipt_observed,
+            replySourceAgeMs=frame.get('sourceFrameAgeMs'), replyServerNowMs=frame.get('serverNowMs'))
 
 
 class HostTimingObserver:
@@ -196,6 +265,61 @@ class HostTimingObserver:
             self.error(error)
 
 
+class BatchAutomaticGcDeferral:
+    """Defer only automatic cyclic GC in an admitted batch, then restore its prior process state."""
+    def __init__(self, report, clock=None):
+        """Keep bounded scalar evidence; construction neither queries nor changes GC."""
+        self.clock = clock or time.perf_counter_ns
+        self.state = dict(version=1, scope='reviewed-batch-source-hold', automaticOnly=True,
+            originalEnabled=None, changed=False, restoreAttempted=False, restored=False)
+        report['batchAutomaticGcDeferral'] = self.state
+
+    def mark(self, name):
+        """A diagnostic-clock failure never prevents state restoration or replaces a primary error."""
+        try:
+            self.state[name] = self.clock()
+        except Exception as error:
+            self.state['timingErrorType'] = type(error).__name__
+
+    def start(self):
+        """Enter inside the original main-loop try, before it can dispatch any input."""
+        self.mark('enteredAtClientNs')
+        self.state['originalEnabled'] = gc.isenabled()
+        self.state['thresholdsBefore'] = list(gc.get_threshold())
+        self.state['callbacksBefore'] = len(gc.callbacks)
+        if self.state['originalEnabled']:
+            # Record ownership before the mutation so even a partial entry failure restores it.
+            self.state['changed'] = True
+            gc.disable()
+        if gc.isenabled():
+            raise RuntimeError('Automatic GC was not deferred for the admitted batch')
+        self.mark('disabledAtClientNs')
+
+    def restore(self):
+        """Restore after native/reader cleanup attempts; return any failure without masking one in flight."""
+        self.state['restoreAttempted'] = True
+        self.mark('restoreStartedAtClientNs')
+        try:
+            original = self.state['originalEnabled']
+            if original is not None:
+                if gc.isenabled() != original:
+                    (gc.enable if original else gc.disable)()
+                self.state['restored'] = gc.isenabled() == original
+                if not self.state['restored']:
+                    raise RuntimeError('Automatic GC state restoration did not take effect')
+            else:
+                self.state['restored'] = True  # Entry failed before any owned mutation.
+            self.state['thresholdsAfter'] = list(gc.get_threshold())
+            self.state['callbacksAfter'] = len(gc.callbacks)
+            return None
+        except Exception as error:
+            self.state['restoreErrorType'] = type(error).__name__
+            self.state['restoreError'] = str(error)[:500]
+            return error
+        finally:
+            self.mark('restoreFinishedAtClientNs')
+
+
 class Bridge:
     """Serialize request/response pairs on the same-user local named pipe."""
     @staticmethod
@@ -216,12 +340,24 @@ class Bridge:
         from bridge_transport import forbid_reconnect
         forbid_reconnect(error, "experimentalChannelFailure")
 
-    def __init__(self, name):
+    @staticmethod
+    def _open_pipe(name):
+        """Use cancellable finite Windows I/O while preserving the original handle identity."""
+        from windows_pipe_transport import WindowsPipe
+        return WindowsPipe(name)
+
+    def _transaction(self):
+        """Bound native lock/header/payload waiting; detached inert handles keep their lock."""
+        owned = getattr(self, '_hello_handle', self.handle)
+        transaction = getattr(owned, 'transaction', None)
+        return transaction(self.lock) if transaction is not None else self.lock
+
+    def __init__(self, name, *, transport_factory=None):
         if not re.fullmatch(r'BetterGI\.Agent\.[A-Za-z0-9_.-]{1,100}', name):
             raise ValueError('Use a local pipe name beginning BetterGI.Agent.')
         if os.name != 'nt':
             raise RuntimeError('The BetterGI bridge requires Windows')
-        self.handle = self._pipe_io('open', open, '\\\\.\\pipe\\' + name, 'r+b', buffering=0)
+        self.handle = self._pipe_io('open', transport_factory or self._open_pipe, name)
         self.lock = threading.Lock()
         # Keep only the original hello bytes and this connection's original owner.
         self._hello_handle = self.handle
@@ -229,7 +365,8 @@ class Bridge:
         self._experimental_enable_failed = False
         self._experimental_enable_close_attempted = False
         try:
-            self.hello, payload = self._read(remember_hello=True)
+            with self._transaction():
+                self.hello, payload = self._read(remember_hello=True)
             self._hello_object = self.hello
             if (self.hello.get('version') != 1 or self.hello.get('type') != 'hello' or payload
                     or not self.hello.get('sessionId') or not self.hello.get('ownerEpoch')
@@ -330,7 +467,7 @@ class Bridge:
         A failed or ambiguous attempt retires only this Bridge's original handle.
         Normal clients do not call this entry and retain their existing behavior.
         """
-        with self.lock:
+        with self._transaction():
             # A retired connection keeps its first failure and all cleanup evidence.
             if getattr(self, '_experimental_enable_failed', False):
                 raise RuntimeError('experimental_enable_connection_retired')
@@ -439,7 +576,7 @@ class Bridge:
                 raise
 
     def request(self, command, **kwargs):
-        with self.lock:
+        with self._transaction():
             if getattr(self, '_experimental_enable_failed', False):
                 raise RuntimeError('Experimental enable failed; this connection is retired')
             self._experimental_connection()
@@ -622,7 +759,7 @@ class RecordingFrameQueue(queue.Queue):
 class AsyncVideoRecorder:
     """Bound image, observation and event queues; only the worker performs recording IO."""
     def __init__(self, directory, ffmpeg, fps, max_bytes, frame_capacity=8, event_capacity=256, preview=False,
-                 metadata_capacity=256, shared_budget=None, retain_policy_rgb=False):
+                 metadata_capacity=256, shared_budget=None, retain_policy_rgb=False, retain_frame_receipts=False):
         from policy_rgb_archive import RECORDING_FORMAT
         if not math.isfinite(fps) or fps <= 0 or max_bytes <= 0 or min(frame_capacity, event_capacity, metadata_capacity) < 1:
             raise ValueError('Recording rate, budget, and queue capacities must be positive')
@@ -633,6 +770,8 @@ class AsyncVideoRecorder:
         self.ffmpeg, self.fps, self.max_bytes = ffmpeg, fps, max_bytes
         self.shared_budget = shared_budget
         self.retain_policy_rgb = retain_policy_rgb
+        # Combat replay needs the exact original receipt envelope, including an empty list.
+        self.retain_frame_receipts = retain_frame_receipts
         self.recording_format = RECORDING_FORMAT
         self.journal_files = {}
         self.policy_rgb_bytes = 0
@@ -692,11 +831,17 @@ class AsyncVideoRecorder:
             if self.closing.is_set():
                 return False
             # Headers retain source clocks/readiness even when image admission fails.
-            # They retain bounded native guard crops, omit policy pixels/receipts,
-            # and never claim a video index.
+            # They retain bounded native guard crops, omit inline policy pixels,
+            # and never claim a video index. Ordinary captures omit receipt envelopes.
             frame_metadata = dict(metadata)
-            for key in ('receipts', 'videoFrameIndex', 'videoPtsSeconds', 'videoQueueAccepted', 'policyRgb'):
+            for key in ('videoFrameIndex', 'videoPtsSeconds', 'videoQueueAccepted', 'policyRgb'):
                 frame_metadata.pop(key, None)
+            if self.retain_frame_receipts:
+                # Snapshot before queue admission so later list mutation cannot alter intake evidence.
+                if 'receipts' in frame_metadata:
+                    frame_metadata['receipts'] = copy.deepcopy(frame_metadata['receipts'])
+            else:
+                frame_metadata.pop('receipts', None)
             video_accepted = True
             try:
                 # Immutable bytes are shared, not recopied or encoded on the capture path.
@@ -727,6 +872,7 @@ class AsyncVideoRecorder:
                     'recordedBytes': self.recorded_bytes,
                     'recordingFormat': self.recording_format, 'journalFiles': dict(self.journal_files),
                     'policyRgbEnabled': self.retain_policy_rgb, 'policyRgbBytes': self.policy_rgb_bytes,
+                    'frameReceiptsRetained': self.retain_frame_receipts,
                     'policyRgbStoredBytes': self.policy_rgb_stored_bytes,
                     'policyRgbFrames': self.policy_rgb_frames,
                     'error': self.error, 'closed': self.closed,
@@ -1072,17 +1218,22 @@ def validate_combat_trial_options(args, policy, control):
     """Keep the explicit single-lease combat authority separate from navigation and scout reuse."""
     binding = getattr(args, 'combat_trial_binding', None)
     if binding is None:
-        if getattr(control, 'combat_trial_guard', None) is not None:
+        if (getattr(control, 'combat_trial_guard', None) is not None
+                or getattr(args, 'combat_trial_control_profile', None) is not None
+                or getattr(policy, 'combat_trial_control_profile', None) is not None):
             raise ValueError('Combat trial authority cannot be removed or reused')
         return None
     from combat_trial_guard import (validate_binding, canonical, combat_scope, SINGLE_SCOPE, scope_maximum,
-                                    source_stale_recovery_enabled)
+                                    source_stale_recovery_enabled, ground_combat_enabled, GROUND_PROFILE)
     validate_binding(binding)
+    ground = ground_combat_enabled(binding)
     # The opt-in is frozen by preparation and stamped only after the worker reopens
     # its exact armed review. A candidate count alone cannot widen input authority.
     scope = combat_scope(binding)
     group = scope != SINGLE_SCOPE
     for authority in (args, policy):
+        if getattr(authority, 'combat_trial_control_profile', None) != (GROUND_PROFILE if ground else None):
+            raise ValueError('Ground-combat control profile differs from its separately prepared authority')
         recovery_stamp = getattr(authority, 'combat_trial_source_stale_recovery_policy', None)
         expected_recovery = binding['policy'].get('sourceStaleRecoveryPolicy')
         if canonical(recovery_stamp) != canonical(expected_recovery):
@@ -1103,11 +1254,23 @@ def validate_combat_trial_options(args, policy, control):
                  'combat_shadow', 'hybrid_navigation', 'hybrid_observe', 'navigation_guidance', 'navigation_progress',
                  'navigation_climb_recovery', 'navigation_idle_reset_seconds', 'warm_photo_plan',
                  'camera_calibration', 'steering_shadow', 'landmark_shadow', 'photo_station')
+    if ground:
+        # Localization is read-only here; no navigation controller, recovery or resident authority is inherited.
+        forbidden = tuple(key for key in forbidden if key != 'navigation_guidance') + (
+            'p2p_executed_history', 'batch_source_hold', 'reviewed_scout_batch', 'reviewed_scout_route',
+            'inspected_source_gap_recovery', 'inspected_obstacle_recovery')
+        if (args.navigation_guidance is not True or args.navigation_profile != SCOUT_PROFILE
+                or getattr(args, 'require_ground_control_layout', False) is not True
+                or args.goal_intent != 'unspecified' or args.history != 41
+                or args.seconds != 5
+                or getattr(args, 'p2p_mouse_sampling', None) is not None
+                or getattr(args, 'p2p_temperature', 1.0) != 1.0):
+            raise ValueError('Ground combat requires the fixed original lease, native pose/layout and unchanged H41 policy')
     if (any(getattr(args, key, None) for key in forbidden) or args.execution_context != 'off'
             or not args.enable_input or not args.native_combat_observation or not args.require_world_ready
-            or args.observation_profile != P2P_NATIVE or args.input_keys != 'LBUTTON'
-            or args.max_input_actions != 3 or not 0 < args.seconds <= 5
-            or not 0 < args.max_observation_age_ms <= 150 or args.action_hold_ms != 100
+            or args.observation_profile != P2P_NATIVE or args.input_keys != ('W,A,S,D,LBUTTON' if ground else 'LBUTTON')
+            or args.max_input_actions != (20 if ground else 3) or not 0 < args.seconds <= 5
+            or not 0 < args.max_observation_age_ms <= 150 or args.action_hold_ms != (50 if ground else 100)
             or not args.record_dir or not args.retain_policy_rgb or not 0 < args.record_max_mib <= 160
             or not args.p2p_execution_feedback or not args.p2p_prewarm or not args.soft_cadence):
         raise ValueError('Combat trial requires one recorded bounded pure-LBUTTON lease without other controllers')
@@ -1873,6 +2036,10 @@ def run_episode(args, policy=None, control=None):
     combat_binding = validate_combat_trial_options(args, policy, control)
     combat_guard = None
     combat_source_recovery = bool(combat_binding and 'sourceStaleRecoveryPolicy' in combat_binding['policy'])
+    ground_combat = bool(combat_binding and combat_binding.get('controlProfile') == 'reviewed-ground-combat-microtrial-v1')
+    ground_clock = None
+    if ground_combat and (getattr(args, 'lease_deadline', None) is None or not math.isfinite(args.lease_deadline)):
+        raise ValueError('Ground combat requires its original outer deadline before opening a native connection')
     hybrid_observe = validate_hybrid_observe_options(args)
     navigation_profile = validate_navigation_scope_options(args)
     native_combat_enabled = getattr(args,'native_combat_observation',False)
@@ -1915,7 +2082,17 @@ def run_episode(args, policy=None, control=None):
     if combat_binding is not None:
         try:
             from combat_trial_guard import CombatTrialGuard
-            combat_guard = CombatTrialGuard(combat_binding, args.combat_trial_owner, bridge.hello, time.perf_counter_ns())
+            started = time.perf_counter_ns()
+            guard_options = {}
+            if ground_combat:
+                # QPC first and monotonic second make this conversion conservative; neither clock is renewed.
+                monotonic = time.monotonic_ns()
+                lease_deadline = int(args.lease_deadline * 1e9)
+                ground_clock = dict(clientNs=started, monotonicNs=monotonic,
+                    leaseDeadlineMonotonicNs=lease_deadline,
+                    originalOuterDeadlineClientNs=started + lease_deadline - monotonic)
+                guard_options['outer_deadline_ns'] = ground_clock['originalOuterDeadlineClientNs']
+            combat_guard = CombatTrialGuard(combat_binding, args.combat_trial_owner, bridge.hello, started, **guard_options)
             control.combat_trial_guard = combat_guard
         except Exception:
             bridge.handle.close()
@@ -1973,6 +2150,8 @@ def run_episode(args, policy=None, control=None):
     if combat_guard is not None:
         report['combatTrialGuard'] = combat_binding
         report['combatTrialGuardState'] = combat_guard.snapshot()
+        if ground_combat:
+            report['combatGroundClock'] = ground_clock
     if execution_mode != 'off':
         report['executionContext'] = {'mode': execution_mode, 'schema': 'execution-context-v1',
                                       'knowledgeClock': 'client_perf_counter_ns',
@@ -2070,9 +2249,9 @@ def run_episode(args, policy=None, control=None):
                 validate_combat_capability(native_combat_capability,scout_guard.native_capability)
             report['nativeCombatObservation'] = copy.deepcopy(native_combat_capability)
             report['nativeCombatEvidenceFrames'] = 0
-        if getattr(args,'require_ground_control_layout',False) and (scout_guard is None or scout_guard.ground_capability is None):
+        if getattr(args,'require_ground_control_layout',False) and not ground_combat and (scout_guard is None or scout_guard.ground_capability is None):
             raise RuntimeError('Ground-only scout input requires its immutable reviewed control-layout binding')
-        if scout_guard is not None and scout_guard.ground_capability is not None:
+        if ground_combat or scout_guard is not None and scout_guard.ground_capability is not None:
             from native_ground_control import negotiate as negotiate_ground
             report['nativeGroundControlObservation'],report['nativeGroundControlGate']=negotiate_ground(bridge)
         if getattr(args, 'inspect_junction_map', False) or getattr(args,'recover_junction_map',False):
@@ -2114,7 +2293,8 @@ def run_episode(args, policy=None, control=None):
             recorder = archive
         else:
             recorder = AsyncVideoRecorder(args.record_dir, args.ffmpeg, args.fps, args.record_max_mib*2**20,
-                                          preview=args.preview, retain_policy_rgb=getattr(args,'retain_policy_rgb',False)) if args.record_dir else None
+                                          preview=args.preview, retain_policy_rgb=getattr(args,'retain_policy_rgb',False),
+                                          retain_frame_receipts=combat_guard is not None) if args.record_dir else None
         if combat_guard is not None:
             recorder = CombatTrialRecorder(recorder)
         elif scout_guard is not None and scout_guard.ground_capability is not None and not executed_history:
@@ -2141,6 +2321,10 @@ def run_episode(args, policy=None, control=None):
     unapplied_receipt_sequence = 0
     recovery_interruption_sequence = 0
     receipt_inbox = []
+    # Only the explicitly admitted source-hold batch gets this one read-only probe.
+    feedback_probe = BatchFeedbackTerminalProbe() if batch_source_hold is not None else None
+    if feedback_probe is not None:
+        report['feedbackTerminalProbe'] = feedback_probe.evidence
     report['decisionHz'] = args.decision_hz
     report['capturePollHz'] = args.fps
     report['maxObservationAgeMs'] = args.max_observation_age_ms
@@ -2201,6 +2385,7 @@ def run_episode(args, policy=None, control=None):
     # Timings are measurement only and exist solely in the already-explicit source-hold mode.
     # Diagnostic rows stay in memory until retirement; required recording traffic is unchanged.
     host_timing = HostTimingObserver(report) if batch_source_hold is not None else None
+    batch_gc = BatchAutomaticGcDeferral(report) if batch_source_hold is not None else None
 
     def source_hold_runtime():
         """Read only intake-owned bookkeeping; never acquire ResidentControl under receive_lock."""
@@ -2299,7 +2484,7 @@ def run_episode(args, policy=None, control=None):
                 stopped.set()
             raise
 
-    def poll_frame(origin='decision-refresh', wake=None):
+    def poll_frame(origin='decision-refresh', wake=None, feedback=None):
         """Serialize frame ingestion so scheduled and just-in-time polls cannot reorder evidence."""
         nonlocal server_snapshot
         nonlocal received_frame_id
@@ -2307,6 +2492,27 @@ def run_episode(args, policy=None, control=None):
         nonlocal recovery_capture_context
         with (host_timing.poll(origin, wake) if host_timing is not None else nullcontext()) as timing, receive_lock, combat_intake_boundary():
             if host_timing is not None:host_timing.mark(timing, 'intakeAcquiredNs')
+            if feedback is not None:
+                # Recheck after the intake lock: the reader may have delivered the
+                # receipt or a newer source while the policy thread was waiting.
+                request, accepted_ns = feedback
+                if stopped.is_set():
+                    raise RuntimeError('Executed-history reader stopped before terminal probe')
+                if time.perf_counter() >= deadline:
+                    raise RuntimeError('Executed-history lease ended before terminal probe')
+                hybrid.check_leg_deadline()
+                # Match the feedback loop: an already-collected terminal goes
+                # through its original validator, not a redundant probe deadline.
+                if request['requestId'] in history_receipts:
+                    return
+                received_at, status = server_snapshot
+                server_now = status.get('serverNowMs')
+                if (type(server_now) not in (int, float) or not math.isfinite(server_now)
+                        or server_now+(time.perf_counter()-received_at)*1000 >= request['expiresAtMs']):
+                    raise RuntimeError('Executed-history original request deadline ended before terminal probe')
+                if not feedback_probe.reserve(batch_source_hold, scout_guard, status, request,
+                        accepted_ns, time.perf_counter_ns(), history_receipts):
+                    return
             start = time.perf_counter_ns()
             if host_timing is not None:host_timing.mark(timing, 'rpcStartedNs', start)
             metadata, pixels = bridge.request('frame')
@@ -2480,6 +2686,11 @@ def run_episode(args, policy=None, control=None):
                     recorder.put(recording_frame_metadata(metadata, execution_mode, retain_execution=combat_source_recovery), pixels)
                 if host_timing is not None:host_timing.mark(timing, 'recorderQueuedNs')
                 received_frame_id = metadata['frameId']
+            if feedback is not None:
+                # Retain only diagnostic attribution. The unchanged intake and
+                # post-terminal gate own every hazard, receipt and later source.
+                feedback_probe.received(metadata, time.perf_counter_ns(),
+                    request['requestId'] in history_receipts)
 
     # Keep one actual reader failure; strings alone cannot authorize another lease.
     receive_failure = []
@@ -2578,6 +2789,7 @@ def run_episode(args, policy=None, control=None):
                     recorder.check()
                     if host_timing is not None:host_timing.elapsed(timing, 'recorderChecks', recorder_at)
                     intake_at = time.perf_counter_ns() if host_timing is not None else None
+                    probe_ready = False
                     with receive_lock:
                         if host_timing is not None:host_timing.elapsed(timing, 'intakeWait', intake_at)
                         matches = [item for item in receipt_inbox if item.get('requestId') == request['requestId']]
@@ -2595,8 +2807,19 @@ def run_episode(args, policy=None, control=None):
                         if (type(server_now) not in (int, float) or not math.isfinite(server_now)
                                 or server_now+(time.perf_counter()-received_at)*1000 >= request['expiresAtMs']):
                             raise RuntimeError('Executed-history receipt is unavailable before the original request deadline')
+                        if feedback_probe is not None:
+                            probe_ready = feedback_probe.eligible(batch_source_hold, scout_guard, status, request,
+                                event['acceptedAtClientNs'], time.perf_counter_ns(), history_receipts) is not None
+                    if probe_ready:
+                        # poll_frame owns this same lock; never call it while holding
+                        # intake or let a drained receipt overtake its hazard path.
+                        poll_frame('feedback-terminal', feedback=(request, event['acceptedAtClientNs']))
+                        continue
                     wait_at = time.perf_counter_ns() if host_timing is not None else None
-                    stopped.wait(.002)
+                    if feedback_probe is not None:
+                        sleep_until(time.perf_counter()+.002, stopped)
+                    else:
+                        stopped.wait(.002)
                     if host_timing is not None:host_timing.elapsed(timing, 'receiptSleep', wait_at)
         except Exception as error:
             failure, event['error'] = error, str(error)
@@ -2827,6 +3050,7 @@ def run_episode(args, policy=None, control=None):
     episode_failure = None
     stop_failure = None
     try:
+        if batch_gc is not None:batch_gc.start()
         if host_timing is not None:host_timing.start_gc()
         while time.perf_counter() < deadline and not stopped.is_set():
             if executed_history:
@@ -2973,8 +3197,14 @@ def run_episode(args, policy=None, control=None):
                     if state['trip'] is not None:
                         from combat_trial_guard import CombatTrialStop
                         raise CombatTrialStop('Combat trial stopped: ' + state['trip']['reason'])
+                    if ground_combat and state['phase'] != 'complete':
+                        completed_window = combat_guard.complete_ground_window(time.perf_counter_ns())
+                        if completed_window is not None:
+                            recorder.event(completed_window)
+                            state = completed_window['state']
+                            report['combatTrialGuardState'] = state
                     if state['trialComplete']:
-                        report['endReason'] = 'combatTrialComplete'
+                        report['endReason'] = 'combatGroundWindowDrained' if ground_combat else 'combatTrialComplete'
                         break
                     if state['phase'] == 'awaitingStaleRelease':
                         from combat_trial_guard import STALE_RELEASE_REASON
@@ -2990,7 +3220,8 @@ def run_episode(args, policy=None, control=None):
                         last_readiness_epoch = released['worldReadiness']['epoch']
                         latest.clear()
                         state = combat_guard.snapshot()
-                    if state['phase'] != 'ready' or not state['evidenceReady']:
+                    if state['phase'] != 'ready' or not state['evidenceReady'] or (ground_combat
+                            and (state['groundCombat']['dispatchClosed'] or state['acceptedActions'] >= 20)):
                         # No inference, superseding action, generic release or automatic resume
                         # can overtake the owned terminal receipt and post-release source barrier.
                         cadence.advance(time.perf_counter())
@@ -3241,8 +3472,12 @@ def run_episode(args, policy=None, control=None):
                 result['warmRequestId'] = warm.current['id']
             if args.action_hold_ms is not None and result.get('parseValid') and len(result.get('steps', [])) == 1:
                 result['rawPolicySteps'] = [dict(step) for step in result['steps']]
-                result['steps'] = [dict(result['steps'][0], durationMs=args.action_hold_ms)]
-                result['controllerResampling'] = 'explicit-bounded-key-hold; mouse applied once'
+                if ground_combat:
+                    # OpenP2P already emits50ms. An incompatible raw duration is refused, never repaired.
+                    result['controllerResampling'] = 'none; unchanged native50ms policy step'
+                else:
+                    result['steps'] = [dict(result['steps'][0], durationMs=args.action_hold_ms)]
+                    result['controllerResampling'] = 'explicit-bounded-key-hold; mouse applied once'
             action_model_id = args.model
             if hybrid:
                 selection = hybrid.choose(frame, result)
@@ -3351,7 +3586,13 @@ def run_episode(args, policy=None, control=None):
                             result['startBeforeMs'] = arguments['startBeforeMs']
                             evidence.update(expiresAtMs=arguments['expiresAtMs'], startBeforeMs=arguments['startBeforeMs'])
                         with (host_timing.native_call('action', request_id, frame['frameId']) if host_timing is not None else nullcontext()):
-                            response = transmit_bound_action(bridge,warm,report,arguments,'unacknowledgedAction',evidence)
+                            transmission = combat_guard.transmitting(time.perf_counter_ns()) if ground_combat else None
+                            try:
+                                response = transmit_bound_action(bridge,warm,report,arguments,'unacknowledgedAction',evidence)
+                            finally:
+                                # Retain the pre-wire gate after the call, so journal serialization cannot consume its reserve.
+                                if transmission is not None:
+                                    recorder.event(transmission)
                         if executed_history and action_response_accepted(response[0], request_id, response[1]):
                             # Register while intake is excluded, before a fast terminal reply can be collected.
                             history_requests[request_id] = copy.deepcopy(executed_request)
@@ -3525,82 +3766,90 @@ def run_episode(args, policy=None, control=None):
                 raise climb.terminate('episode_failed_during_recovery', exc) from exc
             raise
     finally:
-        if host_timing is not None:host_timing.stop_gc()
-        stopped.set()
-        if executed_history:
-            # Attempt release before any encoder failure or cache reset can interrupt cleanup.
-            # Keep the raw acknowledgement even when its journal write fails.
-            with receive_lock:
-                try:
-                    released, payload = bridge.request('release')
-                    report['executedHistoryRelease'] = dict(response=copy.deepcopy(released), payloadBytes=len(payload))
-                    marker = scout_guard.acknowledge_release(released, len(payload), time.perf_counter_ns(), 'executedHistoryTeardown')
-                    report['scoutEncounterGuardState'] = marker['state']
-                    collect_receipts(released)
-                    if recorder:recorder.event(marker)
-                except Exception as error:
-                    stop_failure = error
-                    report['executedHistoryReleaseError'] = str(error)
-            try:
-                policy.reset()
-            except Exception as error:
-                stop_failure = stop_failure or error
-                report['executedHistoryResetError'] = str(error)
-        if combat_guard is not None:
-            # Release is unconditional, including failed recording, unknown admission,
-            # an interrupted final hold and an already latched reader hazard.
-            with receive_lock:
-                state = combat_guard.snapshot()
-                if not state['trialComplete'] and state['trip'] is None:
-                    # Replay must see this exact state transition before Release.
-                    # A failed journal must still leave the unconditional release reachable.
-                    terminal_stop = combat_guard.fail('trialEndedBeforeDrain', time.perf_counter_ns())
-                    report['combatTrialGuardState'] = terminal_stop['state']
-                    report['combatTrialTerminalStop'] = terminal_stop
+        try:
+            if host_timing is not None:host_timing.stop_gc()
+            stopped.set()
+            if executed_history:
+                # Attempt release before any encoder failure or cache reset can interrupt cleanup.
+                # Keep the raw acknowledgement even when its journal write fails.
+                with receive_lock:
                     try:
-                        if recorder and not recorder.error:
-                            recorder.event(terminal_stop)
+                        released, payload = bridge.request('release')
+                        report['executedHistoryRelease'] = dict(response=copy.deepcopy(released), payloadBytes=len(payload))
+                        marker = scout_guard.acknowledge_release(released, len(payload), time.perf_counter_ns(), 'executedHistoryTeardown')
+                        report['scoutEncounterGuardState'] = marker['state']
+                        collect_receipts(released)
+                        if recorder:recorder.event(marker)
                     except Exception as error:
                         stop_failure = error
-                        report['combatTrialStopJournalError'] = str(error)
+                        report['executedHistoryReleaseError'] = str(error)
                 try:
-                    released, _ = combat_trial_release(bridge, combat_guard, report,
-                        recorder if recorder and not recorder.error else None, 'combatTrialTeardown')
-                    collect_receipts(released)
+                    policy.reset()
                 except Exception as error:
                     stop_failure = stop_failure or error
-                    report['combatTrialReleaseError'] = str(error)
-                    report['combatTrialGuardState'] = combat_guard.fail('terminalReleaseFailure', time.perf_counter_ns(), error=str(error))['state']
-        producer.join(timeout=3)
-        if climb and climb.helper.blocks_model:
-            terminal_climb_error = climb.terminate('lease_ended_during_recovery', cleanup_allowed=not producer.is_alive())
-        if not producer.is_alive():
-            try:
-                if args.readiness_snapshots:
-                    diagnostic_status = bridge.request('status')[0]
-                    collect_receipts(diagnostic_status)
-                    report['readinessDiagnosticsBeforeStop'] = diagnostic_status.get('diagnostics')
-                report['stop'], stop_payload = bridge.request('stop')
-                collect_receipts(report['stop'])
-                if combat_guard is not None and (report['stop'].get('type') != 'stopped' or stop_payload):
-                    report['combatTrialGuardState'] = combat_guard.fail('invalidStopAcknowledgement', time.perf_counter_ns(),
-                        response=report['stop'], payloadBytes=len(stop_payload))['state']
-                    raise RuntimeError('Combat trial stop was not acknowledged')
-            except Exception as exc:
-                stop_failure = exc
-                report['stopError'] = str(exc)
-        if climb:
-            try:
-                climb.handle.close()  # Never close a substituted public handle.
-            except Exception as close_error:
-                report['navigationClimbHandleCloseError'] = str(close_error)
-                report.setdefault('error', 'Recovery handle close failed')
-                terminal_climb_error = terminal_climb_error or RuntimeError(report['error'])
-        else:
-            bridge.handle.close()
-        producer.join(timeout=1)
-        if producer.is_alive():
-            report['streamError'] = 'Frame reader did not stop after disconnection'
+                    report['executedHistoryResetError'] = str(error)
+            if combat_guard is not None:
+                # Release is unconditional, including failed recording, unknown admission,
+                # an interrupted final hold and an already latched reader hazard.
+                with receive_lock:
+                    state = combat_guard.snapshot()
+                    if not state['trialComplete'] and state['trip'] is None:
+                        # Replay must see this exact state transition before Release.
+                        # A failed journal must still leave the unconditional release reachable.
+                        terminal_stop = combat_guard.fail('trialEndedBeforeDrain', time.perf_counter_ns())
+                        report['combatTrialGuardState'] = terminal_stop['state']
+                        report['combatTrialTerminalStop'] = terminal_stop
+                        try:
+                            if recorder and not recorder.error:
+                                recorder.event(terminal_stop)
+                        except Exception as error:
+                            stop_failure = error
+                            report['combatTrialStopJournalError'] = str(error)
+                    try:
+                        released, _ = combat_trial_release(bridge, combat_guard, report,
+                            recorder if recorder and not recorder.error else None, 'combatTrialTeardown')
+                        collect_receipts(released)
+                    except Exception as error:
+                        stop_failure = stop_failure or error
+                        report['combatTrialReleaseError'] = str(error)
+                        report['combatTrialGuardState'] = combat_guard.fail('terminalReleaseFailure', time.perf_counter_ns(), error=str(error))['state']
+            producer.join(timeout=3)
+            if climb and climb.helper.blocks_model:
+                terminal_climb_error = climb.terminate('lease_ended_during_recovery', cleanup_allowed=not producer.is_alive())
+            if not producer.is_alive():
+                try:
+                    if args.readiness_snapshots:
+                        diagnostic_status = bridge.request('status')[0]
+                        collect_receipts(diagnostic_status)
+                        report['readinessDiagnosticsBeforeStop'] = diagnostic_status.get('diagnostics')
+                    report['stop'], stop_payload = bridge.request('stop')
+                    collect_receipts(report['stop'])
+                    if combat_guard is not None and (report['stop'].get('type') != 'stopped' or stop_payload):
+                        report['combatTrialGuardState'] = combat_guard.fail('invalidStopAcknowledgement', time.perf_counter_ns(),
+                            response=report['stop'], payloadBytes=len(stop_payload))['state']
+                        raise RuntimeError('Combat trial stop was not acknowledged')
+                except Exception as exc:
+                    stop_failure = exc
+                    report['stopError'] = str(exc)
+            if climb:
+                try:
+                    climb.handle.close()  # Never close a substituted public handle.
+                except Exception as close_error:
+                    report['navigationClimbHandleCloseError'] = str(close_error)
+                    report.setdefault('error', 'Recovery handle close failed')
+                    terminal_climb_error = terminal_climb_error or RuntimeError(report['error'])
+            else:
+                bridge.handle.close()
+            producer.join(timeout=1)
+            if producer.is_alive():
+                report['streamError'] = 'Frame reader did not stop after disconnection'
+        finally:
+            if batch_gc is not None:
+                gc_error = batch_gc.restore()
+                if gc_error is not None:
+                    report['batchAutomaticGcRestoreError'] = str(gc_error)[:500]
+                    stop_failure = stop_failure or gc_error
+                    report.setdefault('error', 'Automatic GC state restoration failed: '+str(gc_error))
         if report['captureQuality']['usableFrames'] == 0:
             report['captureError'] = 'No usable RGB frames were received; wholly black/white captures cannot evaluate a live policy.'
             report.setdefault('error', report['captureError'])
@@ -3641,7 +3890,7 @@ def run_episode(args, policy=None, control=None):
             if state['trip'] is not None or not state['trialComplete']:
                 report.setdefault('error', 'Combat trial incomplete: ' + (state['trip']['reason'] if state['trip'] else state['phase']))
             else:
-                report['endReason'] = 'combatTrialComplete'
+                report['endReason'] = 'combatGroundWindowDrained' if ground_combat else 'combatTrialComplete'
         report.setdefault('endReason', 'noUsableFrames' if report.get('captureError') else
                           'streamError' if report.get('streamError') else 'error' if report.get('error') else
                           'durationElapsed' if time.perf_counter() >= deadline else 'stopped')

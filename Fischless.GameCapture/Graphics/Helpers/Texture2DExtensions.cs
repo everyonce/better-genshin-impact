@@ -6,7 +6,13 @@ namespace Fischless.GameCapture.Graphics.Helpers;
 
 public static class Texture2DExtensions
 {
-    public static Mat? CreateMat(this Texture2D staging, Device d3dDevice, Texture2D surfaceTexture, ResourceRegion? region = null)
+    /// <summary>Preserves the existing null-on-failure API for callers without device recovery.</summary>
+    public static Mat? CreateMat(this Texture2D staging, Device d3dDevice, Texture2D surfaceTexture, ResourceRegion? region = null) =>
+        CreateMat(staging, d3dDevice, surfaceTexture, region, propagateSharpDxErrors: false);
+
+    /// <summary>Copies a texture to owned CPU pixels; callers owning device recovery may opt into SharpDX failures.</summary>
+    internal static Mat? CreateMat(this Texture2D staging, Device d3dDevice, Texture2D surfaceTexture, ResourceRegion? region,
+        bool propagateSharpDxErrors)
     {
         try
         {
@@ -38,11 +44,15 @@ public static class Texture2DExtensions
                 d3dDevice.ImmediateContext.UnmapSubresource(staging, 0);
             }
         }
-        catch (Exception e)
+        catch (Exception e) when (ShouldSuppressFailure(e, propagateSharpDxErrors))
         {
             Debug.WriteLine("Failed to copy texture to mat.");
             Debug.WriteLine(e.StackTrace);
             return null;
         }
     }
+
+    /// <summary>Preserves legacy null-on-failure callers while letting device owners recover from GPU errors.</summary>
+    internal static bool ShouldSuppressFailure(Exception error, bool propagateSharpDxErrors) =>
+        !propagateSharpDxErrors || error is not SharpDX.SharpDXException;
 }

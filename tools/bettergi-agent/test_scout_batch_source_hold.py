@@ -24,12 +24,56 @@ def empty_context():
                 trackedState=dict(heldKeys=[],executionUncertain=True,releaseOutcome='returned_unverified',telemetryIncomplete=False))
 
 
+def append_input_pair(events, at, origin, operation, *, identity=(None, None, None, None), key=None, dx=0, dy=0):
+    """Record two explicitly synthetic native-format stages in one monotonic fixture ledger."""
+    sequence = events[-1]['sequence'] + 1 if events else 1
+    call_id = (sequence + 1) // 2
+    for offset, stage in enumerate(('started', 'returned_unverified' if operation == 'releaseAll' else 'returned')):
+        events.append(dict(sequence=sequence + offset, atMs=at,
+            requestId=identity[0], modelId=identity[1], frameId=identity[2], stepIndex=identity[3], origin=origin,
+            call=dict(callId=call_id, operation=operation, stage=stage, key=key, mouseDx=dx, mouseDy=dy, error=None)))
+
+
+def append_completed_input(events, receipt):
+    """Derive synthetic calls only from a completed inert receipt, without changing that receipt."""
+    step = receipt['appliedSteps'][0]
+    identity = (receipt['requestId'], receipt['modelId'], receipt['frameId'], 0)
+    for key in step['keys']:
+        append_input_pair(events, step['startedAtMs'], 'dispatch',
+            'buttonDown' if key in ('LBUTTON', 'RBUTTON', 'MBUTTON') else 'keyDown', identity=identity, key=key)
+    if step['mouseDx'] or step['mouseDy']:
+        append_input_pair(events, step['startedAtMs'], 'dispatch', 'mouseMove', identity=identity,
+                          dx=step['mouseDx'], dy=step['mouseDy'])
+    append_input_pair(events, receipt['endedAtMs'], 'release:horizon_complete', 'releaseAll', identity=identity)
+
+
+def input_context(events, sampled):
+    """Publish the exact256-event ring shape while retaining software release uncertainty."""
+    rows = copy.deepcopy(events[-256:])
+    last = rows[-1]['sequence'] if rows else 0
+    return dict(empty_context(), version=1, clock='monotonic milliseconds since session start',
+        observesBlockedCallConcurrently=False, physicalExecutionProven=False, sampledAtMs=sampled,
+        firstSequence=rows[0]['sequence'] if rows else 0, lastSequence=last,
+        evictedEvents=max(0, last - 256), events=rows, lastInputEvent=copy.deepcopy(rows[-1]) if rows else None)
+
+
+def settled_input_context(receipt, sampled, *, release_at=None, prefix_calls=0):
+    """Build a bounded source-hold fixture with explicit irrelevant historical calls."""
+    events = []
+    for _ in range(prefix_calls):
+        append_input_pair(events, 0, 'release:client_release', 'releaseAll')
+    append_completed_input(events, receipt)
+    if release_at is not None:
+        append_input_pair(events, release_at, 'release:client_release', 'releaseAll')
+    return input_context(events, sampled)
+
+
 def source(index=187,at=1000,epoch=1,age=10):
     """Use original native schema validators and exact synthetic ground crops."""
     value=attach_ground(native_sample(index,at,candidates=0,epoch=epoch,age=age))
     value.update(navigationPose=dict(state='valid',frameId=index,x=BATCH.points[1][0],y=BATCH.points[1][1],
         yawDegrees=90,positionConfidence=.996,yawConfidence=.6,layerId='MapBack_2'),
-        motionEvidence=dict(status='normal',spaceKeyMatched=False),executionContext=empty_context())
+        motionEvidence=dict(status='normal',spaceKeyMatched=False))
     for key in ('worldReadiness','frameWorldReadiness'):
         value[key].update(reason='world_ready',sourceCapturedAtMs=value['capturedAtMs'],checkedAtMs=value['serverNowMs'])
     return value
@@ -68,7 +112,7 @@ def fixture():
         history=history,settled=settled,predecessor=dict(requestId='prior',frameId=186,endedAtMs=990,sourceFrame=old_source))
     stale=copy.deepcopy(healthy);stale.update(sourceFrameAgeMs=165.6613,serverNowMs=1165.6613,inputAvailable=False)
     stale['worldReadiness'].update(ready=False,reason='world_observation_stale',epoch=2,checkedAtMs=1165.6613)
-    ack=dict(type='released',serverNowMs=1170,receipts=[],droppedReceipts=0,executionContext=empty_context(),
+    ack=dict(type='released',serverNowMs=1170,receipts=[],droppedReceipts=0,executionContext=settled_input_context(receipt,1170,release_at=1170),
         worldReadiness=dict(stale['worldReadiness'],ready=False,reason='client_release',epoch=3,checkedAtMs=1170))
     return machine,healthy,stale,ack,runtime
 
@@ -177,7 +221,7 @@ class BatchSourceHoldTests(unittest.TestCase):
             lambda v:v['combatEvidence'].update(playerHealthFractionEstimate=.7),
             lambda v:v['combatEvidence'].update(enemyBarCandidates=native_sample()['combatEvidence']['enemyBarCandidates']),
             lambda v:v['worldReadiness'].update(epoch=4),lambda v:v.update(droppedReceipts=1),
-            lambda v:v['executionContext'].update(active={'requestId':'foreign'}),
+            lambda v:v.update(executionContext=dict(active={'requestId':'foreign'})),
             lambda v:v['sourceFrame'].update(captureEpoch='foreign'))
         for mutate in mutations:
             machine,runtime=self.begin();value=source(188,1180,3);mutate(value)
@@ -200,6 +244,143 @@ class BatchSourceHoldTests(unittest.TestCase):
         machine.observe(source(189,1260,3),1_330_000_000,runtime)
         _,_,stale,_,_=fixture()
         self.assertIsNone(machine.observe(stale,1_350_000_000,runtime));self.assertEqual(machine.used,1)
+
+
+class FiniteInputTailTests(unittest.TestCase):
+    """Keep historical eviction distinct from missing current software-call evidence."""
+    def prepared(self, prefix_calls=130, *, trigger_context=False):
+        """Retain the original pure hold clocks and exact committed predecessor."""
+        machine, healthy, stale, ack, runtime = fixture()
+        receipt = runtime['settled']['receipt']
+        if trigger_context:
+            stale['executionContext'] = settled_input_context(receipt, stale['serverNowMs'], prefix_calls=prefix_calls)
+        ack['executionContext'] = settled_input_context(receipt, ack['serverNowMs'], release_at=ack['serverNowMs'],
+                                                       prefix_calls=prefix_calls)
+        machine.observe(stale, 1_220_000_000, runtime)
+        return machine, stale, ack, runtime
+
+    def test_evicted_historical_prefix_preserves_the_same_one_hold_and_history(self):
+        machine, stale, ack, runtime = self.prepared()
+        before = copy.deepcopy(runtime)
+        self.assertGreater(ack['executionContext']['evictedEvents'], 0)
+        machine.acknowledge_release(ack, 0, 1_230_000_000, runtime)
+        self.assertTrue(machine.release['response']['executionContext']['trackedState']['executionUncertain'])
+        for index, at in ((188, 1230), (189, 1260)):
+            machine.observe(source(index, at, 3), int((at + 70) * 1e6), runtime)
+        self.assertEqual(runtime, before)
+        self.assertEqual(machine.used, 1)
+        self.assertEqual(machine.phase, 'complete')
+
+    def test_supplied_trigger_and_wait_contexts_keep_exact_overlapping_events(self):
+        machine, stale, ack, runtime = self.prepared(trigger_context=True)
+        machine.acknowledge_release(ack, 0, 1_230_000_000, runtime)
+        for index, at in ((188, 1230), (189, 1260)):
+            value = source(index, at, 3)
+            value['executionContext'] = copy.deepcopy(ack['executionContext'])
+            value['executionContext']['sampledAtMs'] = value['serverNowMs']
+            self.assertTrue(machine.observe(value, int((at + 70) * 1e6), runtime)['qualified'])
+        machine, stale, ack, runtime = self.prepared(trigger_context=True)
+        ack['executionContext']['events'][0]['origin'] = 'changed-historical-origin'
+        with self.assertRaisesRegex(ValueError, 'changed across'):
+            machine.acknowledge_release(ack, 0, 1_230_000_000, runtime)
+
+    def test_missing_cut_through_or_inconsistent_ring_evidence_refuses(self):
+        mutations = (
+            lambda c: c['events'].pop(-3),
+            lambda c: c.update(evictedEvents=c['evictedEvents'] + 1),
+            lambda c: c.update(firstSequence=True),
+            lambda c: c['events'][-2]['call'].update(callId=c['events'][-2]['call']['callId'] + 1),
+            lambda c: c['lastInputEvent'].update(atMs=float('nan')),
+            lambda c: c['events'][-6]['call'].update(stage='returned'),
+        )
+        for mutate in mutations:
+            machine, _, ack, runtime = self.prepared()
+            mutate(ack['executionContext'])
+            with self.subTest(mutate=mutate), self.assertRaises(ValueError):
+                machine.acknowledge_release(ack, 0, 1_230_000_000, runtime)
+
+    def test_foreign_or_mismatched_current_action_cannot_hide_in_the_prefix(self):
+        for field, value in (('requestId', 'foreign'), ('modelId', 'foreign'), ('frameId', 999), ('stepIndex', 1)):
+            machine, _, ack, runtime = self.prepared()
+            for row in ack['executionContext']['events'][-6:-2]:
+                row[field] = value
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                machine.acknowledge_release(ack, 0, 1_230_000_000, runtime)
+        machine, _, ack, runtime = self.prepared()
+        for row in ack['executionContext']['events'][-6:-4]:
+            row['call']['key'] = 'A'
+        with self.assertRaisesRegex(ValueError, 'cover its applied step'):
+            machine.acknowledge_release(ack, 0, 1_230_000_000, runtime)
+
+    def test_current_release_must_be_new_unique_unbound_and_software_complete(self):
+        for mutate in (
+                lambda c: c['events'][-2].update(atMs=1165.6612),
+                lambda c: c['events'][-2].update(requestId='prior', modelId='controller', frameId=186, stepIndex=0),
+                lambda c: c['events'][-1]['call'].update(stage='skipped_backend_changed'),
+                lambda c: c['trackedState'].update(executionUncertain=False),
+                lambda c: c.update(telemetryComplete=False)):
+            machine, _, ack, runtime = self.prepared()
+            mutate(ack['executionContext'])
+            ack['executionContext']['lastInputEvent'] = copy.deepcopy(ack['executionContext']['events'][-1])
+            with self.assertRaises(ValueError):
+                machine.acknowledge_release(ack, 0, 1_230_000_000, runtime)
+
+    def test_real_native_clock_order_does_not_force_release_before_receipt_end(self):
+        machine, _, ack, runtime = self.prepared()
+        rows = ack['executionContext']['events']
+        rows[-4]['atMs'] = 990.01
+        rows[-3]['atMs'] = 990.02
+        ack['executionContext']['sampledAtMs'] = 1170.001
+        machine.acknowledge_release(ack, 0, 1_230_000_000, runtime)
+        self.assertEqual(machine.phase, 'awaitingSources')
+        machine, _, ack, runtime = self.prepared()
+        ack['executionContext']['events'][-4]['atMs'] = 989.99
+        with self.assertRaises(ValueError):
+            machine.acknowledge_release(ack, 0, 1_230_000_000, runtime)
+
+    def test_additional_input_or_release_during_reacquisition_remains_terminal(self):
+        machine, _, ack, runtime = self.prepared()
+        machine.acknowledge_release(ack, 0, 1_230_000_000, runtime)
+        value = source(188, 1230, 3)
+        events = copy.deepcopy(ack['executionContext']['events'])
+        append_input_pair(events, 1200, 'release:client_release', 'releaseAll')
+        value['executionContext'] = input_context(events, value['serverNowMs'])
+        with self.assertRaises(ValueError):
+            machine.observe(value, 1_300_000_000, runtime)
+
+    def test_later_completed_native_action_cannot_replace_the_settled_history_anchor(self):
+        machine, _, ack, runtime = self.prepared()
+        receipt = copy.deepcopy(runtime['settled']['receipt'])
+        receipt.update(requestId='later-unsettled', frameId=187, acceptedAtMs=1100, endedAtMs=1150)
+        receipt['appliedSteps'][0]['startedAtMs'] = 1100
+        events = copy.deepcopy(ack['executionContext']['events'][:-2])
+        append_completed_input(events, receipt)
+        append_input_pair(events, 1170, 'release:client_release', 'releaseAll')
+        ack['executionContext'] = input_context(events, 1170)
+        with self.assertRaises(ValueError):
+            machine.acknowledge_release(ack, 0, 1_230_000_000, runtime)
+
+    def test_one_shot_mouse_and_empty_or_multiple_key_steps_have_exact_call_coverage(self):
+        """Accept only each already-declared step, including a genuine no-call interval."""
+        for keys, dx in ((['W', 'A'], 12), ([], -12), ([], 0)):
+            machine, _, stale, ack, runtime = fixture()
+            receipt = runtime['settled']['receipt']
+            runtime['settled']['arguments']['steps'][0].update(keys=keys[:], mouseDx=dx)
+            receipt['appliedSteps'][0].update(keys=keys[:], mouseDx=dx)
+            ack['executionContext'] = settled_input_context(receipt, 1170, release_at=1170, prefix_calls=130)
+            machine.observe(stale, 1_220_000_000, runtime)
+            machine.acknowledge_release(ack, 0, 1_230_000_000, runtime)
+            self.assertEqual(machine.phase, 'awaitingSources')
+        machine, _, stale, ack, runtime = fixture()
+        receipt = runtime['settled']['receipt']
+        runtime['settled']['arguments']['steps'][0]['mouseDx'] = 12
+        receipt['appliedSteps'][0]['mouseDx'] = 12
+        ack['executionContext'] = settled_input_context(receipt, 1170, release_at=1170, prefix_calls=130)
+        for row in ack['executionContext']['events']:
+            if row['call']['operation'] == 'mouseMove':row['call']['mouseDx'] = 11
+        machine.observe(stale, 1_220_000_000, runtime)
+        with self.assertRaisesRegex(ValueError, 'cover its applied step'):
+            machine.acknowledge_release(ack, 0, 1_230_000_000, runtime)
 
 
 class BatchSourceHoldAuthorityTests(unittest.TestCase):
@@ -228,6 +409,14 @@ class HoldBridge(batch_tests.BatchBridge):
         self.delay_second=delay_second;self.interrupt=interrupt;self.frozen=None
         self.hold_releases=0;self.hold_at=None;self.first_post=None;self.frame_calls=[]
         self.last_row=None;self.stale_once=False;self.freeze_action=freeze_action
+        self.last_completed_receipt=None
+
+    def terminal(self,*,cancel=False):
+        """Retain the actual inert completed receipt for the next source-hold ACK fixture."""
+        rows=super().terminal(cancel=cancel)
+        for receipt in rows:
+            if receipt['status']=='completed':self.last_completed_receipt=copy.deepcopy(receipt)
+        return rows
 
     def normalize(self,row):
         """Fill only known native readiness/context fields omitted by older transport doubles."""
@@ -238,7 +427,8 @@ class HoldBridge(batch_tests.BatchBridge):
             row['combatEvidence']=native_sample(row['frameId'],row['sourceFrame']['freshnessAtMs'],candidates=0)['combatEvidence']
             row['combatEvidence']['sourceFrame']=copy.deepcopy(row['sourceFrame'])
             unavailable(row,'combatEvidence');unavailable(row,'groundControlEvidence')
-        row['executionContext']=empty_context()
+        # This mode's real frame packets omit optional executionContext.
+        row.pop('executionContext',None)
         return row
 
     def request(self,command,**arguments):
@@ -262,7 +452,8 @@ class HoldBridge(batch_tests.BatchBridge):
             if previous is not None:
                 row['worldReadiness'].update(sourceFrameId=previous['frameId'],
                     sourceCapturedAtMs=previous['capturedAtMs'],checkedAtMs=row['serverNowMs'])
-                row['executionContext']=empty_context()
+                row['executionContext']=(settled_input_context(self.last_completed_receipt,row['serverNowMs'],
+                    release_at=row['serverNowMs'],prefix_calls=130) if self.last_completed_receipt else empty_context())
             if self.frozen is not None:
                 self.hold_releases+=1;self.hold_at=row['serverNowMs'];self.frozen=None
                 if self.lost_ack:raise OSError('synthetic recovery ACK lost after release')
@@ -944,6 +1135,364 @@ class HostTimingTests(unittest.TestCase):
             self.assertEqual(len(bridge.actions),recorder.actions_at_failure)
             self.assertTrue(recorder.closed);self.assertEqual(bridge.commands[-1],'stop')
         self.assertEqual(module.gc.callbacks,before)
+
+
+class GcFacade:
+    """Observe only GC state APIs; no real collector, GPU, model or native operation is invoked."""
+    def __init__(self, enabled=True):
+        """Retain foreign callbacks and thresholds independently from the production scope."""
+        self.enabled=enabled;self.thresholds=(700,10,10);self.callbacks=[lambda phase,info:None]
+        self.calls=[];self.on_enable=None;self.fail_enable=False
+    def isenabled(self):
+        """Expose the process-state bit without adding any collection."""
+        self.calls.append('isenabled');return self.enabled
+    def get_threshold(self):
+        """Permit observation but no threshold mutation API."""
+        self.calls.append('get_threshold');return self.thresholds
+    def disable(self):
+        """Record the exact automatic-GC state transition."""
+        self.calls.append('disable');self.enabled=False
+    def enable(self):
+        """Assert cleanup order before restoring, or model a restoration failure."""
+        self.calls.append('enable')
+        if self.on_enable:self.on_enable()
+        if self.fail_enable:raise OSError('synthetic GC restore failure')
+        self.enabled=True
+    def collect(self,*args,**kwargs):
+        """Forced collection is prohibited in this change."""
+        raise AssertionError('No forced collection is permitted')
+    def set_threshold(self,*args):
+        """The scope must not alter or restore foreign threshold choices."""
+        raise AssertionError('No threshold mutation is permitted')
+
+
+class BatchAutomaticGcDeferralTests(unittest.TestCase):
+    """Prove the admitted scope restores GC after ordinary cleanup and every tested failure."""
+    def test_scope_preserves_enabled_state_thresholds_and_foreign_callbacks(self):
+        """Only the enabled bit is owned; foreign changes during the scope are not overwritten."""
+        module=batch_tests.client_module;fake=GcFacade();original=list(fake.callbacks);report={}
+        with patch.object(module,'gc',fake):
+            scope=module.BatchAutomaticGcDeferral(report,clock=lambda:123)
+            self.assertEqual(fake.calls,[]);scope.start();self.assertFalse(fake.enabled)
+            foreign=lambda phase,info:None;fake.callbacks.append(foreign);fake.thresholds=(800,12,13)
+            self.assertIsNone(scope.restore())
+        self.assertTrue(fake.enabled);self.assertTrue(scope.state['restored'])
+        self.assertEqual(fake.calls.count('disable'),1);self.assertEqual(fake.calls.count('enable'),1)
+        self.assertEqual(fake.callbacks,original+[foreign]);self.assertEqual(fake.thresholds,(800,12,13))
+        self.assertEqual(scope.state['thresholdsBefore'],[700,10,10]);self.assertEqual(scope.state['thresholdsAfter'],[800,12,13])
+
+    def test_originally_disabled_state_stays_disabled_even_when_timing_fails(self):
+        """An already-disabled caller is never enabled; diagnostic clocks are not restoration authority."""
+        module=batch_tests.client_module;fake=GcFacade(False)
+        def broken_clock():raise OSError('diagnostic clock failure')
+        with patch.object(module,'gc',fake):
+            scope=module.BatchAutomaticGcDeferral({},clock=broken_clock);scope.start()
+            self.assertIsNone(scope.restore())
+        self.assertFalse(fake.enabled);self.assertNotIn('enable',fake.calls);self.assertNotIn('disable',fake.calls)
+        self.assertTrue(scope.state['restored']);self.assertFalse(scope.state['changed'])
+        self.assertEqual(scope.state['timingErrorType'],'OSError')
+
+    def test_two_endpoints_restore_only_after_stop_handle_close_and_final_reader_join(self):
+        """Run real intake/history/endpoint code and inspect the precise state restoration boundary."""
+        module=batch_tests.client_module;fake=GcFacade();threads=[];joins=[];actual_thread=module.threading.Thread
+        def make_thread(*args,**kwargs):
+            thread=actual_thread(*args,**kwargs);old_join=thread.join;threads.append(thread)
+            def join(timeout=None):
+                try:return old_join(timeout)
+                finally:joins.append((timeout,thread.is_alive()))
+            thread.join=join;return thread
+        with tempfile.TemporaryDirectory() as folder:
+            recorder=batch_tests.stream_tests.HistoryRecorder();bridge=HoldBridge(recorder,freeze_action=3);policy=ColdBackupPolicy()
+            policy.during_predict=lambda:self.assertFalse(fake.enabled)
+            def check_retired():
+                self.assertEqual(bridge.commands[-1],'stop');self.assertTrue(bridge.handle.close.called)
+                self.assertTrue(threads);self.assertFalse(any(thread.is_alive() for thread in threads))
+                self.assertEqual(joins[-1],(1,False));self.assertEqual(len(fake.callbacks),1)
+            fake.on_enable=check_retired
+            with patch.object(module,'gc',fake),patch.object(module.threading,'Thread',make_thread):
+                code,part,recorder,bridge,policy=run_hold_fixture(folder,recorder=recorder,bridge=bridge,policy=policy)
+            self.assertEqual((code,len(bridge.actions),len(policy.commits)),(0,6,6))
+            self.assertEqual([row['history']['afterFrames'] for row in part['executedHistoryEvents']],[1,2,3,1,2,3])
+            self.assertTrue(part['batchAutomaticGcDeferral']['restored']);self.assertTrue(fake.enabled)
+            self.assertEqual(len([row for row in part['hybridNavigationEvents'] if row['type']=='hybridEndpointVerified']),2)
+            self.assertTrue(recorder.closed);self.assertTrue(part['hostTimingDiagnostics']['gcRemoved'])
+
+    def test_default_batch_does_not_query_or_change_gc(self):
+        """The existing opt-out batch path never constructs the scope or calls the GC facade."""
+        module=batch_tests.client_module;fake=GcFacade()
+        with tempfile.TemporaryDirectory() as folder,patch.object(module,'gc',fake):
+            code,part,recorder,bridge,policy=batch_tests.run_batch_fixture(folder)
+        self.assertEqual(code,0);self.assertNotIn('batchAutomaticGcDeferral',part);self.assertEqual(fake.calls,[])
+
+    def test_stop_guard_recorder_and_lost_ack_paths_restore_the_original_state(self):
+        """Retain the existing concrete primary-failure/cleanup assertions under the new scope."""
+        module=batch_tests.client_module
+        cases=((BatchSourceHoldRaceTests,'test_stop_after_first_confirmation_keeps_fence_and_retires'),
+            (BatchSourceHoldRaceTests,'test_stale_during_prediction_keeps_the_existing_terminal_trip'),
+            (HostTimingTests,'test_original_recorder_failure_still_stops_and_retires'),
+            (BatchSourceHoldStreamTests,'test_lost_release_ack_keeps_primary_failure_and_never_retries_hold'))
+        for case_type,name in cases:
+            fake=GcFacade();before=list(fake.callbacks)
+            with self.subTest(case=name),patch.object(module,'gc',fake):getattr(case_type(),name)()
+            self.assertTrue(fake.enabled);self.assertEqual(fake.calls.count('disable'),1)
+            self.assertEqual(fake.calls.count('enable'),1);self.assertEqual(fake.callbacks,before)
+
+    def test_restore_error_does_not_mask_original_lost_ack_and_is_retained(self):
+        """Restoration failure is separate from the original input-protocol failure."""
+        module=batch_tests.client_module;fake=GcFacade();fake.fail_enable=True
+        with tempfile.TemporaryDirectory() as folder,patch.object(module,'gc',fake):
+            recorder=batch_tests.stream_tests.HistoryRecorder();bridge=HoldBridge(recorder,lost_ack=True)
+            with self.assertRaisesRegex((RuntimeError,OSError),'ACK lost'):
+                run_hold_fixture(folder,recorder=recorder,bridge=bridge)
+            part=json.loads((Path(folder)/'run.json').read_bytes())
+            self.assertIn('ACK lost',part.get('error','')+part.get('streamError',''))
+            self.assertIn('synthetic GC restore failure',part['batchAutomaticGcRestoreError'])
+            self.assertFalse(part['batchAutomaticGcDeferral']['restored'])
+            self.assertEqual(bridge.commands[-1],'stop');self.assertTrue(bridge.handle.close.called)
+
+    def test_handle_close_exception_still_restores_and_preserves_the_cleanup_error(self):
+        """The restoration finally encloses raw handle close, not just its successful fall-through."""
+        module=batch_tests.client_module;fake=GcFacade();captured=[];original=module.BatchAutomaticGcDeferral
+        class Scope(original):
+            def __init__(self,report):super().__init__(report);captured.append(self.state)
+        with tempfile.TemporaryDirectory() as folder,patch.object(module,'gc',fake),patch.object(module,'BatchAutomaticGcDeferral',Scope):
+            recorder=batch_tests.stream_tests.HistoryRecorder();bridge=HoldBridge(recorder)
+            bridge.handle.close.side_effect=OSError('original handle-close failure')
+            with self.assertRaisesRegex(OSError,'original handle-close failure'):
+                run_hold_fixture(folder,recorder=recorder,bridge=bridge)
+            self.assertEqual(bridge.commands[-1],'stop')
+        self.assertTrue(fake.enabled);self.assertTrue(captured[0]['restored'])
+
+    def test_reader_join_exception_still_restores_without_reordering_cleanup(self):
+        """A real joined reader followed by an injected join failure cannot leak disabled GC."""
+        module=batch_tests.client_module;fake=GcFacade();captured=[];original=module.BatchAutomaticGcDeferral
+        actual_thread=module.threading.Thread
+        class Scope(original):
+            def __init__(self,report):super().__init__(report);captured.append(self.state)
+        def make_thread(*args,**kwargs):
+            thread=actual_thread(*args,**kwargs);old_join=thread.join
+            def join(timeout=None):
+                old_join(timeout)
+                if timeout==1:raise OSError('original final-reader-join failure')
+            thread.join=join;return thread
+        with tempfile.TemporaryDirectory() as folder,patch.object(module,'gc',fake),patch.object(module,'BatchAutomaticGcDeferral',Scope),patch.object(module.threading,'Thread',make_thread):
+            recorder=batch_tests.stream_tests.HistoryRecorder();bridge=HoldBridge(recorder)
+            with self.assertRaisesRegex(OSError,'original final-reader-join failure'):
+                run_hold_fixture(folder,recorder=recorder,bridge=bridge)
+            self.assertEqual(bridge.commands[-1],'stop');self.assertTrue(bridge.handle.close.called)
+        self.assertTrue(fake.enabled);self.assertTrue(captured[0]['restored'])
+
+
+class FeedbackTerminalProbeTests(unittest.TestCase):
+    """One anticipatory read with the existing post-terminal source gate unchanged."""
+    def setup_probe(self):
+        """Use the real hold's admitted frame, with an older accepted action source."""
+        module=batch_tests.client_module
+        hold,healthy,_,_,runtime=fixture();hold.begin_prediction(healthy)
+        request=copy.deepcopy(runtime['settled']['arguments'])
+        guard=SimpleNamespace(trip=None,reason='healthyNativeEvidence')
+        probe=module.BatchFeedbackTerminalProbe()
+        values=[hold,guard,healthy,request,1_100_000_000,1_165_000_000,set()]
+        return probe,values
+
+    def test_exact_pending_horizon_and_healthy_age_window(self):
+        """A source may be newer than the dispatched frame; only its real age counts."""
+        probe,values=self.setup_probe()
+        self.assertGreater(values[2]['frameId'],values[3]['frameId'])
+        self.assertTrue(probe.reserve(*values))
+        self.assertEqual(probe.evidence['sourceAgeUpperBoundMs'],106)
+        self.assertEqual(probe.evidence['qualifyingSource']['frameId'],187)
+        self.assertFalse(probe.reserve(*values))
+        self.assertEqual(probe.evidence['requestId'],'prior')
+
+    def test_probe_refuses_early_late_used_foreign_or_already_delivered_state(self):
+        """None of these refusals consumes a probe or changes the existing hold."""
+        changes=[lambda v:v.__setitem__(5,1_159_999_999),
+                 lambda v:v.__setitem__(5,1_209_000_000),
+                 lambda v:setattr(v[0],'used',1),lambda v:setattr(v[0],'phase','complete'),
+                 lambda v:setattr(v[0],'inflight',False),lambda v:setattr(v[1],'trip',{'reason':'enemy'}),
+                 lambda v:setattr(v[1],'reason','nativeSensorStale'),
+                 lambda v:v[2].update(frameId=999),
+                 lambda v:v[2].update(sourceFrame=dict(v[2]['sourceFrame'],captureEpoch='foreign')),
+                 lambda v:v[6].add('prior'),lambda v:v.__setitem__(4,True),
+                 lambda v:v[3]['steps'][0].update(durationMs=50.0)]
+        for change in changes:
+            with self.subTest(change=change):
+                probe,values=self.setup_probe();values[2]=copy.deepcopy(values[2]);change(values)
+                self.assertFalse(probe.reserve(*values));self.assertFalse(probe.evidence['attempted'])
+
+    def test_failed_or_empty_probe_cannot_be_retried_by_another_action(self):
+        """Reservation is consumed before transport and survives all later request names."""
+        probe,values=self.setup_probe();self.assertTrue(probe.reserve(*values))
+        values[3]=dict(values[3],requestId='next-action');values[5]+=1_000_000
+        self.assertFalse(probe.reserve(*values));self.assertTrue(probe.evidence['attempted'])
+        self.assertIsNone(probe.evidence['observedSource'])
+
+    def test_actual904_clock_shape_stays_excluded_by_original_terminal_gate(self):
+        """Replay retained clock values on synthetic pixels, never backdate source authority."""
+        from p2p_executed_history import source_after_terminal
+        module=batch_tests.client_module;probe,values=self.setup_probe();probe.reserve(*values)
+        prior=source(903,32593.28);repeated=source(904,32622.8123)
+        predecessor=dict(frameId=903,sourceFrame=prior['sourceFrame'],endedAtMs=32735.7377)
+        probe.received(repeated,1_166_000_000,True)
+        self.assertFalse(source_after_terminal(repeated,module.observation_timestamp(repeated),predecessor))
+        self.assertEqual(probe.evidence['observedSource']['freshnessAtMs'],32622.8123)
+        self.assertTrue(probe.evidence['attempted'])
+
+    def test_genuinely_post_terminal_probe_pixels_need_no_additional_frame(self):
+        """The probe does not add a new wait, clock or admission/reset policy."""
+        from p2p_executed_history import source_after_terminal
+        module=batch_tests.client_module;probe,values=self.setup_probe();probe.reserve(*values)
+        prior=source(903,32593.28);fresh=source(905,32740)
+        predecessor=dict(frameId=903,sourceFrame=prior['sourceFrame'],endedAtMs=32735.7377)
+        probe.received(fresh,1_166_000_000,True)
+        self.assertTrue(source_after_terminal(fresh,module.observation_timestamp(fresh),predecessor))
+        foreign=copy.deepcopy(fresh);foreign['sourceFrame']['captureEpoch']='foreign'
+        with self.assertRaises(ValueError):source_after_terminal(foreign,module.observation_timestamp(foreign),predecessor)
+        self.assertFalse(probe.reserve(*values))
+
+    def test_original_high_resolution_sleep_does_not_use_event_timeout(self):
+        """Exercise the existing helper with an exact fake clock, without real sleeping."""
+        module=batch_tests.client_module;clock=SimpleNamespace(now=1.);sleeps=[]
+        def sleep(duration):
+            sleeps.append(duration);clock.now+=duration
+        stop=SimpleNamespace(is_set=lambda:False,wait=lambda value:self.fail('Event.wait used'))
+        with patch.object(module.time,'perf_counter',lambda:clock.now),patch.object(module.time,'sleep',sleep):
+            self.assertTrue(module.sleep_until(1.002,stop))
+        self.assertAlmostEqual(sum(sleeps),.002);self.assertTrue(all(x<=.005 for x in sleeps))
+
+
+def run_feedback_probe_method(*,empty=False,hazard=False,reader_race=False,default=False,expired=False):
+    """Run the exact production feedback method with inert clock/policy/transport boundaries.
+
+    Receipt verification is real. The fake poll only supplies the already qualified
+    frame/receipt envelope; full frame intake remains covered by the loop cohort.
+    """
+    import threading
+    from p2p_executed_history import MODE, encode_controller_step
+    module=batch_tests.client_module
+    probe,values=FeedbackTerminalProbeTests().setup_probe()
+    hold,guard,current,request,accepted,_,received=values
+    settled=fixture()[-1]['settled'];receipt=copy.deepcopy(settled['receipt'])
+    frame=source(request['frameId'],request['observedAtMs'])
+    policy=batch_tests.stream_tests.HistoryPolicy();policy.predict(None,(192,192))
+    clock=SimpleNamespace(ns=1_155_000_000);calls=[];sleeps=[];waits=[];failures=[];inbox=[]
+    stopped=threading.Event();token=('original',1,None,'run')
+    namespace=dict(time=SimpleNamespace(perf_counter_ns=lambda:clock.ns,perf_counter=lambda:clock.ns/1e9),
+        history_predecessor=None,EXECUTED_HISTORY_MODE=MODE,
+        encode_controller_step=encode_controller_step,observation_timestamp=module.observation_timestamp,
+        copy=copy,math=module.math,args=SimpleNamespace(model='p2p'),policy=policy,
+        batch_source_hold=None if default else hold,host_timing=None,stopped=stopped,
+        control=SimpleNamespace(prediction_token=lambda:token,snapshot=lambda:('run',None)),
+        deadline=1.156 if expired else 1.3,
+        hybrid=SimpleNamespace(check_leg_deadline=lambda:None),recorder=SimpleNamespace(check=lambda:None),
+        receive_lock=threading.Lock(),receipt_inbox=inbox,report={'serverDroppedReceipts':0},
+        server_snapshot=(1.07,current),feedback_probe=None if default else probe,
+        scout_guard=guard,history_receipts=received,
+        forbid_reconnect=lambda error,reason:failures.append((str(error),reason)))
+    def deliver():
+        """Publish one exact terminal receipt, never an acceptance as completion."""
+        if not inbox:inbox.append(copy.deepcopy(receipt));received.add(request['requestId'])
+    def advance(deadline,stop):
+        """Keep this test input-free and make delayed reader delivery explicit."""
+        sleeps.append(clock.ns);clock.ns=round(deadline*1e9)
+        if empty and clock.ns>=1_180_000_000:deliver()
+        return not stop.is_set()
+    def wait(duration):
+        """Only unchanged default execution may retain the old wait call."""
+        waits.append(duration)
+        if not default:raise AssertionError('Source-hold feedback used Event.wait')
+        clock.ns+=round(duration*1e9)
+        if clock.ns>=1_180_000_000:deliver()
+        return False
+    stopped.wait=wait
+    def poll(origin,wake=None,feedback=None):
+        """Model reader arbitration before reservation, then one consumed transport call."""
+        if reader_race:deliver()
+        if not probe.reserve(hold,guard,current,request,accepted,clock.ns,received):return
+        calls.append((origin,clock.ns))
+        if not empty:deliver()
+        probe.received(current,clock.ns,request['requestId'] in received)
+        if hazard:stopped.set()
+    namespace.update(sleep_until=advance,poll_frame=poll)
+    tree=ast.parse(Path(module.__file__).read_text(encoding='utf-8'))
+    node=copy.deepcopy(next(node for node in ast.walk(tree)
+        if isinstance(node,ast.FunctionDef) and node.name=='finish_executed_feedback'))
+    exec(compile(ast.Module(body=[node],type_ignores=[]),module.__file__,'exec'),namespace)
+    result=dict(steps=copy.deepcopy(request['steps']),acceptance=copy.deepcopy(settled['acceptance']),
+        hybridNavigation={'owner':'controller'},executedHistoryAcceptedClientNs=accepted)
+    event,error=namespace['finish_executed_feedback'](result,frame,request,token)
+    return SimpleNamespace(event=event,error=error,probe=probe,calls=calls,sleeps=sleeps,
+        waits=waits,inbox=inbox,policy=policy,failures=failures)
+
+
+class FeedbackTerminalProbeLoopTests(unittest.TestCase):
+    """Qualify the actual feedback loop without a model, pipe or scheduler sleep."""
+    def test_actual_poll_skips_delivered_receipt_before_probe_expiry_but_not_hazards(self):
+        """Run the exact poll entry: reader completion may win while intake is locked."""
+        from contextlib import nullcontext
+        import threading
+        module=batch_tests.client_module;stopped=threading.Event();calls=[]
+        def request(*args,**kwargs):
+            calls.append(args);raise AssertionError('Redundant native probe')
+        namespace=dict(time=SimpleNamespace(perf_counter_ns=lambda:1_500_000_000,perf_counter=lambda:1.5),
+            host_timing=None,math=module.math,nullcontext=nullcontext,receive_lock=threading.Lock(),
+            combat_intake_boundary=nullcontext,stopped=stopped,deadline=2.,
+            hybrid=SimpleNamespace(check_leg_deadline=lambda:None),history_receipts={'prior'},
+            server_snapshot=(1.,{'serverNowMs':1000}),bridge=SimpleNamespace(request=request))
+        tree=ast.parse(Path(module.__file__).read_text(encoding='utf-8'))
+        node=copy.deepcopy(next(n for n in ast.walk(tree) if isinstance(n,ast.FunctionDef) and n.name=='poll_frame'))
+        node.body=[ast.Global(names=n.names) if isinstance(n,ast.Nonlocal) else n for n in node.body]
+        exec(compile(ast.fix_missing_locations(ast.Module(body=[node],type_ignores=[])),module.__file__,'exec'),namespace)
+        poll=lambda:namespace['poll_frame']('feedback-terminal',feedback=({'requestId':'prior','expiresAtMs':1150},1_100_000_000))
+        self.assertIsNone(poll());self.assertEqual(calls,[])
+        stopped.set()
+        with self.assertRaisesRegex(RuntimeError,'reader stopped'):poll()
+        stopped.clear();namespace['deadline']=1.5
+        with self.assertRaisesRegex(RuntimeError,'lease ended'):poll()
+        namespace['deadline']=2.
+        def expired_leg():raise RuntimeError('original leg deadline')
+        namespace['hybrid']=SimpleNamespace(check_leg_deadline=expired_leg)
+        with self.assertRaisesRegex(RuntimeError,'original leg deadline'):poll()
+        namespace['hybrid']=SimpleNamespace(check_leg_deadline=lambda:None);namespace['history_receipts'].clear()
+        with self.assertRaisesRegex(RuntimeError,'original request deadline'):poll()
+        self.assertEqual(calls,[])
+
+    def test_original_terminal_checker_commits_after_one_bounded_probe(self):
+        result=run_feedback_probe_method()
+        self.assertIsNone(result.error);self.assertEqual(result.event['outcome'],'committed')
+        self.assertEqual(result.policy.commits,['prior']);self.assertEqual(len(result.calls),1)
+        self.assertGreaterEqual(result.calls[0][1],1_160_000_000)
+        self.assertEqual(result.calls[0][0],'feedback-terminal')
+        self.assertEqual(result.probe.evidence['observedSource']['frameId'],187);self.assertEqual(result.waits,[])
+
+    def test_empty_probe_waits_for_original_reader_without_another_rpc(self):
+        result=run_feedback_probe_method(empty=True)
+        self.assertIsNone(result.error);self.assertEqual(len(result.calls),1)
+        self.assertFalse(result.probe.evidence['receiptObserved'])
+        self.assertEqual(result.probe.evidence['observedSource']['frameId'],187)
+        self.assertEqual(result.policy.commits,['prior'])
+
+    def test_reader_delivery_between_eligibility_and_lock_skips_probe(self):
+        result=run_feedback_probe_method(reader_race=True)
+        self.assertIsNone(result.error);self.assertEqual(result.calls,[])
+        self.assertFalse(result.probe.evidence['attempted']);self.assertEqual(result.policy.commits,['prior'])
+
+    def test_latched_hazard_wins_even_when_probe_retains_completed_receipt(self):
+        result=run_feedback_probe_method(hazard=True)
+        self.assertIn('interrupted',str(result.error));self.assertEqual(result.event['outcome'],'failed')
+        self.assertEqual(len(result.inbox),1);self.assertEqual(result.inbox[0]['status'],'completed')
+        self.assertEqual(result.policy.commits,[]);self.assertIsNone(result.event['receipt'])
+
+    def test_original_lease_expiry_prevents_probe_and_history_commit(self):
+        result=run_feedback_probe_method(expired=True)
+        self.assertIn('lease ended',str(result.error));self.assertEqual(result.calls,[])
+        self.assertEqual(result.policy.commits,[]);self.assertFalse(result.probe.evidence['attempted'])
+
+    def test_default_feedback_has_no_probe_or_new_wait_path(self):
+        result=run_feedback_probe_method(default=True)
+        self.assertIsNone(result.error);self.assertEqual(result.calls,[]);self.assertEqual(result.sleeps,[])
+        self.assertTrue(result.waits);self.assertFalse(result.probe.evidence['attempted'])
 
 
 if __name__=='__main__':unittest.main()

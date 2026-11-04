@@ -46,7 +46,10 @@ def audit_recording(directory, binding, episode):
             and hello.get('observationProfile') == approach.PROFILE, 'Input lease contract changed')
     require(type(episode.get('startedAtClientNs')) is int and type(episode.get('deadlineClientNs')) is int,
             'Original controller clock bounds are missing')
-    replay = approach.ApproachController(binding, hello, episode['startedAtClientNs'], deadline_ns=episode['deadlineClientNs'])
+    source_hold = 'sourceReacquisition' in episode
+    require(not source_hold or binding['policy']['version'] == 2, 'Source reacquisition requires the explicit v2 review')
+    replay = approach.ApproachController(binding, hello, episode['startedAtClientNs'],
+        deadline_ns=episode['deadlineClientNs'], source_reacquisition=source_hold)
     replay_stop = None
     replay_outcome = None
     route = approach.route_geometry(binding['route'])
@@ -59,6 +62,8 @@ def audit_recording(directory, binding, episode):
     pending = None
     capture = None
     target_seen = None
+    initial_target_deadline = (episode['startedAtClientNs'] + 1_500_000_000
+                               if binding['policy']['version'] == 2 else None)
     endpoint_events = []
     releases, stops = [], []
 
@@ -113,7 +118,8 @@ def audit_recording(directory, binding, episode):
                     image_files[filename] = approach.digest(pixels)
                 require(event.get('rgbSha256') == image_files[filename], 'Original raw RGB changed')
                 evidence = frame.get('combatEvidence') or {}
-                if evidence.get('state') == 'valid' and evidence.get('enemyBarCandidates'):
+                if (evidence.get('state') == 'valid' and evidence.get('enemyBarCandidates')
+                        and (initial_target_deadline is None or replay.target_seen_at == frame['sourceFrame']['freshnessAtMs'])):
                     target_seen = frame['sourceFrame']['freshnessAtMs']
             latest = event
             observations.append(event)
@@ -138,7 +144,12 @@ def audit_recording(directory, binding, episode):
             source = frame['sourceFrame']
             require(capture is None or capture == source['captureEpoch'], 'Capture owner changed during actions')
             capture = source['captureEpoch']
-            require(target_seen is not None and 0 <= source['freshnessAtMs'] - target_seen <= 750, 'Target absence exceeded the reviewed corridor allowance')
+            if target_seen is None:
+                require(initial_target_deadline is not None and type(event.get('clientTimeNs')) is int
+                        and episode['startedAtClientNs'] <= event['clientTimeNs'] < initial_target_deadline,
+                        'Initial target acquisition exceeded its original allowance')
+            else:
+                require(0 <= source['freshnessAtMs'] - target_seen <= 750, 'Target absence exceeded the reviewed corridor allowance')
             pose = frame['navigationPose']
             px, py = pose['x'] - start[0], pose['y'] - start[1]
             along, cross = px * direction[0] + py * direction[1], abs(px * direction[1] - py * direction[0])
@@ -206,6 +217,13 @@ def audit_recording(directory, binding, episode):
             abandoned[key] = event
             replay_stop = event['reason']
             pending = None
+        elif kind == 'sourceReacquisitionRelease':
+            require(source_hold and replay_stop is None and replay_outcome == 'sourceReacquisitionReleaseRequired',
+                    'Unexplained source reacquisition release')
+            require(event.get('payloadBytes') == 0 and type(event.get('clientReceivedNs')) is int,
+                    'Source reacquisition release lacks its exact reception clock')
+            terminal(event['response'])
+            replay.source_reacquisition_released(event['response'], b'', event['clientReceivedNs'])
         elif kind in ('endpointRelease', 'release', 'stop'):
             response = event['response']
             require(event.get('payloadBytes') == 0 and response.get('type') == ('stopped' if kind == 'stop' else 'released'),
@@ -243,7 +261,16 @@ def audit_recording(directory, binding, episode):
             and episode.get('receiptsComplete') is True and episode.get('releaseAcknowledged') is True
             and episode.get('stopAcknowledged') is True, 'Worker summary disagrees with original evidence')
     require({row['requestId']: row for row in episode['receipts']} == receipts, 'Worker terminal copies differ')
+    if initial_target_deadline is not None:
+        require(episode.get('initialTargetAcquisition') == replay.initial_target_acquisition(),
+                'Initial target acquisition clock or original native observation differs')
+    if source_hold:
+        require(approach.canonical(episode['sourceReacquisition']) == approach.canonical(replay.source_reacquisition()),
+                'Source reacquisition evidence or original bounds differ')
     if episode.get('status') == 'completed':
+        require(initial_target_deadline is None or (replay.first_target_at_ns is not None
+                and episode['startedAtClientNs'] <= replay.first_target_at_ns < initial_target_deadline),
+                'Route completion lacks native target acquisition within the original allowance')
         require(replay_stop is None and replay.complete and len(endpoint_events) == 1 and len(releases) == 2
                 and all(row['status'] == 'completed' for row in receipts.values())
                 and episode.get('navigationVerified') is True and episode.get('navigation', {}).get('completedLegs') == 1,

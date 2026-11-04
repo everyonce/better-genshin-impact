@@ -334,9 +334,54 @@ function actOneStatuePanelRecoveryReady(o,now,session) {
     return Number.isFinite(amount)&&amount>0&&amount<=10000&&[r.x,r.y,r.width,r.height].every(Number.isFinite)&&
         r.x>=1380&&r.x<=1420&&r.y>=580&&r.y<=630&&r.width>=450&&r.width<=530&&r.height>=20&&r.height<=50;
 }
+// Only these two Statue requests may recognize the retained, geometrically bounded Auto OCR alias.
+function actOneStatueDialogueScope(request) {
+    return !!(request&&request.mission==='questStep'&&
+        ['actTwoStarfellStatueOpen','statueBlessingOpen'].indexOf(request.step)>=0);
+}
+// Keep raw OCR unchanged. Missing Auto permits one same-image crop, never an input.
+function actOneStatueDialogueAnchors(rows,allowMissingAuto) {
+    if(!Array.isArray(rows)||rows.some(function(r){return !r||typeof r.text!=='string'||
+        ![r.x,r.y,r.width,r.height].every(Number.isFinite)||r.width<=0||r.height<=0;}))return null;
+    function text(r){return r.text.trim();}
+    function box(r,x0,x1,y0,y1,w0,w1,h0,h1){return r.x>=x0&&r.x<=x1&&r.y>=y0&&r.y<=y1&&
+        r.width>=w0&&r.width<=w1&&r.height>=h0&&r.height<=h1;}
+    var ids=rows.filter(function(r){return /^UID\b/i.test(text(r))||/^\d{9}$/.test(text(r))&&r.x>=1600&&r.y>=1030;}),
+        speakers=rows.filter(function(r){return text(r)==='Statue of The Seven';}),
+        autos=rows.filter(function(r){return text(r)==='Auto'||text(r)==='utc';});
+    if(ids.length!==1||!/^UID:\s*693306810$/.test(text(ids[0]))||
+       !box(ids[0],1600,1850,1030,1065,120,260,15,40)||ids[0].x+ids[0].width>1915||ids[0].y+ids[0].height>1080||
+       speakers.length!==1||!box(speakers[0],730,1050,825,910,180,450,20,55)||
+       autos.length>1||autos.length===0&&!allowMissingAuto||
+       autos.length===1&&!box(autos[0],0,180,0,80,30,150,15,45))return null;
+    return {uid:ids[0],speaker:speakers[0],auto:autos.length?autos[0]:null};
+}
+// A silent Statue subtitle may be absent from OCR; unrelated text or any choice prevents advance.
+function actOneStatueSilentIntro(rows) {
+    var anchors=actOneStatueDialogueAnchors(rows,false);
+    return !!(anchors&&rows.every(function(r){return r===anchors.uid||r===anchors.speaker||r===anchors.auto||
+        /^(?:\.{3}|…)$/.test(r.text.trim())&&r.x>=800&&r.x<=1100&&r.y>=900&&r.y<=1000&&
+        r.width>=3&&r.width<=200&&r.height>=5&&r.height<=70;}));
+}
+// The one intro advance uses the original capture clock, UID and exact retained screenshot identity.
+function actOneStatueIntroTarget(o,now,session) {
+    var h=o&&o.hud;
+    if(!o||typeof session!=='string'||!session||o.session!==session||!Number.isInteger(o.frameId)||o.frameId<1||
+       !Number.isFinite(now)||!Number.isFinite(o.capturedAt)||!Number.isFinite(o.timestamp)||o.capturedAt<=0||
+       o.timestamp<o.capturedAt||now<o.timestamp||now-o.capturedAt>1000||
+       o.screenshotPath!=='observations/'+session+'/frame-'+String(o.frameId).padStart(4,'0')+'.png'||
+       o.map!==null||!h||h.world!==false||h.health!==null||h.auto!==true||h.choice!==false||
+       h.dialogueReady!==true||h.journal!==false||h.bigMap!==false||h.climbing!==false||
+       h.loading===true||h.unknownHud===true||!actOneStatueSilentIntro(o.ocr)||
+       Object.prototype.hasOwnProperty.call(o,'uiObservation')||
+       [o.mapDiagnostic,o.timings&&o.timings.mapDiagnostic].some(function(d){return d&&typeof d.mode==='string'&&
+           d.mode.indexOf('inventory-ui-only')===0;}))return null;
+    return JSON.parse(JSON.stringify(actOneStatueDialogueAnchors(o.ocr,false)));
+}
+
 // Open only the explicitly recognized Blessing choice from this captured Statue dialogue.
 // UID must be positively visible here; an earlier world/account witness grants no authority.
-function actOneStatueBlessingChoiceTarget(o,now,session) {
+function actOneStatueBlessingChoiceTarget(o,now,session,allowScopedAutoAlias) {
     var h=o&&o.hud,rows=o&&o.ocr;
     if(!o||typeof session!=='string'||!session||o.session!==session||
        !Number.isInteger(o.frameId)||o.frameId<1||!Number.isFinite(now)||
@@ -361,8 +406,9 @@ function actOneStatueBlessingChoiceTarget(o,now,session) {
     if(identities.length!==1||!/^UID:\s*693306810$/.test(text(identities[0]))||
        !box(identities[0],1600,1850,1030,1065,120,260,15,40)||
        identities[0].x+identities[0].width>1915||identities[0].y+identities[0].height>1080)return null;
-    var speakers=rows.filter(function(r){return text(r)==='Statue of The Seven';}),
-        autos=rows.filter(function(r){return text(r)==='Auto';}),
+    var scoped=allowScopedAutoAlias===true&&actOneStatueDialogueAnchors(rows,false),
+        speakers=rows.filter(function(r){return text(r)==='Statue of The Seven';}),
+        autos=rows.filter(function(r){return text(r)==='Auto'||scoped&&r===scoped.auto;}),
         blessings=rows.filter(function(r){return text(r)==="Statue's Blessing";});
     if(speakers.length!==1||!box(speakers[0],730,1050,825,910,180,450,20,55)||
        autos.length!==1||!box(autos[0],0,180,0,80,30,150,15,45)||
@@ -2482,6 +2528,8 @@ function createActOneAdapter(sessionId,options) {
     var worldInventoryCloseAttempted=false;
     // A new request cannot inherit another request's positive before-frame or B attempt.
     var inventoryUiPauseBefore=null,inventoryUiPauseAdmittedAt=null,inventoryUiPauseAttempted=false;
+    // A request may reread its own UID pixels once before B, never after an input attempt.
+    var inventoryUiPauseUidCropAttempted=false;
     var expectedSession = Number(sessionId), held = null, request = null, events = [], lastObservation = null, navLastAcceptedPosition = null, heartbeat = null, focusRecoveryAttempted = false, wolfInfoAttempted = false, lionDomainStartAttempted=false, lionPartyStartAttempted=false, lionFalconWaypointAttempted=false, wolfContinueAttempted = false, wolfInventoryContinueAttempted = false, wolfInventoryOpenAttempted = false, wolfKaeyaFoodAttempted = false, wolfFeedKaeyaAttempted = false, wolfRecoveryFoodUseAttempted=false, wolfRecoveryFoodSelectAttempted=false, wolfRecoveryFoodFeedAttempted=false, wolfRecoveryFoodCloseAttempted=false, wolfExitFlameAttempted=false, wolfWindContinueAttempted=false, wolfWindSpaceAttempted=false, wolfWindRideContinueAttempted=false, wolfWindRideSpaceAttempted=false, wolfGlideContinueAttempted=false, wolfGlideMoves=0, wolfGlideLastMoveFrame=null, wolfGlideBaseline=null, wolfDefensiveCryoAttempted = false, wolfAimCryoAttempted = false, wolfCloseFoodAttempted = false, wolfCloseFoodCompletedAt = null, wolfCloseFoodLookAttempted = false, wolfCloseFoodForwardAttempted = false, wolfCloseFoodSkillAttempted = false, wolfTurretSkillAttempted = false, wolfTurretForwardAttempted = false, wolfTurretSkillFinishedAt = null, wolfTurretBaseline = null, wolfConsoleContinueAttempted=false, wolfConsoleInteractAttempted=false, wolfApproachContinueAttempted=false, wolfApproachMoveAttempted=false, wolfApproachHydroFrame=null,wolfApproachHydroReceiptId=null,wolfCombatSeekForwards=0,wolfCombatSeekTurns=0,wolfCombatSeekFrames=[],wolfBurstContinueAttempted=false,wolfBurstQAttempted=false,wolfBurstPauseAttempted=false,wolfCryoContinueAttempted=false,wolfCryoResumeConfirmedAt=null,wolfCryoBaseline=null,wolfCryoSkillAttempted=false,wolfCryoPauseAttempted=false,wolfCryoWaitMs=6500,wolfCryoWaitPlan=null,wolfReviveContinueAttempted=false,wolfReviveContinueFrame=null,wolfReviveSelectAttempted=false,wolfReviveAmberBaseline=null,wolfReviveRecoverySelectAttempted=false,wolfReviveRecoveryConfirmAttempted=false,wolfReviveRecoverySelectFrame=null,wolfReviveRecoveryConfirmFrame=null,wolfReviveRecoveryAmberBaseline=null,ocrPrimitiveMs=0,ocrReadCount=0;
     function dispose(v) { if (v && typeof v.dispose === 'function') v.dispose(); }
     var wolfCryoLastInputFrame = null;
@@ -3229,7 +3277,7 @@ function createActOneAdapter(sessionId,options) {
             return matches.length===1?matches[0]:null;
         } finally {dispose(mask);dispose(hsv);dispose(crop);}
     }
-    function readEnemyBars(img, rows, level, nativeAcquisition) {
+    function readEnemyBars(img, rows, level, nativeAcquisition, groundObservation) {
         enemyBarDiagnostic={level:level||1,candidates:0,localReads:[],greenMask:null};
         var top=nativeAcquisition===true?30:100;
         var left=nativeAcquisition===true||level===12||level===13?0:350;
@@ -3237,17 +3285,52 @@ function createActOneAdapter(sessionId,options) {
         try {
             mask=crop.srcMat.inRange(new OpenCvSharp.OpenCvSharp.Scalar(75,75,230),new OpenCvSharp.OpenCvSharp.Scalar(110,110,255));
             var contours=mask.findContoursAsArray(OpenCvSharp.OpenCvSharp.RetrievalModes.External,OpenCvSharp.OpenCvSharp.ContourApproximationModes.ApproxSimple),candidates=[],bars=[];
-            for(var i=0;i<contours.length;i++) {
-                var b=OpenCvSharp.OpenCvSharp.Cv2.boundingRect(contours[i]),w=Number(b.width),h=Number(b.height);
+            var contourCount=contours&&contours.length;
+            if(groundObservation===true){
+                // ClearScript exposes native arrays as indexed objects, not necessarily JS Arrays.
+                if(contours&&contourCount===undefined)contourCount=contours.Length;
+                if(!contours||!Number.isInteger(contourCount)||contourCount<0||
+                   typeof OpenCvSharp.OpenCvSharp.Cv2.countNonZero!=='function'||
+                   typeof OpenCvSharp.OpenCvSharp.Cv2.contourArea!=='function')
+                    throw new Error('Ground enemy detector result unavailable or malformed');
+                var redPixels=Number(OpenCvSharp.OpenCvSharp.Cv2.countNonZero(mask));
+                if(!Number.isInteger(redPixels)||redPixels<0||redPixels>1920*870)
+                    throw new Error('Ground enemy detector pixel count malformed');
+                enemyBarDiagnostic.contourCount=contourCount;enemyBarDiagnostic.redPixels=redPixels;
+                // Excess color/components cannot establish a measured clear scene.
+                if(contourCount>4096||redPixels>1920*870*.05){enemyBarDiagnostic.overloaded=true;return [];}
+            }
+            for(var i=0;i<(groundObservation===true?contourCount:contours.length);i++) {
+                var b=OpenCvSharp.OpenCvSharp.Cv2.boundingRect(contours[i]);
+                if(groundObservation===true){
+                    if(!b)throw new Error('Ground enemy detector rectangle missing');
+                    b={x:b.x===undefined?b.X:b.x,y:b.y===undefined?b.Y:b.y,
+                        width:b.width===undefined?b.Width:b.width,height:b.height===undefined?b.Height:b.height};
+                    if(![b.x,b.y,b.width,b.height].every(Number.isInteger)||b.x<0||b.y<0||
+                       b.width<1||b.height<1||b.x+b.width>1920||b.y+b.height>870)
+                        throw new Error('Ground enemy detector rectangle malformed');
+                }
+                var w=Number(b.width),h=Number(b.height);
                 // A nearly defeated enemy has a very short red segment. Requiring
                 // a wide bar made the controller lose the target before the final hit.
                 var bar={x:left+Number(b.x)+w/2,y:top+Number(b.y)+h/2,width:w,height:h};
-                if(level==='any'&&request&&(request.mission==='navigation'&&["Go to the exam point","Talk to Amber","Check the suspicious location and eliminate any threats","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||/^actTwo/.test(request.step||''))&&typeof OpenCvSharp.OpenCvSharp.Cv2.contourArea==='function')
+                if(level==='any'&&request&&(groundObservation===true||request.mission==='navigation'&&["Go to the exam point","Talk to Amber","Check the suspicious location and eliminate any threats","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||/^actTwo/.test(request.step||''))&&typeof OpenCvSharp.OpenCvSharp.Cv2.contourArea==='function')
                     bar.rectangularity=Number(OpenCvSharp.OpenCvSharp.Cv2.contourArea(contours[i],false))/Math.max(1,(w-1)*(h-1));
+                if(groundObservation===true&&(!Number.isFinite(bar.rectangularity)||bar.rectangularity<0||bar.rectangularity>1.05))
+                    throw new Error('Ground enemy detector contour area malformed');
                 if(actOneEnemyBarSize(w,h)||((level===4||level===5||level===10||level===11||level===12||level===13||level===14||level==='any')&&w>=2&&w<=300&&h>12&&h<=20)||nativeAcquisition===true&&w>=30&&w<=300&&h>20&&h<=32&&w/h>=3.5) candidates.push(bar);
             }
             candidates.sort(function(a,b){return b.height-a.height;});
             enemyBarDiagnostic.candidates=candidates.length;
+            if(groundObservation===true){
+                // Retain rejected bar-shaped components too: failed level OCR is not clear ground.
+                enemyBarDiagnostic.rawCandidates=candidates.slice(0,64);
+                if(candidates.length>64){enemyBarDiagnostic.overloaded=true;return [];}
+                // Small near-square fragments in the side HUD are not field bars. Wide edge bars
+                // and same-image level-anchored depleted bars remain candidates, never silently clear.
+                enemyBarDiagnostic.fieldCandidates=candidates.filter(function(bar){return bar.x>=350&&bar.x<=1600||
+                    bar.width/bar.height>=3.5||actOneOutdoorEnemyBarCandidate(bar,rows);});
+            }
             // Uncharted outdoor walking must stop for a visible red bar even when
             // OCR misses the enemy level. These candidates never authorize combat.
             if(level==='any'){
@@ -3255,7 +3338,7 @@ function createActOneAdapter(sessionId,options) {
                 // The rounded ends occupy much of a depleted short bar. Two
                 // recorded Lv.5 bars scored .731/.765 rather than .8. Recover
                 // only small near-rectangles with a same-image exact level anchor.
-                if(nativeAcquisition===true){
+                if(nativeAcquisition===true&&groundObservation!==true){
                     var depletedReads=0;
                     for(var d=0;d<candidates.length&&depletedReads<2;d++){
                         var cb=candidates[d];
@@ -3431,7 +3514,7 @@ function createActOneAdapter(sessionId,options) {
             statueDialogueState={advanceAttempted:false,leaveAttempted:false,lastInputFrame:-1};
             lisaNavigationState={active:false,lastInputFrame:-1,lastField:null};
             worldInventoryCloseAttempted=false;
-            inventoryUiPauseBefore=null;inventoryUiPauseAdmittedAt=null;inventoryUiPauseAttempted=false;
+            inventoryUiPauseBefore=null;inventoryUiPauseAdmittedAt=null;inventoryUiPauseAttempted=false;inventoryUiPauseUidCropAttempted=false;
             lionDomainStartAttempted=false;lionPartyStartAttempted=false;lionFalconWaypointAttempted=false;
             wolfClosingState={begun:false,inputs:0,lastFrame:-1,lastFinishedAt:null};
             wolfChestAttempted=false;
@@ -3465,7 +3548,7 @@ function createActOneAdapter(sessionId,options) {
             if(value.mission==='questStep'&&['lionFieldCombat','lionFieldProbe'].indexOf(value.step)>=0)names.push('lion-field-combat.js','world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&value.step==='lionFieldProbe')names.push('paused-navigation-anchor.js','lisa-climb-release.js');
             if(value.mission==='questStep'&&value.step==='lisaStatueRecovery')names.push('lisa-statue-recovery.js','world-inventory.js','local-pause.js');
-            if(value.mission==='questStep'&&value.step==='combatStatueRetreat')names.push('combat-statue-retreat.js','world-inventory.js','local-pause.js');
+            if(value.mission==='questStep'&&['combatStatueRetreat','actTwoStarfellInventoryTeleport'].indexOf(value.step)>=0)names.push('combat-statue-retreat.js','world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&value.step==='combatStatueHeal')names.push('combat-statue-retreat.js','combat-statue-heal.js','combat-statue-panel.js','world-inventory.js','local-pause.js','statue-dialogue.js');
             if(value.mission==='questStep'&&value.step==='worldInventoryClose')names.push('world-inventory.js');
             if(value.mission==='questStep'&&(value.step==='lionStart'||value.step==='lionPartyStart'))names.push('lion-entry.js');
@@ -3509,9 +3592,30 @@ function createActOneAdapter(sessionId,options) {
             return true;
         },
         focusGame: async function () { sessionReady(); await genshin.focusGame(); ready(); },
-        requireInputReady: ready, keyPress: async function (key) {
+        requireInputReady: ready, keyPress: async function (key,source) {
             var closingJournal=key==='VK_ESCAPE' && lastObservation && lastObservation.hud.journal;
-            await boundedKey(key,60);
+            // Only an explicit observation supplies provenance; legacy omitted/numeric arguments stay unchanged.
+            var explicit=source&&typeof source==='object',frameId,sourceGuard;
+            if(explicit){
+                frameId=source.frameId;
+                sourceGuard=function(){
+                    checkStop();ready();
+                    var stamp=source.hud&&source.hud.captureStamp,now=Date.now();
+                    if(!request||!lastObservation||source.session!==request.session||source.session!==lastObservation.session||
+                       !Number.isInteger(frameId)||frameId<1||frameId!==lastObservation.frameId||
+                       !Number.isFinite(source.timestamp)||source.timestamp!==lastObservation.timestamp||
+                       now<source.timestamp||now-source.timestamp>1000||
+                       source.screenshotPath!==lastObservation.screenshotPath||
+                       !stamp||stamp.session!==source.session||stamp.frameId!==frameId||
+                       !Number.isFinite(stamp.capturedAt)||stamp.capturedAt<=0||stamp.capturedAt>source.timestamp||
+                       stamp.capturedAt!==lastObservation.capturedAt||now-stamp.capturedAt>1000||
+                       JSON.stringify(source.ocr)!==JSON.stringify(lastObservation.ocr)||
+                       JSON.stringify(source.hud)!==JSON.stringify(lastObservation.hud)||
+                       JSON.stringify(source.map)!==JSON.stringify(lastObservation.map))
+                        throw new Error('Explicit key source changed or expired before input');
+                };
+            }
+            await boundedKey(key,60,frameId,sourceGuard);
             if(closingJournal) await sleep(500);
         }, release: release,
         teleportStarfellStatue: async function () {
@@ -4773,17 +4877,61 @@ function createActOneAdapter(sessionId,options) {
             checkStop();ready();
             if(inventoryUiOnly||!request||request.mission!=='questStep'||request.step!=='statueBlessingOpen')
                 throw new Error('Dedicated non-inventory Statue Blessing request required');
-            var source=lastObservation;
+            var source=lastObservation,sourceSnapshot=initial,introEvent=null,introDeadline=null,introPolls=0;
             function sameSource(){
-                return source&&lastObservation===source&&initial&&source.session===initial.session&&
-                    source.frameId===initial.frameId&&source.timestamp===initial.timestamp&&
-                    source.screenshotPath===initial.screenshotPath;
+                return source&&lastObservation===source&&sourceSnapshot&&source.session===sourceSnapshot.session&&
+                    source.frameId===sourceSnapshot.frameId&&source.timestamp===sourceSnapshot.timestamp&&
+                    source.screenshotPath===sourceSnapshot.screenshotPath;
             }
-            if(!sameSource()||!actOneStatueBlessingChoiceTarget(source,Date.now(),request.session))
-                throw new Error('Fresh exact Statue dialogue, unique Blessing choice and visible original UID required');
+            if(!sameSource())throw new Error('Fresh exact Statue dialogue, unique Blessing choice and visible original UID required');
+            if(!actOneStatueBlessingChoiceTarget(source,Date.now(),request.session,true)){
+                var intro=actOneStatueIntroTarget(source,Date.now(),request.session);
+                if(!intro)throw new Error('Fresh exact Statue dialogue, unique Blessing choice and visible original UID required');
+                // Consume the sole advance before calling native input; the six-poll/three-second budget is shared.
+                introDeadline=Date.now()+3000;
+                introEvent={type:'statueBlessingIntroAdvance',requestId:request.id,frameId:source.frameId,
+                    source:{session:source.session,frameId:source.frameId,capturedAt:source.capturedAt,
+                        timestamp:source.timestamp,screenshotPath:source.screenshotPath},
+                    clockKind:'legacy_capture_request_wall_time',target:intro,key:'VK_SPACE',durationMs:60,
+                    attemptedAt:Date.now(),startedAt:null,outcome:'reserved',deadlineAt:introDeadline,
+                    observedFrameIds:[],physicalInputDeliveryVerified:false};
+                events.push(introEvent);
+                function introGuard(){
+                    checkStop();ready();
+                    if(Date.now()>=introDeadline||!sameSource()||
+                       JSON.stringify(actOneStatueIntroTarget(source,Date.now(),request.session))!==JSON.stringify(intro))
+                        throw new Error('Statue intro source changed or expired before advance');
+                    introEvent.startedAt=Date.now();introEvent.outcome='started';
+                }
+                try{await boundedKey('VK_SPACE',60,source.frameId,introGuard);introEvent.outcome='returned_unverified';}
+                catch(error){introEvent.outcome='threw';introEvent.error=String(error&&error.message||error);throw error;}
+                finally{introEvent.finishedAt=Date.now();}
+                if(introEvent.startedAt===null||introEvent.finishedAt<introEvent.startedAt)
+                    throw new Error('Statue intro advance clock moved backwards');
+                var introLastFrame=source.frameId,choiceFound=false;
+                while(introPolls<6){
+                    checkStop();if(Date.now()>=introDeadline)break;
+                    await sleep(introPolls===0?350:250);checkStop();if(Date.now()>=introDeadline)break;
+                    var afterIntro=await observe();introPolls++;
+                    if(!afterIntro||afterIntro.session!==request.session||!Number.isInteger(afterIntro.frameId)||
+                       afterIntro.frameId<=introLastFrame||!Number.isFinite(afterIntro.timestamp)||
+                       afterIntro.timestamp<=introEvent.finishedAt)
+                        throw new Error('Statue intro result source is not a fresh later frame');
+                    introLastFrame=afterIntro.frameId;introEvent.observedFrameIds.push(afterIntro.frameId);
+                    source=lastObservation;sourceSnapshot=afterIntro;
+                    if(Date.now()>=introDeadline)break;
+                    if(sameSource()&&source.capturedAt>introEvent.finishedAt&&
+                       actOneStatueBlessingChoiceTarget(source,Date.now(),request.session,true)){choiceFound=true;break;}
+                }
+                if(!choiceFound)return {status:'stopped',step:'statueBlessingOpen',action:'advanceStatueIntro',
+                    introAdvanceAttempted:true,introSourceFrameId:introEvent.frameId,clicks:0,panelReady:false,
+                    frameId:introLastFrame,healingAttempted:false,offeringAttempted:false,questComplete:false,
+                    physicalInputDeliveryVerified:false,reason:'Statue intro advanced once; fresh Blessing choice not established within the shared passive bound'};
+            }
             checkStop();ready();
-            var started=Date.now(),target=sameSource()&&actOneStatueBlessingChoiceTarget(source,started,request.session);
-            if(!target)throw new Error('Statue Blessing source changed or expired before the click');
+            var started=Date.now(),target=sameSource()&&actOneStatueBlessingChoiceTarget(source,started,request.session,true);
+            if(!target||introDeadline!==null&&started>=introDeadline)
+                throw new Error('Statue Blessing source changed or expired before the click');
             // Retain the exact raw capture identity and click attempt before the native call can fail.
             var event={type:'statueBlessingOpen',requestId:request.id,frameId:source.frameId,
                 source:{session:source.session,frameId:source.frameId,capturedAt:source.capturedAt,
@@ -4800,14 +4948,15 @@ function createActOneAdapter(sessionId,options) {
                 event.finishedAt=Date.now();
             }
             if(event.finishedAt<event.startedAt)throw new Error('Statue Blessing click clock moved backwards');
-            var deadline=event.finishedAt+3000,current=null,lastFrame=source.frameId,
+            var deadline=introDeadline===null?event.finishedAt+3000:introDeadline,current=null,lastFrame=source.frameId,
                 result={status:'stopped',step:'statueBlessingOpen',action:'openBlessingPanel',clicks:1,
                     sourceFrameId:source.frameId,panelReady:false,healingAttempted:false,offeringAttempted:false,
                     questComplete:false,physicalInputDeliveryVerified:false};
+            if(introEvent){result.introAdvanceAttempted=true;result.introSourceFrameId=introEvent.frameId;}
             // These are passive observations only. The existing strict panel predicate remains unchanged.
-            for(var poll=0;poll<6;poll++){
+            for(var poll=introPolls;poll<6;poll++){
                 checkStop();
-                await sleep(poll===0?350:250);
+                await sleep(poll===introPolls?350:250);
                 checkStop();
                 if(Date.now()>deadline)break;
                 current=await observe();
@@ -5836,22 +5985,58 @@ function createActOneAdapter(sessionId,options) {
         },
         runLisaWindriseTeleport: async function(initial,observe){
             var protector=loadLocalPause(),current=initial,attempted=false,result=null,operationError=null;
-            var actTwoTeleport=request&&['actTwoGateTeleport','actTwoCityTeleport','actTwoWindriseTeleport','actTwoLionTeleport','actTwoNorthTeleport','actTwoStarfellTeleport','actTwoCoastTeleport','actTwoSpringvaleTeleport'].indexOf(request.step)>=0,city=request&&request.step==='actTwoCityTeleport',lion=request&&request.step==='actTwoLionTeleport',north=request&&request.step==='actTwoNorthTeleport',destination=request&&request.step==='actTwoGateTeleport'?{x:-1122.173,y:2197.455}:city?{x:-867.68,y:2281.38}:lion?{x:-1436.901,y:1659.013}:north?{x:-1508.909,y:2298.307}:request.step==='actTwoCoastTeleport'?{x:-1636.902,y:2679.84}:request.step==='actTwoStarfellTeleport'?{x:-1323.474,y:2566.115}:request.step==='actTwoSpringvaleTeleport'?{x:-867.23413,y:1992.874}:{x:-1265.917,y:1928.381};
+            var inventoryTeleport=request&&request.step==='actTwoStarfellInventoryTeleport';
+            var actTwoTeleport=request&&['actTwoGateTeleport','actTwoCityTeleport','actTwoWindriseTeleport','actTwoLionTeleport','actTwoNorthTeleport','actTwoStarfellTeleport','actTwoCoastTeleport','actTwoSpringvaleTeleport'].indexOf(request.step)>=0,city=request&&request.step==='actTwoCityTeleport',lion=request&&request.step==='actTwoLionTeleport',north=request&&request.step==='actTwoNorthTeleport',destination=request&&request.step==='actTwoGateTeleport'?{x:-1122.173,y:2197.455}:city?{x:-867.68,y:2281.38}:lion?{x:-1436.901,y:1659.013}:north?{x:-1508.909,y:2298.307}:request.step==='actTwoCoastTeleport'?{x:-1636.902,y:2679.84}:(request.step==='actTwoStarfellTeleport'||inventoryTeleport)?{x:-1323.474,y:2566.115}:request.step==='actTwoSpringvaleTeleport'?{x:-867.23413,y:1992.874}:{x:-1265.917,y:1928.381};
             var rows=initial&&initial.ocr||[],proof=actOneLocalPauseProof(initial,Date.now(),request.session);
-            if(!request||request.mission!=='questStep'||(!actTwoTeleport&&request.step!=='lisaWindriseTeleport')||actTwoTeleport&&!actTwoOriginalAccount(rows)||
+            // This explicit entry consumes recognized inventory evidence without sending Escape or M.
+            // The native teleport API owns its existing bounded map/teleport operation.
+            var inventorySource=inventoryTeleport?lastObservation:null,
+                inventorySeal=inventorySource?combatRetreatSeal(inventorySource):null,
+                inventoryGate=inventoryTeleport?combatRetreatModule():null,
+                inventoryPermission=inventoryTeleport?eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;'):null;
+            // Reuse the retreat's original capture clock and exact UID, plus the current private observation.
+            function inventoryReady(){
+                if(inventoryUiOnly||!request||request.mission!=='questStep'||!inventorySource||
+                   inventorySource!==lastObservation||!initial||initial.session!==request.session||
+                   initial.frameId!==inventorySource.frameId||initial.timestamp!==inventorySource.timestamp||
+                   initial.screenshotPath!==inventorySource.screenshotPath||
+                   !Number.isInteger(request.expectedFrameId)||initial.frameId<=request.expectedFrameId||
+                   combatRetreatSeal(initial)!==inventorySeal||combatRetreatSeal(inventorySource)!==inventorySeal||
+                   events.some(function(e){return e.type==='actTwoStarfellInventoryTeleport';})||
+                   !inventoryGate.fresh(inventorySource,Date.now(),request.session,-1)||
+                   inventorySource.hud.captureStamp.capturedAt!==inventorySource.capturedAt||
+                   !inventoryGate.originalUid(inventorySource)||actOneEnterGameAuthPrompt(inventorySource.ocr)||
+                   actOneEnterGameUnknownUi(inventorySource.ocr))return false;
+                var paused=actOneLocalPauseProof(inventorySource,Date.now(),request.session);
+                return !!(paused&&paused.kind==='inventory'&&inventoryPermission(inventorySource,Date.now(),request.session));
+            }
+            var inventoryRefusal={status:'stopped',step:'actTwoStarfellInventoryTeleport',
+                reason:'Fresh original-account inventory required',teleportAttempted:false,questComplete:false};
+            if(inventoryTeleport&&!inventoryReady())return inventoryRefusal;
+            if(!inventoryTeleport&&(!request||request.mission!=='questStep'||(!actTwoTeleport&&request.step!=='lisaWindriseTeleport')||actTwoTeleport&&!actTwoOriginalAccount(rows)||
                !proof||proof.kind!=='map'||
                !rows.some(function(r){return /^(Starfell Valley|Starfell Valleyale|Galesong\s*Hill)$/.test(r.text.trim())||actTwoTeleport&&r.text.trim()==='Windwail Highland';})||
-               request.step==='actTwoSpringvaleTeleport'&&!rows.some(function(r){return r.text.trim()==='Galesong Hill'&&r.x>=1500&&r.y>=950;}))
+               request.step==='actTwoSpringvaleTeleport'&&!rows.some(function(r){return r.text.trim()==='Galesong Hill'&&r.x>=1500&&r.y>=950;})))
                 return {status:'stopped',step:'lisaWindriseTeleport',reason:'Fresh Windrise regional map required',teleportAttempted:false,questComplete:false};
             var lastInputFrame=initial.frameId,event=null;
             try{
-                checkStop();ready();attempted=true;
+                checkStop();ready();
+                // Helper reads and heartbeat checks cannot extend the original 1000 ms source admission.
+                if(inventoryTeleport&&!inventoryReady())return inventoryRefusal;
+                attempted=true;
                 event={type:request.step,frameId:initial.frameId,x:destination.x,y:destination.y,startedAt:Date.now()};events.push(event);
+                if(inventoryTeleport)event.source={session:inventorySource.session,frameId:inventorySource.frameId,
+                    capturedAt:inventorySource.capturedAt,timestamp:inventorySource.timestamp,screenshotPath:inventorySource.screenshotPath};
                 try{await genshin.tp(destination.x,destination.y,false);}finally{event.finishedAt=Date.now();}
                 var arrived=false;
                 for(var poll=0;poll<8;poll++){
                     checkStop();await sleep(350);current=await observe();
-                    if((actTwoTeleport?actTwoOriginalAccount(current.ocr)&&current.hud.world&&current.hud.groundControls&&current.hud.health&&!current.hud.climbing:actOneLionFalconWaypointReady(current,Date.now(),request.session))&&current.map&&
+                    // Only this inventory entry adds explicit living numeric HP and the fixed Teyvat map.
+                    if((inventoryTeleport?inventoryGate.fresh(current,Date.now(),request.session,lastInputFrame)&&
+                        inventoryGate.originalUid(current)&&current.hud.world===true&&current.hud.groundControls===true&&
+                        current.hud.health&&Number.isInteger(current.hud.health.current)&&Number.isInteger(current.hud.health.max)&&
+                        current.hud.health.current>0&&current.hud.health.max>0&&current.hud.health.current<=current.hud.health.max&&
+                        current.map&&current.map.map==='Teyvat'&&current.hud.climbing===false:actTwoTeleport?actTwoOriginalAccount(current.ocr)&&current.hud.world&&current.hud.groundControls&&current.hud.health&&!current.hud.climbing:actOneLionFalconWaypointReady(current,Date.now(),request.session))&&current.map&&
                        Math.hypot(current.map.x-destination.x,current.map.y-destination.y)<=20){arrived=true;break;}
                     if(actOneLocalPauseProof(current,Date.now(),request.session))break;
                 }
@@ -5861,6 +6046,7 @@ function createActOneAdapter(sessionId,options) {
                     nativeTeleportMs:event.finishedAt-event.startedAt};
             }catch(e){operationError=String(e&&e.message||e);}
             if(attempted)return await finishWithLocalPause(protector,this,initial,observe,lastInputFrame,result,operationError);
+            if(inventoryTeleport&&operationError){inventoryRefusal.reason=operationError;return inventoryRefusal;}
             return result;
         },
         // Fixed retreat from a recognized pause. The existing protector owns final pause input.
@@ -8768,6 +8954,9 @@ function createActOneAdapter(sessionId,options) {
                 if (readyError) throw readyError;
             } else ready();
             enemyBarDiagnostic=null;ocrPrimitiveMs=0;ocrReadCount=0;
+            // Only explicit normal observations and opted-in free exploration request this evidence.
+            var groundEnemyRequested=!inventoryUiOnly&&request&&(request.mission==='observe'||
+                request.mission==='navigation'&&request.objective==='Explore for Adventure Rank'&&request.requireMeasuredGround===true);
             var t0 = Date.now(), img = captureGameRegion(), captureMs = Date.now() - t0;
             var pngPending=null,pngScheduleMs=0,pngWaitMs=0,pngMs=0,pngWriteMode='synchronous';
             try {
@@ -8795,9 +8984,18 @@ function createActOneAdapter(sessionId,options) {
                     actTwoAutoCropNeeded(rows))
                     rows=actOneMergeControlCropRows(rows,scaledRows(img,90,20,100,65),90,20);
                 if(actTwoMapResinCropNeeded(rows))rows=actOneMergeControlCropRows(rows,scaledRows(img,1615,25,140,45),1615,25);
-                if(request&&(request.mission==='navigation'&&['Explore for Adventure Rank','Talk to Kaeya','Speak to Lynn','Give the Chicken-Mushroom Skewer to Lynn','Talk to Amber','Go to the exam point'].indexOf(request.objective)>=0||/^actTwo/.test(request.step||''))&&!actTwoOriginalAccount(rows)){
+                // The UI pause can reuse this fixed same-capture crop only after a positive
+                // engine-admitted before-frame. Keep all original rows: no UID digit is inferred.
+                var inventoryUiPauseUidCrop=inventoryUiOnly&&request&&request.mission==='questStep'&&
+                    request.step==='worldInventory'&&inventoryUiPauseBefore&&!inventoryUiPauseAttempted&&!inventoryUiPauseUidCropAttempted;
+                if(request&&(request.mission==='navigation'&&['Explore for Adventure Rank','Talk to Kaeya','Speak to Lynn','Give the Chicken-Mushroom Skewer to Lynn','Talk to Amber','Go to the exam point'].indexOf(request.objective)>=0||/^actTwo/.test(request.step||'')||inventoryUiPauseUidCrop)&&!actTwoOriginalAccount(rows)){
+                    if(inventoryUiPauseUidCrop)inventoryUiPauseUidCropAttempted=true;
                     rows=actOneMergeControlCropRows(rows,scaledRows(img,1680,1040,/^actTwo(?:WorldMap|MapClose|CityTeleport|WindriseTeleport|LionTeleport|NorthTeleport|StarfellTeleport|CoastTeleport)$/.test(request.step||'')?190:240,40),1680,1040);
                 }
+                // The positively anchored Statue scope may recover an omitted Auto label from this same image.
+                var statueCropAnchors=actOneStatueDialogueScope(request)&&actOneStatueDialogueAnchors(rows,true);
+                if(statueCropAnchors&&!statueCropAnchors.auto)
+                    rows=actOneMergeControlCropRows(rows,scaledRows(img,90,20,100,65),90,20);
                 var fullOcrMs = Date.now() - o0,reviveStockOcrMs=0;
                 if(request&&request.mission==='recover'&&actOneWolfReviveItemModalVisible({ocr:rows})&&
                    rows.some(function(r){return String(r.text||'').trim()==='Teyvat Fried Egg';})&&
@@ -8874,7 +9072,8 @@ function createActOneAdapter(sessionId,options) {
                 } catch (mapError) { mapDiagnostic={reason:String(mapError&&mapError.message||mapError)}; }
                 var mapMs = Date.now() - map0, text = rows.map(function (r) { return r.text; }).join(' ');
                 var hp = actOneHealth(healthRows);
-                var auto = rows.some(function (r) { return /^Auto$/i.test(r.text.trim()) && r.x < 350 && r.y < 150; });
+                var scopedStatueDialogue=actOneStatueDialogueScope(request)&&actOneStatueDialogueAnchors(rows,false);
+                var auto = rows.some(function (r) { return /^Auto$/i.test(r.text.trim()) && r.x < 350 && r.y < 150; })||!!scopedStatueDialogue;
                 // The recorded three-dot Lisa subtitle is omitted even by
                 // enlarged OCR. Require its three separated white dot patches
                 // and an otherwise dark surrounding strip in this capture.
@@ -9010,7 +9209,7 @@ function createActOneAdapter(sessionId,options) {
                     }
                 }
                 var climbing=rows.some(function(r){return r.text.trim()==='X' && r.x>1500 && r.y>990;}) && rows.some(function(r){return r.text.trim()==='Space' && r.x>1600 && r.y>990;});
-                var dialogueReady=actOneDialogueReady(rows,choice)||lisaSilentSubtitle&&!choice, objectiveChanged=/objective updated|quest completed/i.test(text),aerialBoss=null,interactionOcrMs=0,cooldownOcrMs=0;
+                var dialogueReady=actOneDialogueReady(rows,choice)||lisaSilentSubtitle&&!choice||!!(scopedStatueDialogue&&!choice&&actOneStatueSilentIntro(rows)), objectiveChanged=/objective updated|quest completed/i.test(text),aerialBoss=null,interactionOcrMs=0,cooldownOcrMs=0;
                 if(request&&request.mission==='questStep'&&['wolfCryoWait','wolfSpikeCrossFirst','wolfSpikeCrossSecond'].indexOf(request.step)>=0&&!pos&&hp&&hp.max===1427&&hp.current>0&&
                    !auto&&!journal&&!bigMap&&!dialogueReady&&!choice&&!climbing&&!tutorialStep&&!objectiveChanged&&
                    actOneGroundControlEvidence(rows)&&actOneWolfCryoCooldownRemaining({ocr:rows})===null) {
@@ -9094,7 +9293,7 @@ function createActOneAdapter(sessionId,options) {
                     if(skewerDigits.length===1&&String(skewerDigits[0].text).trim()==='1'&&skewerDigits[0].x/3+1105>1125&&skewerDigits[0].x/3+1105<1165&&skewerDigits[0].y/3+590>605&&skewerDigits[0].y/3+590<655)foodQuantity={value:1,source:'scaled-same-frame',frameId:frame};
                 }
                 var groundObjectiveIgnored=[];if(regionalObservation&&JSON.parse(file.readTextSync('act-two-field-request.json')).mode==='actions'||request&&(request.mission==='observe'||request.step==='actTwoWorldMap')){var filteredGroundObjectives=actTwoGroundObjectiveRows(objectiveRows);if(filteredGroundObjectives.length!==objectiveRows.length)groundObjectiveIgnored=objectiveRows;objectiveRows=filteredGroundObjectives;}
-                var hud = { foodQuantity:foodQuantity, auto:auto, climbing:climbing, groundControls:actOneGroundControlEvidence(rows), enemyBars: (combatRetreatObservation||combatHealObservation) ? readEnemyBars(img,rows,'any',true) : combatObjective ? readEnemyBars(img, rows) : request&&/^falcon(Combat|AmberCombat|Ranged|Engage)$/.test(request.step) ? readEnemyBars(img,rows,4) : request&&request.mission==='questStep'&&/^wolf(Combat|RecoveryCombat|CryoWait|CharactersOpen|WitnessAction|SpikeCrossFirst|SpikeCrossSecond|PlatformObserve|DefensiveCryo|Forward|ForwardFine|Advance|Right|Left|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue|KaeyaSkill|TurretPass|ChestInteract|LootInteract|ConsoleInteract|ApproachEnemy)$/.test(request.step)&&hp&&!auto&&!journal&&!bigMap ? readEnemyBars(img,rows,5) : [], aerialBossVisible:aerialBossVisible, aerialBoss:aerialBoss, slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: dialogueReady, choice: auto && choice, journal: journal, bigMap: bigMap,
+                var hud = { foodQuantity:foodQuantity, auto:auto, climbing:climbing, groundControls:actOneGroundControlEvidence(rows), enemyBars: groundEnemyRequested ? [] : (combatRetreatObservation||combatHealObservation) ? readEnemyBars(img,rows,'any',true) : combatObjective ? readEnemyBars(img, rows) : request&&/^falcon(Combat|AmberCombat|Ranged|Engage)$/.test(request.step) ? readEnemyBars(img,rows,4) : request&&request.mission==='questStep'&&/^wolf(Combat|RecoveryCombat|CryoWait|CharactersOpen|WitnessAction|SpikeCrossFirst|SpikeCrossSecond|PlatformObserve|DefensiveCryo|Forward|ForwardFine|Advance|Right|Left|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue|KaeyaSkill|TurretPass|ChestInteract|LootInteract|ConsoleInteract|ApproachEnemy)$/.test(request.step)&&hp&&!auto&&!journal&&!bigMap ? readEnemyBars(img,rows,5) : [], aerialBossVisible:aerialBossVisible, aerialBoss:aerialBoss, slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: dialogueReady, choice: auto && choice, journal: journal, bigMap: bigMap,
                     objectiveChanged: /objective updated|quest completed/i.test(text), health: hp, healthOcr: healthRows.map(function (r) { return r.text; }), healthDiagnostic:healthRead.diagnostic,
                     healthPct: hp && hp.max > 0 ? hp.current / hp.max : null,
                     lowHealth: !hp || hp.max <= 0 || hp.current > hp.max || hp.current / hp.max < 0.6,
@@ -9142,7 +9341,7 @@ function createActOneAdapter(sessionId,options) {
                         lowTierStock:kaeyaPanelNumber(1350,832,65,28),midTierStock:kaeyaPanelNumber(1480,832,65,28),
                         highTierStock:kaeyaPanelNumber(1610,832,65,28),mora:kaeyaPanelNumber(1665,24,110,47)};
                 }
-                if(request&&(request.mission==='observe'&&objectiveRows.some(function(r){return actOneLisaObjective(r.text);})||request.mission==='navigation'&&["Go to the exam point","Talk to Amber","Check the suspicious location and eliminate any threats","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||request.mission==='questStep'&&['actTwoDaytime','actTwoMageNative','actTwoMageFinish','actTwoStarfellShoreContinue','actTwoStarfellShore','actTwoStarfellNorthShore','actTwoStarfellShoreCamera','actTwoStarfellShoreExit','actTwoBoundedMount','actTwoShieldPyro','actTwoMageBurst','actTwoMagePrep','actTwoNativeCombat','actTwoNativeGroup','actTwoNativeFinish','actTwoNativeDeadlineProbe','actTwoField','actTwoFieldInspect','actTwoRiddleMount','actTwoWallMount','actTwoWallLowRelease','actTwoWallStaminaTiming','actTwoWallAttachmentTiming','actTwoWallMicroAscent','actTwoMapClose','actTwoLaunchPractice','actTwoVisual','actTwoNativeRoute','actTwoInformantCombat','actTwoOre','actTwoTownRecovery','actTwoTownClimb','actTwoTownRail','actTwoWaypoint','actTwoKaeyaTalk','actTwoKaeyaReport','actTwoJackTalk','actTwoMarjorieTalk','actTwoCyrusTalk','actTwoVileTalk','actTwoLynnTalk','windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&hp&&!auto&&!journal&&!bigMap) {
+                if(!groundEnemyRequested&&request&&(request.mission==='observe'&&objectiveRows.some(function(r){return actOneLisaObjective(r.text);})||request.mission==='navigation'&&["Go to the exam point","Talk to Amber","Check the suspicious location and eliminate any threats","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||request.mission==='questStep'&&['actTwoDaytime','actTwoMageNative','actTwoMageFinish','actTwoStarfellShoreContinue','actTwoStarfellShore','actTwoStarfellNorthShore','actTwoStarfellShoreCamera','actTwoStarfellShoreExit','actTwoBoundedMount','actTwoShieldPyro','actTwoMageBurst','actTwoMagePrep','actTwoNativeCombat','actTwoNativeGroup','actTwoNativeFinish','actTwoNativeDeadlineProbe','actTwoField','actTwoFieldInspect','actTwoRiddleMount','actTwoWallMount','actTwoWallLowRelease','actTwoWallStaminaTiming','actTwoWallAttachmentTiming','actTwoWallMicroAscent','actTwoMapClose','actTwoLaunchPractice','actTwoVisual','actTwoNativeRoute','actTwoInformantCombat','actTwoOre','actTwoTownRecovery','actTwoTownClimb','actTwoTownRail','actTwoWaypoint','actTwoKaeyaTalk','actTwoKaeyaReport','actTwoJackTalk','actTwoMarjorieTalk','actTwoCyrusTalk','actTwoVileTalk','actTwoLynnTalk','windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&hp&&!auto&&!journal&&!bigMap) {
                     var fieldLevel=request.step==='actTwoMageBurst'||['actTwoFieldInspect','actTwoMapClose'].indexOf(request.step)>=0&&actTwoAmbushQuestAnchor(objectiveRows)?13:'any';
                     if(request.step==='actTwoField'){
                         try{fieldLevel=eval(file.readTextSync('act-two-field.js')+'\nActTwoField;').enemyLevel(JSON.parse(file.readTextSync('act-two-field-request.json')),request);}catch(fieldLevelError){fieldLevel='any';}
@@ -9259,6 +9458,35 @@ function createActOneAdapter(sessionId,options) {
                     var wait0=Date.now(),pngResult=await pngPending;
                     pngWaitMs=Date.now()-wait0;pngMs=pngScheduleMs+pngWaitMs;
                     if(!pngResult.saved){var blocked=new Error('PNG write failed: capture storage is blocked'+(pngResult.error?': '+pngResult.error:''));blocked.code='CAPTURE_STORAGE_BLOCKED';throw blocked;}
+                }
+                if(groundEnemyRequested){
+                    // An explicit normal-mode observation may measure threats, never authorize combat.
+                    // Keep unavailable distinct from a detector that examined this image and found zero.
+                    var groundEnemy={version:1,kind:'normal-ground-enemy-observation-v1',state:'unavailable',
+                        session:session,frameId:frame,capturedAt:t0,reason:'not_recognized_overworld_ground',
+                        candidateCount:null,acceptedCount:null};
+                    hud.enemyBarObservation=groundEnemy;
+                    if(hud.world===true&&hud.groundControls===true&&hud.climbing===false&&!hud.auto&&
+                       !hud.dialogueReady&&!hud.choice&&!hud.journal&&!hud.bigMap&&!hud.tutorialStep&&!trackQuest&&
+                       pos&&pos.map==='Teyvat'&&Number.isFinite(pos.x)&&Number.isFinite(pos.y)&&
+                       hp&&Number.isInteger(hp.current)&&Number.isInteger(hp.max)&&hp.current>0&&hp.current<=hp.max){
+                        try{
+                            // Full-width same-image scan includes edge bars; existing level anchoring remains strict.
+                            hud.enemyBars=readEnemyBars(img,rows,'any',true,true);
+                            hud.enemyBarDiagnostic=enemyBarDiagnostic;
+                            groundEnemy.candidateCount=enemyBarDiagnostic.fieldCandidates?enemyBarDiagnostic.fieldCandidates.length:
+                                enemyBarDiagnostic.overloaded&&!enemyBarDiagnostic.rawCandidates?null:enemyBarDiagnostic.candidates;
+                            groundEnemy.acceptedCount=hud.enemyBars.length;
+                            groundEnemy.state=enemyBarDiagnostic.overloaded?'overloaded':hud.enemyBars.length?'threat':
+                                groundEnemy.candidateCount?'ambiguous':'clear';
+                            groundEnemy.reason=enemyBarDiagnostic.overloaded?'detector_overloaded':hud.enemyBars.length?
+                                'outdoor_bar_candidates':groundEnemy.candidateCount?'unanchored_bar_shaped_components':'no_bar_shaped_components';
+                        }catch(groundEnemyError){
+                            hud.enemyBars=[];hud.enemyBarDiagnostic=enemyBarDiagnostic;
+                            groundEnemy.reason='detector_result_unavailable_or_rejected';
+                            groundEnemy.error=String(groundEnemyError&&groundEnemyError.message||groundEnemyError).slice(0,200);
+                        }
+                    }
                 }
                 // Preserve this invocation's capture start through engine HUD serialization.
                 // This is neither compositor acquisition time nor evidence of physical input delivery.

@@ -179,6 +179,83 @@ class HeldFileTests(unittest.TestCase):
         cap.close()
 
 
+    def _metadata_budget(self, sizes, expected_error=None):
+        """Exercise real acquisition/cleanup with tiny files and virtual stat sizes, not large byte allocations.
+
+        Only this budget fixture substitutes the final content verifier. The existing tests above
+        exercise actual hash, identity, sharing, parent, STOP and private-admission checks.
+        """
+        folder=self.folder/'budget';folder.mkdir(exist_ok=True)
+        paths=[folder/('%04d.json' % index) for index in range(len(sizes))]
+        for path in paths:path.write_bytes(b'x')
+        pins={str(path):hashlib.sha256(b'x').hexdigest() for path in paths}
+        metadata={str(path):size for path,size in zip(paths,sizes)}
+        original_open=open;original_fstat=os.fstat;opened=[];by_fd={};files=None
+        def opened_file(name,*args,**kwargs):
+            """Keep every real stream available for the partial-retirement assertion."""
+            stream=original_open(name,*args,**kwargs);opened.append(stream)
+            by_fd[stream.fileno()]=metadata[str(name)]
+            return stream
+        def sized_fstat(fd):
+            """Change only the reported size for the aggregate/per-file admission boundaries."""
+            info=list(original_fstat(fd));info[6]=by_fd[fd]
+            return os.stat_result(info)
+        try:
+            with patch('builtins.open',opened_file),patch.object(held.os,'fstat',side_effect=sized_fstat), \
+                    patch.object(held.HeldFiles,'verify',return_value=({},sum(sizes))) as verify:
+                if expected_error:
+                    with self.assertRaisesRegex(ValueError,expected_error):held.HeldFiles(pins)
+                    verify.assert_not_called()
+                else:
+                    files=held.HeldFiles(pins)
+                    self.assertEqual(len(files.rows),len(sizes))
+                    self.assertEqual(sum(row[1][2] for row in files.rows.values()),sum(sizes))
+                    verify.assert_called_once_with()
+        finally:
+            if files is not None:self.assertEqual(files.close(),[])
+        self.assertTrue(opened)
+        self.assertTrue(all(stream.closed for stream in opened))
+        paths[0].write_bytes(b'retired');paths[-1].write_bytes(b'retired')
+
+    def test_measured_r73_run39_budget_shape_and_old_cap_refusal(self):
+        """Retain the real count/group totals and sixteen DLL sizes without depending on live artifacts."""
+        def partition(total,count):
+            """Model only aggregate-size accounting; small within-group distributions are immaterial."""
+            size,remainder=divmod(total,count)
+            return [size+1]*remainder+[size]*(count-remainder)
+        dll_sizes=[20913152, 20914688, 20843008, 20848640, 20856320, 20882944, 20883968, 20884480, 20912128, 20913152, 20913152, 20913152, 20913152, 20913152, 20913152, 20913152]
+        sizes=dll_sizes+[305152]*16+partition(538904,97)
+        sizes+=partition(6003463,369)*2+partition(959640,8)+partition(74810524,934)
+        self.assertEqual((len(sizes),sum(sizes)),(1809,427529818))
+        self.assertEqual(held.MAX_FILES,2304)
+        self.assertEqual(held.MAX_FILE_BYTES,32*1024*1024)
+        self.assertEqual(held.MAX_TOTAL_BYTES,448*1024*1024)
+        with patch.object(held,'MAX_TOTAL_BYTES',384*1024*1024):
+            self._metadata_budget(sizes,'Immutable file byte budget exceeded')
+        self._metadata_budget(sizes)
+
+    def test_exact_aggregate_cap_and_one_byte_excess_retire_all_handles(self):
+        """Accept the precise 448 MiB boundary; reject its next byte before content verification."""
+        sizes=[32*1024*1024]*14
+        self.assertEqual(sum(sizes),held.MAX_TOTAL_BYTES)
+        self._metadata_budget(sizes)
+        self._metadata_budget(sizes+[1],'Immutable file byte budget exceeded')
+
+    def test_per_file_cap_is_not_relaxed_by_aggregate_increase(self):
+        """The unchanged 32 MiB individual-file ceiling still retires the just-opened stream."""
+        self._metadata_budget([1,32*1024*1024+1],'unbounded immutable file')
+
+    def test_fresh_real_byte_read_still_enforces_aggregate_cap(self):
+        """Fresh verification uses the same ceiling and preserves real digest/identity checks."""
+        self.files=held.HeldFiles(self.pins)
+        actual,total=self.files.verify()
+        self.assertEqual(actual,self.pins)
+        with patch.object(held,'MAX_TOTAL_BYTES',total-1):
+            with self.assertRaisesRegex(ValueError,'Immutable file byte budget changed'):self.files.verify()
+        self.assertEqual(self.files.close(),[])
+        self.a.write_bytes(b'released after verify refusal')
+
+
 class OwnerClosureTests(unittest.TestCase):
     """Build the finite lineage entirely from the repository's existing synthetic owner fixture."""
     def setUp(self):
@@ -329,11 +406,11 @@ class OwnerClosureTests(unittest.TestCase):
                 held.owner_inputs(self.path,map_owner.ARTIFACTS,validate)
             validate.assert_not_called()
 
-    def test_r70_scope_rejects_r74_before_validation(self):
+    def test_r70_scope_rejects_r76_before_validation(self):
         """A historical R70 chain cannot select an out-of-scope later package."""
         self.append_r70()
         game=json.loads(self.path.read_bytes())['protectedGame']
-        later,_=self.fixture.create_next_handoff(self.path,self.result,game,74)
+        later,_=self.fixture.create_next_handoff(self.path,self.result,game,76)
         future=later/'map-owner-lineage.json'
         owner_fixtures.write(future,dict(prior=str(self.path),protectedGame=game))
         with patch.object(map_owner,'load_map_owner') as validate:
@@ -394,11 +471,11 @@ class OwnerClosureTests(unittest.TestCase):
             validate.assert_not_called()
 
 
-    def test_r71_scope_rejects_r74_before_validation(self):
+    def test_r71_scope_rejects_r76_before_validation(self):
         """A historical R71 chain still cannot select an unknown later package."""
         self.append_r71()
         game=json.loads(self.path.read_bytes())['protectedGame']
-        later,_=self.fixture.create_next_handoff(self.path,self.result,game,74)
+        later,_=self.fixture.create_next_handoff(self.path,self.result,game,76)
         future=later/'map-owner-lineage.json'
         owner_fixtures.write(future,dict(prior=str(self.path),protectedGame=game))
         with patch.object(map_owner,'load_map_owner') as validate:
@@ -459,11 +536,11 @@ class OwnerClosureTests(unittest.TestCase):
             validate.assert_not_called()
 
 
-    def test_r72_scope_rejects_r74_before_validation(self):
+    def test_r72_scope_rejects_r76_before_validation(self):
         """A historical R72 chain still cannot select an unknown later package."""
         self.append_r72()
         game=json.loads(self.path.read_bytes())['protectedGame']
-        later,_=self.fixture.create_next_handoff(self.path,self.result,game,74)
+        later,_=self.fixture.create_next_handoff(self.path,self.result,game,76)
         future=later/'map-owner-lineage.json'
         owner_fixtures.write(future,dict(prior=str(self.path),protectedGame=game))
         with patch.object(map_owner,'load_map_owner') as validate:
@@ -525,11 +602,11 @@ class OwnerClosureTests(unittest.TestCase):
             validate.assert_not_called()
 
 
-    def test_r73_scope_rejects_r74_and_seventeenth_link_before_validation(self):
+    def test_r75_scope_rejects_r76_and_nineteenth_link_before_validation(self):
         """The collector independently refuses a later package and an extra otherwise-shaped link."""
-        self.append_r73()
+        self.append_r75()
         game=json.loads(self.path.read_bytes())['protectedGame']
-        later,_=self.fixture.create_next_handoff(self.path,self.result,game,74)
+        later,_=self.fixture.create_next_handoff(self.path,self.result,game,76)
         future=later/'map-owner-lineage.json'
         owner_fixtures.write(future,dict(prior=str(self.path),protectedGame=game))
         extra=self.folder.parent/'excess-link'
@@ -545,6 +622,238 @@ class OwnerClosureTests(unittest.TestCase):
 
 
 
+
+
+    def append_r74(self):
+        """Extend the existing synthetic R73 receipt with one exact English R74 handoff."""
+        self.append_r73()
+        prior=self.path
+        game=json.loads(prior.read_bytes())['protectedGame']
+        folder,result=self.fixture.create_next_handoff(prior,self.result,game,74)
+        result['child'].update(configuredTriggerPolicyVersion=1, configuredTriggersSuppressed=True)
+        build,_=map_owner.target_package(74)
+        owner_fixtures.write(Path(build['targetDirectory'])/'User/config.json',map_owner.R62_CLEAN_CAPTURE)
+        config_sha=map_owner.check_clean_target(build)
+        preflight=json.loads((folder/'preflight.json').read_bytes())
+        preflight['targetConfigSha256']=config_sha
+        result['replacementEvidence']['existingTargetConfigSha256']=config_sha
+        owner_fixtures.write(folder/'preflight.json',preflight)
+        owner_fixtures.write(folder/'ensure-child.json',result)
+        self.prior,self.folder,self.result=prior,folder,result
+        self.path=folder/'map-owner-lineage.json'
+        owner_fixtures.write(self.path,map_owner.replacement(prior,folder))
+
+
+    def test_r74_complete_reader_set_is_held(self):
+        """All seventeen packages and every actual immutable owner read belong to the held census."""
+        self.append_r74()
+        _,pins,_=self.verify_reader_set(expected_packages=17)
+        self.assertEqual(len(pins),137)
+
+
+    def test_r74_retained_endpoints_and_selection_remain_bound(self):
+        """R73/R74 witnesses preserve exact replay; later original-path reappearance still refuses."""
+        self.append_r74()
+        self.fixture.check_source_and_target_witnesses(self.prior,self.folder,self.result,(73,74))
+        owner,pins,packages=self.verify_reader_set(expected_packages=17)
+        missing=map_owner.ARTIFACTS/'release-r73'
+        self.assertFalse(packages[str(missing)]['originalPresent'])
+        report={};context={'owner':owner}
+        cap=held.PausedAdmission(context,pins,(),lambda:[],[],packages,report)
+        try:
+            missing.mkdir()
+            with self.assertRaisesRegex(ValueError,'package selection'):
+                cap.consume(lambda:context,report,lambda:None)
+        finally:self.assertEqual(cap.close(),[])
+
+
+    def test_r74_missing_game_evidence_refuses_before_validation(self):
+        """A missing newest game-lifetime document cannot be replaced by an already-known owner."""
+        self.append_r74()
+        (self.folder/'game-before.json').unlink()
+        with patch.object(map_owner,'load_map_owner') as validate:
+            with self.assertRaises(FileNotFoundError):
+                held.owner_inputs(self.path,map_owner.ARTIFACTS,validate)
+            validate.assert_not_called()
+
+
+    def append_r75(self):
+        """Extend the existing synthetic R74 receipt with one exact English R75 handoff."""
+        self.append_r74()
+        prior=self.path
+        game=json.loads(prior.read_bytes())['protectedGame']
+        folder,result=self.fixture.create_next_handoff(prior,self.result,game,75)
+        result['child'].update(configuredTriggerPolicyVersion=1, configuredTriggersSuppressed=True)
+        build,_=map_owner.target_package(75)
+        owner_fixtures.write(Path(build['targetDirectory'])/'User/config.json',map_owner.R62_CLEAN_CAPTURE)
+        config_sha=map_owner.check_clean_target(build)
+        preflight=json.loads((folder/'preflight.json').read_bytes())
+        preflight['targetConfigSha256']=config_sha
+        result['replacementEvidence']['existingTargetConfigSha256']=config_sha
+        owner_fixtures.write(folder/'preflight.json',preflight)
+        owner_fixtures.write(folder/'ensure-child.json',result)
+        self.prior,self.folder,self.result=prior,folder,result
+        self.path=folder/'map-owner-lineage.json'
+        owner_fixtures.write(self.path,map_owner.replacement(prior,folder))
+
+
+    def test_r75_complete_reader_set_is_held(self):
+        """All eighteen packages and every actual immutable owner read belong to the held census."""
+        self.append_r75()
+        _,pins,_=self.verify_reader_set(expected_packages=18)
+        self.assertEqual(len(pins),145)
+
+
+    def test_r75_retained_endpoints_and_selection_remain_bound(self):
+        """R74/R75 witnesses preserve exact replay; later original-path reappearance still refuses."""
+        self.append_r75()
+        self.fixture.check_source_and_target_witnesses(self.prior,self.folder,self.result,(74,75))
+        owner,pins,packages=self.verify_reader_set(expected_packages=18)
+        missing=map_owner.ARTIFACTS/'release-r74'
+        self.assertFalse(packages[str(missing)]['originalPresent'])
+        report={};context={'plan':dict(owner=owner,ownerFile=str(self.path.absolute()),ownerSha256=pins[str(self.path.absolute())])}
+        cap=held.PausedAdmission(context,pins,(),lambda:[],[],packages,report)
+        try:
+            missing.mkdir()
+            with self.assertRaisesRegex(ValueError,'package selection'):
+                cap.consume(lambda:context,report,lambda:None)
+        finally:self.assertEqual(cap.close(),[])
+
+
+    def test_r75_missing_game_evidence_refuses_before_validation(self):
+        """A missing newest game-lifetime document cannot be replaced by an already-known owner."""
+        self.append_r75()
+        (self.folder/'game-before.json').unlink()
+        with patch.object(map_owner,'load_map_owner') as validate:
+            with self.assertRaises(FileNotFoundError):
+                held.owner_inputs(self.path,map_owner.ARTIFACTS,validate)
+            validate.assert_not_called()
+
+
+def r75_budget_fixture(testcase):
+    """Build an actual validated eighteen-link owner from tiny disposable package fixtures."""
+    fixture = OwnerClosureTests()
+    fixture.setUp()
+    testcase.addCleanup(fixture.doCleanups)
+    fixture.append_r75()
+    owner, pins, packages = held.owner_inputs(fixture.path, map_owner.ARTIFACTS, map_owner.load_map_owner)
+    plan = dict(ownerFile=str(fixture.path.absolute()), ownerSha256=pins[str(fixture.path.absolute())], owner=owner)
+    budget = packages[str(map_owner.ARTIFACTS / 'release-r75')]['heldBudget']
+    return fixture, plan, pins, packages, budget
+
+
+class R75BudgetTests(unittest.TestCase):
+    """Qualify the finite 480 MiB branch without allocating large fixture contents."""
+    def setUp(self):
+        """Retain real validated lineage bytes and one disposable metadata-size census."""
+        self.fixture, self.plan, self.pins, self.packages, self.budget = r75_budget_fixture(self)
+        self.tmp = tempfile.TemporaryDirectory(prefix='inert-r75-budget-')
+        self.addCleanup(self.tmp.cleanup)
+        self.folder = Path(self.tmp.name)
+
+    def virtual_budget(self, total, *, expected=None, extended=True, oversized=False):
+        """Keep real handles and proof replay; substitute only stat sizes and the final content pass."""
+        pins = dict(self.pins)
+        for index in range(1825 - len(pins)):
+            path = self.folder / ('source-%04d.json' % index)
+            path.write_bytes(b'x')
+            pins[str(path)] = hashlib.sha256(b'x').hexdigest()
+        names = sorted(pins)
+        size, remainder = divmod(total, len(names))
+        sizes = {name:size + (index < remainder) for index, name in enumerate(names)}
+        if oversized:
+            sizes[names[1]] = held.MAX_FILE_BYTES + 1
+        original_open, original_fstat = open, os.fstat
+        opened, by_fd = [], {}
+        def open_fixture(name, *args, **kwargs):
+            """Track every real acquisition for both normal and partial cleanup."""
+            stream = original_open(name, *args, **kwargs)
+            opened.append(stream)
+            by_fd[stream.fileno()] = sizes[str(name)]
+            return stream
+        def sized_fstat(fd):
+            """Change only the immutable file's reported size, never its path or sharing flags."""
+            info = list(original_fstat(fd))
+            info[6] = by_fd[fd]
+            return os.stat_result(info)
+        kwargs = dict(owner_plan=self.plan, owner_budget=self.budget) if extended else {}
+        files = None
+        try:
+            with patch('builtins.open', open_fixture), patch.object(held.os, 'fstat', side_effect=sized_fstat), \
+                    patch.object(held.HeldFiles, 'verify', return_value=(pins, sum(sizes.values()))) as verify:
+                if expected:
+                    with self.assertRaisesRegex(ValueError, expected):
+                        held.HeldFiles(pins, **kwargs)
+                    verify.assert_not_called()
+                else:
+                    files = held.HeldFiles(pins, **kwargs)
+                    self.assertEqual(len(files.rows), 1825)
+                    self.assertEqual(sum(row[1][2] for row in files.rows.values()), total)
+                    self.assertEqual(files.maximum_bytes, 480 * 1024 * 1024)
+                    verify.assert_called_once_with()
+        finally:
+            if files is not None:
+                self.assertEqual(files.close(), [])
+        self.assertTrue(opened)
+        self.assertTrue(all(stream.closed for stream in opened))
+
+    def test_projected_eighteen_link_size_needs_the_exact_owner_context(self):
+        """The measured R74-shaped projection fails at 448 but fits only the proved R75 branch."""
+        self.virtual_budget(469825862, expected='byte budget exceeded', extended=False)
+        self.virtual_budget(469825862)
+
+    def test_r75_exact_cap_next_byte_and_per_file_limit_retire_handles(self):
+        """Accept exactly 480 MiB, refuse its next byte and retain the 32 MiB individual bound."""
+        self.virtual_budget(480 * 1024 * 1024)
+        self.virtual_budget(480 * 1024 * 1024 + 1, expected='byte budget exceeded')
+        self.virtual_budget(469825862, expected='unbounded immutable file', oversized=True)
+
+    def test_r75_private_admission_reports_and_rechecks_real_original_bytes(self):
+        """The real held reader consumes and closes the small source set with its exact budget proof."""
+        context, report = dict(plan=self.plan), {}
+        cap = held.PausedAdmission(context, self.pins, (), lambda:[], [], self.packages, report)
+        try:
+            self.assertEqual(report['maximumBytes'], 480 * 1024 * 1024)
+            self.assertEqual(report['ownerBudget'], self.budget)
+            self.assertEqual(cap.consume(lambda:context, report, lambda:None), self.pins)
+            self.assertEqual(report['freshHashBytes'], sum(Path(path).stat().st_size for path in self.pins))
+            with patch.object(held, 'R75_MAX_TOTAL_BYTES', report['freshHashBytes'] - 1):
+                with self.assertRaisesRegex(ValueError, 'byte budget changed'):
+                    cap.files.verify()
+        finally:
+            self.assertEqual(cap.close(), [])
+        self.assertTrue(report['consumed'] and report['closed'])
+        self.assertEqual(report['closeErrors'], [])
+
+    def test_r75_budget_rejects_wrong_owner_missing_links_and_fabricated_raw_bytes(self):
+        """A path label or claimed depth cannot replace the original hashed eighteen-link chain."""
+        changes = [
+            lambda value:value.update(ownerFile=str(self.fixture.prior)),
+            lambda value:value['links'].pop(),
+            lambda value:value['links'].append(copy.deepcopy(value['links'][-1])),
+            lambda value:value['links'][0].update(json=value['links'][0]['json'] + ' '),
+            lambda value:value['links'][1].update(path=value['links'][0]['path']),
+            lambda value:value['packages'].pop(str(map_owner.ARTIFACTS / 'release-r58')),
+            lambda value:value['packages'].update({str(map_owner.ARTIFACTS / 'release-r76'):
+                value['packages'].pop(str(map_owner.ARTIFACTS / 'release-r75'))}),
+        ]
+        for change in changes:
+            value = copy.deepcopy(self.budget)
+            change(value)
+            with self.subTest(change=change), patch('builtins.open') as opened:
+                with self.assertRaisesRegex(ValueError, 'R75'):
+                    held.HeldFiles(self.pins, owner_plan=self.plan, owner_budget=value)
+                opened.assert_not_called()
+
+    def test_r75_package_set_cannot_omit_the_collected_budget_or_change_its_plan(self):
+        """An eighteen-package map alone cannot raise the default byte limit."""
+        packages = copy.deepcopy(self.packages)
+        packages[str(map_owner.ARTIFACTS / 'release-r75')].pop('heldBudget')
+        with self.assertRaisesRegex(ValueError, 'validated lineage'):
+            held.PausedAdmission(dict(plan=self.plan), self.pins, (), lambda:[], [], packages, {})
+        plan = dict(self.plan, ownerFile=str(self.fixture.prior))
+        with self.assertRaisesRegex(ValueError, 'validated owner'):
+            held.PausedAdmission(dict(plan=plan), self.pins, (), lambda:[], [], self.packages, {})
 
 
 class WorkerHeldTests(PausedReviewTrialTests):

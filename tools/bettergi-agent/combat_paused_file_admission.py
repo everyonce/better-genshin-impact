@@ -11,7 +11,11 @@ import time
 
 MAX_FILES = 2304
 MAX_FILE_BYTES = 32 * 1024 * 1024
-MAX_TOTAL_BYTES = 384 * 1024 * 1024
+# R73 has 16 retained native generations; run39 measured 407.72 MiB across 1,809 pinned paths.
+# Keep a finite 448 MiB aggregate while preserving every per-file, census and fresh-hash check.
+MAX_TOTAL_BYTES = 448 * 1024 * 1024
+# R75's eighteenth exact package pair exceeds 448 MiB; only its validated lineage may use this bound.
+R75_MAX_TOTAL_BYTES = 480 * 1024 * 1024
 
 
 def require(value, message):
@@ -23,6 +27,63 @@ def require(value, message):
 def canonical(value):
     """Bind detached JSON context without relying on object serialization order."""
     return json.dumps(value, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()
+
+
+def validate_r75_budget(plan, pins, budget):
+    """Replay the small hash-bound R75 chain without reading mutable originals or accepting a generation flag."""
+    require(isinstance(plan, dict) and isinstance(pins, dict) and isinstance(budget, dict)
+        and type(budget.get('version')) is int and budget['version'] == 1
+        and budget.get('kind') == 'r75-eighteen-link-held-budget-v1', 'Invalid R75 held byte-budget context')
+    require(isinstance(plan.get('ownerFile'), str) and isinstance(plan.get('owner'), dict)
+        and budget.get('ownerFile') == plan['ownerFile'] and budget.get('owner') == plan['owner']
+        and pins.get(plan['ownerFile']) == plan.get('ownerSha256')
+        and isinstance(plan.get('ownerSha256'), str) and re.fullmatch('[a-f0-9]{64}', plan['ownerSha256']),
+        'R75 byte budget is not bound to the validated owner')
+    packages, links = budget.get('packages'), budget.get('links')
+    require(isinstance(packages, dict) and len(packages) == 18
+        and all(isinstance(path, str) and Path(path).is_absolute() for path in packages)
+        and isinstance(links, list) and len(links) == 18, 'R75 byte budget requires exactly eighteen links and packages')
+    roots = {Path(path).parent for path in packages}
+    require(len(roots) == 1, 'R75 packages have different artifact roots')
+    artifacts = roots.pop()
+    require(set(packages) == {str(artifacts / ('release-r' + str(number))) for number in range(58, 76)},
+        'R75 byte budget has a missing, skipped or unknown package')
+    for original, choice in packages.items():
+        require(isinstance(choice, dict) and set(choice) == {'originalPresent', 'selected'}
+            and type(choice['originalPresent']) is bool, 'R75 package selection is not original evidence')
+        selected = Path(original) if choice['originalPresent'] else artifacts / 'release-retention/package-witnesses' / Path(original).name
+        require(choice['selected'] == str(selected)
+            and all(isinstance(pins.get(str(selected / relative)), str)
+                and re.fullmatch('[a-f0-9]{64}', pins[str(selected / relative)])
+                for relative in ('build-manifest.json', 'BetterGI-English-win-x64/BetterGI.exe',
+                                 'BetterGI-English-win-x64/BetterGI.dll')),
+            'R75 package witness is not in the held source set')
+    cursor, seen = plan['ownerFile'], set()
+    for index, row in enumerate(links):
+        require(isinstance(row, dict) and set(row) == {'path', 'json'} and row['path'] == cursor
+            and isinstance(row['json'], str) and 0 < len(row['json']) <= 4 * 1024 * 1024
+            and Path(cursor).is_absolute() and Path(cursor).is_relative_to(artifacts)
+            and Path(cursor).name == 'map-owner-lineage.json' and cursor not in seen,
+            'R75 lineage order or original source is invalid')
+        raw = row['json'].encode('utf-8')
+        require(len(raw) <= 4 * 1024 * 1024 and hashlib.sha256(raw).hexdigest() == pins.get(cursor),
+            'R75 lineage bytes differ from the held original')
+        receipt = json.loads(raw)
+        require(isinstance(receipt, dict) and type(receipt.get('version')) is int and receipt['version'] == 1
+            and receipt.get('kind') == 'idle-map-child-replacement' and isinstance(receipt.get('identity'), dict)
+            and receipt['identity'].get('root') == plan['owner'].get('root')
+            and (index != 0 or receipt['identity'] == plan['owner']) and isinstance(receipt.get('prior'), str),
+            'R75 lineage changed its original owner')
+        seen.add(cursor)
+        cursor = receipt['prior']
+        require(Path(cursor).is_absolute() and Path(cursor).is_relative_to(artifacts), 'R75 predecessor escaped its artifact root')
+        if index < 17:
+            require(receipt.get('priorLineageSha256') == pins.get(cursor)
+                and isinstance(pins.get(cursor), str), 'R75 predecessor hash does not join its next link')
+    require(Path(cursor).name == 'warm-launcher.json' and cursor == budget.get('warmOwner')
+        and isinstance(pins.get(cursor), str) and re.fullmatch('[a-f0-9]{64}', pins[cursor]),
+        'R75 lineage does not end at its original warm owner')
+    return R75_MAX_TOTAL_BYTES
 
 
 def source_reader(path, flags):
@@ -55,11 +116,15 @@ class HandleCleanupError(ValueError):
 
 class HeldFiles:
     """Own read-sharing-only handles and rehash their current bytes before one admission."""
-    def __init__(self, pins, *, empty_sources=()):
+    def __init__(self, pins, *, empty_sources=(), owner_plan=None, owner_budget=None):
         """Acquire the complete bounded set while paused, closing every partial acquisition."""
         self.rows = {}
         self.directories = {}
         self.closed = False
+        self.r75_budget = None
+        if owner_budget is not None:
+            validate_r75_budget(owner_plan, pins, owner_budget)
+            self.r75_budget = copy.deepcopy(owner_budget)
         self.empty_sources = frozenset(Path(path).absolute() for path in empty_sources)
         require(isinstance(pins, dict) and 0 < len(pins) <= MAX_FILES, 'Invalid immutable file census')
         normalized = {}
@@ -82,7 +147,7 @@ class HeldFiles:
                         and (info.st_size > 0 or path in self.empty_sources)
                         and info.st_size <= MAX_FILE_BYTES, 'Linked, empty or unbounded immutable file')
                     total += info.st_size
-                    require(total <= MAX_TOTAL_BYTES, 'Immutable file byte budget exceeded')
+                    require(total <= self.maximum_bytes, 'Immutable file byte budget exceeded')
                     self.rows[path] = (stream, file_identity(info), digest)
                 except BaseException as error:
                     try:
@@ -104,6 +169,11 @@ class HeldFiles:
                 raise HandleCleanupError(error, errors) from error
             raise
 
+    @property
+    def maximum_bytes(self):
+        """Keep the old default ceiling unless this private set has a replayed R75 owner proof."""
+        return R75_MAX_TOTAL_BYTES if self.r75_budget is not None else MAX_TOTAL_BYTES
+
     def verify(self):
         """Freshly read every held byte; retain path identity without repeated full-path resolution."""
         require(not self.closed, 'Immutable handles are retired')
@@ -124,7 +194,7 @@ class HeldFiles:
             require(len(raw) == info.st_size and digest == expected, 'Immutable held bytes changed: ' + str(path))
             actual[str(path)] = digest
             total += len(raw)
-        require(total <= MAX_TOTAL_BYTES, 'Immutable file byte budget changed')
+        require(total <= self.maximum_bytes, 'Immutable file byte budget changed')
         return actual, total
 
     def close(self):
@@ -142,11 +212,11 @@ class HeldFiles:
 def owner_inputs(path, artifacts, validate_owner):
     """Enumerate the current finite owner's complete immutable replay inputs, then validate normally.
 
-    This mirrors only map_owner's explicit R58..R73 evidence names and package-selection rule.
+    This mirrors only map_owner's explicit R58..R75 evidence names and package-selection rule.
     Its actual reader set is checked by an independent read-trace regression; no new owner is admitted here.
     """
     artifacts = Path(artifacts).resolve()
-    pins, packages, seen = {}, {}, set()
+    pins, packages, seen, links = {}, {}, set(), []
     def add(path, maximum=4 * 1024 * 1024):
         """Pin one original byte sequence under the existing artifacts root."""
         path = Path(path).absolute()
@@ -163,10 +233,12 @@ def owner_inputs(path, artifacts, validate_owner):
         return raw
     cursor = Path(path).absolute()
     while cursor.name != 'warm-launcher.json':
-        require(cursor.name == 'map-owner-lineage.json' and cursor not in seen and len(seen) < 16,
+        require(cursor.name == 'map-owner-lineage.json' and cursor not in seen and len(seen) < 18,
             'Owner closure exceeds the finite lineage')
         seen.add(cursor)
-        receipt = json.loads(add(cursor))
+        raw = add(cursor)
+        receipt = json.loads(raw)
+        links.append(dict(path=str(cursor), json=raw.decode('utf-8')))
         folder = cursor.parent
         for name in ('before.json', 'preflight.json', 'ensure-child.json'):
             add(folder / name)
@@ -174,7 +246,7 @@ def owner_inputs(path, artifacts, validate_owner):
             add(folder / 'game-before.json')
         selected = json.loads(add(folder / 'ensure-child.json'))['selectedPackage']
         target = Path(selected['targetDirectory']).absolute()
-        match = re.fullmatch(r'release-r(5[89]|6[0-9]|7[0123])', target.parent.name)
+        match = re.fullmatch(r'release-r(5[89]|6[0-9]|7[012345])', target.parent.name)
         require(match is not None and target == artifacts / target.parent.name / 'BetterGI-English-win-x64',
             'Unexpected owner package scope')
         number = int(match[1])
@@ -189,6 +261,12 @@ def owner_inputs(path, artifacts, validate_owner):
     add(cursor)
     add(cursor.with_name('handoff-audit.json'))
     owner = validate_owner(path)
+    if len(packages) == 18:
+        # Keep only the original small lineage documents needed to replay this finite byte allowance.
+        budget = dict(version=1, kind='r75-eighteen-link-held-budget-v1', ownerFile=str(Path(path).absolute()),
+            owner=owner, packages=copy.deepcopy(packages), links=links, warmOwner=str(cursor))
+        validate_r75_budget(dict(ownerFile=budget['ownerFile'], ownerSha256=pins[budget['ownerFile']], owner=owner), pins, budget)
+        packages[str(artifacts / 'release-r75')]['heldBudget'] = budget
     return owner, pins, packages
 
 
@@ -203,14 +281,19 @@ class PausedAdmission:
         self.report = report
         self.consumed = False
         self.closed = False
-        self.files = HeldFiles(pins, empty_sources=empty_sources)
+        budgets = [choice['heldBudget'] for choice in packages.values() if 'heldBudget' in choice]
+        require(len(budgets) <= 1 and (bool(budgets) or len(packages) <= 17), 'R75 byte allowance lacks its validated lineage')
+        self.files = HeldFiles(pins, empty_sources=empty_sources, owner_plan=context.get('plan'),
+            owner_budget=budgets[0] if budgets else None)
         report.update(version=1, kind='per-worker-held-immutable-admission-v1',
             preparedAtUnixNs=time.time_ns(), fileCount=len(self.files.rows),
             contextSha256=hashlib.sha256(self.context).hexdigest(),
             immutableFiles={str(path):row[2] for path,row in self.files.rows.items()},
-            maximumFiles=MAX_FILES, maximumBytes=MAX_TOTAL_BYTES, maximumFileBytes=MAX_FILE_BYTES,
+            maximumFiles=MAX_FILES, maximumBytes=self.files.maximum_bytes, maximumFileBytes=MAX_FILE_BYTES,
             denyWriteDelete=True, checkpointContentHeld=False, freshHashReadRequired=True,
             consumed=False, closed=False)
+        if budgets:
+            report['ownerBudget'] = copy.deepcopy(budgets[0])
 
     def consume(self, context, report, liveness):
         """Spend the private capability once, checking STOP around all fresh immutable byte reads."""

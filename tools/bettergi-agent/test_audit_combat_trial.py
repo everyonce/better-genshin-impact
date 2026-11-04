@@ -344,6 +344,49 @@ class CombatTrialAuditTests(unittest.TestCase):
         self.assertEqual(replay['state']['acceptedActions'], 0)
         self.assertEqual(replay['counts']['combatTrialLocalRefusal'], 1)
 
+    def test_recovery_stream_real_async_recording_passes_original_exact_intake_audit(self):
+        """Exercise production recorder creation and the unchanged auditor with empty/nonempty receipts."""
+        from unittest.mock import patch
+        import stream_client as client
+        from policy_rgb_archive import read_recording_jsonl
+        from test_combat_trial_stream import CombatStaleRecoveryStreamTests, StaleRecoveryBridge, TrialPolicy
+        from test_recorder_metadata import MemoryEncoder
+        real_recorder = client.AsyncVideoRecorder
+        created = []
+
+        def factory(*args, **kwargs):
+            """Use the real constructor arguments supplied by the combat stream."""
+            recorder = real_recorder(*args, **kwargs)
+            created.append(recorder)
+            return recorder
+
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(client.subprocess, 'Popen', return_value=MemoryEncoder()):
+            folder = Path(directory)
+            harness, policy = CombatStaleRecoveryStreamTests(), TrialPolicy()
+            args = harness.recovery_arguments(folder, policy)
+            # Match the live20FPS capture rate instead of the memory-only100FPS fixture.
+            args.fps = args.decision_hz = 20
+            result = harness.run_inert(folder, StaleRecoveryBridge(interrupt=False), policy, None,
+                                       args=args, recorder_factory=factory, real_images=True)
+            report = json.loads((folder / 'run.json').read_bytes())
+            self.assertEqual(result, 0, report.get('error'))
+            self.assertEqual(len(created), 1)
+            self.assertTrue(report['recording']['frameReceiptsRetained'])
+            recording = folder / 'recording'
+            frames = read_recording_jsonl(recording, 'frames.jsonl')[0]
+            events = read_recording_jsonl(recording, 'events.jsonl')[0]
+            audited = audit_episode(report, events, frames, recording, args.combat_trial_binding)
+            self.assertTrue(audited['trialCompleteVerified'])
+            self.assertTrue(any(row.get('receipts') == [] for row in frames))
+            self.assertTrue(any(row.get('receipts') for row in frames))
+            # Losing only this field must still trigger the original exact-intake refusal.
+            missing = copy.deepcopy(frames)
+            for row in missing:
+                row.pop('receipts', None)
+            with self.assertRaisesRegex(ValueError, 'exact original guard intake'):
+                audit_episode(report, events, missing, recording, args.combat_trial_binding)
+
     def test_actual_stream_event_order_is_replayable(self):
         """Run the real stream loop against inert resources, then independently replay its output."""
         from test_combat_trial_stream import CombatTrialStreamTests, TrialBridge, TrialPolicy
@@ -694,6 +737,349 @@ class CombatStaleReacquisitionAuditTests(unittest.TestCase):
         """Old four-enemy semantics still reject the actual unexplained epoch change."""
         self.binding['policy'] = trial_policy(FOUR_SCOPE)
         with self.assertRaises(ValueError): self.audit()
+
+
+
+
+def ground_completed_trace(count=20, *, rich_release=False):
+    """Retain a deterministic bounded native-shaped trace, without native/model/encoder execution."""
+    from test_combat_trial_guard import ground_review_parts, ground_hello, ground_proposal
+    from test_encounter_approach import sample
+    from test_scout_encounter_guard import ReleaseContextSnapshotTests
+    parts=ground_review_parts(); authority=binding(parts); hello=ground_hello()
+    guard=CombatTrialGuard(authority,OWNER,hello,50_000_000,outer_deadline_ns=5_000_000_000)
+    events,frames,decisions,receipts=[],[],[],[]; epoch=0
+    def observe(at):
+        """Each crop-rich source and exact receipt envelope is preserved once as RGB metadata."""
+        row=sample(len(frames)+1,at,epoch=epoch); row['receipts']=[]
+        frames.append(copy.deepcopy(row)); events.append(guard.observe(row,int(row['serverNowMs']*1e6),round_trip_ms=1))
+        return row
+    observe(100); current=observe(150)
+    for at in range(200,651,50): current=observe(at)
+    for index in range(count):
+        if index: current=observe(650+index*180)
+        at=current['sourceFrame']['freshnessAtMs']
+        proposed=ground_proposal((),dx=50) if index%5==4 else ground_proposal(('LBUTTON',) if index%3==1 else ('W',))
+        marker=guard.prepare_action(current,proposed,'ground-'+str(index),int((at+15)*1e6),owner=OWNER,hello=hello)
+        events.append(marker);events.append(guard.transmitting(int((at+16)*1e6)))
+        accepted=dict(type='accepted',requestId='ground-'+str(index),receivedAtMs=at+19,acceptedAtMs=at+20)
+        events.append(guard.admission(accepted,0,int((at+21)*1e6)))
+        events.append(dict(type='proposal',proposalJournalVersion=2,model='open-p2p',
+            frameId=current['frameId'],steps=copy.deepcopy(proposed['steps']),rawPolicySteps=copy.deepcopy(proposed['steps']),
+            acceptance=copy.deepcopy(accepted),combatTrialGuard=copy.deepcopy(marker),historyCommitted=True,
+            controllerResampling='none; unchanged native50ms policy step'))
+        observe(at+50)
+        receipt=dict(requestId='ground-'+str(index),frameId=current['frameId'],modelId='open-p2p',
+            status='completed',reason='horizon_complete',acceptedAtMs=at+20,endedAtMs=at+70,
+            appliedSteps=[dict(index=0,startedAtMs=at+21,
+                **{key:proposed['steps'][0][key] for key in ('keys','mouseDx','mouseDy')})])
+        receipts.append(copy.deepcopy(receipt));events.append(guard.receipt(receipt,int((at+75)*1e6)))
+        epoch+=1; released=dict(type='released',serverNowMs=at+80,worldReadiness=dict(ready=False,epoch=epoch))
+        if rich_release: released['executionContext']=ReleaseContextSnapshotTests.context('ground-'+str(index))
+        events.append(guard.acknowledge_release(released,0,int((at+81)*1e6),'completedCombatPulse'))
+        decisions.append(dict(copy.deepcopy(proposed),rawPolicySteps=copy.deepcopy(proposed['steps']),
+            frameId=current['frameId'],acceptance=accepted,combatTrialGuard=marker,historyCommitted=True,
+            controllerResampling='none; unchanged native50ms policy step'))
+        observe(at+100); current=observe(at+150)
+    if count<20:
+        current=observe(4350)
+    end=guard.complete_ground_window(int(current['serverNowMs']*1e6)); assert end is not None,guard.snapshot()
+    events.append(end)
+    at=current['serverNowMs']+10
+    events.append(guard.acknowledge_release(dict(type='released',serverNowMs=at,
+        worldReadiness=dict(ready=False,epoch=epoch+1)),0,int((at+1)*1e6),'combatTrialTeardown'))
+    episode=dict(status='completed',hello=hello,combatTrialGuard=authority,combatTrialGuardState=guard.snapshot(),
+        combatGroundClock=dict(clientNs=50_000_000,monotonicNs=1_000_000_000,
+            leaseDeadlineMonotonicNs=5_950_000_000,originalOuterDeadlineClientNs=5_000_000_000),
+        nativeGroundControlObservation=copy.deepcopy(parts[2]['nativeGroundControlObservation']),
+        nativeGroundControlGate=copy.deepcopy(parts[2]['nativeGroundControlGate']),
+        navigationGuidance=copy.deepcopy(parts[2]['capability']),decisions=decisions,receipts=receipts,
+        combatTrialReceiptEnvelopes=[dict(type='frame',serverNowMs=item['endedAtMs']+5,
+            receipts=[copy.deepcopy(item)],droppedReceipts=0) for item in receipts],
+        combatTrialReleases=[{key:copy.deepcopy(event[key]) for key in ('response','payloadBytes','clientTimeNs','reason')}
+            for event in events if event['type']=='combatTrialRelease'],acceptedInputActions=count,
+        endReason='combatGroundWindowDrained',stop=dict(type='stopped'),residentRunId='a'*32,
+        combatTrialFinalControl=dict(version=1,runId='a'*32,command='run'),goalChanges=[],
+        recording=dict(complete=True,lossless=True,workerRetired=True,error=None,encodedFrames=len(frames),
+            policyRgbFrames=len(frames),recordedObservations=len(frames),droppedFrames=0,droppedEvents=0,
+            droppedObservations=0,abandonedFrames=0))
+    goal=dict(controlEpoch=0,policyGoalVersion=0,appliedGoalRequestId=None,goalRequestId=None,
+        goalRequestStatus=None,goalError=None,goalMetadata=dict(instruction='fixed combat'),goalIntent='unspecified')
+    episode.update(initialGoalState=copy.deepcopy(goal),finalGoalState=copy.deepcopy(goal))
+    return episode,events,frames,authority
+
+
+
+
+class GroundCombatAuditTests(unittest.TestCase):
+    """Independently replay finite ground authority, full causal proofs and the real bounded writer."""
+    evidence_sink=None  # Optional ignored-artifact export; ordinary tests remain self-contained.
+
+    def setUp(self):
+        """Give each mutation an independent small disk archive and exact retained RGB identity."""
+        self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
+        self.folder=Path(self.temp.name)
+
+    def recorded(self,count=3):
+        """Write original frame pixels without a native source or image/model inference."""
+        self.episode,self.events,self.frames,self.binding=ground_completed_trace(count)
+        for index,row in enumerate(self.frames):
+            row.update(videoFrameIndex=index,clientReceivedNs=int(row['serverNowMs']*1e6),transportRoundTripMs=1)
+            row['policyRgb']=write_policy_rgb(self.folder,index,row,bytes([index])*(192*192*3))
+        return self.episode,self.events,self.frames,self.binding
+
+    def audit(self):
+        """Use the same complete episode replay as the actual retained combat auditor."""
+        return audit_episode(self.episode,self.events,self.frames,self.folder,self.binding)
+
+    def test_zero_and_partial_drained_counts_do_not_claim_a_kill_or_required_twenty(self):
+        """The cap is a ceiling and only exact completed/retired evidence establishes a bounded window."""
+        for count in (0,3):
+            with self.subTest(count=count),tempfile.TemporaryDirectory() as folder:
+                self.folder=Path(folder);self.recorded(count)
+                result=self.audit()
+                self.assertTrue(result['trialCompleteVerified']);self.assertEqual(result['acceptedProposalJoins'],count)
+                self.assertFalse(result['damageVerified']);self.assertFalse(result['killVerified']);self.assertFalse(result['combatSuccess'])
+
+    def test_missing_swapped_and_altered_completed_references_refuse_causally(self):
+        """Changing every recurring snapshot cannot manufacture an absent or future proof."""
+        self.recorded()
+        original_events,original_episode=copy.deepcopy(self.events),copy.deepcopy(self.episode)
+        for field,change in (('postFrame',lambda x:x.update(sha256='0'*64)),
+            ('frame',lambda x:x.update(bindingSha256='f'*64)),('release',lambda x:x.update(clientTimeNs=x['clientTimeNs']+1)),
+            ('postFrame',lambda x:x.clear())):
+            self.events,self.episode=copy.deepcopy(original_events),copy.deepcopy(original_episode)
+            for event in self.events:
+                state=event.get('state')
+                if isinstance(state,dict) and state.get('completed'):change(state['completed'][0][field])
+            change(self.episode['combatTrialGuardState']['completed'][0][field])
+            with self.subTest(field=field,change=change),self.assertRaises(ValueError):self.audit()
+        self.events,self.episode=copy.deepcopy(original_events),copy.deepcopy(original_episode)
+        future=copy.deepcopy(self.episode['combatTrialGuardState']['completed'][1]['release'])
+        for event in self.events:
+            state=event.get('state')
+            if isinstance(state,dict) and state.get('completed'):state['completed'][0]['release']=copy.deepcopy(future)
+        self.episode['combatTrialGuardState']['completed'][0]['release']=future
+        with self.assertRaises(ValueError):self.audit()
+
+    def test_full_release_and_post_frame_cannot_be_removed_behind_valid_hashes(self):
+        """References remain dependent on original causal bytes, not standalone digest assertions."""
+        self.recorded()
+        original=copy.deepcopy(self.events)
+        first_release=next(event for event in self.events if event['type']=='combatTrialRelease')
+        self.events.remove(first_release)
+        with self.assertRaises(ValueError):self.audit()
+        self.events=original
+        missing=self.episode['combatTrialGuardState']['completed'][0]['postFrame']['frameId']
+        self.events=[event for event in self.events if not(event['type']=='combatTrialObservation' and event['frame']['frameId']==missing)]
+        with self.assertRaises(ValueError):self.audit()
+
+    def test_changed_outer_clock_or_missing_final_send_gate_refuses(self):
+        """Neither a re-based outer deadline nor a detached native admission can validate the window."""
+        self.recorded();original=copy.deepcopy(self.episode)
+        self.episode['combatGroundClock']['leaseDeadlineMonotonicNs']+=1
+        with self.assertRaises(ValueError):self.audit()
+        self.episode=original
+        self.events=[event for event in self.events if event['type']!='combatTrialTransmission']
+        with self.assertRaises(ValueError):self.audit()
+
+    def test_raw_step_and_accepted_history_claim_require_original_journal(self):
+        """Native completion cannot excuse a rewritten proposal or an absent accepted-history commit."""
+        self.recorded();original=copy.deepcopy(self.episode)
+        self.episode['decisions'][0]['rawPolicySteps'][0]['durationMs']=100
+        with self.assertRaises(ValueError):self.audit()
+        self.episode=copy.deepcopy(original);self.episode['decisions'][0]['historyCommitted']=False
+        with self.assertRaises(ValueError):self.audit()
+        self.episode=original;self.events=[event for event in self.events if event.get('type')!='proposal']
+        with self.assertRaises(ValueError):self.audit()
+
+    def test_foreign_ground_pose_or_pixels_cannot_replay_as_an_original_frame(self):
+        """A report-level source/geometry mutation cannot be excused by a later good pose."""
+        self.recorded();original=copy.deepcopy(self.frames)
+        for mutate in (lambda x:x['navigationPose'].update(layerId='foreign'),
+            lambda x:x['groundControlEvidence'].update(frameId=999),lambda x:x['sourceFrame'].update(captureEpoch='foreign')):
+            self.frames=copy.deepcopy(original);mutate(self.frames[0])
+            with self.subTest(mutate=mutate),self.assertRaises(ValueError):self.audit()
+
+    def test_twenty_actions_fit_real_async_writer_and_complete_audit_without_cap_changes(self):
+        """Deterministic native/model clocks and encoder; real queues, PNG/journal writer and full episode audit."""
+        from contextlib import ExitStack
+        import hashlib,random,shutil,time
+        from unittest.mock import patch
+        import stream_client as client
+        import policy_rgb_archive as archive
+        from test_recorder_metadata import MemoryEncoder
+        episode,events,frames,authority=ground_completed_trace(rich_release=True)
+        original_events=copy.deepcopy(events)
+        pixels=random.Random(75).randbytes(192*192*3)
+        by_id={row['frameId']:row for row in frames}
+        record=self.folder/'recording'  # The real recorder owns exclusive directory creation.
+        with ExitStack() as stack:
+            encoder=MemoryEncoder();stack.enter_context(patch.object(client.subprocess,'Popen',return_value=encoder))
+            recorder=client.AsyncVideoRecorder(record,'inert-encoder',20,160*1024*1024,
+                retain_policy_rgb=True,retain_frame_receipts=True)
+            started=time.perf_counter();last_time=50_000_000
+            try:
+                for event in events:
+                    last_time=event.get('clientTimeNs',last_time)
+                    remaining=(last_time-50_000_000)/1e9-(time.perf_counter()-started)
+                    if remaining>0:time.sleep(remaining)
+                    self.assertTrue(recorder.event(event),recorder.error)
+                    if event['type']=='combatTrialObservation':
+                        row=copy.deepcopy(by_id[event['frame']['frameId']])
+                        row.update(clientReceivedNs=event['clientTimeNs'],transportRoundTripMs=event['roundTripMs'])
+                        self.assertTrue(recorder.put(row,pixels))
+            finally:recording=recorder.close()
+            elapsed=time.perf_counter()-started
+        self.assertTrue(recording['complete'] and recording['lossless'],recording)
+        self.assertTrue(recording['workerRetired']);self.assertIsNone(recording['error'])
+        for field in ('droppedFrames','droppedEvents','droppedObservations','abandonedFrames'):self.assertEqual(recording[field],0)
+        actual_events,_=archive.read_recording_jsonl(record,'events.jsonl')
+        actual_frames,_=archive.read_recording_jsonl(record,'frames.jsonl')
+        self.assertEqual(actual_events,original_events)
+        episode['recording']=recording;episode['framesReceived']=len(actual_frames)
+        result=audit_episode(episode,actual_events,actual_frames,record,authority)
+        self.assertTrue(result['trialCompleteVerified']);self.assertEqual(result['acceptedProposalJoins'],20)
+        self.assertFalse(result['combatSuccess']);self.assertFalse(result['damageVerified']);self.assertFalse(result['killVerified'])
+        seal=json.loads((record/'recording.json').read_bytes())
+        for row in seal['journalFiles'].values():
+            self.assertLessEqual(row['bytes'],archive.JOURNAL_MAX_DECODED_BYTES)
+            self.assertLessEqual(row['rows'],archive.JOURNAL_MAX_ROWS)
+        physical=sum(path.stat().st_size for path in record.rglob('*') if path.is_file())
+        self.assertLessEqual(physical,160*1024*1024)
+        summary=dict(candidateOnly=True,noNativeOrModelCalls=True,accepted=20,completed=20,
+            sourceFrames=len(actual_frames),events=len(actual_events),physicalBytes=physical,
+            journalFiles=seal['journalFiles'],elapsedWriterSeconds=elapsed,
+            syntheticOriginalStartedNs=50_000_000,syntheticOriginalDeadlineNs=5_000_000_000,
+            syntheticLastEventNs=last_time,releaseLedgerRows=256,
+            originalRecordingMaximumBytes=160*1024*1024,decodedJournalMaximumBytes=archive.JOURNAL_MAX_DECODED_BYTES,
+            audit=result,limitations=['Synthetic native/model/receipt clocks and inert encoder.',
+                'Actual bounded asynchronous writer and full episode audit; no physical delivery, damage or kill claim.',
+                'Measured twenty-action workload, not a guarantee that every permitted scheduling/telemetry trace fits.'])
+        if self.evidence_sink is not None:
+            target=Path(self.evidence_sink);target.mkdir(exist_ok=False)
+            shutil.copytree(record,target/'recording')
+            (target/'episode.json').write_text(json.dumps(episode,indent=2)+'\n',encoding='utf-8')
+            (target/'result.json').write_text(json.dumps(summary,indent=2)+'\n',encoding='utf-8')
+
+
+
+    def test_clock_only_legacy_call_remains_valid_but_ground_marker_needs_binding(self):
+        """The new original-lease join cannot require a full binding from historical clock-only callers."""
+        import audit_combat_trial as audit
+        from test_audit_combat_paused_review import HeldClockAuditTests
+        from test_combat_trial_guard import ground_review_parts
+        fixture=HeldClockAuditTests();fixture.setUp();self.addCleanup(fixture.doCleanups)
+        fixture.verify()
+        qpc,mono=fixture.qpc,fixture.mono
+        fixture.plan['binding']=binding(ground_review_parts())
+        outer=qpc+64_000_000_000;started=qpc+61_100_000_000
+        fixture.episode={'combatTrialGuardState':dict(startedNs=started,deadlineNs=outer,
+            groundCombat=dict(outerDeadlineNs=outer,dispatchCutoffNs=outer-650_000_000)),
+            'combatGroundClock':dict(clientNs=started,monotonicNs=mono+61_100_000_000,
+                leaseDeadlineMonotonicNs=fixture.wrapper['leaseDeadlineMonotonicNs'],originalOuterDeadlineClientNs=outer)}
+        fixture.verify([dict(type='combatTrialTransmission',clientTimeNs=outer-650_000_000)])
+        with self.assertRaises(ValueError):fixture.verify([dict(type='combatTrialTransmission',clientTimeNs=outer-650_000_000+1)])
+        original=fixture.plan.pop('binding')
+        with self.assertRaisesRegex(ValueError,'exact reviewed binding'):fixture.verify()
+        fixture.plan['binding']=binding()
+        with self.assertRaisesRegex(ValueError,'exact reviewed binding'):fixture.verify()
+        fixture.plan['binding']=original;fixture.episode['combatGroundClock']['leaseDeadlineMonotonicNs']+=1
+        with self.assertRaises(ValueError):fixture.verify()
+
+    def test_ground_replay_requires_exact_current_pure_geometry_and_crop_implementations(self):
+        """A changed but rehashed archived helper cannot silently alter replay of the reviewed corridor."""
+        import audit_combat_trial as audit
+        from test_combat_trial_guard import ground_review_parts
+        base=('combat_trial.py','combat_trial_guard.py','stream_client.py','native_combat.py',
+            'model_adapters.py','resident_runtime.py','episode_split.py')
+        dependencies=('native_ground_control.py','navigation_profiles.py','reviewed_scout_route.py','hybrid_routes.py')
+        pins={}; originals={}
+        for name in base+dependencies:
+            raw=Path(audit.__file__).with_name(name).read_bytes();relative='tools/bettergi-agent/'+name
+            destination=self.folder/'source-snapshot'/relative;destination.parent.mkdir(parents=True,exist_ok=True)
+            destination.write_bytes(raw);pins[relative]=digest(raw);originals[name]=raw
+        plan=dict(binding=binding(ground_review_parts()),sourceFiles=pins)
+        audit.verify_source_archive(self.folder,plan)
+        for name in dependencies:
+            relative='tools/bettergi-agent/'+name;destination=self.folder/'source-snapshot'/relative
+            with self.subTest(dependency=name):
+                old=pins.pop(relative)
+                with self.assertRaises(ValueError):audit.verify_source_archive(self.folder,plan)
+                changed=originals[name]+b'\n# changed retained pure implementation\n'
+                destination.write_bytes(changed);pins[relative]=digest(changed)
+                with self.assertRaisesRegex(ValueError,'Replay implementation differs'):audit.verify_source_archive(self.folder,plan)
+                destination.write_bytes(originals[name]);pins[relative]=old
+        audit.verify_source_archive(self.folder,plan)
+
+
+    def test_coherently_rehashed_dispatched_ground_crop_requires_pixel_replay(self):
+        """Honest content hashes and matching compact references cannot replace actual E/Q glyphs."""
+        import base64
+        from combat_trial_guard import ground_frame_reference
+        from native_ground_control import require_ground_frame
+        self.recorded()
+        self.assertTrue(self.audit()['trialCompleteVerified'])
+        target=self.episode['decisions'][0]['frameId']
+        self.assertEqual(self.episode['decisions'][0]['steps'],
+            [dict(keys=['W'],mouseDx=0,mouseDy=0,durationMs=50)])
+        self.assertNotEqual(target,self.binding['reviewedFrame']['frameId'])
+        counts=dict(frames=0,references=0)
+        def change_crop(value):
+            """Change only the selected dispatched source, including each full causal copy."""
+            if isinstance(value,dict):
+                if value.get('frameId')==target and isinstance(value.get('groundControlEvidence'),dict):
+                    crop=value['groundControlEvidence']['crops'][0]
+                    pixels=bytes(crop['width']*crop['height']*3)
+                    crop.update(rgbBase64=base64.b64encode(pixels).decode('ascii'),sha256=digest(pixels))
+                    counts['frames']+=1
+                for child in value.values():change_crop(child)
+            elif isinstance(value,list):
+                for child in value:change_crop(child)
+        for value in (self.episode,self.events,self.frames):change_crop(value)
+        frame=next(row for row in self.frames if row['frameId']==target)
+        with self.assertRaisesRegex(ValueError,'Ground-control glyph does not replay'):
+            require_ground_frame(frame,replay_pixels=True)
+        reference=ground_frame_reference(frame,self.episode['combatTrialGuardState']['bindingSha256'])
+        def change_reference(value):
+            """Recompute every compact reference, avoiding an unrelated hash-mismatch refusal."""
+            if isinstance(value,dict):
+                if value.get('kind')=='ground-combat-frame-reference-v1' and value.get('frameId')==target:
+                    value.clear();value.update(copy.deepcopy(reference));counts['references']+=1
+                for child in value.values():change_reference(child)
+            elif isinstance(value,list):
+                for child in value:change_reference(child)
+        for value in (self.episode,self.events):change_reference(value)
+        self.assertGreater(counts['frames'],1);self.assertGreater(counts['references'],0)
+        with self.assertRaisesRegex(ValueError,'Ground-control glyph does not replay'):
+            self.audit()
+
+    def test_unavailable_startup_ground_evidence_remains_non_authoritative(self):
+        """The stricter pixel audit still admits an unavailable startup row before fresh qualification."""
+        from unittest.mock import patch
+        from test_encounter_approach import sample
+        def initial_unavailable(index,at,**kwargs):
+            """Project only the first source into the native world-not-ready evidence shape."""
+            row=sample(index,at,**kwargs)
+            if index==1:
+                row['inputAvailable']=False
+                for key in ('worldReadiness','frameWorldReadiness'):
+                    row[key].update(ready=False,reason='world_confirming')
+                row['motionEvidence'].update(status='unknown',reason='world_not_ready',
+                    spaceKeyMatched=None,xKeyMatched=None)
+                row['groundControlEvidence'].update(state='unavailable',reason='world_not_ready',
+                    groundControlsConfirmed=False,swimHintPixels=0,spaceKeyMatched=None,xKeyMatched=None,
+                    eKey=None,qKey=None,crops=[])
+            return row
+        from test_combat_trial_guard import ground_review_parts
+        reviewed_parts=ground_review_parts()  # Keep the already-reviewed baseline independent of startup.
+        with patch('test_combat_trial_guard.ground_review_parts',return_value=reviewed_parts), \
+                patch('test_encounter_approach.sample',side_effect=initial_unavailable):self.recorded()
+        first=self.frames[0]
+        self.assertEqual(first['groundControlEvidence']['state'],'unavailable')
+        self.assertFalse(first['inputAvailable'])
+        self.assertNotIn(first['frameId'],[row['frameId'] for row in self.episode['decisions']])
+        self.assertTrue(self.audit()['trialCompleteVerified'])
 
 
 if __name__ == '__main__':

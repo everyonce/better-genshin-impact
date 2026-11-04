@@ -313,6 +313,114 @@ class HeldClockAuditTests(unittest.TestCase):
         """Call the real auditor without altering its inputs or predicates."""
         return audit.verify_reviewed_episode_clocks(self.plan, self.wrapper, self.episode, events)
 
+    def r75_context(self):
+        """Join a real fixture collector's eighteen original lineage documents to this clock fixture."""
+        from test_combat_paused_file_admission import r75_budget_fixture
+        fixture, plan, pins, _packages, budget = r75_budget_fixture(self)
+        self.plan.update(plan)
+        self.wrapper['pausedImmutableAdmission'].update(maximumBytes=480*1024*1024,
+            immutableFiles=pins, fileCount=len(pins), ownerBudget=budget)
+        return fixture
+
+    def test_r75_only_budget_projection_exact_boundary_and_overrun(self):
+        """The source-bound R75 branch accepts its finite projection and exact ceiling, never the next byte."""
+        self.r75_context()
+        held = self.wrapper['pausedImmutableAdmission']
+        held['freshHashBytes'] = 469825862
+        self.verify()
+        held['freshHashBytes'] = 480*1024*1024
+        self.verify()
+        held['freshHashBytes'] += 1
+        with self.assertRaisesRegex(ValueError, 'source declaration'):
+            self.verify()
+
+    def test_r75_budget_requires_exact_owner_original_chain_and_package_scope(self):
+        """Neither a claimed R75 generation nor fabricated, missing or nineteenth link can widen a ceiling."""
+        fixture = self.r75_context()
+        original = copy.deepcopy(self.wrapper['pausedImmutableAdmission'])
+        original_plan = copy.deepcopy(self.plan)
+        mutations = [
+            lambda value:value.pop('ownerBudget'),
+            lambda value:value['ownerBudget']['links'].pop(),
+            lambda value:value['ownerBudget']['links'].append(copy.deepcopy(value['ownerBudget']['links'][-1])),
+            lambda value:value['ownerBudget']['links'][0].update(json=value['ownerBudget']['links'][0]['json']+' '),
+            lambda value:value['ownerBudget'].update(warmOwner=str(fixture.prior)),
+            lambda value:value.update(maximumBytes=448*1024*1024),
+            lambda value:value.update(maximumBytes=float(480*1024*1024)),
+        ]
+        for mutate in mutations:
+            self.wrapper['pausedImmutableAdmission'] = copy.deepcopy(original)
+            mutate(self.wrapper['pausedImmutableAdmission'])
+            with self.subTest(mutate=mutate), self.assertRaisesRegex(ValueError, 'R75|source declaration'):
+                self.verify()
+        self.wrapper['pausedImmutableAdmission'] = original
+        self.plan['ownerFile'] = str(fixture.prior)
+        with self.assertRaisesRegex(ValueError, 'validated owner'):
+            self.verify()
+        self.plan = original_plan
+
+    def test_r75_budget_keeps_original_clocks_source_mode_and_cleanup(self):
+        """The larger file allowance cannot authorize expired input or failed handle retirement."""
+        self.r75_context()
+        self.verify()
+        original = self.wrapper['finalPausedReviewAdmission']['admittedAtClientNs']
+        self.wrapper['finalPausedReviewAdmission']['admittedAtClientNs'] = self.qpc + 61_000_000_001
+        with self.assertRaisesRegex(ValueError, 'lease widened'):
+            self.verify()
+        self.wrapper['finalPausedReviewAdmission']['admittedAtClientNs'] = original
+        self.wrapper['pausedImmutableAdmission']['closed'] = False
+        with self.assertRaisesRegex(ValueError, 'source declaration'):
+            self.verify()
+        self.wrapper['pausedImmutableAdmission']['closed'] = True
+        self.plan['sourceFiles'] = {}
+        with self.assertRaisesRegex(ValueError, 'Historical'):
+            self.verify()
+
+    def test_r75_budget_replays_without_opening_any_original_source(self):
+        """The auditor derives generation/depth from retained exact bytes, not a mutable owner lookup."""
+        self.r75_context()
+        with patch('builtins.open', side_effect=AssertionError('No original read')), \
+                patch.object(Path, 'open', side_effect=AssertionError('No original read')):
+            self.verify()
+
+    def test_historical_budget_cannot_inherit_the_larger_ceiling(self):
+        """A 384 MiB declaration still fails at its own next byte, regardless of the newer contract."""
+        held=self.wrapper['pausedImmutableAdmission']
+        held['freshHashBytes']=384*1024*1024
+        self.verify()
+        held['freshHashBytes']+=1
+        with self.assertRaisesRegex(ValueError,'source declaration'):self.verify()
+
+    def test_new_budget_measured_shape_boundary_and_overrun(self):
+        """The finite 448 MiB declaration admits the measured run39 size, its boundary, but no more."""
+        held=self.wrapper['pausedImmutableAdmission'];held['maximumBytes']=448*1024*1024
+        held['freshHashBytes']=427529818
+        self.verify()
+        held['freshHashBytes']=448*1024*1024
+        self.verify()
+        held['freshHashBytes']+=1
+        with self.assertRaisesRegex(ValueError,'source declaration'):self.verify()
+
+    def test_unknown_or_non_integer_budget_declarations_refuse(self):
+        """Only the two explicit integer ceilings exist; unknown or numeric-lookalike values refuse."""
+        held=self.wrapper['pausedImmutableAdmission']
+        for value in (0,True,False,None,'469762048',float(384*1024*1024),float(448*1024*1024),
+                      384*1024*1024-1,384*1024*1024+1,448*1024*1024+1,512*1024*1024):
+            with self.subTest(value=value):
+                held['maximumBytes']=value
+                with self.assertRaisesRegex(ValueError,'source declaration'):self.verify()
+
+    def test_new_budget_cannot_relax_clock_or_source_mode(self):
+        """The larger file bound cannot introduce later admission or an undeclared held mode."""
+        self.wrapper['pausedImmutableAdmission']['maximumBytes']=448*1024*1024
+        self.verify()
+        admitted=self.wrapper['finalPausedReviewAdmission']['admittedAtClientNs']
+        self.wrapper['finalPausedReviewAdmission']['admittedAtClientNs']=self.qpc+61_000_000_001
+        with self.assertRaisesRegex(ValueError,'lease widened'):self.verify()
+        self.wrapper['finalPausedReviewAdmission']['admittedAtClientNs']=admitted
+        self.plan['sourceFiles']={}
+        with self.assertRaisesRegex(ValueError,'Historical'):self.verify()
+
     def test_held_admission_after_pair_before_start_passes(self):
         """A real final read may finish after sampling, while every deadline stays fixed."""
         self.verify()

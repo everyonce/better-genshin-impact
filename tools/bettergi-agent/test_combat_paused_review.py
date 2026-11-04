@@ -240,6 +240,78 @@ class PausedReviewTrialTests(unittest.TestCase):
             path.write_bytes(raw)
             os.utime(path, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
 
+    def test_reviewed_arm_has_one_final_fresh_preparation_replay(self):
+        """The real ARM call retains its last full replay before any plan or ARM is published."""
+        self.capture_and_pause()
+        self.prepare()
+        observed = []
+        def armed(ready):
+            """Count only this API call; independent worker admission remains outside the patch."""
+            with patch.object(trial, 'verify_reviewed_preparation', wraps=trial.verify_reviewed_preparation) as full:
+                self.arm(ready)
+            observed.append(full.call_count)
+            self.assertEqual(full.call_count, 1)
+            self.assertTrue((self.folder / 'plan.json').exists())
+            self.assertTrue((self.folder / 'ARM.json').exists())
+            raise ValueError('inert ARM replay count finished')
+        self.assertEqual(self.worker(arm=armed), 1)
+        self.assertEqual(observed, [1], self.report().get('error'))
+        self.assertEqual(self.report()['error'], 'inert ARM replay count finished')
+        self.assertEqual((self.loads, self.lifecycle.starts, self.episodes), (1, 0, 0))
+
+    def assert_arm_construction_mutation_refused(self, mutate, message):
+        """Change synthetic evidence during pure plan construction, immediately before the retained replay."""
+        self.capture_and_pause()
+        self.prepare()
+        original_scope_fields = trial.scope_fields
+        changes = []
+        def changed(scope):
+            """The scope hook models a concurrent change without replacing the actual verifier."""
+            result = original_scope_fields(scope)
+            mutate()
+            changes.append(True)
+            return result
+        def armed(ready):
+            """Keep the mutation inside this ARM call and let the real worker preserve its failure."""
+            with patch.object(trial, 'scope_fields', side_effect=changed):
+                self.arm(ready)
+        self.assertEqual(self.worker(arm=armed), 1)
+        self.assertEqual(changes, [True], self.report().get('error'))
+        self.assertRegex(self.report()['error'], message)
+        self.assertTrue((self.folder / 'ARM-REQUESTED.json').exists())
+        self.assertFalse((self.folder / 'plan.json').exists())
+        self.assertFalse((self.folder / 'ARM.json').exists())
+        self.assertFalse((self.folder / 'READY-TO-RESUME.json').exists())
+        self.assertEqual((self.loads, self.lifecycle.starts, self.episodes), (1, 0, 0))
+
+    def test_reviewed_arm_final_replay_refuses_changed_source_bytes(self):
+        """Removing the earlier replay cannot admit a current source changed before final verification."""
+        def mutate():
+            """Change only this fixture's unimported source copy."""
+            self.code.write_bytes(self.code.read_bytes() + b'\n')
+        self.assert_arm_construction_mutation_refused(mutate, 'Source bytes changed')
+
+    def test_reviewed_arm_final_replay_refuses_foreign_preparation_snapshot(self):
+        """A substituted preparation cannot reuse the earlier ready witness or the in-memory plan."""
+        def mutate():
+            """Keep the JSON well formed but replace its exact original owner identity."""
+            value = json.loads(self.plan_path.read_bytes())
+            value['owner']['child']['processId'] += 1
+            self.plan_path.write_bytes(canonical(value))
+        self.assert_arm_construction_mutation_refused(mutate, 'Prepared worker identity or authority changed')
+
+    def test_reviewed_arm_final_replay_keeps_stop_after_plan_construction(self):
+        """A STOP arriving between the early liveness check and final replay still prevents publication."""
+        self.assert_arm_construction_mutation_refused(
+            lambda: (self.folder / 'STOP').write_text('inert stop', encoding='utf-8'), 'was stopped')
+
+    def test_reviewed_arm_final_replay_keeps_original_scene_expiry(self):
+        """The original scene clock is never reset when in-memory construction consumes its budget."""
+        def expire():
+            """Advance only the existing fixture clock past its original scene deadline."""
+            self.clock_offset = self.preparation['pausedReview']['chain']['originalSceneDeadlineClientNs'] + 1 - self.qpc_ns
+        self.assert_arm_construction_mutation_refused(expire, 'Native reviewed scene is stale or future-dated')
+
     def test_reviewed_plan_uses_one_complete_preparation_replay(self):
         """Only this exact paused format skips duplicate common I/O; its complete verifier still runs."""
         def inspect(plan):
@@ -648,6 +720,136 @@ class PrivatePrecheckTests(unittest.TestCase):
         """Keep the new opt-in schema distinct even under Python's bool/int equality."""
         self.assertFalse(proof.version_one(dict(version=True)))
         self.assertTrue(proof.version_one(dict(version=1)))
+
+
+
+
+class GroundPausedReviewTests(unittest.TestCase):
+    """Qualify the explicit profile through actual preparation/ARM APIs, with inert native/model resources."""
+    loader=PausedReviewTrialTests.loader
+    identity=PausedReviewTrialTests.identity
+    report=PausedReviewTrialTests.report
+    configure_group_review=PausedReviewTrialTests.configure_group_review
+    capture_and_pause=PausedReviewTrialTests.capture_and_pause
+    arm=PausedReviewTrialTests.arm
+    resume=PausedReviewTrialTests.resume
+    worker=PausedReviewTrialTests.worker
+    probe=PausedReviewTrialTests.probe
+
+    def setUp(self):
+        """Reuse original UI/provenance fixtures, adding only an explicit independently reviewed ground scene."""
+        from test_combat_trial_guard import ground_review_parts
+        PausedReviewTrialTests.setUp(self)
+        parts=ground_review_parts()
+        self.assertEqual(trial.digest(parts[-1]),trial.GOAL_SHA256)
+        parts[0].update(inspectedHealth=self.baseline_health,inspectedMaximumHealth=self.maximum_health)
+        for name,value in zip(trial.EVIDENCE_NAMES[:-1],parts[:-1]):
+            self.evidence[name].write_bytes(value if isinstance(value,bytes) else canonical(value))
+
+    def fresh_scene(self):
+        """Move all original source clocks by one fixed offset, preserving stable-sample identity/order."""
+        self.clock_offset+=500_000_000
+        scene=json.loads(self.evidence['scene'].read_bytes())
+        selected=next(row for row in scene['observations'] if row['frameId']==scene['qualifiedImageFrameId'])
+        offset=time.perf_counter_ns()//100-1_100_000-selected['sourceFrame']['timestamp100ns']
+        def advance(value):
+            """Preserve exact repeated frame/source joins while making the last stable sample already past."""
+            if isinstance(value,dict):
+                for key,item in value.items():
+                    if key=='timestamp100ns':value[key]+=offset
+                    else:advance(item)
+            elif isinstance(value,list):
+                for item in value:advance(item)
+        for name in ('review','plan','scene','sidecar'):
+            value=json.loads(self.evidence[name].read_bytes());advance(value)
+            if name=='review':value['reviewedAtUnixNs']=time.time_ns()
+            self.evidence[name].write_bytes(canonical(value))
+
+    def prepare(self, *, claim=True, ground_combat=True, source_stale_recovery=False):
+        """Select the fixed profile explicitly; no flag is inferred from image contents."""
+        self.preparation=trial.prepare_reviewed_paused(self.folder,self.owner_file,
+            self.capture_folder/'paired-pause.json',self.evidence,ground_combat=ground_combat,
+            source_stale_recovery=source_stale_recovery)
+        self.plan=self.preparation
+        if claim:
+            now=time.monotonic_ns()
+            trial.exclusive_json(self.folder/'CONSUMED.json',dict(runId=self.preparation['runId'],
+                planSha256=trial.digest(self.plan_path.read_bytes()),startedMonotonicNs=now,
+                startedAtUnixNs=time.time_ns(),startedAtClientNs=time.perf_counter_ns(),deadlineMonotonicNs=now+90_000_000_000))
+        return self.preparation
+
+    def episode(self,args,policy,control):
+        """Inspect actual prepared arguments; detailed receipts are covered by the separate real stream/audit cases."""
+        from combat_trial_guard import GROUND_PROFILE
+        from navigation_profiles import SCOUT_PROFILE
+        self.episodes+=1;self.last_episode_args=args
+        self.assertEqual((args.history,args.fps,args.decision_hz,args.seconds,args.action_hold_ms),(41,20,10,5,50))
+        self.assertEqual((args.max_input_actions,args.input_keys),(20,'W,A,S,D,LBUTTON'))
+        self.assertEqual((args.navigation_guidance,args.navigation_profile,args.require_ground_control_layout),(True,SCOUT_PROFILE,True))
+        self.assertEqual((args.combat_trial_control_profile,policy.combat_trial_control_profile),(GROUND_PROFILE,GROUND_PROFILE))
+        self.assertLessEqual(args.lease_deadline-time.monotonic(),5)
+        native=dict(status='completed',endReason='combatGroundWindowDrained',combatTrialGuard=copy.deepcopy(self.plan['binding']),
+            combatTrialGuardState=dict(phase='complete',trialComplete=True,trip=None,acceptedActions=0,
+                completedActions=0,completed=[],pending=None,armed=False),acceptedInputActions=0,decisions=[],framesReceived=5,
+            recording=dict(error=None,closed=True,complete=True,lossless=True,workerRetired=True,
+                droppedFrames=0,droppedEvents=0,droppedObservations=0,abandonedFrames=0,encodedFrames=5,
+                recordedObservations=5,policyRgbEnabled=True,policyRgbFrames=5,policyRgbBytes=5*trial.RGB192_BYTES),
+            stop=dict(type='stopped',heldKeys=[],active=None))
+        self.lifecycle.child.update(taskRunning=False,agentStreamRunning=False)
+        Path(args.record_dir).mkdir()
+        for index in range(5):(Path(args.record_dir)/f'retained-{index}.rgb').write_bytes(bytes(trial.RGB192_BYTES))
+        Path(args.output).write_bytes(canonical(native));return 0
+
+    def test_ground_flag_is_explicit_and_cli_preserves_separate_recovery_selection(self):
+        """A reviewed profile or a flag alone cannot change the default trial."""
+        self.capture_and_pause()
+        with self.assertRaisesRegex(ValueError,'explicitly selected'):self.prepare(ground_combat=False)
+        self.assertFalse(self.folder.exists())
+        argv=['prepare-reviewed-paused','--directory',str(self.folder),'--owner-from',str(self.owner_file),
+            '--paired-pause',str(self.capture_folder/'paired-pause.json'),'--ground-combat']
+        for name,value in self.evidence.items():
+            argv+=['--native-plan' if name=='plan' else '--native-scene' if name=='scene' else '--'+name,str(value)]
+        with patch.object(trial,'prepare_reviewed_paused',return_value=dict(runId='a'*32)) as prepare:
+            self.assertEqual(trial.main(argv),0)
+            self.assertIs(prepare.call_args.kwargs['ground_combat'],True)
+            self.assertIs(prepare.call_args.kwargs['source_stale_recovery'],False)
+        self.assertEqual((self.loads,self.lifecycle.starts,self.episodes),(0,0,0))
+
+    def test_profile_50ms_config_survives_real_prepare_arm_precheck_and_worker(self):
+        """The model generation/configuration path selects50ms before loading; raw outputs stay untouched."""
+        from combat_trial_guard import GROUND_PROFILE
+        self.capture_and_pause();self.prepare()
+        self.assertEqual(trial.load_reviewed_preparation(self.plan_path)[0],self.preparation)
+        self.assertEqual(trial.verify_reviewed_preparation(self.preparation,self.folder),self.preparation['reviewedCombat']['binding'])
+        self.assertEqual(self.preparation['modelConfiguration']['holdMs'],50)
+        self.assertEqual(self.worker(),0,self.report().get('error'))
+        self.assertEqual((self.loads,self.lifecycle.starts,self.episodes),(1,1,1))
+        self.assertEqual((self.last_args.action_hold_ms,self.last_args.max_input_actions,self.last_args.enable_input),(50,0,False))
+        self.assertFalse(hasattr(self.last_args,'combat_trial_binding'))
+        self.assertEqual(self.last_policy.combat_trial_control_profile,GROUND_PROFILE)
+        self.assertEqual(self.plan['policy']['maximumActions'],20)
+        self.assertEqual(self.plan['binding'],self.preparation['reviewedCombat']['binding'])
+        self.assertTrue(self.report()['cleanupVerified'])
+
+    def test_preparation_substitution_refuses_without_model_or_native_start(self):
+        """Rehashing outer JSON cannot silently change the selected policy or50ms configuration."""
+        self.capture_and_pause();self.prepare()
+        for mutate in (lambda x:x['modelConfiguration'].update(holdMs=100),
+            lambda x:x['reviewedCombat']['binding'].pop('controlProfile'),
+            lambda x:x['reviewedCombat']['binding']['policy'].update(sourceStaleRecoveryPolicy={})):
+            changed=copy.deepcopy(self.preparation);mutate(changed)
+            with self.subTest(mutate=mutate),self.assertRaises(ValueError):
+                trial.verify_reviewed_preparation(changed,self.folder)
+        self.assertEqual((self.loads,self.lifecycle.starts,self.episodes),(0,0,0))
+
+    def test_legacy_direct_entry_and_stale_recovery_cannot_adopt_ground_profile(self):
+        """This first profile is paused-review-only and grants no stale-source recovery authority."""
+        self.capture_and_pause()
+        with self.assertRaisesRegex(ValueError,'reviewed-paused'):
+            trial.prepare(self.live/'legacy-ground-refused',self.owner_file,self.evidence,scope=FOUR_SCOPE)
+        with self.assertRaises(ValueError):self.prepare(source_stale_recovery=True)
+        self.assertFalse(self.folder.exists())
+        self.assertEqual((self.loads,self.lifecycle.starts,self.episodes),(0,0,0))
 
 
 if __name__ == '__main__':

@@ -16,7 +16,7 @@ async function polling(samples){
  const body=source.slice(source.indexOf('runActTwoField: async'),source.indexOf('runActTwoWindriseSlime: async'));
  const loop=body.match(/for\(var poll=0;poll<5;poll\+\+\)\{.*\}/)[0];
  let reads=0,releases=0;const events=[];
- const run=new Function('guard','witness','request','p','sleep','observe','Date','release','return (async()=>{let current;const fieldReady=o=>guard.ready(o,witness,Date.now(),request.session,false,false,true);'+loop+';return current;})()');
+ const run=new Function('guard','witness','request','p','sleep','observe','Date','release','return (async()=>{let current;const eyeDefense=null;const actTwoFieldEntrySettled=o=>!!(o&&o.hud&&o.hud.world===true&&o.hud.health&&Number.isFinite(o.hud.health.current)&&Number.isFinite(o.hud.health.max)&&o.hud.health.max>0);const fieldReady=o=>guard.ready(o,witness,Date.now(),request.session,false,false,true);'+loop+';return current;})()');
  let error;try{await run(g,healthy(),{session:low.session},p,async ms=>events.push(['wait',ms]),async()=>{reads++;events.push(['read']);return samples.shift();},{now:()=>1000},()=>{releases++;events.push(['release']);});}catch(e){error=e;}
  return {reads,releases,events,error};
 }

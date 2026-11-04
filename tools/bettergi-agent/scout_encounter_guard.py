@@ -103,6 +103,7 @@ class ScoutEncounterGuard:
         self.armed = False
         self.releases = 0
         self.last_release = None
+        self._last_release_snapshot = None
         self.reason = 'awaitingNativeHealthEvidence'
         self.last = None
         self.trip = None
@@ -112,7 +113,7 @@ class ScoutEncounterGuard:
         with self._lock:
             result=dict(bindingSha256=self.sha256, observations=self.observations,
                         distinctSources=self.distinct_sources, admitted=self.admitted,
-                        armed=self.armed, releases=self.releases, lastRelease=copy.deepcopy(self.last_release),
+                        armed=self.armed, releases=self.releases, lastRelease=copy.deepcopy(self._last_release_snapshot),
                         state='tripped' if self.trip else 'ready' if self.reason=='healthyNativeEvidence' else 'waiting',
                         reason=self.reason, lastObservation=copy.deepcopy(self.last), trip=copy.deepcopy(self.trip))
             # Exact inline pixels remain in the observation event and recorder frame, not every repeated state snapshot.
@@ -204,10 +205,22 @@ class ScoutEncounterGuard:
             if (self.last is not None and response['serverNowMs']<self.last['frame']['sourceFrame']['freshnessAtMs']
                     or self.last_release is not None and response['serverNowMs']<self.last_release['response']['serverNowMs']):
                 raise ScoutEncounterStop('Scout encounter guard: release acknowledgement predates native evidence')
+            number=self.releases+1
+            original=dict(number=number,clientTimeNs=now_ns,reason=reason,
+                          response=copy.deepcopy(response),payloadBytes=payload_bytes)
+            # Keep the complete ACK in private state and its release event. Cache
+            # one compact public projection per release, never hash on intake.
+            snapshot=dict(original,response={key:copy.deepcopy(value) for key,value in original['response'].items()
+                                              if key!='executionContext'})
+            if 'executionContext' in original['response']:
+                digest=hashlib.sha256(json.dumps(original['response']['executionContext'],sort_keys=True,
+                    separators=(',', ':'),allow_nan=False).encode('utf-8')).hexdigest()
+                snapshot['executionContextReference']=dict(version=1,kind='scout-release-context-v1',
+                    bindingSha256=self.sha256,releaseNumber=number,sha256=digest)
             self.armed=False
-            self.releases+=1
-            self.last_release=dict(number=self.releases,clientTimeNs=now_ns,reason=reason,
-                                   response=copy.deepcopy(response),payloadBytes=payload_bytes)
+            self.releases=number
+            self.last_release=original
+            self._last_release_snapshot=snapshot
             if self.trip is None:self.reason='awaitingPostReleaseNativeEvidence'
             return dict(type='scoutEncounterGuardRelease',bindingSha256=self.sha256,
                         **copy.deepcopy(self.last_release),state=self.snapshot())

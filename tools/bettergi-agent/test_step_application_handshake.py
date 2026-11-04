@@ -115,7 +115,7 @@ def bridge(reply=None, *, greeting=None, extra=b''):
     namespace=dict(os=types.SimpleNamespace(name='nt'),open=opened,re=re,struct=struct,json=json,
         threading=types.SimpleNamespace(Lock=lambda:gate),time=types.SimpleNamespace(perf_counter_ns=clock))
     exec(compile(ast.Module(body=[node],type_ignores=[]),str(SOURCE),'exec'),namespace)
-    instance=namespace['Bridge']('BetterGI.Agent.inert')
+    instance=namespace['Bridge']('BetterGI.Agent.inert', transport_factory=lambda name: opened('\\\\.\\pipe\\'+name, 'r+b', buffering=0))
     return instance,pipe,gate,namespace
 
 

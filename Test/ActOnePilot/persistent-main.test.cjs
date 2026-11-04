@@ -12,6 +12,17 @@ function scene(now,kind='blank') {
     {text:'Weapons',x:139,y:28,width:119,height:40},{text:'Weapons 7/2000',x:1612,y:32,width:189,height:27}]};
   if(kind==='world') return {timestamp:now,screenshotPath:'world.png',map:{map:'Teyvat',x:0,y:0},hud:{...hud,world:true},ocr:[{text:'Teyvat'}]};
   if(kind==='auth') return {timestamp:now,screenshotPath:'auth.png',map:null,hud,ocr:[{text:'Verification code required'}]};
+  if(kind==='signedOut') return {timestamp:now,map:null,hud,ocr:[
+    {text:'HOyOVERSE',x:785,y:303,width:348,height:49},
+    {text:'Enter email/username',x:702,y:431,width:241,height:27},
+    {text:'Enter password',x:701,y:512,width:175,height:31},
+    {text:'Start game',x:888,y:652,width:143,height:41}
+  ]};
+  if(kind==='disconnect') return {timestamp:now,map:null,hud,ocr:[
+    {text:'You have disconnected',x:736,y:278,width:447,height:43},
+    {text:'Connection timed out',x:799,y:490,width:321,height:37},
+    {text:'Confirm',x:909,y:734,width:134,height:43}
+  ]};
   if(kind==='titlePulse') return {timestamp:now,screenshotPath:'title.png',map:null,hud,ocr:[
     {text:'START GAME',x:761,y:472,width:389,height:67},
     {text:'America',x:890,y:907,width:139,height:35}
@@ -24,14 +35,17 @@ function scene(now,kind='blank') {
 
 async function runMain({storageVersion=1,focusFailures=0,sessionId=6,remote=true,enableInput=false,autoEnterGame,observations=['world'],cancelDuringFocus=false,requestSequence,missionSource}={}) {
   let now=100000,polls=0,releases=0,focuses=0,callback=null,observeCount=0,startupObservationCount=null;
-  const files=new Map(),states=[],sleeps=[],captures=[],startupSteps=[];
+  const files=new Map(),states=[],sleeps=[],captures=[],startupSteps=[],events=[];
   const write=(p,t)=>{files.set(p,t);if(p==='controller-status.json')states.push(JSON.parse(t));return true;};
   const api={now:()=>now,focusGame:async()=>{focuses++;if(focuses<=focusFailures)throw Error('No RDP game focus');},
     setHeartbeat:fn=>{callback=fn;},heartbeat:(_,force)=>callback(force),checkStop:()=>{},requireInputReady:()=>{},
     observe:async(session,n)=>{captures.push([session,n]);const kind=observations[Math.min(observeCount,observations.length-1)]||'blank';observeCount++;
       return scene(now,kind);},
     write,append:(p,t)=>write(p,(files.get(p)||'')+t),wasSeen:(s,id)=>files.has(`receipts/${s}/${id}.json`),
-    beginMission:()=>{},events:()=>[],release:()=>{releases++;}};
+    beginMission:()=>{events.length=0;},events:()=>events.slice(),release:()=>{releases++;},
+    sleep:async ms=>{now+=ms;},
+    reconnectGame:()=>{startupSteps.push({step:'reconnectGame'});events.push({type:'reconnectGame',frameId:observeCount,startedAt:now,finishedAt:now});},
+    startGame:step=>{startupSteps.push({step});return {frameId:observeCount};}};
   const source={
     'engine.js':fs.readFileSync(path.join(root,'engine.js'),'utf8'),
     'bgi.js':bgiSource,
@@ -110,6 +124,26 @@ test('bottom CLICK TO BEGIN startup frame dispatches enterWorld',async()=>{
   const h=await runMain({enableInput:true,observations:['door']});
   assert.equal(h.error,null);assert.deepEqual(h.startupSteps.map(x=>x.step),['enterWorld']);
   assert.equal(h.startupSteps[0].frameId,2);assert.equal(h.startupSteps[0].observationCount,2);
+});
+
+test('a recognized timeout advances once and resumes a newly observed door through the real entry missions',async()=>{
+  const missionSource=fs.readFileSync(path.join(root,'mission.js'),'utf8');
+  const h=await runMain({enableInput:true,missionSource,observations:[
+    'disconnect','disconnect','blank','blank','door','door','world'
+  ]});
+  assert.equal(h.error,null);assert.deepEqual(h.startupSteps.map(x=>x.step),['reconnectGame','enterWorld']);
+});
+
+test('a persistent timeout or authentication after confirmation ends startup without another click',async()=>{
+  const missionSource=fs.readFileSync(path.join(root,'mission.js'),'utf8');
+  for(const next of ['disconnect','auth','signedOut']) {
+    const h=await runMain({enableInput:true,missionSource,observations:['disconnect','disconnect',next]});
+    assert.equal(h.error,null);assert.deepEqual(h.startupSteps.map(x=>x.step),['reconnectGame']);
+  }
+  const disabled=await runMain({enableInput:true,autoEnterGame:false,missionSource,observations:['disconnect']});
+  assert.equal(disabled.error,null);assert.deepEqual(disabled.startupSteps,[]);
+  const changed=await runMain({enableInput:true,missionSource,observations:['disconnect','auth','door']});
+  assert.equal(changed.error,null);assert.deepEqual(changed.startupSteps,[]);
 });
 
 test('blank startup recognition stops after eight observations and does not dispatch a mission',async()=>{

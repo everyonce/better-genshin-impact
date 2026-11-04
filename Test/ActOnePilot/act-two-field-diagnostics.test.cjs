@@ -12,7 +12,7 @@ test('definitive low health aborts the resume polling loop immediately',async()=
  const source=fs.readFileSync(require.resolve('../../BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js'),'utf8');
  const body=source.slice(source.indexOf('runActTwoField: async'),source.indexOf('runActTwoWindriseSlime: async'));
  const loop=body.match(/for\(var poll=0;poll<5;poll\+\+\)\{.*\}/)[0];
- let reads=0,releases=0;const run=new Function('guard','witness','request','p','sleep','observe','Date','release','return (async()=>{let current;const fieldReady=o=>guard.ready(o,witness,Date.now(),request.session);'+loop+';})()');
+ let reads=0,releases=0;const run=new Function('guard','witness','request','p','sleep','observe','Date','release','return (async()=>{let current;const eyeDefense=null;const actTwoFieldEntrySettled=o=>!!(o&&o.hud&&o.hud.world===true&&o.hud.health&&Number.isFinite(o.hud.health.current)&&Number.isFinite(o.hud.health.max)&&o.hud.health.max>0);const fieldReady=o=>guard.ready(o,witness,Date.now(),request.session);'+loop+';})()');
  await assert.rejects(run({...g,ready:()=>false},w,{session:'s'},{},async()=>{},async()=>{reads++;return w;},{now:()=>1000},()=>releases++),/health_below_minimum/);
  assert.equal(reads,1);
  assert.equal(releases,1);

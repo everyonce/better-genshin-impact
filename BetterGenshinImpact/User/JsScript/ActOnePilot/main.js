@@ -21,6 +21,7 @@ eval(file.readTextSync('bgi.js'));
     }
     function startupStep(observation) {
         var now=Date.now();
+        if (typeof actOneReconnectTarget==='function' && actOneReconnectTarget(observation,now)) return 'reconnectGame';
         if (typeof actOneEnterGameTitleFrame==='function' && actOneEnterGameTitleFrame(observation,now)) return 'enterGame';
         if (typeof actOneEnterWorldTarget==='function' && actOneEnterWorldTarget(observation,now)) return 'enterWorld';
         return null;
@@ -40,6 +41,41 @@ eval(file.readTextSync('bgi.js'));
             var value=JSON.parse(file.readTextSync('observation.json'));
             return value&&value.session===session&&value.frameId===runner.getFrame()?value:null;
         } catch (_) { return null; }
+    }
+    async function dispatchStartupStep(step,observation) {
+        // The normal mission takes a new capture and checks STOP before clicking.
+        checkStartupStop();
+        eval(file.readTextSync('mission.js'));
+        return runner.process({id:'startup-'+step,session:session,createdAt:Date.now(),
+            expectedFrameId:observation.frameId,mission:'questStep',step:step},
+            function () { return {runQuestStep:ActOneMission.runQuestStep}; });
+    }
+    async function continueAfterReconnect() {
+        // A disconnect is allowed one native confirmation per startup. Poll for
+        // a separate title/door transition only after that exact click returned.
+        var receipt=JSON.parse(file.readTextSync('receipts/'+session+'/startup-reconnectGame.json'));
+        var details=receipt.details||{},result=details.result||{},inputs=details.inputEvents||[];
+        var clicks=inputs.filter(function(e){return e&&e.type==='reconnectGame';});
+        if (receipt.id!=='startup-reconnectGame'||receipt.session!==session||receipt.status!=='stopped'||
+            result.step!=='reconnectGame'||result.clicks!==1||clicks.length!==1||
+            !Number.isInteger(result.frameId)||!(clicks[0].frameId<result.frameId&&result.frameId<=receipt.frameId)||
+            !Number.isFinite(clicks[0].startedAt)||!Number.isFinite(clicks[0].finishedAt)||
+            clicks[0].finishedAt<clicks[0].startedAt) return;
+        var deadline=Date.now()+5000;
+        for(var i=0;i<8&&Date.now()<deadline;i++) {
+            checkStartupStop();
+            var observed=await runner.observe();
+            checkStartupStop();
+            if(Date.now()>=deadline||observed.frameId<=receipt.frameId) return;
+            if(actOneEnterGameAuthPrompt(observed.ocr)) return;
+            var next=startupStep(observed);
+            if(next==='enterGame'||next==='enterWorld') {
+                await dispatchStartupStep(next,observed);
+                return;
+            }
+            if(next!=='reconnectGame'&&!blankStartup(observed)&&!actOneEnterGameLoading(observed.ocr)) return;
+            if(i<7) await sleep(Math.max(0,Math.min(350,deadline-Date.now())));
+        }
     }
     function wolfHistory() {
         try {
@@ -556,10 +592,8 @@ eval(file.readTextSync('bgi.js'));
             step=startupStep(initialObservation);
         }
         if (settings.enableInput === true && settings.autoEnterGame !== false && step) {
-            eval(file.readTextSync('mission.js'));
-            await runner.process({id:'startup-'+step,session:session,createdAt:Date.now(),
-                expectedFrameId:initialObservation.frameId,mission:'questStep',step:step},
-                function () { return {runQuestStep:ActOneMission.runQuestStep}; });
+            var startupStatus=await dispatchStartupStep(step,initialObservation);
+            if(step==='reconnectGame'&&startupStatus==='stopped') await continueAfterReconnect();
         }
         heartbeat(true);
         while (!runner.stopped()) {

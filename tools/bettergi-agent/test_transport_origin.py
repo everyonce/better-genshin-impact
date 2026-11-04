@@ -38,7 +38,7 @@ class BridgeOriginTests(unittest.TestCase):
                 error = OSError('synthetic ' + operation)
                 if operation == 'open':
                     with patch.object(client, 'os', SimpleNamespace(name='nt')), \
-                            patch.object(client, 'open', fail(error), create=True):
+                            patch.object(client.Bridge, '_open_pipe', fail(error)):
                         with self.assertRaises(OSError) as caught:
                             client.Bridge('BetterGI.Agent.synthetic')
                 else:

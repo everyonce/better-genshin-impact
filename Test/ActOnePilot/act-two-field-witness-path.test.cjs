@@ -6,6 +6,7 @@ test('field witness loading accepts new-session padded frames and later large fr
   const reads=[],plan={witnessFrameId:id,regionMapFrameId:2},paths={
    'world-inventory.js':'function actOneWorldInventoryClosePermission(){return true;}',
    'act-two-field.js':'var ActTwoField={plan:()=>true,regionalMap:()=>true,cameraPlan:()=>false,eventReposition:()=>false,ready:()=>false,originalWitnessFailure:()=>"witness_field_conditions"};',
+   'act-two-eye-defense.js':fs.readFileSync(require.resolve('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-eye-defense.js'),'utf8'),
    'act-two-field-request.json':JSON.stringify(plan),
    [`observations/s/frame-${String(id).padStart(4,'0')}.json`]:JSON.stringify({session:'s',frameId:id}),
    'observations/s/frame-0002.json':JSON.stringify({session:'s',frameId:2})};

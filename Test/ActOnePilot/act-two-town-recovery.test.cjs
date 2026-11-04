@@ -50,8 +50,9 @@ test('meeting terrace continuations reject other objectives and distant position
  }
 });
 
-test('recorded informant tree releases only the witnessed short climb',()=>{
- const o=require('./act-two-informant-tree.fixture.json');
+test('synthetic informant tree releases only the witnessed short climb',()=>{
+ // Synthetic boundary fixture: no captured frame or account identifier.
+ const o={session:'synthetic-informant',timestamp:1000,map:{map:'Teyvat',x:-1123.299,y:2219.727},hud:{climbing:true,health:{current:1700,max:1700},enemyBars:[],objectives:['Meet with the informant at the designated location']},ocr:[{text:'X',x:1600,y:1000},{text:'Space',x:1700,y:1000}]};
  assert.equal(gate.ready(o,o.timestamp,o.session),true);
  assert.equal(gate.ready({...o,map:{...o.map,x:o.map.x+3}},o.timestamp,o.session),false);
  assert.equal(gate.ready({...o,hud:{...o.hud,objectives:['Report to Kaeya']}},o.timestamp,o.session),false);

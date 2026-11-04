@@ -58,7 +58,19 @@ test('read-only Lisa witness repairs the selected grey slot from the same captur
 });
 test('read-only Lisa witness detects an anchored enemy bar from the same capture',async()=>{
  const f=setup({initialScreen:'field',noEnemy:false,extra:[row('Lv.7',500,220)]});
+ // Normal observations scan the whole field, unlike the older combat ROI.
+ // Keep a single synthetic rectangle at the same screen position in either ROI.
+ let scans=0;const capture=f.context.captureGameRegion;
+ f.context.captureGameRegion=()=>{const img=capture(),crop=img.deriveCrop;img.deriveCrop=(x,y,w,h)=>{
+  const region=crop(x,y,w,h);
+  if(x===0&&y===30&&w===1920&&h===870){scans++;region.srcMat.inRange=()=>({findContoursAsArray:()=>[{x:850,y:320,width:90,height:8}],dispose(){}});}
+  return region;
+ };return img;};
+ f.context.OpenCvSharp.OpenCvSharp.Cv2.contourArea=b=>(b.width-1)*(b.height-1);
+ f.context.OpenCvSharp.OpenCvSharp.Cv2.countNonZero=()=>90*8;
  f.adapter.beginMission({mission:'observe',id:'read-only',session:'lion-adapter-test',expectedFrameId:1,createdAt:9000});
  const o=await f.adapter.observe('lion-adapter-test',1);
  assert.equal(o.hud.enemyBars.length,1);assert.equal(f.inputs.length,0);
+ assert.equal(scans,1);assert.equal(f.metrics.captures,1);assert.equal(o.hud.enemyBarObservation.state,'threat');
+ assert.equal(o.hud.enemyBars[0].x,895);assert.equal(o.hud.enemyBars[0].y,354);
 });

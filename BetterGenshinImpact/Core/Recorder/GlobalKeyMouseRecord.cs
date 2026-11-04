@@ -5,6 +5,7 @@ using BetterGenshinImpact.GameTask;
 using BetterGenshinImpact.GameTask.Common;
 using BetterGenshinImpact.GameTask.Common.Element.Assets;
 using BetterGenshinImpact.GameTask.Runtime;
+using BetterGenshinImpact.GameTask.Model.Area;
 using BetterGenshinImpact.Model;
 using BetterGenshinImpact.Service;
 using BetterGenshinImpact.View.Windows;
@@ -164,16 +165,21 @@ public class GlobalKeyMouseRecord : Singleton<GlobalKeyMouseRecord>
             return;
         }
 
-        var ra = runtime.CaptureToRectArea();
-        var iconRa = ra.Find(ElementRecognition.Get("FriendChat", ra));
-        var exist = iconRa.IsExist();
+        var exist = DetectMainUi(() => runtime.CaptureToRectArea(),
+            static ra => ra.Find(ElementRecognition.Get("FriendChat", ra)));
         if (exist != _isInMainUi)
         {
             _logger.LogInformation("Recording: {Text}", exist ? "Entered the main screen; capturing relative mouse movement" : "Left the main screen; capturing absolute mouse movement");
         }
         _isInMainUi = exist;
-        iconRa.Dispose();
-        ra.Dispose();
+    }
+
+    /// <summary>Owns both recognition regions even when template loading, recognition or disposal fails.</summary>
+    internal static bool DetectMainUi(Func<ImageRegion> capture, Func<ImageRegion, Region> findIcon)
+    {
+        using var ra = capture();
+        using var iconRa = findIcon(ra);
+        return iconRa.IsExist();
     }
 
     public void GlobalHookKeyDown(KeyEventArgs e, DateTime time)

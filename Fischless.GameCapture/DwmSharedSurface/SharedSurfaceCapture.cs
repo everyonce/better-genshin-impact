@@ -17,14 +17,15 @@ public partial class SharedSurfaceCapture : IGameCapture
     private static readonly object LockObject = new();
 
     // D3D 设备
-    private Device? _d3dDevice;
+    private readonly SharedSurfaceResources<Device, Texture2D> _resources = new(
+        () => new Device(SharpDX.Direct3D.DriverType.Hardware, DeviceCreationFlags.BgraSupport)); // Software/Hardware
 
     // 截图区域
     private ResourceRegion? _region;
     private RECT? _captureRect;
 
     // 暂存贴图
-    private Texture2D? _stagingTexture;
+    // The device owner also retires its staging texture whenever the device changes.
 
     // Surface 大小
     private int _surfaceWidth;
@@ -44,12 +45,23 @@ public partial class SharedSurfaceCapture : IGameCapture
 
     public void Start(nint hWnd, Dictionary<string, object>? settings = null)
     {
-        _hWnd = hWnd;
-        User32.ShowWindow(hWnd, ShowWindowCommand.SW_RESTORE);
-        (_region, _captureRect) = GetGameScreenInfo(hWnd);
-        _d3dDevice = new Device(SharpDX.Direct3D.DriverType.Hardware, DeviceCreationFlags.BgraSupport); // Software/Hardware
-
-        IsCapturing = true;
+        lock (LockObject)
+        {
+            StopCore();
+            try
+            {
+                _hWnd = hWnd;
+                User32.ShowWindow(hWnd, ShowWindowCommand.SW_RESTORE);
+                (_region, _captureRect) = GetGameScreenInfo(hWnd);
+                _resources.ResetDevice();
+                IsCapturing = true;
+            }
+            catch
+            {
+                StopCore();
+                throw;
+            }
+        }
     }
 
     /// <summary>
@@ -90,7 +102,7 @@ public partial class SharedSurfaceCapture : IGameCapture
     {
         lock (LockObject)
         {
-            if (_d3dDevice == null)
+            if (_resources.Device is not { } device)
             {
                 Debug.WriteLine("D3Device is null.");
                 return null;
@@ -107,23 +119,24 @@ public partial class SharedSurfaceCapture : IGameCapture
 
             try
             {
-                using var surfaceTexture = _d3dDevice.OpenSharedResource<Texture2D>(phSurface);
+                using var surfaceTexture = device.OpenSharedResource<Texture2D>(phSurface);
 
-                if (_stagingTexture == null || _surfaceWidth != surfaceTexture.Description.Width ||
+                if (_resources.Staging == null || _surfaceWidth != surfaceTexture.Description.Width ||
                     _surfaceHeight != surfaceTexture.Description.Height)
                 {
                     if (User32.IsIconic(_hWnd))
                         return null;
 
-                    _stagingTexture?.Dispose();
-                    _stagingTexture = null;
+                    _resources.ClearStaging();
                     _surfaceWidth = surfaceTexture.Description.Width;
                     _surfaceHeight = surfaceTexture.Description.Height;
                     (_region, _captureRect) = GetGameScreenInfo(_hWnd);
                 }
 
-                _stagingTexture ??= Direct3D11Helper.CreateStagingTexture(_d3dDevice, _surfaceWidth, _surfaceHeight, _region);
-                var mat = _stagingTexture.CreateMat(_d3dDevice, surfaceTexture, _region);
+                var staging = _resources.Staging ?? _resources.GetOrCreateStaging(currentDevice =>
+                    Direct3D11Helper.CreateStagingTexture(currentDevice, _surfaceWidth, _surfaceHeight, _region));
+                // Device-lost readback errors must reach the same recovery path as OpenSharedResource errors.
+                var mat = staging.CreateMat(device, surfaceTexture, _region, propagateSharpDxErrors: true);
                 if (mat == null)
                 {
                     return null;
@@ -134,8 +147,14 @@ public partial class SharedSurfaceCapture : IGameCapture
             catch (SharpDXException e)
             {
                 Debug.WriteLine($"SharpDXException: {e.Descriptor}");
-                _d3dDevice?.Dispose();
-                _d3dDevice = new Device(SharpDX.Direct3D.DriverType.Hardware, DeviceCreationFlags.BgraSupport);
+                ClearSurfaceGeometry();
+                try { _resources.ResetDevice(); }
+                catch
+                {
+                    // Replacement failure leaves no device/staging references; explicit Start can retry.
+                    IsCapturing = false;
+                    throw;
+                }
             }
 
             return null;
@@ -146,13 +165,24 @@ public partial class SharedSurfaceCapture : IGameCapture
     {
         lock (LockObject)
         {
-            _stagingTexture?.Dispose();
-            _stagingTexture = null;
-            _captureRect = null;
-            _d3dDevice?.Dispose();
-            _d3dDevice = null;
-            _hWnd = 0;
-            IsCapturing = false;
+            StopCore();
         }
+    }
+
+    /// <summary>Clears metadata before resource cleanup so exceptions cannot publish an active, disposed session.</summary>
+    private void StopCore()
+    {
+        IsCapturing = false;
+        _hWnd = 0;
+        ClearSurfaceGeometry();
+        _resources.Dispose();
+    }
+
+    /// <summary>Invalidates old dimensions and bounds whenever their device or session is retired.</summary>
+    private void ClearSurfaceGeometry()
+    {
+        _surfaceWidth = _surfaceHeight = 0;
+        _region = null;
+        _captureRect = null;
     }
 }

@@ -8,6 +8,7 @@ using BetterGenshinImpact.GameTask.Runtime;
 using Gma.System.MouseKeyHook;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Windows.Forms;
@@ -37,7 +38,33 @@ public class KeyMouseRecorder
         _config = config;
     }
 
-    public List<MacroEvent> MacroEvents { get; } = [];
+    /// <summary>Serializes hook and relative-input producers without holding a lock during recognition.</summary>
+    private readonly object _eventGate = new();
+
+    /// <summary>Events remain private so consumers cannot mutate a concurrently recorded list.</summary>
+    private readonly List<MacroEvent> _macroEvents = [];
+
+    /// <summary>A detached snapshot; sorting and merging cannot change the original recording.</summary>
+    public List<MacroEvent> MacroEvents
+    {
+        get
+        {
+            lock (_eventGate)
+            {
+                return _macroEvents.Select(e => new MacroEvent
+                {
+                    Type = e.Type, KeyCode = e.KeyCode, MouseX = e.MouseX, MouseY = e.MouseY,
+                    MouseButton = e.MouseButton, Time = e.Time, CameraOrientation = e.CameraOrientation
+                }).ToList();
+            }
+        }
+    }
+
+    /// <summary>Admits each complete event atomically from either recording thread.</summary>
+    private void AddEvent(MacroEvent macroEvent)
+    {
+        lock (_eventGate) _macroEvents.Add(macroEvent);
+    }
 
     public DateTime StartTime { get; set; } = DateTime.UtcNow;
 
@@ -58,15 +85,16 @@ public class KeyMouseRecorder
     public string ToJsonMacro()
     {
         // MacroEvents 需要以实际时间进行排序
-        MacroEvents.Sort((a, b) => a.Time.CompareTo(b.Time));
+        // Stable ordering preserves admission order for events with identical timestamps.
+        var macroEvents = MacroEvents.OrderBy(e => e.Time).ToList();
         // 删除为负数的时间
-        MacroEvents.RemoveAll(m => m.Time < 0);
+        macroEvents.RemoveAll(m => m.Time < 0);
         
         var rect = _runtime.SystemInfo.CaptureAreaRect;
         // 合并鼠标移动事件
         var mergedMacroEvents = new List<MacroEvent>();
         MacroEvent? currentMerge = null;
-        foreach (var macroEvent in MacroEvents)
+        foreach (var macroEvent in macroEvents)
         {
             if (currentMerge == null)
             {
@@ -138,7 +166,7 @@ public class KeyMouseRecorder
 
     public void KeyDown(KeyEventArgs e, DateTime time)
     {
-        MacroEvents.Add(new MacroEvent
+        AddEvent(new MacroEvent
         {
             Type = MacroEventType.KeyDown,
             KeyCode = e.KeyValue,
@@ -148,7 +176,7 @@ public class KeyMouseRecorder
 
     public void KeyUp(KeyEventArgs e, DateTime time)
     {
-        MacroEvents.Add(new MacroEvent
+        AddEvent(new MacroEvent
         {
             Type = MacroEventType.KeyUp,
             KeyCode = e.KeyValue,
@@ -158,7 +186,7 @@ public class KeyMouseRecorder
 
     public void MouseDown(MouseEventExtArgs e, DateTime time)
     {
-        MacroEvents.Add(new MacroEvent
+        AddEvent(new MacroEvent
         {
             Type = MacroEventType.MouseDown,
             MouseX = e.X,
@@ -170,7 +198,7 @@ public class KeyMouseRecorder
 
     public void MouseUp(MouseEventExtArgs e, DateTime time)
     {
-        MacroEvents.Add(new MacroEvent
+        AddEvent(new MacroEvent
         {
             Type = MacroEventType.MouseUp,
             MouseX = e.X,
@@ -182,7 +210,7 @@ public class KeyMouseRecorder
 
     public void MouseMoveTo(MouseEventExtArgs e, DateTime time)
     {
-        MacroEvents.Add(new MacroEvent
+        AddEvent(new MacroEvent
         {
             Type = MacroEventType.MouseMoveTo,
             MouseX = e.X,
@@ -193,7 +221,7 @@ public class KeyMouseRecorder
     
     public void MouseWheel(MouseEventExtArgs e, DateTime time)
     {
-        MacroEvents.Add(new MacroEvent
+        AddEvent(new MacroEvent
         {
             Type = MacroEventType.MouseWheel,
             MouseY = e.Delta, // 120 的倍率
@@ -216,7 +244,7 @@ public class KeyMouseRecorder
             }
         }
         
-        MacroEvents.Add(new MacroEvent
+        AddEvent(new MacroEvent
         {
             Type = MacroEventType.MouseMoveBy,
             MouseX = e.DeltaX,

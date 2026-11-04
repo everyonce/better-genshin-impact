@@ -41,7 +41,7 @@ function harness(options = {}) {
 }
 
 test('fresh post-action seed requests pause before the next capture, then independently verifies Inventory',async()=>{
- const h=harness({frames:[frame(2,10900,'s','inventory')]});
+ const h=harness({frames:[frame(2,10650,'s','inventory')]});
  const proof=await pause.ensure({session:'s',afterFrameId:0,initialObservation:frame(1,10000)},h.api);
  const key=h.events.findIndex(e=>e[0]==='key'),capture=h.events.findIndex(e=>e[0]==='observe');
  assert.ok(key>=0&&capture>key);assert.equal(h.events[key][1],'VK_B');
@@ -265,4 +265,93 @@ test('short menu watchdog releases and fails within bounded time without false p
  const api={now:()=>now,release:()=>{releases++},pauseObserve:async()=>({session:'s',frameId:++frame,timestamp:now}),pauseProof:()=>null,pauseInputReady:()=>false,pauseKey:()=>{keys++},sleep:async ms=>{now+=ms},pausePending:async()=>{}};
  await assert.rejects(pause.ensure({session:'s',afterFrameId:0,maxWaitMs:12000},api),e=>e.code==='PAUSE_PROTECTION_EXHAUSTED');
  assert.ok(now>=12000&&now<=13000);assert.ok(releases>1);assert.equal(keys,0);
+});
+
+// Controlled clocks and host callbacks only; no game or controller is contacted.
+for (const operation of ['release', 'pauseObserve', 'pauseProof', 'pauseDialogueHandoff', 'pauseResolveKnownUi', 'pauseInputReady', 'pausePending']) {
+  test('deadline is enforced after slow ' + operation, async () => {
+    const h = harness({frames:[frame(1,10000)]});
+    h.api.pauseDialogueHandoff=()=>false;
+    h.api.pauseResolveKnownUi=()=>false;
+    if(operation==='pausePending')h.api.pauseInputReady=()=>false;
+    const original=h.api[operation];
+    h.api[operation]=async (...args)=>{const result=await original(...args);h.setNow(16000);return operation==='pauseProof'?{kind:'menu',evidence:['menu']}:operation==='pauseDialogueHandoff'?true:result;};
+    await assert.rejects(pause.ensure({session:'s',afterFrameId:0,maxWaitMs:5000,hardDeadlineAt:15000},h.api),e=>e.code==='PAUSE_PROTECTION_EXHAUSTED');
+    assert.equal(h.events.some(e=>e[0]==='key'),false);
+    assert.equal(h.events.some(e=>e[0]==='sleep'),false);
+    if(operation==='release')assert.equal(h.events.some(e=>e[0]==='observe'),false);
+  });
+}
+for(const hardDeadlineAt of [undefined,30000])test('relative budget survives a slow capture with absolute deadline '+hardDeadlineAt,async()=>{
+ const h=harness({frames:[frame(1,16000)]});const original=h.api.pauseObserve;
+ h.api.pauseObserve=async()=>{h.setNow(16000);return original();};
+ await assert.rejects(pause.ensure({session:'s',afterFrameId:0,maxWaitMs:5000,hardDeadlineAt},h.api),e=>e.code==='PAUSE_PROTECTION_EXHAUSTED');
+ assert.equal(h.events.some(e=>e[0]==='key'||e[0]==='sleep'),false);
+});
+test('absolute deadline caps settling sleep and prevents another capture',async()=>{
+ const h=harness();
+ await assert.rejects(pause.ensure({session:'s',afterFrameId:0,maxWaitMs:5000,hardDeadlineAt:10100,initialObservation:frame(1,10000)},h.api),e=>e.code==='PAUSE_PROTECTION_EXHAUSTED');
+ assert.deepEqual(h.events.filter(e=>e[0]==='sleep').map(e=>e[1]),[100]);
+ assert.equal(h.events.some(e=>e[0]==='observe'),false);
+});
+test('seed settling replaces redundant polling delay on repeated invocations',async()=>{
+ for(let i=0;i<3;i++){
+  const h=harness({frames:[frame(2,10650,'s','inventory')]});
+  const result=await pause.ensure({session:'s',afterFrameId:0,initialObservation:frame(1,10000)},h.api);
+  assert.equal(result.verified,true);assert.equal(h.api.now(),10650);
+  assert.deepEqual(h.events.filter(e=>e[0]==='sleep').map(e=>e[1]),[650]);
+ }
+});
+test('throwing host callback cannot bypass elapsed relative budget',async()=>{
+ const h=harness();h.api.pauseObserve=async()=>{h.setNow(16000);throw Error('capture failed');};
+ await assert.rejects(pause.ensure({session:'s',afterFrameId:0,maxWaitMs:5000},h.api),e=>e.code==='PAUSE_PROTECTION_EXHAUSTED');
+ assert.equal(h.events.some(e=>e[0]==='key'||e[0]==='sleep'),false);
+});
+for(const call of [2,3])test('late proof on recheck '+call+' cannot return success',async()=>{
+ const h=harness({frames:[frame(1,10000)]});let calls=0;
+ h.api.pauseResolveKnownUi=()=>false;
+ h.api.pauseProof=()=>{if(++calls===call){h.setNow(16000);return {kind:'menu',evidence:['menu']};}return null;};
+ await assert.rejects(pause.ensure({session:'s',afterFrameId:0,maxWaitMs:5000},h.api),e=>e.code==='PAUSE_PROTECTION_EXHAUSTED');
+ assert.equal(h.events.some(e=>e[0]==='key'),false);
+});
+test('seed optimization preserves the fallback input gap',async()=>{
+ const h=harness();let next=1;const inputTimes=[];
+ h.api.pauseObserve=()=>frame(++next,h.api.now(),'s',next>=4?'inventory':null);
+ h.api.pauseKey=async(o,key)=>inputTimes.push({key,at:h.api.now()});
+ const result=await pause.ensure({session:'s',afterFrameId:0,initialObservation:frame(1,10000)},h.api);
+ assert.equal(result.verified,true);
+ assert.deepEqual(inputTimes.map(e=>e.key),['VK_B','VK_J']);
+ assert.ok(inputTimes[1].at-inputTimes[0].at>=750);
+ assert.equal(h.events.filter(e=>e[0]==='sleep')[0][1],650);
+});
+test('polling sleep is capped by the earlier absolute deadline',async()=>{
+ const h=harness();h.api.pauseObserve=()=>frame(1,h.api.now());h.api.pauseInputReady=()=>false;
+ await assert.rejects(pause.ensure({session:'s',afterFrameId:0,maxWaitMs:5000,hardDeadlineAt:10100},h.api),e=>e.code==='PAUSE_PROTECTION_EXHAUSTED');
+ assert.deepEqual(h.events.filter(e=>e[0]==='sleep').map(e=>e[1]),[100]);
+});
+test('sleep exception after its deadline still releases and reports exhaustion',async()=>{
+ const h=harness({frames:[frame(1,10000)]});h.api.pauseInputReady=()=>false;
+ h.api.sleep=async()=>{h.setNow(16000);throw Error('cancelled sleep');};
+ await assert.rejects(pause.ensure({session:'s',afterFrameId:0,maxWaitMs:5000},h.api),e=>e.code==='PAUSE_PROTECTION_EXHAUSTED');
+ assert.equal(h.events.at(-2)[0],'release');
+});
+test('slow proof before seeded key cannot shorten fallback input gap',async()=>{
+ const h=harness();let next=1,proofCalls=0;const inputTimes=[];
+ h.api.pauseProof=()=>{if(++proofCalls===1)h.setNow(10200);return next>=4?{kind:'inventory',evidence:['menu']}:null;};
+ h.api.pauseObserve=()=>frame(++next,h.api.now());
+ h.api.pauseKey=async(o,key)=>inputTimes.push({key,at:h.api.now()});
+ const result=await pause.ensure({session:'s',afterFrameId:0,initialObservation:frame(1,10000)},h.api);
+ assert.equal(result.verified,true);
+ assert.deepEqual(inputTimes.map(e=>e.key),['VK_B','VK_J']);
+ assert.ok(inputTimes[1].at-inputTimes[0].at>=750,JSON.stringify(inputTimes));
+});
+test('slow known UI input starts fallback spacing after the callback',async()=>{
+ const h=harness();let next=0,handled=false;const inputTimes=[];
+ h.api.pauseObserve=()=>frame(++next,h.api.now(),'s',next>=5?'inventory':null);
+ h.api.pauseResolveKnownUi=()=>{if(handled)return false;handled=true;h.setNow(10200);inputTimes.push({key:'known-ui',at:h.api.now()});return true;};
+ h.api.pauseKey=async(o,key)=>inputTimes.push({key,at:h.api.now()});
+ const result=await pause.ensure({session:'s',afterFrameId:0},h.api);
+ assert.equal(result.verified,true);
+ assert.deepEqual(inputTimes.map(e=>e.key),['known-ui','VK_B']);
+ assert.ok(inputTimes[1].at-inputTimes[0].at>=750,JSON.stringify(inputTimes));
 });

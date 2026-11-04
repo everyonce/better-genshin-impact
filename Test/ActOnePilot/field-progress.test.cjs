@@ -56,6 +56,6 @@ test('runtime checks and persists the attempt before unpause, then records outco
  const block=source.slice(source.indexOf('runActTwoField: async'),source.indexOf('runActTwoWindriseSlime: async'));
  assert.ok(block.indexOf('progress.rejection')<block.indexOf("await boundedKey('VK_ESCAPE'"));
  assert.ok(block.indexOf('progress.begin')<block.indexOf("await boundedKey('VK_ESCAPE'"));
- assert.ok(block.includes('progress.finish(progressHistory,request.id,lastObservation)'));
+ assert.ok(block.includes('progress.finish(progressHistory,request.id,lastObservation,events)'));
  assert.ok(block.includes("throw Error('Progress history persistence failed')"));
 });

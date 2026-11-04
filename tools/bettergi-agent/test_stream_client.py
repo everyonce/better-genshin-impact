@@ -124,7 +124,7 @@ class ProtocolTests(unittest.TestCase):
 
     def test_bad_handshake_closes_pipe_and_default_namespace_is_validated(self):
         handle = FragmentedPipe(packet({'type': 'hello', 'version': 2}))
-        with patch.object(client.os, 'name', 'nt'), patch('builtins.open', return_value=handle):
+        with patch.object(client.os, 'name', 'nt'), patch.object(client.Bridge, '_open_pipe', return_value=handle):
             with self.assertRaises(ValueError):
                 client.Bridge('BetterGI.Agent.local')
         self.assertTrue(handle.closed)

@@ -340,12 +340,24 @@ class Bridge:
         from bridge_transport import forbid_reconnect
         forbid_reconnect(error, "experimentalChannelFailure")
 
-    def __init__(self, name):
+    @staticmethod
+    def _open_pipe(name):
+        """Use cancellable finite Windows I/O while preserving the original handle identity."""
+        from windows_pipe_transport import WindowsPipe
+        return WindowsPipe(name)
+
+    def _transaction(self):
+        """Bound native lock/header/payload waiting; detached inert handles keep their lock."""
+        owned = getattr(self, '_hello_handle', self.handle)
+        transaction = getattr(owned, 'transaction', None)
+        return transaction(self.lock) if transaction is not None else self.lock
+
+    def __init__(self, name, *, transport_factory=None):
         if not re.fullmatch(r'BetterGI\.Agent\.[A-Za-z0-9_.-]{1,100}', name):
             raise ValueError('Use a local pipe name beginning BetterGI.Agent.')
         if os.name != 'nt':
             raise RuntimeError('The BetterGI bridge requires Windows')
-        self.handle = self._pipe_io('open', open, '\\\\.\\pipe\\' + name, 'r+b', buffering=0)
+        self.handle = self._pipe_io('open', transport_factory or self._open_pipe, name)
         self.lock = threading.Lock()
         # Keep only the original hello bytes and this connection's original owner.
         self._hello_handle = self.handle
@@ -353,7 +365,8 @@ class Bridge:
         self._experimental_enable_failed = False
         self._experimental_enable_close_attempted = False
         try:
-            self.hello, payload = self._read(remember_hello=True)
+            with self._transaction():
+                self.hello, payload = self._read(remember_hello=True)
             self._hello_object = self.hello
             if (self.hello.get('version') != 1 or self.hello.get('type') != 'hello' or payload
                     or not self.hello.get('sessionId') or not self.hello.get('ownerEpoch')
@@ -454,7 +467,7 @@ class Bridge:
         A failed or ambiguous attempt retires only this Bridge's original handle.
         Normal clients do not call this entry and retain their existing behavior.
         """
-        with self.lock:
+        with self._transaction():
             # A retired connection keeps its first failure and all cleanup evidence.
             if getattr(self, '_experimental_enable_failed', False):
                 raise RuntimeError('experimental_enable_connection_retired')
@@ -563,7 +576,7 @@ class Bridge:
                 raise
 
     def request(self, command, **kwargs):
-        with self.lock:
+        with self._transaction():
             if getattr(self, '_experimental_enable_failed', False):
                 raise RuntimeError('Experimental enable failed; this connection is retired')
             self._experimental_connection()

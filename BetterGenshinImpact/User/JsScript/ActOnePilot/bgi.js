@@ -334,9 +334,54 @@ function actOneStatuePanelRecoveryReady(o,now,session) {
     return Number.isFinite(amount)&&amount>0&&amount<=10000&&[r.x,r.y,r.width,r.height].every(Number.isFinite)&&
         r.x>=1380&&r.x<=1420&&r.y>=580&&r.y<=630&&r.width>=450&&r.width<=530&&r.height>=20&&r.height<=50;
 }
+// Only these two Statue requests may recognize the retained, geometrically bounded Auto OCR alias.
+function actOneStatueDialogueScope(request) {
+    return !!(request&&request.mission==='questStep'&&
+        ['actTwoStarfellStatueOpen','statueBlessingOpen'].indexOf(request.step)>=0);
+}
+// Keep raw OCR unchanged. Missing Auto permits one same-image crop, never an input.
+function actOneStatueDialogueAnchors(rows,allowMissingAuto) {
+    if(!Array.isArray(rows)||rows.some(function(r){return !r||typeof r.text!=='string'||
+        ![r.x,r.y,r.width,r.height].every(Number.isFinite)||r.width<=0||r.height<=0;}))return null;
+    function text(r){return r.text.trim();}
+    function box(r,x0,x1,y0,y1,w0,w1,h0,h1){return r.x>=x0&&r.x<=x1&&r.y>=y0&&r.y<=y1&&
+        r.width>=w0&&r.width<=w1&&r.height>=h0&&r.height<=h1;}
+    var ids=rows.filter(function(r){return /^UID\b/i.test(text(r))||/^\d{9}$/.test(text(r))&&r.x>=1600&&r.y>=1030;}),
+        speakers=rows.filter(function(r){return text(r)==='Statue of The Seven';}),
+        autos=rows.filter(function(r){return text(r)==='Auto'||text(r)==='utc';});
+    if(ids.length!==1||!/^UID:\s*693306810$/.test(text(ids[0]))||
+       !box(ids[0],1600,1850,1030,1065,120,260,15,40)||ids[0].x+ids[0].width>1915||ids[0].y+ids[0].height>1080||
+       speakers.length!==1||!box(speakers[0],730,1050,825,910,180,450,20,55)||
+       autos.length>1||autos.length===0&&!allowMissingAuto||
+       autos.length===1&&!box(autos[0],0,180,0,80,30,150,15,45))return null;
+    return {uid:ids[0],speaker:speakers[0],auto:autos.length?autos[0]:null};
+}
+// A silent Statue subtitle may be absent from OCR; unrelated text or any choice prevents advance.
+function actOneStatueSilentIntro(rows) {
+    var anchors=actOneStatueDialogueAnchors(rows,false);
+    return !!(anchors&&rows.every(function(r){return r===anchors.uid||r===anchors.speaker||r===anchors.auto||
+        /^(?:\.{3}|…)$/.test(r.text.trim())&&r.x>=800&&r.x<=1100&&r.y>=900&&r.y<=1000&&
+        r.width>=3&&r.width<=200&&r.height>=5&&r.height<=70;}));
+}
+// The one intro advance uses the original capture clock, UID and exact retained screenshot identity.
+function actOneStatueIntroTarget(o,now,session) {
+    var h=o&&o.hud;
+    if(!o||typeof session!=='string'||!session||o.session!==session||!Number.isInteger(o.frameId)||o.frameId<1||
+       !Number.isFinite(now)||!Number.isFinite(o.capturedAt)||!Number.isFinite(o.timestamp)||o.capturedAt<=0||
+       o.timestamp<o.capturedAt||now<o.timestamp||now-o.capturedAt>1000||
+       o.screenshotPath!=='observations/'+session+'/frame-'+String(o.frameId).padStart(4,'0')+'.png'||
+       o.map!==null||!h||h.world!==false||h.health!==null||h.auto!==true||h.choice!==false||
+       h.dialogueReady!==true||h.journal!==false||h.bigMap!==false||h.climbing!==false||
+       h.loading===true||h.unknownHud===true||!actOneStatueSilentIntro(o.ocr)||
+       Object.prototype.hasOwnProperty.call(o,'uiObservation')||
+       [o.mapDiagnostic,o.timings&&o.timings.mapDiagnostic].some(function(d){return d&&typeof d.mode==='string'&&
+           d.mode.indexOf('inventory-ui-only')===0;}))return null;
+    return JSON.parse(JSON.stringify(actOneStatueDialogueAnchors(o.ocr,false)));
+}
+
 // Open only the explicitly recognized Blessing choice from this captured Statue dialogue.
 // UID must be positively visible here; an earlier world/account witness grants no authority.
-function actOneStatueBlessingChoiceTarget(o,now,session) {
+function actOneStatueBlessingChoiceTarget(o,now,session,allowScopedAutoAlias) {
     var h=o&&o.hud,rows=o&&o.ocr;
     if(!o||typeof session!=='string'||!session||o.session!==session||
        !Number.isInteger(o.frameId)||o.frameId<1||!Number.isFinite(now)||
@@ -361,8 +406,9 @@ function actOneStatueBlessingChoiceTarget(o,now,session) {
     if(identities.length!==1||!/^UID:\s*693306810$/.test(text(identities[0]))||
        !box(identities[0],1600,1850,1030,1065,120,260,15,40)||
        identities[0].x+identities[0].width>1915||identities[0].y+identities[0].height>1080)return null;
-    var speakers=rows.filter(function(r){return text(r)==='Statue of The Seven';}),
-        autos=rows.filter(function(r){return text(r)==='Auto';}),
+    var scoped=allowScopedAutoAlias===true&&actOneStatueDialogueAnchors(rows,false),
+        speakers=rows.filter(function(r){return text(r)==='Statue of The Seven';}),
+        autos=rows.filter(function(r){return text(r)==='Auto'||scoped&&r===scoped.auto;}),
         blessings=rows.filter(function(r){return text(r)==="Statue's Blessing";});
     if(speakers.length!==1||!box(speakers[0],730,1050,825,910,180,450,20,55)||
        autos.length!==1||!box(autos[0],0,180,0,80,30,150,15,45)||
@@ -3511,9 +3557,30 @@ function createActOneAdapter(sessionId,options) {
             return true;
         },
         focusGame: async function () { sessionReady(); await genshin.focusGame(); ready(); },
-        requireInputReady: ready, keyPress: async function (key) {
+        requireInputReady: ready, keyPress: async function (key,source) {
             var closingJournal=key==='VK_ESCAPE' && lastObservation && lastObservation.hud.journal;
-            await boundedKey(key,60);
+            // Only an explicit observation supplies provenance; legacy omitted/numeric arguments stay unchanged.
+            var explicit=source&&typeof source==='object',frameId,sourceGuard;
+            if(explicit){
+                frameId=source.frameId;
+                sourceGuard=function(){
+                    checkStop();ready();
+                    var stamp=source.hud&&source.hud.captureStamp,now=Date.now();
+                    if(!request||!lastObservation||source.session!==request.session||source.session!==lastObservation.session||
+                       !Number.isInteger(frameId)||frameId<1||frameId!==lastObservation.frameId||
+                       !Number.isFinite(source.timestamp)||source.timestamp!==lastObservation.timestamp||
+                       now<source.timestamp||now-source.timestamp>1000||
+                       source.screenshotPath!==lastObservation.screenshotPath||
+                       !stamp||stamp.session!==source.session||stamp.frameId!==frameId||
+                       !Number.isFinite(stamp.capturedAt)||stamp.capturedAt<=0||stamp.capturedAt>source.timestamp||
+                       stamp.capturedAt!==lastObservation.capturedAt||now-stamp.capturedAt>1000||
+                       JSON.stringify(source.ocr)!==JSON.stringify(lastObservation.ocr)||
+                       JSON.stringify(source.hud)!==JSON.stringify(lastObservation.hud)||
+                       JSON.stringify(source.map)!==JSON.stringify(lastObservation.map))
+                        throw new Error('Explicit key source changed or expired before input');
+                };
+            }
+            await boundedKey(key,60,frameId,sourceGuard);
             if(closingJournal) await sleep(500);
         }, release: release,
         teleportStarfellStatue: async function () {
@@ -4775,17 +4842,61 @@ function createActOneAdapter(sessionId,options) {
             checkStop();ready();
             if(inventoryUiOnly||!request||request.mission!=='questStep'||request.step!=='statueBlessingOpen')
                 throw new Error('Dedicated non-inventory Statue Blessing request required');
-            var source=lastObservation;
+            var source=lastObservation,sourceSnapshot=initial,introEvent=null,introDeadline=null,introPolls=0;
             function sameSource(){
-                return source&&lastObservation===source&&initial&&source.session===initial.session&&
-                    source.frameId===initial.frameId&&source.timestamp===initial.timestamp&&
-                    source.screenshotPath===initial.screenshotPath;
+                return source&&lastObservation===source&&sourceSnapshot&&source.session===sourceSnapshot.session&&
+                    source.frameId===sourceSnapshot.frameId&&source.timestamp===sourceSnapshot.timestamp&&
+                    source.screenshotPath===sourceSnapshot.screenshotPath;
             }
-            if(!sameSource()||!actOneStatueBlessingChoiceTarget(source,Date.now(),request.session))
-                throw new Error('Fresh exact Statue dialogue, unique Blessing choice and visible original UID required');
+            if(!sameSource())throw new Error('Fresh exact Statue dialogue, unique Blessing choice and visible original UID required');
+            if(!actOneStatueBlessingChoiceTarget(source,Date.now(),request.session,true)){
+                var intro=actOneStatueIntroTarget(source,Date.now(),request.session);
+                if(!intro)throw new Error('Fresh exact Statue dialogue, unique Blessing choice and visible original UID required');
+                // Consume the sole advance before calling native input; the six-poll/three-second budget is shared.
+                introDeadline=Date.now()+3000;
+                introEvent={type:'statueBlessingIntroAdvance',requestId:request.id,frameId:source.frameId,
+                    source:{session:source.session,frameId:source.frameId,capturedAt:source.capturedAt,
+                        timestamp:source.timestamp,screenshotPath:source.screenshotPath},
+                    clockKind:'legacy_capture_request_wall_time',target:intro,key:'VK_SPACE',durationMs:60,
+                    attemptedAt:Date.now(),startedAt:null,outcome:'reserved',deadlineAt:introDeadline,
+                    observedFrameIds:[],physicalInputDeliveryVerified:false};
+                events.push(introEvent);
+                function introGuard(){
+                    checkStop();ready();
+                    if(Date.now()>=introDeadline||!sameSource()||
+                       JSON.stringify(actOneStatueIntroTarget(source,Date.now(),request.session))!==JSON.stringify(intro))
+                        throw new Error('Statue intro source changed or expired before advance');
+                    introEvent.startedAt=Date.now();introEvent.outcome='started';
+                }
+                try{await boundedKey('VK_SPACE',60,source.frameId,introGuard);introEvent.outcome='returned_unverified';}
+                catch(error){introEvent.outcome='threw';introEvent.error=String(error&&error.message||error);throw error;}
+                finally{introEvent.finishedAt=Date.now();}
+                if(introEvent.startedAt===null||introEvent.finishedAt<introEvent.startedAt)
+                    throw new Error('Statue intro advance clock moved backwards');
+                var introLastFrame=source.frameId,choiceFound=false;
+                while(introPolls<6){
+                    checkStop();if(Date.now()>=introDeadline)break;
+                    await sleep(introPolls===0?350:250);checkStop();if(Date.now()>=introDeadline)break;
+                    var afterIntro=await observe();introPolls++;
+                    if(!afterIntro||afterIntro.session!==request.session||!Number.isInteger(afterIntro.frameId)||
+                       afterIntro.frameId<=introLastFrame||!Number.isFinite(afterIntro.timestamp)||
+                       afterIntro.timestamp<=introEvent.finishedAt)
+                        throw new Error('Statue intro result source is not a fresh later frame');
+                    introLastFrame=afterIntro.frameId;introEvent.observedFrameIds.push(afterIntro.frameId);
+                    source=lastObservation;sourceSnapshot=afterIntro;
+                    if(Date.now()>=introDeadline)break;
+                    if(sameSource()&&source.capturedAt>introEvent.finishedAt&&
+                       actOneStatueBlessingChoiceTarget(source,Date.now(),request.session,true)){choiceFound=true;break;}
+                }
+                if(!choiceFound)return {status:'stopped',step:'statueBlessingOpen',action:'advanceStatueIntro',
+                    introAdvanceAttempted:true,introSourceFrameId:introEvent.frameId,clicks:0,panelReady:false,
+                    frameId:introLastFrame,healingAttempted:false,offeringAttempted:false,questComplete:false,
+                    physicalInputDeliveryVerified:false,reason:'Statue intro advanced once; fresh Blessing choice not established within the shared passive bound'};
+            }
             checkStop();ready();
-            var started=Date.now(),target=sameSource()&&actOneStatueBlessingChoiceTarget(source,started,request.session);
-            if(!target)throw new Error('Statue Blessing source changed or expired before the click');
+            var started=Date.now(),target=sameSource()&&actOneStatueBlessingChoiceTarget(source,started,request.session,true);
+            if(!target||introDeadline!==null&&started>=introDeadline)
+                throw new Error('Statue Blessing source changed or expired before the click');
             // Retain the exact raw capture identity and click attempt before the native call can fail.
             var event={type:'statueBlessingOpen',requestId:request.id,frameId:source.frameId,
                 source:{session:source.session,frameId:source.frameId,capturedAt:source.capturedAt,
@@ -4802,14 +4913,15 @@ function createActOneAdapter(sessionId,options) {
                 event.finishedAt=Date.now();
             }
             if(event.finishedAt<event.startedAt)throw new Error('Statue Blessing click clock moved backwards');
-            var deadline=event.finishedAt+3000,current=null,lastFrame=source.frameId,
+            var deadline=introDeadline===null?event.finishedAt+3000:introDeadline,current=null,lastFrame=source.frameId,
                 result={status:'stopped',step:'statueBlessingOpen',action:'openBlessingPanel',clicks:1,
                     sourceFrameId:source.frameId,panelReady:false,healingAttempted:false,offeringAttempted:false,
                     questComplete:false,physicalInputDeliveryVerified:false};
+            if(introEvent){result.introAdvanceAttempted=true;result.introSourceFrameId=introEvent.frameId;}
             // These are passive observations only. The existing strict panel predicate remains unchanged.
-            for(var poll=0;poll<6;poll++){
+            for(var poll=introPolls;poll<6;poll++){
                 checkStop();
-                await sleep(poll===0?350:250);
+                await sleep(poll===introPolls?350:250);
                 checkStop();
                 if(Date.now()>deadline)break;
                 current=await observe();
@@ -8842,6 +8954,10 @@ function createActOneAdapter(sessionId,options) {
                     if(inventoryUiPauseUidCrop)inventoryUiPauseUidCropAttempted=true;
                     rows=actOneMergeControlCropRows(rows,scaledRows(img,1680,1040,/^actTwo(?:WorldMap|MapClose|CityTeleport|WindriseTeleport|LionTeleport|NorthTeleport|StarfellTeleport|CoastTeleport)$/.test(request.step||'')?190:240,40),1680,1040);
                 }
+                // The positively anchored Statue scope may recover an omitted Auto label from this same image.
+                var statueCropAnchors=actOneStatueDialogueScope(request)&&actOneStatueDialogueAnchors(rows,true);
+                if(statueCropAnchors&&!statueCropAnchors.auto)
+                    rows=actOneMergeControlCropRows(rows,scaledRows(img,90,20,100,65),90,20);
                 var fullOcrMs = Date.now() - o0,reviveStockOcrMs=0;
                 if(request&&request.mission==='recover'&&actOneWolfReviveItemModalVisible({ocr:rows})&&
                    rows.some(function(r){return String(r.text||'').trim()==='Teyvat Fried Egg';})&&
@@ -8918,7 +9034,8 @@ function createActOneAdapter(sessionId,options) {
                 } catch (mapError) { mapDiagnostic={reason:String(mapError&&mapError.message||mapError)}; }
                 var mapMs = Date.now() - map0, text = rows.map(function (r) { return r.text; }).join(' ');
                 var hp = actOneHealth(healthRows);
-                var auto = rows.some(function (r) { return /^Auto$/i.test(r.text.trim()) && r.x < 350 && r.y < 150; });
+                var scopedStatueDialogue=actOneStatueDialogueScope(request)&&actOneStatueDialogueAnchors(rows,false);
+                var auto = rows.some(function (r) { return /^Auto$/i.test(r.text.trim()) && r.x < 350 && r.y < 150; })||!!scopedStatueDialogue;
                 // The recorded three-dot Lisa subtitle is omitted even by
                 // enlarged OCR. Require its three separated white dot patches
                 // and an otherwise dark surrounding strip in this capture.
@@ -9054,7 +9171,7 @@ function createActOneAdapter(sessionId,options) {
                     }
                 }
                 var climbing=rows.some(function(r){return r.text.trim()==='X' && r.x>1500 && r.y>990;}) && rows.some(function(r){return r.text.trim()==='Space' && r.x>1600 && r.y>990;});
-                var dialogueReady=actOneDialogueReady(rows,choice)||lisaSilentSubtitle&&!choice, objectiveChanged=/objective updated|quest completed/i.test(text),aerialBoss=null,interactionOcrMs=0,cooldownOcrMs=0;
+                var dialogueReady=actOneDialogueReady(rows,choice)||lisaSilentSubtitle&&!choice||!!(scopedStatueDialogue&&!choice&&actOneStatueSilentIntro(rows)), objectiveChanged=/objective updated|quest completed/i.test(text),aerialBoss=null,interactionOcrMs=0,cooldownOcrMs=0;
                 if(request&&request.mission==='questStep'&&['wolfCryoWait','wolfSpikeCrossFirst','wolfSpikeCrossSecond'].indexOf(request.step)>=0&&!pos&&hp&&hp.max===1427&&hp.current>0&&
                    !auto&&!journal&&!bigMap&&!dialogueReady&&!choice&&!climbing&&!tutorialStep&&!objectiveChanged&&
                    actOneGroundControlEvidence(rows)&&actOneWolfCryoCooldownRemaining({ocr:rows})===null) {

@@ -531,7 +531,7 @@ var ActOneMission = (function () {
             }
             for(var settle=0;settle<2&&safe(field)&&selection.selection(field.ocr||[],'Statue of The Seven')!=='selected';settle++){api.checkStop();await api.sleep(250);field=await observe();}
             if(!safe(field)||Math.hypot(field.map.x+1323.474,field.map.y-2566.115)>3||selection.selection(field.ocr||[],'Statue of The Seven')!=='selected')return {status:'stopped',reason:'Fresh selected Starfell Statue interaction required',moves:moves,turns:turns,fieldFrameId:field.frameId};
-            api.checkStop();await api.keyPress('VK_F');await api.sleep(900);var after=await observe();
+            api.checkStop();await api.keyPress('VK_F',field);await api.sleep(900);var after=await observe();
             for(var dialoguePoll=0;dialoguePoll<4&&!after.hud.dialogueReady&&!after.hud.choice;dialoguePoll++){api.checkStop();await api.sleep(250);after=await observe();}
             return {status:'stopped',step:name,reason:'Starfell Statue interaction sent; inspect offering options',moves:moves,turns:turns,fieldFrameId:after.frameId};
         });

@@ -208,6 +208,16 @@ def controller_scene(kind='world', objective='Defeat the nearby hilichurls', *, 
     return value
 
 
+def record_ground_scan(source):
+    """Represent the same-frame measurement produced by an explicit native ground observation."""
+    stamp = dict(session=source['session'], frameId=source['frameId'], capturedAt=source['timestamp'])
+    hud = source['hud']
+    count = len(hud['enemyBars'])
+    hud['captureStamp'] = dict(stamp, source='game-capture-start')
+    hud['enemyBarObservation'] = dict(stamp, version=1, kind='normal-ground-enemy-observation-v1',
+        state='threat' if count else 'clear', candidateCount=count, acceptedCount=count)
+
+
 class ReplayPilot:
     """Replay serial native-shaped results without any process or input calls."""
 
@@ -258,6 +268,8 @@ class ReplayPilot:
         frame = self.source['frameId'] + 1
         self.source = copy.deepcopy(item.get('source', self.source))
         self.source.update(session=self.session, frameId=frame, timestamp=self.clock.milliseconds())
+        if mission == 'observe' and self.source['hud'].get('groundControls'):
+            record_ground_scan(self.source)
         receipt = dict(id=request['id'], session=self.session, mission=mission,
                        status=item.get('status', 'completed'), frameId=frame,
                        details=dict(result=copy.deepcopy(item.get('result')), inputEvents=[]))
@@ -388,6 +400,7 @@ class SupervisedRouteControllerTests(unittest.TestCase):
         self.assertEqual([r['mission'] for r in inputs], ['questStep', 'navigation'])
         self.assertEqual(inputs[0]['step'], 'worldInventory')
         self.assertEqual(inputs[1]['objective'], route_tool.EXPLORATION_OBJECTIVE)
+        self.assertIs(inputs[1]['requireMeasuredGround'], True)
         self.assertLessEqual(inputs[1]['deadlineMs'], 45000)
 
     def test_exploration_threat_low_health_and_oversized_route_refuse(self):
@@ -406,6 +419,29 @@ class SupervisedRouteControllerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, '1..4'):
             self.run_controller(pilot)
         self.assertEqual(pilot.calls, [])
+
+    def test_only_same_capture_measured_clear_allows_exploration(self):
+        now = self.clock.milliseconds()
+        source = controller_scene()
+        source.update(timestamp=now)
+        source['hud']['objectives'] = []
+
+        def phase(observation, at=now):
+            return route_tool.route_phase(observation, '693306810', [route_tool.EXPLORATION_OBJECTIVE],
+                allow_dialogue=False, journal_resume=False, now_ms=at)[0]
+
+        # Older reports seeded enemyBars=[] even when the detector never ran.
+        self.assertEqual(phase(source), 'wait')
+        record_ground_scan(source)
+        self.assertEqual(phase(source), 'navigation')
+        self.assertEqual(phase(source, now + 1001), 'wait')
+        for fields in ({'state': 'ambiguous'}, {'state': 'unavailable'}, {'state': 'overloaded'},
+                       {'candidateCount': 1}, {'acceptedCount': 1}, {'candidateCount': False},
+                       {'session': 'different'}, {'frameId': 2}, {'capturedAt': now - 1}):
+            with self.subTest(fields=fields):
+                changed = copy.deepcopy(source)
+                changed['hud']['enemyBarObservation'].update(fields)
+                self.assertEqual(phase(changed), 'wait')
 
     def test_exploration_deadline_uses_exact_inventory_pause_proof(self):
         self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE

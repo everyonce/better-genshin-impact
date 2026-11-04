@@ -415,7 +415,28 @@ def source_account_matches(source, expected_uid):
     return matches == [expected_uid]
 
 
-def route_phase(source, expected_uid, objectives, *, allow_dialogue, journal_resume):
+def ground_scan_is_clear(source, now_ms):
+    """Accept a measured empty scan only from this capture and within its input freshness window."""
+    hud = source['hud']
+    scan = hud.get('enemyBarObservation')
+    stamp = hud.get('captureStamp')
+    if not isinstance(scan, dict) or not isinstance(stamp, dict):
+        return False
+    captured_at = stamp.get('capturedAt')
+    return (stamp.get('source') == 'game-capture-start' and type(captured_at) is int
+            and captured_at <= source['timestamp'] <= now_ms and now_ms - captured_at <= 1000
+            and stamp.get('session') == scan.get('session') == source['session']
+            and type(stamp.get('frameId')) is int and type(scan.get('frameId')) is int
+            and stamp['frameId'] == scan['frameId'] == source['frameId']
+            and type(scan.get('capturedAt')) is int and scan['capturedAt'] == captured_at
+            and type(scan.get('version')) is int and scan['version'] == 1
+            and scan.get('kind') == 'normal-ground-enemy-observation-v1' and scan.get('state') == 'clear'
+            and type(scan.get('candidateCount')) is int and scan['candidateCount'] == 0
+            and type(scan.get('acceptedCount')) is int and scan['acceptedCount'] == 0
+            and hud.get('enemyBars') == [])
+
+
+def route_phase(source, expected_uid, objectives, *, allow_dialogue, journal_resume, now_ms=None):
     """Select a named existing operation; raw input proposals and unknown objectives are never accepted."""
     hud, rows = source['hud'], source['ocr']
     if any(not isinstance(row, dict) or not isinstance(row.get('text'), str) for row in rows):
@@ -449,6 +470,8 @@ def route_phase(source, expected_uid, objectives, *, allow_dialogue, journal_res
             return 'wait', 'Exploration requires zero visible threat'
         if hp['current'] < hp['max'] * .85:
             return 'wait', 'Existing generic exploration requires at least 85% health'
+        if not ground_scan_is_clear(source, int(time.time() * 1000) if now_ms is None else now_ms):
+            return 'wait', 'Exploration requires a fresh enemy scan showing clear ground'
         return 'navigation', EXPLORATION_OBJECTIVE
     matches = [name for name in objectives if name in visible_objectives]
     if len(matches) != 1:
@@ -541,9 +564,10 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
             source = pilot.current()
             dispatch('observe', source, {})
             source = pilot.current()
-            require_fresh_source(source, pilot.session, clock_ms())
+            now_ms = clock_ms()
+            require_fresh_source(source, pilot.session, now_ms)
             phase, value = route_phase(source, expected_uid, authorized_objectives,
-                allow_dialogue=allow_dialogue, journal_resume=journal_resume)
+                allow_dialogue=allow_dialogue, journal_resume=journal_resume, now_ms=now_ms)
             paused_navigation = inventory_navigation is not None
             if paused_navigation:
                 if not source_account_matches(source, expected_uid) or not pilot.inventory_ready(source):
@@ -611,6 +635,8 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
             start = state['nextWaypointIndex']
             suffix = points[state['nextWaypointIndex']:]
             fields = dict(objective=value, waypoints=suffix, deadlineMs=min(45000, remaining - reserve))
+            if value == EXPLORATION_OBJECTIVE:
+                fields['requireMeasuredGround'] = True
             state['navigationRequests'] += 1
             result = dispatch('navigation', source, fields, allow_deadline_checkpoint=True)
             terminal = state['records'][-1]

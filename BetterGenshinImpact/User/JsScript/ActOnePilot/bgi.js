@@ -3277,7 +3277,7 @@ function createActOneAdapter(sessionId,options) {
             return matches.length===1?matches[0]:null;
         } finally {dispose(mask);dispose(hsv);dispose(crop);}
     }
-    function readEnemyBars(img, rows, level, nativeAcquisition) {
+    function readEnemyBars(img, rows, level, nativeAcquisition, groundObservation) {
         enemyBarDiagnostic={level:level||1,candidates:0,localReads:[],greenMask:null};
         var top=nativeAcquisition===true?30:100;
         var left=nativeAcquisition===true||level===12||level===13?0:350;
@@ -3285,17 +3285,52 @@ function createActOneAdapter(sessionId,options) {
         try {
             mask=crop.srcMat.inRange(new OpenCvSharp.OpenCvSharp.Scalar(75,75,230),new OpenCvSharp.OpenCvSharp.Scalar(110,110,255));
             var contours=mask.findContoursAsArray(OpenCvSharp.OpenCvSharp.RetrievalModes.External,OpenCvSharp.OpenCvSharp.ContourApproximationModes.ApproxSimple),candidates=[],bars=[];
-            for(var i=0;i<contours.length;i++) {
-                var b=OpenCvSharp.OpenCvSharp.Cv2.boundingRect(contours[i]),w=Number(b.width),h=Number(b.height);
+            var contourCount=contours&&contours.length;
+            if(groundObservation===true){
+                // ClearScript exposes native arrays as indexed objects, not necessarily JS Arrays.
+                if(contours&&contourCount===undefined)contourCount=contours.Length;
+                if(!contours||!Number.isInteger(contourCount)||contourCount<0||
+                   typeof OpenCvSharp.OpenCvSharp.Cv2.countNonZero!=='function'||
+                   typeof OpenCvSharp.OpenCvSharp.Cv2.contourArea!=='function')
+                    throw new Error('Ground enemy detector result unavailable or malformed');
+                var redPixels=Number(OpenCvSharp.OpenCvSharp.Cv2.countNonZero(mask));
+                if(!Number.isInteger(redPixels)||redPixels<0||redPixels>1920*870)
+                    throw new Error('Ground enemy detector pixel count malformed');
+                enemyBarDiagnostic.contourCount=contourCount;enemyBarDiagnostic.redPixels=redPixels;
+                // Excess color/components cannot establish a measured clear scene.
+                if(contourCount>4096||redPixels>1920*870*.05){enemyBarDiagnostic.overloaded=true;return [];}
+            }
+            for(var i=0;i<(groundObservation===true?contourCount:contours.length);i++) {
+                var b=OpenCvSharp.OpenCvSharp.Cv2.boundingRect(contours[i]);
+                if(groundObservation===true){
+                    if(!b)throw new Error('Ground enemy detector rectangle missing');
+                    b={x:b.x===undefined?b.X:b.x,y:b.y===undefined?b.Y:b.y,
+                        width:b.width===undefined?b.Width:b.width,height:b.height===undefined?b.Height:b.height};
+                    if(![b.x,b.y,b.width,b.height].every(Number.isInteger)||b.x<0||b.y<0||
+                       b.width<1||b.height<1||b.x+b.width>1920||b.y+b.height>870)
+                        throw new Error('Ground enemy detector rectangle malformed');
+                }
+                var w=Number(b.width),h=Number(b.height);
                 // A nearly defeated enemy has a very short red segment. Requiring
                 // a wide bar made the controller lose the target before the final hit.
                 var bar={x:left+Number(b.x)+w/2,y:top+Number(b.y)+h/2,width:w,height:h};
-                if(level==='any'&&request&&(request.mission==='navigation'&&["Go to the exam point","Talk to Amber","Check the suspicious location and eliminate any threats","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||/^actTwo/.test(request.step||''))&&typeof OpenCvSharp.OpenCvSharp.Cv2.contourArea==='function')
+                if(level==='any'&&request&&(groundObservation===true||request.mission==='navigation'&&["Go to the exam point","Talk to Amber","Check the suspicious location and eliminate any threats","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||/^actTwo/.test(request.step||''))&&typeof OpenCvSharp.OpenCvSharp.Cv2.contourArea==='function')
                     bar.rectangularity=Number(OpenCvSharp.OpenCvSharp.Cv2.contourArea(contours[i],false))/Math.max(1,(w-1)*(h-1));
+                if(groundObservation===true&&(!Number.isFinite(bar.rectangularity)||bar.rectangularity<0||bar.rectangularity>1.05))
+                    throw new Error('Ground enemy detector contour area malformed');
                 if(actOneEnemyBarSize(w,h)||((level===4||level===5||level===10||level===11||level===12||level===13||level===14||level==='any')&&w>=2&&w<=300&&h>12&&h<=20)||nativeAcquisition===true&&w>=30&&w<=300&&h>20&&h<=32&&w/h>=3.5) candidates.push(bar);
             }
             candidates.sort(function(a,b){return b.height-a.height;});
             enemyBarDiagnostic.candidates=candidates.length;
+            if(groundObservation===true){
+                // Retain rejected bar-shaped components too: failed level OCR is not clear ground.
+                enemyBarDiagnostic.rawCandidates=candidates.slice(0,64);
+                if(candidates.length>64){enemyBarDiagnostic.overloaded=true;return [];}
+                // Small near-square fragments in the side HUD are not field bars. Wide edge bars
+                // and same-image level-anchored depleted bars remain candidates, never silently clear.
+                enemyBarDiagnostic.fieldCandidates=candidates.filter(function(bar){return bar.x>=350&&bar.x<=1600||
+                    bar.width/bar.height>=3.5||actOneOutdoorEnemyBarCandidate(bar,rows);});
+            }
             // Uncharted outdoor walking must stop for a visible red bar even when
             // OCR misses the enemy level. These candidates never authorize combat.
             if(level==='any'){
@@ -3303,7 +3338,7 @@ function createActOneAdapter(sessionId,options) {
                 // The rounded ends occupy much of a depleted short bar. Two
                 // recorded Lv.5 bars scored .731/.765 rather than .8. Recover
                 // only small near-rectangles with a same-image exact level anchor.
-                if(nativeAcquisition===true){
+                if(nativeAcquisition===true&&groundObservation!==true){
                     var depletedReads=0;
                     for(var d=0;d<candidates.length&&depletedReads<2;d++){
                         var cb=candidates[d];
@@ -8919,6 +8954,9 @@ function createActOneAdapter(sessionId,options) {
                 if (readyError) throw readyError;
             } else ready();
             enemyBarDiagnostic=null;ocrPrimitiveMs=0;ocrReadCount=0;
+            // Only explicit normal observations and opted-in free exploration request this evidence.
+            var groundEnemyRequested=!inventoryUiOnly&&request&&(request.mission==='observe'||
+                request.mission==='navigation'&&request.objective==='Explore for Adventure Rank'&&request.requireMeasuredGround===true);
             var t0 = Date.now(), img = captureGameRegion(), captureMs = Date.now() - t0;
             var pngPending=null,pngScheduleMs=0,pngWaitMs=0,pngMs=0,pngWriteMode='synchronous';
             try {
@@ -9255,7 +9293,7 @@ function createActOneAdapter(sessionId,options) {
                     if(skewerDigits.length===1&&String(skewerDigits[0].text).trim()==='1'&&skewerDigits[0].x/3+1105>1125&&skewerDigits[0].x/3+1105<1165&&skewerDigits[0].y/3+590>605&&skewerDigits[0].y/3+590<655)foodQuantity={value:1,source:'scaled-same-frame',frameId:frame};
                 }
                 var groundObjectiveIgnored=[];if(regionalObservation&&JSON.parse(file.readTextSync('act-two-field-request.json')).mode==='actions'||request&&(request.mission==='observe'||request.step==='actTwoWorldMap')){var filteredGroundObjectives=actTwoGroundObjectiveRows(objectiveRows);if(filteredGroundObjectives.length!==objectiveRows.length)groundObjectiveIgnored=objectiveRows;objectiveRows=filteredGroundObjectives;}
-                var hud = { foodQuantity:foodQuantity, auto:auto, climbing:climbing, groundControls:actOneGroundControlEvidence(rows), enemyBars: (combatRetreatObservation||combatHealObservation) ? readEnemyBars(img,rows,'any',true) : combatObjective ? readEnemyBars(img, rows) : request&&/^falcon(Combat|AmberCombat|Ranged|Engage)$/.test(request.step) ? readEnemyBars(img,rows,4) : request&&request.mission==='questStep'&&/^wolf(Combat|RecoveryCombat|CryoWait|CharactersOpen|WitnessAction|SpikeCrossFirst|SpikeCrossSecond|PlatformObserve|DefensiveCryo|Forward|ForwardFine|Advance|Right|Left|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue|KaeyaSkill|TurretPass|ChestInteract|LootInteract|ConsoleInteract|ApproachEnemy)$/.test(request.step)&&hp&&!auto&&!journal&&!bigMap ? readEnemyBars(img,rows,5) : [], aerialBossVisible:aerialBossVisible, aerialBoss:aerialBoss, slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: dialogueReady, choice: auto && choice, journal: journal, bigMap: bigMap,
+                var hud = { foodQuantity:foodQuantity, auto:auto, climbing:climbing, groundControls:actOneGroundControlEvidence(rows), enemyBars: groundEnemyRequested ? [] : (combatRetreatObservation||combatHealObservation) ? readEnemyBars(img,rows,'any',true) : combatObjective ? readEnemyBars(img, rows) : request&&/^falcon(Combat|AmberCombat|Ranged|Engage)$/.test(request.step) ? readEnemyBars(img,rows,4) : request&&request.mission==='questStep'&&/^wolf(Combat|RecoveryCombat|CryoWait|CharactersOpen|WitnessAction|SpikeCrossFirst|SpikeCrossSecond|PlatformObserve|DefensiveCryo|Forward|ForwardFine|Advance|Right|Left|LookRight|LookLeft|LookDown|LookUp|Pause|Continue|Info|OpeningDialogue|KaeyaSkill|TurretPass|ChestInteract|LootInteract|ConsoleInteract|ApproachEnemy)$/.test(request.step)&&hp&&!auto&&!journal&&!bigMap ? readEnemyBars(img,rows,5) : [], aerialBossVisible:aerialBossVisible, aerialBoss:aerialBoss, slimeTarget: tutorialStep === 'aimSlime' ? readSlime(img) : null, tutorialStep: tutorialStep, characterAcquired: acquired.length === 1 ? acquired[0].text.trim() : null, dialogueReady: dialogueReady, choice: auto && choice, journal: journal, bigMap: bigMap,
                     objectiveChanged: /objective updated|quest completed/i.test(text), health: hp, healthOcr: healthRows.map(function (r) { return r.text; }), healthDiagnostic:healthRead.diagnostic,
                     healthPct: hp && hp.max > 0 ? hp.current / hp.max : null,
                     lowHealth: !hp || hp.max <= 0 || hp.current > hp.max || hp.current / hp.max < 0.6,
@@ -9303,7 +9341,7 @@ function createActOneAdapter(sessionId,options) {
                         lowTierStock:kaeyaPanelNumber(1350,832,65,28),midTierStock:kaeyaPanelNumber(1480,832,65,28),
                         highTierStock:kaeyaPanelNumber(1610,832,65,28),mora:kaeyaPanelNumber(1665,24,110,47)};
                 }
-                if(request&&(request.mission==='observe'&&objectiveRows.some(function(r){return actOneLisaObjective(r.text);})||request.mission==='navigation'&&["Go to the exam point","Talk to Amber","Check the suspicious location and eliminate any threats","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||request.mission==='questStep'&&['actTwoDaytime','actTwoMageNative','actTwoMageFinish','actTwoStarfellShoreContinue','actTwoStarfellShore','actTwoStarfellNorthShore','actTwoStarfellShoreCamera','actTwoStarfellShoreExit','actTwoBoundedMount','actTwoShieldPyro','actTwoMageBurst','actTwoMagePrep','actTwoNativeCombat','actTwoNativeGroup','actTwoNativeFinish','actTwoNativeDeadlineProbe','actTwoField','actTwoFieldInspect','actTwoRiddleMount','actTwoWallMount','actTwoWallLowRelease','actTwoWallStaminaTiming','actTwoWallAttachmentTiming','actTwoWallMicroAscent','actTwoMapClose','actTwoLaunchPractice','actTwoVisual','actTwoNativeRoute','actTwoInformantCombat','actTwoOre','actTwoTownRecovery','actTwoTownClimb','actTwoTownRail','actTwoWaypoint','actTwoKaeyaTalk','actTwoKaeyaReport','actTwoJackTalk','actTwoMarjorieTalk','actTwoCyrusTalk','actTwoVileTalk','actTwoLynnTalk','windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&hp&&!auto&&!journal&&!bigMap) {
+                if(!groundEnemyRequested&&request&&(request.mission==='observe'&&objectiveRows.some(function(r){return actOneLisaObjective(r.text);})||request.mission==='navigation'&&["Go to the exam point","Talk to Amber","Check the suspicious location and eliminate any threats","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0||request.mission==='questStep'&&['actTwoDaytime','actTwoMageNative','actTwoMageFinish','actTwoStarfellShoreContinue','actTwoStarfellShore','actTwoStarfellNorthShore','actTwoStarfellShoreCamera','actTwoStarfellShoreExit','actTwoBoundedMount','actTwoShieldPyro','actTwoMageBurst','actTwoMagePrep','actTwoNativeCombat','actTwoNativeGroup','actTwoNativeFinish','actTwoNativeDeadlineProbe','actTwoField','actTwoFieldInspect','actTwoRiddleMount','actTwoWallMount','actTwoWallLowRelease','actTwoWallStaminaTiming','actTwoWallAttachmentTiming','actTwoWallMicroAscent','actTwoMapClose','actTwoLaunchPractice','actTwoVisual','actTwoNativeRoute','actTwoInformantCombat','actTwoOre','actTwoTownRecovery','actTwoTownClimb','actTwoTownRail','actTwoWaypoint','actTwoKaeyaTalk','actTwoKaeyaReport','actTwoJackTalk','actTwoMarjorieTalk','actTwoCyrusTalk','actTwoVileTalk','actTwoLynnTalk','windriseReveal','lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&hp&&!auto&&!journal&&!bigMap) {
                     var fieldLevel=request.step==='actTwoMageBurst'||['actTwoFieldInspect','actTwoMapClose'].indexOf(request.step)>=0&&actTwoAmbushQuestAnchor(objectiveRows)?13:'any';
                     if(request.step==='actTwoField'){
                         try{fieldLevel=eval(file.readTextSync('act-two-field.js')+'\nActTwoField;').enemyLevel(JSON.parse(file.readTextSync('act-two-field-request.json')),request);}catch(fieldLevelError){fieldLevel='any';}
@@ -9420,6 +9458,35 @@ function createActOneAdapter(sessionId,options) {
                     var wait0=Date.now(),pngResult=await pngPending;
                     pngWaitMs=Date.now()-wait0;pngMs=pngScheduleMs+pngWaitMs;
                     if(!pngResult.saved){var blocked=new Error('PNG write failed: capture storage is blocked'+(pngResult.error?': '+pngResult.error:''));blocked.code='CAPTURE_STORAGE_BLOCKED';throw blocked;}
+                }
+                if(groundEnemyRequested){
+                    // An explicit normal-mode observation may measure threats, never authorize combat.
+                    // Keep unavailable distinct from a detector that examined this image and found zero.
+                    var groundEnemy={version:1,kind:'normal-ground-enemy-observation-v1',state:'unavailable',
+                        session:session,frameId:frame,capturedAt:t0,reason:'not_recognized_overworld_ground',
+                        candidateCount:null,acceptedCount:null};
+                    hud.enemyBarObservation=groundEnemy;
+                    if(hud.world===true&&hud.groundControls===true&&hud.climbing===false&&!hud.auto&&
+                       !hud.dialogueReady&&!hud.choice&&!hud.journal&&!hud.bigMap&&!hud.tutorialStep&&!trackQuest&&
+                       pos&&pos.map==='Teyvat'&&Number.isFinite(pos.x)&&Number.isFinite(pos.y)&&
+                       hp&&Number.isInteger(hp.current)&&Number.isInteger(hp.max)&&hp.current>0&&hp.current<=hp.max){
+                        try{
+                            // Full-width same-image scan includes edge bars; existing level anchoring remains strict.
+                            hud.enemyBars=readEnemyBars(img,rows,'any',true,true);
+                            hud.enemyBarDiagnostic=enemyBarDiagnostic;
+                            groundEnemy.candidateCount=enemyBarDiagnostic.fieldCandidates?enemyBarDiagnostic.fieldCandidates.length:
+                                enemyBarDiagnostic.overloaded&&!enemyBarDiagnostic.rawCandidates?null:enemyBarDiagnostic.candidates;
+                            groundEnemy.acceptedCount=hud.enemyBars.length;
+                            groundEnemy.state=enemyBarDiagnostic.overloaded?'overloaded':hud.enemyBars.length?'threat':
+                                groundEnemy.candidateCount?'ambiguous':'clear';
+                            groundEnemy.reason=enemyBarDiagnostic.overloaded?'detector_overloaded':hud.enemyBars.length?
+                                'outdoor_bar_candidates':groundEnemy.candidateCount?'unanchored_bar_shaped_components':'no_bar_shaped_components';
+                        }catch(groundEnemyError){
+                            hud.enemyBars=[];hud.enemyBarDiagnostic=enemyBarDiagnostic;
+                            groundEnemy.reason='detector_result_unavailable_or_rejected';
+                            groundEnemy.error=String(groundEnemyError&&groundEnemyError.message||groundEnemyError).slice(0,200);
+                        }
+                    }
                 }
                 // Preserve this invocation's capture start through engine HUD serialization.
                 // This is neither compositor acquisition time nor evidence of physical input delivery.

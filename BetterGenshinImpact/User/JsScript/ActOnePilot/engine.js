@@ -63,6 +63,11 @@ var ActOnePilot = (function () {
         }
         if (r.mission === 'navigation') {
             allowed.push('waypoints', 'deadlineMs', 'objective');
+            if (r.requireMeasuredGround !== undefined) {
+                if (r.requireMeasuredGround !== true || r.objective !== 'Explore for Adventure Rank')
+                    return 'Measured ground is available only for explicit exploration';
+                allowed.push('requireMeasuredGround');
+            }
             if (typeof r.objective !== 'string' || !r.objective.trim() || r.objective.length > 160) return 'Expected objective required';
             if (!Array.isArray(r.waypoints) || r.waypoints.length < 1 || r.waypoints.length > 10) return 'Invalid waypoints';
             if (!integer(r.deadlineMs, 1000, 90000)) return 'Invalid navigation deadline';

@@ -7,6 +7,21 @@ function actTwoAmberFinalChoice(rows) {
         one('UID: 693306810',1600,1800,1030,1080);
 }
 var ActOneMission = (function () {
+    // Autonomous exploration must see the result of a detector run on the current game capture.
+    function groundScanStopReason(observation, now) {
+        var hud = observation.hud, stamp = hud.captureStamp, scan = hud.enemyBarObservation;
+        if (!stamp || !scan || stamp.source !== 'game-capture-start' ||
+            scan.kind !== 'normal-ground-enemy-observation-v1' || scan.version !== 1 ||
+            stamp.session !== observation.session || scan.session !== observation.session ||
+            !Number.isInteger(observation.frameId) || stamp.frameId !== observation.frameId || scan.frameId !== observation.frameId ||
+            !Number.isInteger(stamp.capturedAt) || scan.capturedAt !== stamp.capturedAt ||
+            !(stamp.capturedAt <= observation.timestamp && observation.timestamp <= now && now - stamp.capturedAt <= 1000))
+            return 'Fresh ground enemy scan required';
+        if (scan.state === 'threat') return 'Enemy observed during exploration';
+        if (scan.state !== 'clear' || scan.candidateCount !== 0 || scan.acceptedCount !== 0 ||
+            !Array.isArray(hud.enemyBars) || hud.enemyBars.length) return 'Ground enemy scan did not establish clear ground';
+        return null;
+    }
     function normalize(degrees) { return (degrees % 360 + 360) % 360; }
     function bearing(from, to) { return normalize(Math.atan2(-(to.y - from.y), -(to.x - from.x)) * 180 / Math.PI); }
     function travelHoldMs(objective, distance, arrivalRadius, remaining) {
@@ -174,6 +189,11 @@ var ActOneMission = (function () {
                 if (climbSteps >= 12 && current && current.hud && !current.hud.climbing) return stop('Navigation-wide climb hold limit reached');
                 if (!safeTransientFrame(current)&&!statueHealingApproach(request,current)) return stop('Dialogue, objective, low-health, or missing navigation evidence');
                 if(exploring&&!statueHealingApproach(request,current)&&current.hud.health&&current.hud.health.current/current.hud.health.max<0.85)return stop('Exploration health threshold reached');
+                if (request.requireMeasuredGround && current.hud.world) {
+                    var groundStop = groundScanStopReason(current, api.now());
+                    if (groundStop) return stop(groundStop);
+                    if (current.hud.climbing) return stop('Exploration left measured ground');
+                }
                 if(exploring&&current.hud.climbing&&climbReleases===0&&typeof api.releaseClimb==='function') {
                     var ch=current.hud,cm=current.map,cp=ch.health;
                     var recentGround=afterForward&&afterForward.groundWitness;
@@ -230,6 +250,11 @@ var ActOneMission = (function () {
                     if(initialHealth.current-coordinateFrame.hud.health.current>initialHealth.max*0.1)
                         return stop('Health dropped more than 10% during map coordinate retry');
                     current=coordinateFrame;
+                }
+                // Coordinate retries can replace the starting frame. Check the final image before any route input.
+                if (request.requireMeasuredGround) {
+                    var scanStop = groundScanStopReason(current, api.now());
+                    if (scanStop) return stop(scanStop);
                 }
                 if(!plausibleMap(current,target)) {
                     if(current&&current.map&&current.map.map!==target.map) return stop('Waypoint map does not match current map');

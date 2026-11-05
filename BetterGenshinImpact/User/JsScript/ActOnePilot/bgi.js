@@ -311,6 +311,27 @@ function actOneStatueAlternativePower(rows) {
        r.width<450||r.width>530||r.height<20||r.height>50||Number(match[1])>10000)return null;
     return Number(match[1]);
 }
+// Keep raw OCR boxes and add the panel instruction when OCR splits it across adjacent boxes.
+function actOneJoinStatueGuide(rows) {
+    var guide='Click on the character portrait to restore HP', full='In combat '+guide;
+    if(!rows.some(r=>r.x>1400 && r.y<100 && /^Statue['’]s Blessing$/.test(String(r.text).trim())) ||
+        rows.some(r=>r.y<100 && String(r.text).includes(guide)))return rows;
+    var parts=rows.filter(function(r){
+        var text=String(r.text||'').trim();
+        return text && [r.x,r.y,r.width,r.height].every(Number.isFinite) && r.x>=10 && r.y>=12 &&
+            r.y<=70 && r.x+r.width<=850 && r.height>=15 && r.height<=55 && (' '+full+' ').includes(' '+text+' ');
+    }).sort((a,b)=>a.x-b.x);
+    if(parts.length<2)return rows;
+    var combined=parts.map(r=>r.text.trim()).join(' ');
+    if(combined!==guide && combined!==full)return rows;
+    var first=parts[0], last=parts[parts.length-1];
+    for(var i=1;i<parts.length;i++){
+        var prev=parts[i-1], next=parts[i], gap=next.x-(prev.x+prev.width);
+        if(gap< -40 || gap>50 || Math.abs((next.y+next.height/2)-(first.y+first.height/2))>15)return rows;
+    }
+    return rows.concat({text:guide, x:first.x, y:first.y, width:last.x+last.width-first.x,
+        height:first.height, source:'joined-statue-guide'});
+}
 // A panel-only request binds the original account and the recorded third Kaeya card.
 // These are legacy completed-observation wall times, not native AgentStream QPC ages.
 function actOneStatuePanelRecoveryReady(o,now,session) {
@@ -8977,7 +8998,7 @@ function createActOneAdapter(sessionId,options) {
                         function(error){return {saved:false,error:String(error&&error.message||error)};});
                     pngScheduleMs=Date.now()-schedule0;pngWriteMode='overlapped';
                 }
-                var o0 = Date.now(), rows = readRows(img, 0, 0, 1920, 1080);
+                var o0 = Date.now(), rows = actOneJoinStatueGuide(readRows(img, 0, 0, 1920, 1080));
                 if(request&&request.step==='actTwoCooking'){
                     rows=actOneMergeControlCropRows(rows,scaledRows(img,1310,120,490,110),1310,120);
                     rows=actOneMergeControlCropRows(rows,scaledRows(img,1330,680,220,35),1330,680);

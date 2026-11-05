@@ -106,6 +106,22 @@ test('combined party heading and healing instruction allow scoped Statue recover
   assert.ok(f.calls.some(call => call[0] === 'click'));
 });
 
+test('split healing guide stays readable between portrait clicks', async () => {
+  const split = [
+    { text: ' In combat Click on the character', x: 25, y: 30, width: 481, height: 33 },
+    { text: 'portrait to restore HP', x: 497, y: 28, width: 282, height: 40 },
+  ];
+  const f = fixture(o => {
+    if (o.map !== null || !o.ocr[0]) return;
+    o.ocr.splice(0, 1, ...split);
+    o.ocr = f.context.actOneJoinStatueGuide(o.ocr);
+  });
+  await f.runner.observe();
+  assert.equal(await f.runner.process(f.request(), () => f.policy), 'completed');
+  const invalid = [split[0], { ...split[1], y: 70 }, ...panel().ocr.slice(1)];
+  assert.equal(f.context.actOneJoinStatueGuide(invalid), invalid);
+});
+
 test('fresh engine entry rejects changed menu, stale source, different session/UID, depletion and ambiguous Kaeya', async () => {
   const mutations = [
     o => { o.hud.world = true; }, o => { o.timestamp -= 1001; },

@@ -111,6 +111,23 @@ test('edge and depleted bar-shaped candidates rejected by level OCR remain ambig
   }
 });
 
+test('sparse camp torch outline is diagnostic only; dense or anchored fragments still stop exploration',async()=>{
+  // Gate-to-camp frame 76: a flame at (1375.5,180.5) produced 4.5 pixels of contour area in an 11×9 box.
+  const torch={x:1370,y:146,width:11,height:9,area:4.5};
+  const clear=await measure({contours:[torch],redPixels:38});
+  assert.equal(clear.observation.hud.enemyBarObservation.state,'clear');
+  assert.equal(clear.observation.hud.enemyBarDiagnostic.rawCandidates[0].rectangularity,.05625);
+  assert.equal(clear.observation.hud.enemyBarObservation.candidateCount,0);
+  const dense=await measure({contours:[{...torch,area:60}]});
+  assert.equal(dense.observation.hud.enemyBarObservation.state,'ambiguous');
+  const tiny=await measure({contours:[{...torch,width:3,height:3,area:0.1}]});
+  assert.equal(tiny.observation.hud.enemyBarObservation.state,'ambiguous');
+  const horizontal=await measure({contours:[{...torch,width:26,height:5}]});
+  assert.equal(horizontal.observation.hud.enemyBarObservation.state,'ambiguous');
+  const anchored=await measure({contours:[torch],rows:[...groundRows(),row('Lv.6',1355,153,36,16)]});
+  assert.equal(anchored.observation.hud.enemyBarObservation.state,'threat');
+});
+
 test('native indexed array and Pascal-case rectangle shapes are measured without Array.isArray assumptions',async()=>{
   for(const contours of [{0:{X:900,Y:152,Width:75,Height:6},Length:1},{0:{x:900,y:152,width:75,height:6},length:1}]){
     const x=await measure({contours});assert.equal(x.observation.hud.enemyBarObservation.state,'threat');

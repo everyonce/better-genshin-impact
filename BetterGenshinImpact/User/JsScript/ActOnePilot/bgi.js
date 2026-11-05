@@ -3355,8 +3355,14 @@ function createActOneAdapter(sessionId,options) {
                 if(candidates.length>64){enemyBarDiagnostic.overloaded=true;return [];}
                 // Small near-square fragments in the side HUD are not field bars. Wide edge bars
                 // and same-image level-anchored depleted bars remain candidates, never silently clear.
-                enemyBarDiagnostic.fieldCandidates=candidates.filter(function(bar){return bar.x>=350&&bar.x<=1600||
-                    bar.width/bar.height>=3.5||actOneOutdoorEnemyBarCandidate(bar,rows);});
+                enemyBarDiagnostic.fieldCandidates=candidates.filter(function(bar){
+                    if(actOneOutdoorEnemyBarCandidate(bar,rows))return true;
+                    // Camp flames can leave tiny, nearly square outlines with almost no filled area.
+                    // Keep short solid bars, thin horizontal segments, and all level-anchored fragments.
+                    var sparseOutline=bar.height>=6&&bar.width<=12&&bar.width>=bar.height&&
+                        bar.width<=1.5*bar.height&&bar.rectangularity<0.1;
+                    return !sparseOutline&&(bar.x>=350&&bar.x<=1600||bar.width/bar.height>=3.5);
+                });
             }
             // Uncharted outdoor walking must stop for a visible red bar even when
             // OCR misses the enemy level. These candidates never authorize combat.

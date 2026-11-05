@@ -370,6 +370,71 @@ class LauncherTests(unittest.TestCase):
         start.assert_called_once()
         child.terminate.assert_called_once()
 
+    def test_stop_error_still_confirms_known_retirement_and_preserves_route_outcome(self):
+        for route_status in ('arrived', 'stopped'):
+            for error in ('lost stop acknowledgement', 'not_owned: task already retired'):
+                with self.subTest(route_status=route_status, error=error):
+                    f = Fixture(self.root / (route_status + str(len(list(self.root.iterdir())))))
+                    f.route_status = route_status
+                    exchange = f.exchange
+                    def retire_without_ack(request, *args):
+                        """Retire the exact owned task, then lose/refuse its reply."""
+                        value = exchange(request, *args)
+                        if isinstance(request, dict) and request['command'] == 'stopPilot':
+                            raise RuntimeError(error)
+                        return value
+                    f.exchange = retire_without_ack
+                    result = f.worker()
+                    self.assertTrue(result['pilotRetired'], result)
+                    self.assertTrue(result['groupRemoved'])
+                    self.assertTrue(result['leaseRemoved'])
+                    self.assertEqual(result['stopError'], error)
+                    self.assertEqual(result['cleanupErrors'], [])
+                    self.assertEqual(f.commands, ['startPilot', 'stopPilot'])
+                    self.assertEqual(result['status'], 'arrived' if route_status == 'arrived' else 'failed')
+                    if route_status == 'stopped':
+                        self.assertIn('Canonical route did not verify arrival', result['error'])
+
+    def test_stop_error_never_accepts_a_replacement_session(self):
+        f = Fixture(self.root)
+        f.route_status = 'stopped'
+        exchange = f.exchange
+        def changed_session(request, *args):
+            """The readback must refuse a new task after a failed stop reply."""
+            value = exchange(request, *args)
+            if isinstance(request, dict) and request['command'] == 'stopPilot':
+                f.child.update(scriptSession='foreign', serviceOwnsPilot=True, taskRunning=True)
+                raise RuntimeError('lost stop acknowledgement')
+            return value
+        f.exchange = changed_session
+        result = f.worker()
+        self.assertFalse(result['pilotRetired'])
+        self.assertIn('Canonical route did not verify arrival', result['error'])
+        self.assertEqual(result['cleanupErrors'], ['Script session changed during retirement.'])
+        self.assertEqual(f.commands, ['startPilot', 'stopPilot'])
+        self.assertTrue((f.app / 'User/ScriptGroup/ActOneRun.json').exists())
+        self.assertTrue((f.pilot / '.rdp-route-launcher.lock').exists())
+
+    def test_stop_error_leaves_unresolved_session_reserved_after_one_bounded_poll(self):
+        f = Fixture(self.root)
+        f.route_status = 'stopped'
+        exchange = f.exchange
+        def not_cancelled(request, *args):
+            """A transport failure grants no retirement when the owned task remains active."""
+            if isinstance(request, dict) and request['command'] == 'stopPilot':
+                f.commands.append('stopPilot')
+                raise RuntimeError('stop transport failed')
+            return exchange(request, *args)
+        f.exchange = not_cancelled
+        result = f.worker()
+        self.assertFalse(result['pilotRetired'])
+        self.assertIn('Canonical route did not verify arrival', result['error'])
+        self.assertEqual(result['cleanupErrors'], ['Owned pilot retirement is unresolved.'])
+        self.assertEqual(f.commands, ['startPilot', 'stopPilot'])
+        self.assertGreaterEqual(f.clock, 20)
+        self.assertLess(f.clock, 20.3)
+        self.assertTrue((f.pilot / '.rdp-route-launcher.lock').exists())
+
 
 if __name__ == '__main__':
     unittest.main()

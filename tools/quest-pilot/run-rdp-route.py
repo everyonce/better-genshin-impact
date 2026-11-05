@@ -339,7 +339,12 @@ def run_worker(config, *, control, rdp, execute=execute_route, game_probe=foregr
                 require(current.get('scriptSession') == session, 'Cleanup found another script session.')
                 require(request_owned(current), 'Cleanup found an unrecorded request; unrelated work was left untouched.')
                 if current.get('serviceOwnsPilot') is True:
-                    state['stopAcknowledgement'] = mutate('stopPilot')
+                    try:
+                        state['stopAcknowledgement'] = mutate('stopPilot')
+                    except Exception as stop_error:
+                        # The task may already have retired, or only its ACK was lost.
+                        # Preserve this diagnostic and read back the exact session; never resend STOP.
+                        state['stopError'] = str(stop_error)
                 deadline = monotonic() + 20
                 while not idle(current) and monotonic() < deadline:
                     sleep(.2)

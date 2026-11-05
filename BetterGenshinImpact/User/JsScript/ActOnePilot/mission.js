@@ -662,7 +662,13 @@ var ActOneMission = (function () {
     // printed W/S controls and remeasure every selection. F is restricted to the farewell itself.
     async function leaveKeyboardMenu(api,observe,request,initial,end) {
         var first=keyboardFarewell(initial,request),current=initial,presses=0,inputMs=0,record=null,menu=first;
-        var signature=JSON.stringify(first.labels);
+        // Full-frame OCR can join a title-cased word to the previous word between two captures.
+        // Keep raw labels for the click and receipt. Compare only unambiguous, ordered row keys.
+        function menuSignature(proof) {
+            var keys=proof.labels.map((label,i)=>i===proof.exit?label:label.replace(/([a-z]) +(?=[A-Z])/g,'$1'));
+            return new Set(keys).size===keys.length?JSON.stringify(keys):null;
+        }
+        var signature=menuSignature(first);
         async function refresh(delay) {
             if(api.now()+delay>=end)return false;
             api.checkStop();await api.sleep(delay);
@@ -672,7 +678,7 @@ var ActOneMission = (function () {
             current=next;menu=keyboardFarewell(current,request);
             return true;
         }
-        function sameMenu(){return menu&&JSON.stringify(menu.labels)===signature&&menu.exit===first.exit;}
+        function sameMenu(){return signature!==null&&menu&&menu.exit===first.exit&&menuSignature(menu)===signature;}
         function result(reason){return {current:current,presses:presses,inputMs:inputMs,farewell:record,reason:reason};}
         if(!await refresh(180)||!sameMenu()||menu.active!==first.active)return result('named_menu_changed_before_exit');
         var started=api.now(),label=menu.labels[menu.exit];

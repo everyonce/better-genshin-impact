@@ -125,6 +125,26 @@ test('the full guide and aligned marker identify the exit when a separate keycap
     const {result,keys}=await replay([scene,scene,prompt],'Katheryne',8000,{resumeMenuOnly:true});
     assert.deepEqual(keys,[['choice','Goodbye.']]);assert.equal(result.status,'completed');
 });
+test('the Guild reward label can lose a space without changing the verified farewell',async()=>{
+    const first=structuredClone(guildKeyboard), next=structuredClone(guildKeyboard);
+    // Temple frames 159/160 lost the space; city frames 4/5 restored it. The selected row stayed put.
+    const reward=next.ocr.find(r=>r.text==='Claim Adventure Rank Rewards');
+    reward.text='Claim AdventureRank Rewards';
+    for(const frames of [[first,next],[next,first]]){
+        const {result,keys}=await replay([...frames,prompt],'Katheryne',8000,{resumeMenuOnly:true});
+        assert.equal(result.status,'completed');assert.equal(result.farewell.frameId,2);
+        assert.deepEqual(keys,[['choice','Goodbye.']]);
+    }
+    for(const change of [
+        f=>f.ocr.find(r=>r.text===reward.text).text='Claim AdventureRank Reports',
+        f=>f.ocr.find(r=>r.text==='Goodbye.').text='Good bye.',
+        f=>f.ocr.find(r=>r.text==='Who are you?').text='Claim Adventure Rank Rewards',
+        f=>f.ocr.find(r=>r.text==='F').y=711]){
+        const altered=structuredClone(next);change(altered);
+        const {result,keys}=await replay([first,altered],'Katheryne',8000,{resumeMenuOnly:true});
+        assert.equal(result.reason,'named_menu_changed_before_exit');assert.deepEqual(keys,[]);
+    }
+});
 test('a persistent keyboard guide moves the highlight one observed step at a time before F',async()=>{
     const scenes=[0,0,0,0,1,1,2,2].map(highlighted);
     const {result,keys}=await replay([...scenes,prompt],'Katheryne',10000,{resumeMenuOnly:true});

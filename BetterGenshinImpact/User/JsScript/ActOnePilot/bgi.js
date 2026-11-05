@@ -738,6 +738,18 @@ function actOneFullHealthRows(rows, scaledRows) {
     var scaled=actOneHealth(scaledRows||[]);
     return scaled&&scaled.current===full.current&&scaled.max===full.max ? [candidate] : [];
 }
+// A passive regional-map capture can merge its UID with a nearby map label in full-screen OCR.
+function actOneObserveRegionalMapRows(request,rows,bigMap,position,readCrop) {
+    if(!request||request.mission!=='observe'||bigMap!==true||position||!Array.isArray(rows))return rows;
+    var progress=rows.some(function(r){return r.x>=1300&&r.x<=1800&&r.y>=990&&r.y<=1040&&
+        /^Exploration Progress:\s*\d{1,3}%$/i.test(String(r.text||'').trim());});
+    if(!progress&&!actOneStarfellMapFooter(rows)&&!actOneFullMapState(rows))return rows;
+    // An existing number, including another account's, stays authoritative. Missing digits are never filled in.
+    var hasUid=rows.some(function(r){return r.x>1600&&r.y>1020&&
+        /^(?:UID)?[: ]*\d{9,10}(?:C?ape)?$/.test(String(r.text||'').trim());});
+    if(hasUid)return rows;
+    return actOneMergeControlCropRows(rows,readCrop(1680,1040,190,40),1680,1040);
+}
 function actOneMergeControlCropRows(fullRows, cropRows, x, y) {
     var mapped=(cropRows||[]).map(function(r){return {text:String(r.text||''),x:x+Number(r.x)/3,y:y+Number(r.y)/3,width:Number(r.width)/3,height:Number(r.height)/3};});
     var merged=(fullRows||[]).slice();
@@ -9523,6 +9535,11 @@ function createActOneAdapter(sessionId,options) {
                 var journal = rows.some(function (r) { return /^In Progress$/i.test(r.text.trim()) && r.y < 100; });
                 var bigMap = !journal && ((inventoryUiOnly||combatRetreatObservation||combatHealObservation) ? actOneInventoryUiBigMap(rows) :
                     !pos && (/Exploration Progress|Starfell Valley/.test(text) || actOneFullMapState(rows)));
+                if(request&&request.mission==='observe'&&bigMap&&!pos){
+                    var mapUidOcrStarted=Date.now();
+                    rows=actOneObserveRegionalMapRows(request,rows,bigMap,pos,function(x,y,w,h){return scaledRows(img,x,y,w,h);});
+                    fullOcrMs+=Date.now()-mapUidOcrStarted;
+                }
                 var acquired = /Obtained New Character/.test(text) && /Click anywhere in the blank area to continue/.test(text) ? rows.filter(function(r) { return ['Amber','Kaeya','Lisa'].indexOf(r.text.trim()) >= 0 && r.x < 500 && r.y > 500 && r.y < 700; }) : [];
                 var tutorialStep = /Press 2 to switch to Amber/i.test(text) && /Use Amber to defeat the airborne/i.test(text) ? 'switchAmber' : null;
                 if(actOneWagnerChoiceTutorial(rows))tutorialStep='wagnerChoice';

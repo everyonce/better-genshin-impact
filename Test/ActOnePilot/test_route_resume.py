@@ -580,7 +580,7 @@ class SupervisedRouteControllerTests(unittest.TestCase):
         report = self.run_controller(pilot, allow_field_combat=True)
         self.assertEqual((report['status'], report['fieldRotations'], report['nextWaypointIndex']), ('arrived', 1, 3))
         self.assertEqual([r.get('step', r['mission']) for r in pilot.calls if r['mission'] != 'observe'],
-                         ['worldInventory','actTwoNativeCombat','worldInventoryClose','worldInventory','navigation'])
+                         ['worldInventory','actTwoFieldCombat','worldInventoryClose','worldInventory','navigation'])
         self.assertFalse(returned['result']['defeatConfirmed'])
 
     def test_threat_interrupt_preserves_completed_waypoints_before_reinspection(self):
@@ -596,6 +596,23 @@ class SupervisedRouteControllerTests(unittest.TestCase):
         self.assertEqual((report['status'],report['fieldRotations']), ('arrived',0))
         self.assertEqual([r['waypoints'] for r in pilot.calls if r['mission'] == 'navigation'],
                          [self.points,self.points[1:]])
+
+    def test_exploration_pack_requires_matching_counts_and_field_combat_opt_in(self):
+        now = self.clock.milliseconds()
+        base = controller_scene(objective='', enemies=True)
+        base['timestamp'] = now
+        def phase(source, enabled):
+            return route_tool.route_phase(source, '693306810', [route_tool.EXPLORATION_OBJECTIVE],
+                allow_dialogue=False, journal_resume=False, now_ms=now, allow_field_combat=enabled)[0]
+        for count in (1, 2, 3, 4):
+            sample = copy.deepcopy(base)
+            sample['hud']['enemyBars'] = [dict(x=1069-i*33,y=412-i*34,width=64,height=3,
+                                                rectangularity=.95) for i in range(count)]
+            record_ground_scan(sample)
+            self.assertEqual(phase(sample, True), 'fieldCombat' if count <= 3 else 'wait')
+            self.assertEqual(phase(sample, False), 'wait')
+            sample['hud']['enemyBarObservation']['candidateCount'] += 1
+            self.assertEqual(phase(sample, True), 'wait')
 
     def test_field_encounter_rejects_ambiguous_scan_or_failed_rotation(self):
         self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
@@ -615,7 +632,7 @@ class SupervisedRouteControllerTests(unittest.TestCase):
                 nativeReturned=False, pauseVerified=True))], source=enemy)
         report = self.run_controller(pilot, allow_field_combat=True)
         self.assertEqual((report['status'],report['fieldRotations']), ('stopped',0))
-        self.assertEqual(pilot.calls[-1]['step'], 'actTwoNativeCombat')
+        self.assertEqual(pilot.calls[-1]['step'], 'actTwoFieldCombat')
 
     def test_exploration_threat_low_health_and_oversized_route_refuse(self):
         self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE

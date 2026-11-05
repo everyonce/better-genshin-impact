@@ -512,7 +512,7 @@ var ActOneMission = (function () {
             }
         });
         if(name==='actTwoPauseProbe')return api.runActTwoPauseProbe(observation,observe);
-        if(name==='actTwoNativeCombat'||name==='actTwoNativeGroup'||name==='actTwoNativeFinish'||name==='actTwoNativeDeadlineProbe')return api.runActTwoNativeCombat(observation,observe);
+        if(name==='actTwoNativeCombat'||name==='actTwoFieldCombat'||name==='actTwoNativeGroup'||name==='actTwoNativeFinish'||name==='actTwoNativeDeadlineProbe')return api.runActTwoNativeCombat(observation,observe);
         if(name==='actTwoEmergencyMap')return api.runActTwoEmergencyMap(observation,observe);
         if(name==='actTwoEmergencySwitch')return api.runActTwoEmergencySwitch(observation,observe);
         if(name==='actTwoLaunchPractice')return api.runActTwoLaunchPractice(observation,observe);

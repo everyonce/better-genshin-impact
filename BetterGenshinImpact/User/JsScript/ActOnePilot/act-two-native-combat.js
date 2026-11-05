@@ -13,13 +13,13 @@
  const strategy='凯亚 e(fast), attack(1)';
  const ambushStrategy='e,attack(1)';
  const groupStrategy='凯亚 e(fast), q, attack(1)';
- function entrySettled(o,now,session,original,ordinary){
+ function entrySettled(o,now,session,original,ordinary,pack){
   const h=o&&o.hud,hp=h&&h.health;
   const settled=!!(h&&h.world===true&&hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.max>0);
   // Inventory fade can expose numeric health before the ground glyphs return.
   // Only ordinary entry with every other existing guard satisfied may use the
   // remaining passive polls. This never grants combat without ground evidence.
-  if(settled&&ordinary===true&&h.groundControls===false&&fieldContext(o,now,session,original,true)&&targets(o).length===1)return false;
+  if(settled&&ordinary===true&&h.groundControls===false&&fieldContext(o,now,session,original,true)&&(pack===true?fieldPack(o):targets(o).length===1))return false;
   return settled;
  }
  function pauseSeed(o,last,now,session){
@@ -58,6 +58,18 @@
   const ambush=o&&thirdCamp(o.map)&&ambushObjective(o.hud&&o.hud.objectives);
   return (o&&o.hud&&o.hud.enemyBars||[]).filter(b=>[b.x,b.y,b.width,b.height,b.rectangularity].every(Number.isFinite)&&b.x>=350&&b.x<=1600&&b.y>=(ambush?30:200)&&b.y<=(ambush?900:850)&&b.width>=16&&b.width<=300&&b.height>=3&&b.height<=20&&b.width/b.height>=3.5&&b.rectangularity>=0.8&&b.rectangularity<=1.05);
  }
+ // Explicit untracked field combat requires every measured bar to qualify.
+ function fieldPack(o){
+  const h=o&&o.hud,bars=h&&h.enemyBars,n=targets(o).length;
+  return !!(Array.isArray(bars)&&n>=1&&n<=3&&bars.length===n&&Array.isArray(h.objectives)&&h.objectives.every(t=>typeof t==='string'&&!t.trim()));
+ }
+ // Taller rendered bars are the existing proximity cue; center breaks ties.
+ // Red segment width is health, so it never decides approach priority.
+ function fieldTarget(o,pack){
+  const bars=targets(o);
+  if(pack===true)bars.sort((a,b)=>b.height-a.height||Math.abs(a.x-960)-Math.abs(b.x-960)||b.y-a.y||a.x-b.x);
+  return bars[0];
+ }
  // Face the measured field target and approach in short steps. Rendered bar height and screen
  // position set the walking budget; the remaining red width measures health, never range.
  async function approachFieldTarget(initial,api){
@@ -67,7 +79,7 @@
    api.checkStop();
    if(!api.eligible(current))throw new Error('Field target or grounded health changed during approach');
    if(Math.hypot(current.map.x-origin.x,current.map.y-origin.y)>12)throw new Error('Field combat approach exceeded its travel budget');
-   const bar=targets(current)[0],dx=api.cameraDelta([bar]);
+   const bar=fieldTarget(current,api.pack),dx=api.cameraDelta([bar]);
    if(dx===0&&(bar.height>=8||bar.y>=620||steps>=4))return current;
    if(api.now()-started>=8500)throw new Error('Field combat approach time expired');
    if(dx!==0){
@@ -85,10 +97,10 @@
  }
  function thirdCamp(m){return !!m&&Math.hypot(m.x+1220,m.y-2315)<=35;}
  function cyrusArea(m){return !!m&&(Math.hypot(m.x+1125,m.y-2230)<=50||Math.hypot(m.x+1415,m.y-2395)<=40||thirdCamp(m));}
- function encounter(o,now,session,original,group){
+ function encounter(o,now,session,original,group,pack){
   if(!field(o,now,session,original,!group))return false;
   const n=targets(o).length,h=o.hud;
-  if(!group)return n===1;
+  if(!group)return pack===true?fieldPack(o):n===1;
   const ambush=thirdCamp(o.map)&&ambushObjective(h.objectives);
   const maxTargets=thirdCamp(o.map)&&((h.objectives||[]).includes('(2/3)')||ambush)?5:3;
   return h.health.current>=h.health.max*0.9&&n>=1&&n<=maxTargets&&(h.enemyBars||[]).length<=maxTargets&&cyrusArea(o.map)&&(ambush||(h.objectives||[]).some(t=>/^\([0-2]\/3\)$/.test(t))&&(h.objectives||[]).some(t=>String(t).replace(/[^A-Za-z]/g,'')==='Questareareached'));
@@ -160,6 +172,6 @@
   if(p.shieldProbe===true){if(p.shieldReviewed!==true||p.nativeAvatar!=='Kaeya'||p.enemyLevel!==13)throw new Error('Reviewed Kaeya shield probe required');return {strategy:'English Whopperflower Shield Probe',seconds:2,deadlineMs:3000,sampleAfterMs:750,minimumHealth:.85};}
   return {strategy:p.nativeAvatar==='Lumina'?'English Ley Line Anemo':'English Ley Line Defense',seconds:6,deadlineMs:8000,sampleAfterMs:2500,minimumHealth:.5};
  }
- root.ActTwoNativeCombat={leyLineProfile,strategy,groupStrategy,ambushStrategy,entrySettled,pauseSeed,targetingParam,deadlineProbe,field,targets,approachFieldTarget,encounter,finish,chunk,assessProgress,progress,sequence};
+ root.ActTwoNativeCombat={leyLineProfile,strategy,groupStrategy,ambushStrategy,entrySettled,pauseSeed,targetingParam,deadlineProbe,field,targets,fieldTarget,approachFieldTarget,encounter,finish,chunk,assessProgress,progress,sequence};
  if(typeof module!=='undefined'&&module.exports)module.exports=root.ActTwoNativeCombat;
 })(typeof globalThis!=='undefined'?globalThis:this);

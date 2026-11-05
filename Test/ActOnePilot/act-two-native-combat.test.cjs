@@ -186,8 +186,8 @@ async function replayEntry(sources){
  const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;
  let calls=0,clock=1000;const waits=[];const original=o=>o.ocr.some(r=>r.text==='UID: 693306810');
  const eligible=o=>native.encounter(o,clock,'test',original,false);
- const current=await new AsyncFunction('native','eligible','observe','sleep','now','request','original','group','probing','let current;'+body+';return current;')
-  (native,eligible,async()=>{const o=structuredClone(sources[Math.min(calls++,sources.length-1)]);clock=o.timestamp;return o;},async ms=>waits.push(ms),()=>clock,{session:'test'},original,false,false);
+ const current=await new AsyncFunction('native','eligible','observe','sleep','now','request','original','group','probing','pack','let current;'+body+';return current;')
+  (native,eligible,async()=>{const o=structuredClone(sources[Math.min(calls++,sources.length-1)]);clock=o.timestamp;return o;},async ms=>waits.push(ms),()=>clock,{session:'test'},original,false,false,false);
  return {current,eligible:eligible(current),calls,waits};
 }
 // Frame65 had a fading inventory HUD: exact UID and positive health, no ground glyph.
@@ -219,4 +219,71 @@ test('fading HUD wait refuses every other failed combat guard and preserves old 
 test('unsafe field during ordinary entry stops before later good frame can mask it',async()=>{
  const bad=fadingFrame();bad.hud.climbing=true;const good=fadingFrame();good.hud.groundControls=true;
  const r=await replayEntry([bad,good]);assert.equal(r.calls,1);assert.equal(r.eligible,false);
+});
+// Explicit field-pack fixtures retain the existing ordinary health and location guards.
+function packFrame(count=2){
+ const o=frame();o.frameId=10;o.hud.health={current:4015,max:4015};o.hud.objectives=[];
+ o.hud.enemyBars=Array.from({length:count},(_,i)=>({x:960+i*60,y:450,width:64,height:8,rectangularity:.95}));return o;
+}
+test('explicit field pack accepts one to three qualified bars while legacy stays single target',()=>{
+ for(let n=1;n<=3;n++){const o=packFrame(n);assert.equal(native.encounter(o,1000,'test',()=>true,false,true),true);assert.equal(native.encounter(o,1000,'test',()=>true,false),n===1);}
+ for(const n of [0,4])assert.equal(native.encounter(packFrame(n),1000,'test',()=>true,false,true),false);
+});
+test('field pack rejects extra filtered bars tracked objectives and unchanged safety failures',()=>{
+ const changes=[o=>o.hud.enemyBars.push({...o.hud.enemyBars[0],width:2}),o=>o.hud.objectives=['Other quest'],o=>delete o.hud.objectives,
+  o=>o.hud.health.current=3412,o=>o.hud.health.current=4016,o=>o.hud.groundControls=false,o=>o.hud.climbing=true,
+  o=>o.hud.auto=true,o=>o.hud.dialogueReady=true,o=>o.hud.choice=true,o=>o.hud.bigMap=true,o=>o.hud.journal=true,
+  o=>o.map.map='Other',o=>o.map.x=-1700];
+ for(const change of changes){const o=packFrame();change(o);assert.equal(native.encounter(o,1000,'test',()=>true,false,true),false);}
+ assert.equal(native.encounter(packFrame(),2001,'test',()=>true,false,true),false);
+ assert.equal(native.encounter(packFrame(),1000,'foreign',()=>true,false,true),false);
+ assert.equal(native.encounter(packFrame(),1000,'test',()=>false,false,true),false);
+});
+test('field pack transition wait retains one to three scope without broadening legacy entry',()=>{
+ const o=packFrame();o.hud.groundControls=false;
+ assert.equal(native.entrySettled(o,1000,'test',()=>true,true,true),false);
+ assert.equal(native.entrySettled(o,1000,'test',()=>true,true),true);
+ o.hud.enemyBars=packFrame(4).hud.enemyBars;assert.equal(native.entrySettled(o,1000,'test',()=>true,true,true),true);
+});
+test('pack target priority is deterministic by rendered height then center and never red width',()=>{
+ const o=packFrame(3);o.hud.enemyBars=[{x:1300,y:450,width:64,height:8,rectangularity:1},{x:1030,y:440,width:40,height:4,rectangularity:1},{x:970,y:450,width:64,height:8,rectangularity:1}];
+ assert.equal(native.fieldTarget(o,true).x,970);assert.equal(native.fieldTarget(o).x,1300);
+ o.hud.enemyBars.reverse();assert.equal(native.fieldTarget(o,true).x,970);
+ o.hud.enemyBars.find(b=>b.x===970).width=32;assert.equal(native.fieldTarget(o,true).x,970);
+});
+test('pack approach follows fresh one to three targets but stops immediately on a fourth',async()=>{
+ const acq=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-combat-acquisition.js');
+ const a=packFrame(1);a.hud.enemyBars[0].height=5;const b=packFrame(2);b.frameId=11;b.hud.enemyBars.forEach(x=>x.height=5);const c=packFrame(4);c.frameId=12;
+ const frames=[b,c],actions=[];
+ await assert.rejects(native.approachFieldTarget(a,{pack:true,now:()=>1000,checkStop(){},eligible:o=>native.encounter(o,1000,'test',()=>true,false,true),cameraDelta:acq.cameraDelta,
+  turn:async()=>actions.push('turn'),forward:async()=>actions.push('forward'),sleep:async()=>{},observe:async()=>frames.shift()}),/target or grounded health/);
+ assert.deepEqual(actions,['forward','forward']);
+});
+test('new named quest step keeps existing strict request schema and mission delegation',async()=>{
+ const engine=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/engine.js'),mission=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/mission.js');
+ const request={id:'field-pack',session:'test',expectedFrameId:1,createdAt:1000,mission:'questStep',step:'actTwoFieldCombat'};
+ assert.equal(engine.validate(request,'test',1,{},1000),null);assert.ok(engine.validate({...request,maximumTargets:9},'test',1,{},1000));
+ const source={frameId:1},observe=()=>{},calls=[];
+ const result=await mission.runQuestStep(request.step,source,{runActTwoNativeCombat:async(o,fn)=>{calls.push([o,fn]);return {bounded:true};}},observe);
+ assert.equal(result.bounded,true);assert.deepEqual(calls,[[source,observe]]);
+});
+// Execute the real adapter method with inert native execution and pause boundaries.
+async function packAdapter(step,count){
+ const path=require('node:path'),vm=require('node:vm'),dir=path.resolve(__dirname,'../../BetterGenshinImpact/User/JsScript/ActOnePilot');
+ const bgi=fs.readFileSync(path.join(dir,'bgi.js'),'utf8');const start=bgi.indexOf('runActTwoNativeCombat: async function('),end=bgi.indexOf('\n        runActTwoPauseProbe:',start);
+ const member=bgi.slice(start,end).trim().replace(/,$/,'');let time=1000,id=1;const calls=[];
+ const initial={session:'test',frameId:1,timestamp:1000,map:null,hud:{world:false,dialogueReady:false,choice:false,journal:false,bigMap:false,climbing:false,auto:false},ocr:[
+  {text:'Weapons',x:136,y:28,width:122,height:40},{text:'Weapons 13/2000',x:1602,y:34,width:199,height:27},{text:"Traveler's Handy Sword",x:1331,y:125,width:417,height:45},{text:'UID: 693306810',x:1680,y:1050,width:181,height:27}]};
+ const box={request:{step,session:'test'},Date:{now:()=>time},file:{readTextSync:n=>fs.readFileSync(path.join(dir,n),'utf8')},events:[],lastObservation:initial,
+  actTwoOriginalAccount:rows=>rows.some(r=>r.text==='UID: 693306810'),checkStop(){},ready(){},release(){calls.push('release');},dispose(){},
+  boundedKey:async k=>calls.push(k),sleep:async ms=>{time+=ms;},keyUp(){},leftButtonUp(){},rightButtonUp(){},moveMouseBy(){calls.push('turn');},
+  dispatcher:{GetLinkedCancellationTokenSource:()=>({Token:{},CancelAfter(){},Cancel(){},Dispose(){}}),RunCombatScript:async()=>calls.push('native')},
+  loadLocalPause:()=>({}),finishWithLocalPause:async(_p,_a,_i,_o,_f,result,error)=>{calls.push('protect');return {...result,pauseVerified:true,error};}};
+ const adapter=vm.runInNewContext('({'+member+'})',box);const observe=async()=>{const o=packFrame(count);o.timestamp=time;o.frameId=++id;o.ocr=initial.ocr.slice(-1);box.lastObservation=o;return o;};
+ return {result:await adapter.runActTwoNativeCombat(initial,observe),calls};
+}
+test('actual adapter new step runs one ordinary rotation and protects while old step refuses two bars',async()=>{
+ const pack=await packAdapter('actTwoFieldCombat',2);assert.equal(pack.result.nativeGroup,false);assert.equal(pack.result.nativeAttempted,true);assert.equal(pack.result.nativeReturned,true);assert.equal(pack.result.damageConfirmed,false);assert.equal(pack.result.defeatConfirmed,false);assert.equal(pack.calls.filter(x=>x==='native').length,1);assert.equal(pack.calls.at(-1),'protect');
+ const legacy=await packAdapter('actTwoNativeCombat',2);assert.equal(legacy.result.nativeAttempted,false);assert.equal(legacy.calls.includes('native'),false);assert.equal(legacy.calls.at(-1),'protect');
+ const four=await packAdapter('actTwoFieldCombat',4);assert.equal(four.result.nativeAttempted,false);assert.equal(four.calls.includes('native'),false);assert.equal(four.calls.at(-1),'protect');
 });

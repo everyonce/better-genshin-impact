@@ -440,7 +440,7 @@ class GuardedPilot:
             raise RouteError('Unexpected route-controller mission fields.')
         if mission == 'keyPress' and fields != {'key': 'VK_ESCAPE'}:
             raise RouteError('Only the fixed Journal-close operation is available.')
-        if mission == 'questStep' and fields['step'] not in ('worldInventory', 'worldInventoryClose', 'actTwoNativeCombat'):
+        if mission == 'questStep' and fields['step'] not in ('worldInventory', 'worldInventoryClose', 'actTwoNativeCombat', 'actTwoFieldCombat'):
             raise RouteError('Unsupported exploration inventory operation.')
         if mission == 'questStep' and fields['step'] != 'worldInventory' and not self.inventory_ready(source):
             raise RouteError('A recognized inventory is required before returning to the field.')
@@ -620,7 +620,8 @@ def route_phase(source, expected_uid, objectives, *, allow_dialogue, journal_res
     if objectives == [EXPLORATION_OBJECTIVE]:
         now_ms = int(time.time() * 1000) if now_ms is None else now_ms
         if (allow_field_combat and not any(text.strip() for text in visible_objectives)
-                and hp['current'] >= hp['max'] * .85 and ground_scan_matches(source, now_ms, 'threat', 1)):
+                and hp['current'] >= hp['max'] * .85 and 1 <= len(bars) <= 3
+                and ground_scan_matches(source, now_ms, 'threat', len(bars))):
             return 'fieldCombat', None
         if bars or any(re.fullmatch(r'Defeatallopponents[0-9]+/[0-9]+', re.sub(r'\s', '', x)) for x in visible_objectives):
             return 'wait', 'Exploration requires zero visible threat'
@@ -763,7 +764,7 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
         status = receipt.get('status')
         measured_threat = (mission == 'navigation' and status in ('stopped', 'failed') and threat_checkpoint(result)
                            and 0 <= result['nextWaypointIndex'] < len(fields['waypoints']))
-        rotation = (mission == 'questStep' and fields['step'] == 'actTwoNativeCombat' and status == 'stopped'
+        rotation = (mission == 'questStep' and fields['step'] == 'actTwoFieldCombat' and status == 'stopped'
                     and returned_rotation(result))
         if outcome.get('cancelled') or not (status == 'completed' or deadline_checkpoint or measured_threat or rotation):
             raise RouteError('Mission did not complete; original result retained without retry.')
@@ -875,7 +876,7 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
                 paused = pilot.current()
                 if not source_account_matches(paused, expected_uid) or not pilot.inventory_ready(paused):
                     raise RouteError('Native combat requires the expected account in inventory.')
-                rotation = dispatch('questStep', paused, dict(step='actTwoNativeCombat'))
+                rotation = dispatch('questStep', paused, dict(step='actTwoFieldCombat'))
                 if not returned_rotation(rotation):
                     raise RouteError('Native field rotation and its inventory pause were not established.')
                 state['fieldRotations'] += 1
@@ -1004,7 +1005,7 @@ def main():
     parser.add_argument('--continue-from-progress', type=Path,
                         help='Reuse an exact completed exploration pause on the same pilot; otherwise refresh the field normally')
     parser.add_argument('--allow-field-combat', action='store_true',
-                        help='Engage a single measured enemy during exploration and resume from fresh field evidence')
+                        help='Engage up to three measured enemies during exploration and resume from fresh field evidence')
     parser.add_argument('--allow-dialogue', action='store_true', help='Permit the existing bounded recognized-dialogue mission')
     parser.add_argument('--continue-objective', action='append', default=[], help='Explicit objective allowed after a completed encounter/dialogue')
     parser.add_argument('--stop-file', action='append', type=Path, default=[], help='Additional caller STOP file')

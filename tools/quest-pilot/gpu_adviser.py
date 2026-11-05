@@ -213,9 +213,9 @@ def worker(args, stop):
     latency, age = deque(maxlen=2048), deque(maxlen=2048)
     pipe, model_loaded, error = None, False, None
     last_id, last_seen_id, last_time, last_source = 0, 0, 0, None
-    report_dir = args.pilot_dir/'reports'
-    context_path = report_dir/'quest-adviser-context.json'
-    result_path = report_dir/'quest-adviser-latest.json'
+    # Keep volatile single-record mailboxes outside the bounded durable reports tree.
+    context_path = args.pilot_dir/'quest-adviser-context.json'
+    result_path = args.pilot_dir/'quest-adviser-latest.json'
     native_name = f'BetterGI.QuestFrames.{args.process_id}.{args.session}'
     def status():
         return dict(**expected,modelLoaded=model_loaded,validNativeFrameSeen=stats['accepted']>0,counts=dict(stats),

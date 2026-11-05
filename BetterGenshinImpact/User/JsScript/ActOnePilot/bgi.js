@@ -2352,7 +2352,7 @@ function createActOneAdapter(sessionId,options) {
         if (!adviser || !adviserTarget || !request || request.mission!=='navigation' || request.session!==session) return;
         adviserContext={session:session,frameId:frame,observedAtUnixMs:startedAt,expectedUid:adviser.expectedUid,
             objective:request.objective,waypoint:adviserTarget,requestId:request.id};
-        try { if (!file.writeTextSync('reports/quest-adviser-context.json',JSON.stringify(adviserContext))) adviserContext=null; }
+        try { if (!file.writeTextSync('quest-adviser-context.json',JSON.stringify(adviserContext))) adviserContext=null; }
         catch (_) { adviserContext=null; }
     }
     var pauseProtectionActive=false,pauseProtectionObserver=null,pauseProtectionKeys=Object.create(null),pauseProtectionLastInputFrame=-1,pauseProtectionLastStatusAt=-Infinity;
@@ -3942,7 +3942,7 @@ function createActOneAdapter(sessionId,options) {
             if (!adviser) return;
             adviserTarget=target ? {map:target.map,x:target.x,y:target.y} : null;
             adviserContext=null;
-            if (!target) try { file.writeTextSync('reports/quest-adviser-context.json','null'); } catch (_) {}
+            if (!target) try { file.writeTextSync('quest-adviser-context.json','null'); } catch (_) {}
         },
         gpuAdvisedForwardMs: function (frame,target,nativeMs) {
             if (!adviser) return nativeMs;
@@ -3950,7 +3950,7 @@ function createActOneAdapter(sessionId,options) {
             try {
                 if (adviserTarget && target.x===adviserTarget.x && target.y===adviserTarget.y && target.map===adviserTarget.map &&
                     adviserContext && lastObservation && lastObservation.frameId===frame.frameId) {
-                    suggestion=JSON.parse(file.readTextSync('reports/quest-adviser-latest.json'));
+                    suggestion=JSON.parse(file.readTextSync('quest-adviser-latest.json'));
                     result=actOneGpuSteeringDecision(suggestion,adviserContext,adviser,frame,Date.now(),nativeMs,
                         suggestion&&suggestion.sourceEpoch===lastAdviserEpoch?lastAdvisedFrame:0);
                 }

@@ -153,7 +153,7 @@ class AdviserTests(unittest.TestCase):
             (root/'reports').mkdir()
             output=root/'audit'
             output.mkdir()
-            adviser.publish(root/'reports/quest-adviser-context.json',self.context)
+            adviser.publish(root/'quest-adviser-context.json',self.context)
             args=SimpleNamespace(output=output,pilot_dir=root,session='real-quest',process_id=101,windows_session_id=7,
                                  game_process_id=202,goal_embedding=Path('test-goal'),first_frame_timeout=10,max_age_ms=250)
             args.disconnect_timeout=10
@@ -175,7 +175,7 @@ class AdviserTests(unittest.TestCase):
             load.assert_called_once()
             self.assertEqual(model.predict.call_count,2)
             model.reset.assert_called_once()
-            latest=json.loads((root/'reports/quest-adviser-latest.json').read_bytes())
+            latest=json.loads((root/'quest-adviser-latest.json').read_bytes())
             self.assertEqual(latest['context'],self.context)
             self.assertEqual(latest['sourceEpoch'],'d'*32)
             self.assertEqual(latest['frameId'],13)
@@ -248,7 +248,7 @@ class AdviserTests(unittest.TestCase):
             self.assertEqual(terminal['counts']['busyOutput'],1)
             self.assertEqual(terminal['counts']['busyStats'],3)
             self.assertEqual(terminal['counts']['duplicate'],1)
-            self.assertFalse((root/'reports/quest-adviser-latest.json').exists())
+            self.assertFalse((root/'quest-adviser-latest.json').exists())
 
     def test_real_windows_job_honors_absolute_runtime_and_pinned_launcher_exit(self):
         repo=fixture_repo()

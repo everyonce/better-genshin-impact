@@ -131,6 +131,45 @@
   return {current,turns,reason,error,startedAt:started,finishedAt:api.now(),deadline,reacquisition:scope.reacquisition,approachBudget:scope.approachBudget,
    nativeReturned:turns.length>0&&turns.every(t=>t.nativeReturned===true)};
  }
+ // Convert the one exact level label in a scaled local crop back to game coordinates.
+ function localLevel(rows,left,top,expected){
+  const found=[];
+  for(const r of rows){
+   const match=/^lv\s*\.\s*([1-9][0-9]{0,2})$/i.exec(String(r.text).trim());
+   if(!match||expected!==undefined&&Number(match[1])!==expected)continue;
+   if(![r.x,r.y,r.width,r.height].every(Number.isFinite)||r.width<40||r.width>260||r.height<14||r.height>95)continue;
+   found.push({level:Number(match[1]),x:left+(r.x+r.width/2)/3,y:top+(r.y+r.height/2)/3});
+  }
+  return found.length===1?found[0]:null;
+ }
+ // An idle enemy can hide its red bar while leaving its world level visible. Use that
+ // label for bounded approach only. The native attack still needs a fresh accepted bar.
+ async function followTurnLabel(before,current,bar,api){
+  const budget=api.approachBudget;
+  let mark=api.levelAt(before,bar.x,bar.y-20),prior=before;
+  for(let poll=0;mark&&poll<4;poll++){
+   api.checkStop();
+   if(api.eligible(current)||!api.emptyField(current)||api.now()+650>=api.deadline)break;
+   const yaw=(current.map.cameraAngle-prior.map.cameraAngle+540)%360-180;
+   if(!Number.isFinite(yaw)||Math.abs(yaw)>35||Math.hypot(current.map.x-prior.map.x,current.map.y-prior.map.y)>4||
+      Math.hypot(current.map.x-api.origin.x,current.map.y-api.origin.y)>12)break;
+   // A positive camera yaw shifts the world left. Center a local OCR crop on that projection.
+   mark=api.levelAt(current,mark.x-yaw*19,mark.y,mark.level);
+   if(!mark||!api.emptyField(current)||api.now()+650>=api.deadline)break;
+   const offset=mark.x-960;
+   if(Math.abs(offset)>180){
+    if(budget.turns>=4)break;
+    await api.turn(Math.max(-200,Math.min(200,Math.round(offset*.45))),current);budget.turns++;
+   }else{
+    if(budget.steps>=4)break;
+    await api.forward(current);budget.steps++;
+   }
+   prior=current;await api.sleep(200);current=await api.observe();
+   if(!current||current.session!==before.session||!Number.isInteger(current.frameId)||current.frameId<=prior.frameId)
+    throw new Error('Tracked level approach needs a new field capture');
+  }
+  return current;
+ }
  // Face the measured field target and approach in short steps. Rendered bar height and screen
  // position set the walking budget; the remaining red width measures health, never range.
  async function approachFieldTarget(initial,api){
@@ -163,7 +202,10 @@
    const next=await api.observe();
    if(!next||next.session!==initial.session||!Number.isInteger(next.frameId)||next.frameId<=current.frameId)
     throw new Error('Field combat approach needs a new observation');
-   current=next;
+   if(api.pack&&dx!==0&&api.levelAt&&api.approachBudget&&api.origin&&api.emptyField(next)){
+    current=await followTurnLabel(current,next,bar,api);
+    turns=api.approachBudget.turns;steps=api.approachBudget.steps;
+   }else current=next;
   }
  }
  function thirdCamp(m){return !!m&&Math.hypot(m.x+1220,m.y-2315)<=35;}
@@ -246,6 +288,6 @@
   if(p.shieldProbe===true){if(p.shieldReviewed!==true||p.nativeAvatar!=='Kaeya'||p.enemyLevel!==13)throw new Error('Reviewed Kaeya shield probe required');return {strategy:'English Whopperflower Shield Probe',seconds:2,deadlineMs:3000,sampleAfterMs:750,minimumHealth:.85};}
   return {strategy:p.nativeAvatar==='Lumina'?'English Ley Line Anemo':'English Ley Line Defense',seconds:6,deadlineMs:8000,sampleAfterMs:2500,minimumHealth:.5};
  }
- root.ActTwoNativeCombat={leyLineProfile,strategy,groupStrategy,ambushStrategy,entrySettled,pauseSeed,targetingParam,deadlineProbe,field,targets,fieldTarget,sameFieldPose,emptyField,reacquireFieldTarget,fieldSequence,approachFieldTarget,encounter,finish,chunk,assessProgress,progress,sequence};
+ root.ActTwoNativeCombat={localLevel,leyLineProfile,strategy,groupStrategy,ambushStrategy,entrySettled,pauseSeed,targetingParam,deadlineProbe,field,targets,fieldTarget,sameFieldPose,emptyField,reacquireFieldTarget,fieldSequence,approachFieldTarget,encounter,finish,chunk,assessProgress,progress,sequence};
  if(typeof module!=='undefined'&&module.exports)module.exports=root.ActTwoNativeCombat;
 })(typeof globalThis!=='undefined'?globalThis:this);

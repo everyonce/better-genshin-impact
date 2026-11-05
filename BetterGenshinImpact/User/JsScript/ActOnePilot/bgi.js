@@ -4230,6 +4230,18 @@ function createActOneAdapter(sessionId,options) {
                         fieldReady:function(o){return native.field(o,Date.now(),request.session,original,true);},
                         emptyField:function(o){return native.emptyField(o,Date.now(),request.session,original);},
                         cameraDelta:acquisition.cameraDelta,
+                        levelAt:function(o,x,y,expected){
+                            if(!Number.isFinite(x)||!Number.isFinite(y)||x<80||x>1840||y<65||y>850)return null;
+                            var png='observations/'+request.session+'/frame-'+String(o.frameId).padStart(4,'0')+'.png';
+                            if(o.session!==request.session||o.screenshotPath!==png||!original(o))return null;
+                            var region=null,mat=null,left=Math.round(x-80),top=Math.round(y-27);
+                            try{
+                                mat=file.readImageMatSync(png);region=new ImageRegion(mat,0,0);
+                                var label=native.localLevel(scaledRows(region,left,top,160,54),left,top,expected);
+                                if(label)result.approach.push({action:'observeLevel',frameId:o.frameId,level:label.level,x:label.x,y:label.y});
+                                return label;
+                            }finally{if(region)dispose(region);else dispose(mat);}
+                        },
                         turn:async function(dx,o){checkStop();ready();result.approach.push({action:'turn',dx:dx,frameId:o.frameId});moveMouseBy(dx,0);},
                         forward:async function(o){checkStop();ready();result.approach.push({action:'forward',ms:400,frameId:o.frameId});await boundedKey('VK_W',400,o.frameId);}
                     });

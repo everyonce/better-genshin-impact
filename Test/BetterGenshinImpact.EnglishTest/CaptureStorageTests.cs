@@ -220,7 +220,7 @@ public sealed class CaptureStorageTests : IDisposable
         File.WriteAllText(temporary, "new");
         var reader = new FileStream(destination, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         var release = Task.Run(() => { Thread.Sleep(100); reader.Dispose(); });
-        try { CaptureRetention.ReplaceLedger(temporary, destination); }
+        try { CaptureReportWriter.PublishPending(temporary, destination); }
         finally { await release; }
         Assert.Equal("new", File.ReadAllText(destination));
         Assert.False(File.Exists(temporary));
@@ -234,10 +234,60 @@ public sealed class CaptureStorageTests : IDisposable
         File.WriteAllText(destination, "old");
         File.WriteAllText(temporary, "new");
         using var reader = new FileStream(destination, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-        var error = Record.Exception(() => CaptureRetention.ReplaceLedger(temporary, destination));
+        var error = Record.Exception(() => CaptureReportWriter.PublishPending(temporary, destination));
         Assert.True(error is IOException or UnauthorizedAccessException);
         Assert.Equal("old", File.ReadAllText(destination));
         Assert.True(File.Exists(temporary));
+    }
+
+    [Fact]
+    public async Task VolatileFileRenamesDoNotRejectIndependentReportWrites()
+    {
+        var reports = Directory.CreateDirectory(Path.Combine(_root, "reports")).FullName;
+        for (int i = 0; i < 12; i++) File.WriteAllText(Path.Combine(reports, $"previous-{i}.json"), "{}");
+        var pending = Path.Combine(reports, "suggestion.pending");
+        var latest = Path.Combine(reports, "latest.json");
+        using var stop = new CancellationTokenSource();
+        using var started = new ManualResetEventSlim();
+        var writer = Task.Run(() =>
+        {
+            while (!stop.IsCancellationRequested)
+            {
+                File.WriteAllText(pending, "{}");
+                started.Set();
+                Thread.SpinWait(1800);
+                try { File.Move(pending, latest, true); }
+                catch (IOException ex) when ((ex.HResult & 0xffff) is 5 or 32 or 33) { }
+                catch (UnauthorizedAccessException ex) when ((ex.HResult & 0xffff) == 5) { }
+            }
+        });
+        try
+        {
+            Assert.True(started.Wait(TimeSpan.FromSeconds(3)));
+            for (int i = 0; i < 100; i++)
+                CaptureStorageBudget.Check(reports, 15119, Plenty, maxBytes: 64L * 1024 * 1024);
+        }
+        finally { stop.Cancel(); await writer; }
+        Assert.Throws<IOException>(() => CaptureStorageBudget.Check(reports, 1, Plenty, maxBytes: 16));
+    }
+
+    [Fact]
+    public async Task ReportReplacementKeepsTheOldSnapshotUntilTheExactNewBytesCanBePublished()
+    {
+        var reports = Directory.CreateDirectory(Path.Combine(_root, "reports")).FullName;
+        var path = Path.Combine(reports, "session.json");
+        File.WriteAllText(path, "previous");
+        using var reader = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        var release = Task.Run(() => { Thread.Sleep(100); reader.Dispose(); });
+        const string report = "{ \"checked\": true }\n";
+        CaptureReportWriter.Replace(path, report);
+        await release;
+        Assert.Equal(System.Text.Encoding.UTF8.GetBytes(report), File.ReadAllBytes(path));
+        using var persistent = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        var failure = Record.Exception(() => CaptureReportWriter.Replace(path, "must not replace"));
+        Assert.True(failure is IOException or UnauthorizedAccessException);
+        Assert.Equal(report, File.ReadAllText(path));
+        Assert.Empty(Directory.EnumerateFiles(reports, ".bgi-report-*.tmp"));
     }
 
     public void Dispose() => Directory.Delete(Path.GetDirectoryName(_root)!, true);

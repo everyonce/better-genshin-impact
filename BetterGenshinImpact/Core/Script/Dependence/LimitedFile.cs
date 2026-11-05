@@ -356,6 +356,7 @@ public class LimitedFile(string rootPath)
 
             // Reports and replay receipts also accumulate across listener sessions.
             // Refuse growth rather than deleting evidence or replay protection.
+            bool durableJson = false;
             if (string.Equals(Path.GetFileName(Path.TrimEndingDirectorySeparator(rootPath)), "ActOnePilot", StringComparison.OrdinalIgnoreCase))
             {
                 var relative = Path.GetRelativePath(rootPath, path).Replace('\\', '/');
@@ -364,10 +365,15 @@ public class LimitedFile(string rootPath)
                 {
                     var bytes = System.Text.Encoding.UTF8.GetByteCount(content);
                     CaptureStorageBudget.Check(Path.Combine(rootPath, tree), bytes, maxBytes: 64L * 1024 * 1024);
+                    durableJson = !append && Path.GetExtension(path).Equals(".json", StringComparison.OrdinalIgnoreCase);
                 }
             }
 
-            if (append && File.Exists(path))
+            if (durableJson)
+            {
+                CaptureReportWriter.Replace(path, content);
+            }
+            else if (append && File.Exists(path))
             {
                 File.AppendAllText(path, content);
             }
@@ -379,8 +385,9 @@ public class LimitedFile(string rootPath)
                 new CaptureRetention(rootPath).RegisterMetadata(path, Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(content))));
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            TaskControl.Logger.LogError(ex, "WriteTextSync failed for {Path}", path);
             return false;
         }
     }

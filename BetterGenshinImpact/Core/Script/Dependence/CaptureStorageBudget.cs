@@ -22,13 +22,25 @@ internal static class CaptureStorageBudget
             // Enumerate explicitly so reparse-point directories are rejected before descent.
             void Visit(string directory)
             {
-                foreach (var entry in Directory.EnumerateFileSystemEntries(directory))
+                // On Windows the directory enumeration supplies attributes and length together.
+                // A file can be renamed immediately afterwards; its enumerated size still counts.
+                foreach (var entry in new DirectoryInfo(directory).EnumerateFileSystemInfos())
                 {
-                    AssertOrdinaryPath(entry);
-                    if (Directory.Exists(entry)) Visit(entry);
+                    if ((entry.Attributes & FileAttributes.ReparsePoint) != 0)
+                        throw new IOException("Capture evidence must not traverse a reparse point.");
+                    if (entry is DirectoryInfo child)
+                    {
+                        try
+                        {
+                            AssertOrdinaryPath(child.FullName);
+                            Visit(child.FullName);
+                        }
+                        catch (FileNotFoundException) { /* Removed between enumeration and descent. */ }
+                        catch (DirectoryNotFoundException) { /* Directory was concurrently retired. */ }
+                    }
                     else
                     {
-                        bytes = checked(bytes + new FileInfo(entry).Length);
+                        bytes = checked(bytes + ((FileInfo)entry).Length);
                         if (++count >= MaxFiles || bytes > maxBytes - pendingBytes)
                             throw new IOException("Capture storage limit reached; archive reviewed evidence before restarting.");
                     }

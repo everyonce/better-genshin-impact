@@ -6,7 +6,6 @@ using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
-using System.Threading;
 
 namespace BetterGenshinImpact.Core.Script.Dependence;
 
@@ -53,23 +52,7 @@ internal sealed class CaptureRetention(string root)
         var temporary = Ledger + ".tmp";
         if (File.Exists(temporary)) CaptureStorageBudget.AssertOrdinaryPath(temporary);
         File.WriteAllLines(temporary, entries.Select(e => $"{e.Path}\t{e.Bytes}\t{e.CreatedTicks}\t{e.Hash}\t{(e.Pinned ? 1 : 0)}\t{e.MetadataHash}"));
-        ReplaceLedger(temporary, Ledger);
-    }
-
-    internal static void ReplaceLedger(string temporary, string destination)
-    {
-        // Indexers/scanners can briefly deny delete-sharing during atomic replacement.
-        // Retry the same operation briefly; never change ACLs or ignore persistent denial.
-        for (var attempt = 0; ; attempt++)
-        {
-            try { File.Move(temporary, destination, true); return; }
-            catch (Exception error) when (attempt < 5 &&
-                (error is IOException || error is UnauthorizedAccessException) &&
-                (error.HResult & 0xffff) is 5 or 32 or 33)
-            {
-                Thread.Sleep(50);
-            }
-        }
+        CaptureReportWriter.PublishPending(temporary, Ledger);
     }
 
     private FileStream Lease()

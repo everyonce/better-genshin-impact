@@ -113,6 +113,51 @@ test('unmeasured, stale, or mismatched ground stops before a movement', async ()
     }
 });
 
+// The first normal hold finishes. Each subsequent image is stationary; durations mirror live frames 98 and 99.
+async function slowStreet(sequence) {
+    let now=8000, frameId=2, index=0;
+    const inputs=[];
+    const first=frame(frameId,now,2564,'clear');
+    const api={now:()=>now, checkStop(){}, sleep:async ms=>{now+=ms;},
+        runActTwoNavigationWithPause:(_o,_see,walk)=>walk(first),
+        forward:async ms=>{inputs.push(ms);now+=ms;}, rotate:()=>assert.fail('unexpected rotation')};
+    const result=await mission.runNavigation(request,first,api,async()=>{
+        assert.ok(index<sequence.length,'unexpected passive capture');
+        const {delay=390,state='clear',mutate}=sequence[index++];
+        const start=now;now+=delay;
+        const next=frame(++frameId,start,2552,state);
+        next.timestamp=now;
+        if(mutate)mutate(next);
+        return next;
+    });
+    return {result,inputs,index};
+}
+
+test('two passive slow-street refreshes can establish arrival without repeating the native W hold', async()=>{
+    const {result,inputs,index}=await slowStreet([{delay:1038},{delay:1113},{delay:390}]);
+    assert.equal(result.status,'arrived');assert.deepEqual(result.passiveGroundRefreshFrames,[4,5]);
+    assert.deepEqual(inputs,[800]);assert.equal(index,3);
+});
+
+test('a newly hostile, unknown, foreign, or repeated refresh never authorizes the next action', async()=>{
+    for(const sample of [{state:'threat'}, {state:'ambiguous'}, {mutate:o=>{o.hud.loading=true;}},
+        {mutate:o=>{o.session=o.hud.captureStamp.session=o.hud.enemyBarObservation.session='another';}},
+        {mutate:o=>{o.frameId=o.hud.captureStamp.frameId=o.hud.enemyBarObservation.frameId=3;}},
+        {mutate:o=>{delete o.hud.enemyBarObservation;}}]) {
+        const {result,inputs}=await slowStreet([{delay:1038},sample]);
+        assert.equal(result.status,'stopped');assert.deepEqual(inputs,[800]);
+        assert.notEqual(result.reason,'Clear ground capture expired after passive refresh');
+        if(sample.state==='threat') assert.equal(result.reason,'Enemy observed during exploration');
+    }
+});
+
+test('persistently expired but correctly identified clear scans stop at the original cursor after two passive captures', async()=>{
+    const {result,inputs,index}=await slowStreet([{delay:1038},{delay:1113},{delay:1095}]);
+    assert.equal(result.reason,'Clear ground capture expired after passive refresh');
+    assert.deepEqual(result.passiveGroundRefreshFrames,[4,5]);assert.equal(result.nextWaypointIndex,0);
+    assert.deepEqual(inputs,[800]);assert.equal(index,3);
+});
+
 test('a new hostile stops the next movement even after a clear initial frame', async () => {
     const {result, moves} = await run(frame(2, 8000, 2564, 'clear'), now => frame(3, now, 2560, 'threat'));
     assert.equal(moves.length, 1);

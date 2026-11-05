@@ -8,18 +8,25 @@ function actTwoAmberFinalChoice(rows) {
 }
 var ActOneMission = (function () {
     // Autonomous exploration must see the result of a detector run on the current game capture.
-    function freshGroundScanIdentity(observation, now) {
+    function matchingGroundScanIdentity(observation, now) {
         var hud = observation && observation.hud, stamp = hud && hud.captureStamp, scan = hud && hud.enemyBarObservation;
         return !!(stamp && scan && stamp.source === 'game-capture-start' &&
             scan.kind === 'normal-ground-enemy-observation-v1' && scan.version === 1 &&
             stamp.session === observation.session && scan.session === observation.session &&
             Number.isInteger(observation.frameId) && stamp.frameId === observation.frameId && scan.frameId === observation.frameId &&
             Number.isInteger(stamp.capturedAt) && scan.capturedAt === stamp.capturedAt &&
-            stamp.capturedAt <= observation.timestamp && observation.timestamp <= now && now - stamp.capturedAt <= 1000);
+            Number.isInteger(observation.timestamp) && stamp.capturedAt <= observation.timestamp && observation.timestamp <= now);
+    }
+    function freshGroundScanIdentity(observation, now) {
+        return matchingGroundScanIdentity(observation,now) && now-observation.hud.captureStamp.capturedAt<=1000;
     }
     function groundScanStopReason(observation, now) {
         if (!freshGroundScanIdentity(observation, now)) return 'Fresh ground enemy scan required';
-        var hud = observation.hud, scan = hud.enemyBarObservation;
+        return measuredGroundIssue(observation.hud);
+    }
+    // Keep ambiguous or hostile detector output separate from the age of a correctly identified capture.
+    function measuredGroundIssue(hud) {
+        var scan = hud.enemyBarObservation;
         if (scan.state === 'threat') return 'Enemy observed during exploration';
         if (scan.state !== 'clear' || scan.candidateCount !== 0 || scan.acceptedCount !== 0 ||
             !Array.isArray(hud.enemyBars) || hud.enemyBars.length) return 'Ground enemy scan did not establish clear ground';
@@ -220,6 +227,37 @@ var ActOneMission = (function () {
         }
         var began = api.now(), initialHealth = observation.hud.health, totalInputMs = 0, turns = 0, movements = 0;
         var current = observation, afterForward = null, stalled = 0, turnAttempts = 0, jumpRecoveries = 0, climbReleases=0, climbSteps=0, climbEpisodeSteps=0, climbLimit=null, climbIsVerified=false, waypointIndex=0;
+        var lastMeasured=null, refreshFrames=[];
+        function refreshableField(frame,target) {
+            var h=frame.hud;
+            return safeTransientFrame(frame) && validHealth(h.health) && h.health.current/h.health.max>=.85 &&
+                h.world===true && h.groundControls===true && !h.climbing && !h.auto && !h.loading && !h.unknownHud &&
+                !h.swimming && !h.tutorialStep && !frame.mapPositionInherited && plausibleMap(frame,target);
+        }
+        // Reacquire a slow, otherwise clear capture only after this navigation has established its own safe field.
+        async function refreshExpiredGround(reason,target) {
+            var now=api.now(), h=current.hud;
+            if (reason!=='Fresh ground enemy scan required' || !lastMeasured || current.session!==request.session ||
+                !matchingGroundScanIdentity(current,now) || measuredGroundIssue(h) || now-current.timestamp>1000 ||
+                !refreshableField(current,target) || current!==lastMeasured && (current.frameId<=lastMeasured.frameId ||
+                    current.hud.captureStamp.capturedAt<=lastMeasured.hud.captureStamp.capturedAt))
+                return reason;
+            if (refreshFrames.length>=2) return 'Clear ground capture expired after passive refresh';
+            if (now-began>=request.deadlineMs) return 'Navigation deadline reached before ground refresh';
+            api.checkStop();
+            var previous=current;
+            current=await observe();
+            now=api.now();
+            if (!current || current.session!==request.session || !matchingGroundScanIdentity(current,now) ||
+                current.frameId<=previous.frameId || current.hud.captureStamp.capturedAt<=previous.hud.captureStamp.capturedAt)
+                return 'Fresh ground enemy scan required';
+            refreshFrames.push(current.frameId);
+            var issue=measuredGroundIssue(current.hud);
+            if (issue) return issue;
+            if (!refreshableField(current,target))
+                return 'Ground refresh left the verified navigation scene';
+            return null;  // Restart the outer loop; heading, health, deadline and ground are checked on the replacement.
+        }
         function lisaGrounded(current) {
             return !lisaObjective || !!(current&&current.hud&&current.hud.groundControls===true&&current.hud.climbing!==true);
         }
@@ -235,6 +273,9 @@ var ActOneMission = (function () {
         async function stop(reason) {
             if (useAdviser) api.gpuAdviserStopped(current,reason);
             var result={ status: 'stopped', reason: reason, nextWaypointIndex: waypointIndex, inputMs: totalInputMs, turns: turns, movements: movements, jumpRecoveries: jumpRecoveries, climbSteps:climbSteps, climbReleases:climbReleases };
+            if (refreshFrames.length) result.passiveGroundRefreshFrames=refreshFrames.slice();
+            if (reason==='Clear ground capture expired after passive refresh')
+                result.expiredGroundCapture={frameId:current.frameId,capturedAt:current.hud.captureStamp.capturedAt,checkedAt:api.now()};
             if(/health|stalled|deadline/i.test(reason)&&typeof api.pauseWorldInventory==='function') {
                 current=await observe();
                 if(await api.pauseWorldInventory()) {for(var pausePoll=0;pausePoll<4;pausePoll++){await api.sleep(500);current=await observe();result.pausedInventory=(current.ocr||[]).some(function(r){return /^(Food|Weapons|Artifacts|Character Development Items|Materials|Gadgets|Quest|Precious Items|Furnishings)$/.test(String(r.text||'').trim())&&r.x>100&&r.x<500&&r.y<80;});if(result.pausedInventory)break;}}
@@ -309,8 +350,13 @@ var ActOneMission = (function () {
                 }
                 // A qualified release always returns stopped; every other state keeps the original scan gate.
                 if (request.requireMeasuredGround && current.hud.world) {
+                    if (current.session!==request.session) return stop('Fresh ground enemy scan required');
                     var groundStop = groundScanStopReason(current, api.now());
-                    if (groundStop) return stop(groundStop);
+                    if (groundStop) {
+                        groundStop=await refreshExpiredGround(groundStop,target);
+                        if (groundStop) return stop(groundStop);
+                        continue;
+                    }
                     if (current.hud.climbing) return stop('Exploration left measured ground');
                 }
                 if(guildObjective&&(current.hud.groundControls!==true||current.hud.climbing||(current.hud.enemyBars||[]).length))
@@ -361,8 +407,14 @@ var ActOneMission = (function () {
                 // Coordinate retries can replace the starting frame. Check the final image before any route input.
                 if (request.requireMeasuredGround) {
                     var scanCheckedAt = api.now();
+                    if (current.session!==request.session) return stop('Fresh ground enemy scan required');
                     var scanStop = groundScanStopReason(current, scanCheckedAt);
-                    if (scanStop) return stop(scanStop);
+                    if (scanStop) {
+                        scanStop=await refreshExpiredGround(scanStop,target);
+                        if (scanStop) return stop(scanStop);
+                        continue;
+                    }
+                    if (current.session===request.session) lastMeasured=current;
                 }
                 if(!plausibleMap(current,target)) {
                     if(current&&current.map&&current.map.map!==target.map) return stop('Waypoint map does not match current map');
@@ -476,7 +528,13 @@ var ActOneMission = (function () {
                     !current.hud.bigMap && !current.hud.journal && !namedFinal && !markerApproach &&
                     namedDialogueAccount(current,api.gpuAdviserUid) && groundScanStopReason(current,api.now())===null) {
                     held=api.gpuAdvisedForwardMs(current,target,held);
-                    if (groundScanStopReason(current,api.now()) || api.now()-began+held>request.deadlineMs)
+                    var adviceScan=groundScanStopReason(current,api.now());
+                    if (adviceScan) {
+                        adviceScan=await refreshExpiredGround(adviceScan,target);
+                        if (adviceScan) return stop(adviceScan);
+                        continue;
+                    }
+                    if (api.now()-began+held>request.deadlineMs)
                         return stop('Measured navigation frame expired before forward');
                 }
                 afterForward = { x: current.map.x, y: current.map.y, minProgress: travelHeld === null ? 0.5 : Math.min(0.5, held / 1000), groundWitness: current.hud.groundControls&&!current.hud.climbing?current:null, groundWitnessAt: request.requireMeasuredGround?scanCheckedAt:null };
@@ -484,7 +542,9 @@ var ActOneMission = (function () {
                 await api.sleep(150); current = await observe();
             }
         }
-        return { status: 'arrived', nextWaypointIndex: request.waypoints.length, inputMs: totalInputMs, turns: turns, movements: movements, jumpRecoveries: jumpRecoveries, climbSteps:climbSteps, climbReleases:climbReleases };
+        var arrival={ status: 'arrived', nextWaypointIndex: request.waypoints.length, inputMs: totalInputMs, turns: turns, movements: movements, jumpRecoveries: jumpRecoveries, climbSteps:climbSteps, climbReleases:climbReleases };
+        if (refreshFrames.length) arrival.passiveGroundRefreshFrames=refreshFrames.slice();
+        return arrival;
         } finally {
             if (useAdviser) api.setGpuAdviserWaypoint(null);
         }

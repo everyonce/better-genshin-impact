@@ -1038,12 +1038,23 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
                 and proof.get('session') == pilot.session and proof.get('verified') is True
                 and result.get('pauseVerified') is True)
 
-    def threat_checkpoint(result):
+    def threat_checkpoint(result, request, receipt):
         """Keep completed waypoints while a protected field-scan interruption is reinspected."""
-        return (allow_field_combat and objective == EXPLORATION_OBJECTIVE and protected_inventory(result)
-                and result.get('status') == 'stopped' and result.get('reason') in (
-                    'Enemy observed during exploration', 'Ground enemy scan did not establish clear ground')
-                and type(result.get('nextWaypointIndex')) is int)
+        if (objective != EXPLORATION_OBJECTIVE or not protected_inventory(result) or result.get('status') != 'stopped'
+                or type(result.get('nextWaypointIndex')) is not int):
+            return False
+        reason = result.get('reason')
+        if reason == 'Clear ground capture expired after passive refresh':
+            frames, proof = result.get('passiveGroundRefreshFrames'), result['pauseProof']
+            expired = result.get('expiredGroundCapture')
+            return ('groundRefreshCheckpoint' not in state and isinstance(frames, list) and len(frames) == 2
+                    and all(type(n) is int for n in frames)
+                    and isinstance(expired, dict) and all(type(expired.get(k)) is int for k in ('frameId', 'capturedAt', 'checkedAt'))
+                    and expired['checkedAt'] - expired['capturedAt'] > 1000
+                    and type(proof.get('sourceFrameId')) is int and type(proof.get('pauseFrameId')) is int
+                    and request['expectedFrameId'] < frames[0] < frames[1] <= expired['frameId'] <= proof['sourceFrameId']
+                    < proof['pauseFrameId'] <= receipt['frameId'])
+        return allow_field_combat and reason in ('Enemy observed during exploration', 'Ground enemy scan did not establish clear ground')
 
     def returned_rotation(result):
         """A completed software rotation permits fresh field inspection, never a kill claim."""
@@ -1094,7 +1105,7 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
             and type(result.get('nextWaypointIndex')) is int
             and 0 < result['nextWaypointIndex'] < len(fields['waypoints']))
         status = receipt.get('status')
-        measured_threat = (mission == 'navigation' and status in ('stopped', 'failed') and threat_checkpoint(result)
+        measured_threat = (mission == 'navigation' and status in ('stopped', 'failed') and threat_checkpoint(result, request, receipt)
                            and 0 <= result['nextWaypointIndex'] < len(fields['waypoints']))
         rotation = (mission == 'questStep' and fields['step'] == 'actTwoFieldCombat' and status == 'stopped'
                     and returned_rotation(result))
@@ -1571,8 +1582,12 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
             result = dispatch('navigation', source, fields, allow_deadline_checkpoint=True)
             terminal = state['records'][-1]
             if terminal['receipt']['status'] != 'completed':
-                if threat_checkpoint(result):
+                if threat_checkpoint(result, terminal['request'], terminal['receipt']):
                     # Inspect the actual encounter. Dispatch already preserved its native route cursor.
+                    if result.get('reason') == 'Clear ground capture expired after passive refresh':
+                        state['groundRefreshCheckpoint'] = dict(requestId=terminal['request']['id'],
+                            nextWaypointIndex=state['nextWaypointIndex'], frames=result['passiveGroundRefreshFrames'])
+                        save()
                     inspect_after_encounter = True
                     last_phase = 'navigation'
                     continue

@@ -1059,6 +1059,39 @@ class SupervisedRouteControllerTests(unittest.TestCase):
             self.assertEqual([r['waypoints'] for r in pilot.calls if r['mission'] == 'navigation'],
                              [self.points,self.points[1:]])
 
+    def test_slow_clear_checkpoint_reinspects_once_and_submits_only_the_verified_suffix(self):
+        self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
+        inv, clear = controller_scene('inventory'), controller_scene(objective='')
+        pause = dict(mission='questStep', source=inv, result=dict(pausedInventory=True))
+        interruption = dict(mission='navigation', status='failed', frames=6, source=inv, result=dict(
+            status='stopped', reason='Clear ground capture expired after passive refresh', nextWaypointIndex=1,
+            pauseVerified=True, pauseProof=dict(verified=True, kind='inventory', session='route-session')))
+        for scenario in ('fresh', 'expired_again', 'bad_identity'):
+            self.progress = Path(self.temp.name) / ('slow-clear-' + scenario + '.json')
+            end = self.arrival(2,inv) if scenario == 'fresh' else interruption
+            pilot = ReplayPilot(self.clock,[pause,interruption,dict(mission='questStep',source=clear,
+                result=dict(worldVisible=True)),pause,end],source=clear)
+            native = pilot.execute
+            def with_capture_ids(mission,source,fields,deadline,pending):
+                out = native(mission,source,fields,deadline,pending)
+                receipt = out['receipt']
+                result = receipt.get('details',{}).get('result') or {}
+                if result.get('reason') == interruption['result']['reason']:
+                    frame = receipt['frameId']
+                    result['passiveGroundRefreshFrames'] = [frame-3,frame-2] if scenario != 'bad_identity' else [frame-2,frame-2]
+                    result['expiredGroundCapture'] = dict(frameId=frame-2,capturedAt=10000,checkedAt=11113)
+                    result['pauseProof'].update(sourceFrameId=frame-1,pauseFrameId=frame)
+                return out
+            pilot.execute = with_capture_ids
+            report = self.run_controller(pilot,allow_field_combat=False)
+            nav = [r['waypoints'] for r in pilot.calls if r['mission']=='navigation']
+            if scenario == 'bad_identity':
+                self.assertEqual(nav,[self.points]);self.assertNotIn('groundRefreshCheckpoint',report)
+            else:
+                self.assertEqual(nav,[self.points,self.points[1:]])
+                self.assertEqual(report['groundRefreshCheckpoint']['nextWaypointIndex'],1)
+            self.assertEqual(report['status'],'arrived' if scenario=='fresh' else 'stopped',report.get('reason'))
+
     def test_exploration_pack_requires_matching_counts_without_a_candidate_list_and_opt_in(self):
         now = self.clock.milliseconds()
         base = controller_scene(objective='', enemies=True)

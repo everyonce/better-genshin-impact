@@ -323,5 +323,184 @@ class PatrolLauncherTests(unittest.TestCase):
         self.assertTrue((self.folder/'broker.json').exists() and (self.folder/'audit.json').exists())
 
 
+
+
+class KnownObstacleRecoveryTests(unittest.TestCase):
+    """Exercise the closed-failure handoff with inert broker and route boundaries."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.folder = Path(self.temp.name)/'patrol'
+        self.folder.mkdir()
+        self.repo = Path(self.temp.name)/'repo'
+        self.root = dict(processId=101, windowsSessionId=1, instanceNonce='a'*32)
+        self.child = dict(processId=202, windowsSessionId=3, instanceNonce='b'*32)
+        self.state = dict(routeId=patrol.SCOUT_INLAND_GAP_ROUTE, requestedLegs=1,
+            runId='c'*32, stopReason=None, stopRequested=False, verified=False)
+        self.broker = dict(returnCode=1, timedOut=False, success=False, windowsSessionId=3,
+            commandProcessId=303, commandIdentity=dict(processId=303, windowsSessionId=3))
+        segment_path = self.folder/'patrol-segments/00001.json'
+        self.report = dict(runId='c'*32, status='failed', error=patrol.KNOWN_OBSTACLE_ERROR,
+            windowsSessionId=3, segments=[dict(number=1, report=str(segment_path), processId=202,
+                instanceNonce='b'*32, exitCode=1)])
+        self.segment = dict(residentRunId='c'*32, status='failed', error=patrol.KNOWN_OBSTACLE_ERROR,
+            segment=dict(number=1, leaseEnded=True), unappliedAcceptedActions=0, serverDroppedReceipts=0,
+            stop=dict(type='stopped', executionContext=dict(active=None, telemetryComplete=True,
+                trackedState=dict(heldKeys=[], telemetryIncomplete=False, executionUncertain=True))),
+            continuity=dict(pendingProposals=[], pendingRecoveryActions=[]),
+            hybridNavigation=dict(routeId=patrol.SCOUT_INLAND_GAP_ROUTE,
+                profileId='mondstadt-combat-scout-v1', phase='failed', completedLegs=0,
+                failure='survey_obstacle_requires_inspection', lastPose=dict(state='valid',
+                    layerId='MapBack_2', frameId=179, x=-1141.8515625, y=2274.033203125,
+                    positionConfidence=.9992364250760757, yawConfidence=.7026136517524719)))
+        segment_path.parent.mkdir()
+        self.write_documents()
+        route = self.repo/'tools/quest-pilot/routes/mondstadt-scout-inland-detour.json'
+        route.parent.mkdir(parents=True)
+        route.write_text(json.dumps(dict(startNear=patrol.KNOWN_OBSTACLE_START)), encoding='utf-8')
+        self.args = patrol.options(['--route', patrol.SCOUT_INLAND_GAP_ROUTE, '--legs', '1',
+            '--navigation-profile', 'mondstadt-combat-scout-v1', '--recover-known-obstacles',
+            '--expected-uid', '693306810'])
+        self.launcher = Mock()
+        self.launcher.parse_args.side_effect = lambda argv: argv
+        self.launcher.run.return_value = dict(status='arrived', exitCode=0, pilotRetired=True,
+            progress=str(self.folder/'detour-progress.json'))
+
+    def write_documents(self):
+        """Publish only finite saved-producer shapes, without any process calls."""
+        patrol.atomic_json(self.folder/'patrol.json', self.report)
+        patrol.atomic_json(self.folder/'broker.json', self.broker)
+        patrol.atomic_json(self.folder/'patrol-segments/00001.json', self.segment)
+        patrol.atomic_json(self.folder/'patrol.json.control.json', dict(version=1, runId='c'*32, command='run'))
+
+    def recover(self):
+        """Replace only the canonical launcher and the read-only temperature query."""
+        with patch.object(patrol, 'ROOT', self.repo), patch.object(patrol, 'route_launcher_module', return_value=self.launcher), \
+                patch.object(patrol, 'log_sample', return_value=dict(temperatureC=50)):
+            return patrol.recover_known_obstacle(self.args, self.folder, self.state, self.broker, self.root, self.child)
+
+    def test_opt_in_requires_exact_route_single_leg_and_uid(self):
+        self.assertFalse(patrol.options([]).recover_known_obstacles)
+        for argv in (['--recover-known-obstacles'],
+                     ['--route', patrol.SCOUT_INLAND_GAP_ROUTE, '--legs', '2', '--navigation-profile',
+                      'mondstadt-combat-scout-v1', '--recover-known-obstacles', '--expected-uid', '693306810'],
+                     ['--route', patrol.SCOUT_INLAND_GAP_ROUTE, '--legs', '1', '--navigation-profile',
+                      'mondstadt-combat-scout-v1', '--recover-known-obstacles', '--expected-uid', 'unknown']):
+            with self.subTest(argv=argv), self.assertRaises(SystemExit):
+                patrol.options(argv)
+
+    def test_only_exact_terminal_obstacle_and_near_mapback_pose_qualify(self):
+        import copy
+        self.assertIsNotNone(patrol.known_obstacle_evidence(self.report, self.segment, self.state, self.broker, self.child))
+        mutations = [
+            lambda r,s,t,b: r.update(error='nativeSensorStale'),
+            lambda r,s,t,b: r.update(runId='d'*32),
+            lambda r,s,t,b: r['segments'][0].update(instanceNonce='d'*32),
+            lambda r,s,t,b: b.update(timedOut=True),
+            lambda r,s,t,b: b['commandIdentity'].update(windowsSessionId=7),
+            lambda r,s,t,b: s['segment'].update(leaseEnded=False),
+            lambda r,s,t,b: s.update(unappliedAcceptedActions=1),
+            lambda r,s,t,b: s['continuity'].update(pendingProposals=['pending']),
+            lambda r,s,t,b: s['stop']['executionContext'].update(active={'requestId':'active'}),
+            lambda r,s,t,b: s['stop']['executionContext']['trackedState'].update(heldKeys=['W']),
+            lambda r,s,t,b: s['hybridNavigation']['lastPose'].update(layerId='City_102'),
+            lambda r,s,t,b: s['hybridNavigation']['lastPose'].update(x=-1120),
+            lambda r,s,t,b: s['hybridNavigation']['lastPose'].update(x=float('nan')),
+            lambda r,s,t,b: t.update(stopReason='temperatureLimit')]
+        for mutate in mutations:
+            report, segment, state, broker = copy.deepcopy((self.report, self.segment, self.state, self.broker))
+            mutate(report, segment, state, broker)
+            with self.subTest(mutate=mutate):
+                self.assertIsNone(patrol.known_obstacle_evidence(report, segment, state, broker, self.child))
+
+    def test_detour_has_distinct_outcome_and_preserves_gpu_bytes_and_owner(self):
+        original = {p: p.read_bytes() for p in (self.folder/'patrol.json', self.folder/'broker.json')}
+        outcome = self.recover()
+        self.assertEqual(outcome['status'], 'recovered_detour')
+        self.assertIs(outcome['originalEndpointReached'], False)
+        self.assertIs(self.state['verified'], False)
+        self.assertEqual(original, {p: p.read_bytes() for p in original})
+        self.assertEqual(json.loads((self.folder/'error.json').read_text())['error'], patrol.KNOWN_OBSTACLE_ERROR)
+        self.launcher.run.assert_called_once()
+        self.assertEqual(self.launcher.run.call_args.kwargs['expected_owner'], dict(root=self.root, child=self.child))
+        argv = self.launcher.parse_args.call_args.args[0]
+        self.assertNotIn('--allow-field-combat', argv)
+        self.assertNotIn('--allow-dialogue', argv)
+        self.assertIn(str(self.folder/'detour.STOP'), argv)
+        with self.assertRaises(FileExistsError):
+            self.recover()
+        self.assertEqual(self.launcher.run.call_count, 1)
+
+    def test_disabled_or_unknown_failure_never_starts_the_route(self):
+        self.args.recover_known_obstacles = False
+        self.assertIsNone(self.recover())
+        self.args.recover_known_obstacles = True
+        self.report['error'] = 'different failure'
+        self.write_documents()
+        self.assertIsNone(self.recover())
+        self.launcher.run.assert_not_called()
+        self.assertFalse((self.folder/'known-obstacle-recovery.json').exists())
+
+    def test_original_stop_blocks_the_route_without_rewriting_the_control(self):
+        patrol.atomic_json(self.folder/'patrol.json.control.json', dict(version=1, runId='c'*32, command='stop'))
+        self.assertEqual(self.recover()['status'], 'failed')
+        self.launcher.run.assert_not_called()
+        self.assertEqual(json.loads((self.folder/'patrol.json.control.json').read_text())['command'], 'stop')
+
+    def test_owner_refusal_is_retained_and_never_retried(self):
+        self.launcher.run.side_effect = RuntimeError('Original owner changed before route dispatch')
+        result = self.recover()
+        self.assertEqual(result['status'], 'failed')
+        self.assertIn('owner changed', result['error'])
+        self.launcher.run.assert_called_once()
+        self.assertIs(result['originalEndpointReached'], False)
+
+    def test_unretired_route_cannot_report_recovered_detour(self):
+        self.launcher.run.return_value['pilotRetired'] = False
+        self.assertEqual(self.recover()['status'], 'failed')
+
+    def test_operator_stop_during_detour_is_forwarded_to_only_its_stop_path(self):
+        def route_run(*_args, **_kwargs):
+            patrol.atomic_json(self.folder/'patrol.json.control.json', dict(version=1, runId='c'*32, command='pause'))
+            end = time.monotonic() + 1
+            while not (self.folder/'detour.STOP').exists() and time.monotonic() < end:
+                time.sleep(.005)
+            self.assertTrue((self.folder/'detour.STOP').exists())
+            return dict(status='arrived', exitCode=0, pilotRetired=True)
+        self.launcher.run.side_effect = route_run
+        result = self.recover()
+        self.assertEqual((result['status'], result['stopReason']), ('failed', 'originalPatrolControl'))
+        self.assertEqual(json.loads((self.folder/'patrol.json.control.json').read_text())['command'], 'pause')
+
+    def test_successful_gpu_path_does_not_consult_recovery(self):
+        binary = self.folder/'existing'
+        binary.touch()
+        for name in ('gpu_python', 'runner_python', 'ffmpeg', 'nvidia_smi', 'goal_embedding', 'checkpoint'):
+            setattr(self.args, name, binary)
+        self.args.source = self.folder
+        patrol.atomic_json(self.folder/'patrol.json.status.json', dict(version=1, runId='c'*32))
+        patrol.atomic_json(self.folder/'patrol.json', dict(runId='c'*32, endReason='hybridLegLimit'))
+        api = Mock()
+        api.run_command.return_value = dict(success=True, returnCode=0, timedOut=False)
+        with patch.object(patrol, 'control_module', return_value=api), \
+                patch.object(patrol, 'ready_session', return_value=(self.root, self.child)), \
+                patch.object(patrol, 'log_sample', return_value=dict(temperatureC=50)), \
+                patch.object(patrol, 'recover_known_obstacle', side_effect=AssertionError('Unexpected fallback')), \
+                patch('audit_hybrid_run.audit', return_value=dict(verifiedLegs=1)):
+            self.assertIsNone(patrol.run(self.args, self.folder))
+        self.assertIs(json.loads((self.folder/'launcher.json').read_text())['verified'], True)
+
+    def test_main_names_recovered_detour_without_claiming_verified_gpu_legs(self):
+        self.args.evidence_root = self.folder
+        with patch.object(patrol, 'options', return_value=self.args), \
+                patch.object(patrol, 'run', return_value=dict(status='recovered_detour')), patch('builtins.print') as printed:
+            self.assertEqual(patrol.main(), 0)
+        messages = ' '.join(str(call.args[0]) for call in printed.call_args_list)
+        self.assertIn('recovered_detour', messages)
+        self.assertIn('Original GPU endpoint was not reached', messages)
+        self.assertNotIn('Verified 1 leg', messages)
+
+
 if __name__ == '__main__':
     unittest.main()

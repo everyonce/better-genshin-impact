@@ -1086,6 +1086,105 @@ def read_json(path):
     return json.loads(path.read_text(encoding='utf-8'))
 
 
+
+
+class RouteStartNearTests(unittest.TestCase):
+    """A retained failure location is never a substitute for a fresh route start."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.clock = ControllerClock()
+        self.progress = Path(self.temp.name)/'progress.json'
+        self.route = dict(objective=route_tool.EXPLORATION_OBJECTIVE,
+            waypoints=[dict(map='Teyvat', x=-1134, y=2266)],
+            startNear=dict(map='Teyvat', x=-1141.85, y=2274.03, radius=3))
+
+    def world(self, *, far=False, enemies=False):
+        """Use ordinary measured native-shaped world data at or away from the rock."""
+        source = controller_scene(enemies=enemies)
+        source['hud']['objectives'] = []
+        source['map'].update(x=-1100 if far else -1141.8515625, y=2274.033203125)
+        return source
+
+    def run_route(self, pilot, **kwargs):
+        """Run the actual controller with only its process/input boundary replaced."""
+        return route_tool.run_controller(pilot, self.route, self.progress, '693306810',
+            monotonic=self.clock.monotonic, clock_ms=self.clock.milliseconds, emit=lambda _:None, **kwargs)
+
+    def test_exact_optional_start_shape_and_finite_positive_radius(self):
+        route_tool.validate_route(self.route)
+        invalid = [None, {}, dict(self.route['startNear'], extra=1), dict(self.route['startNear'], map='City_102')]
+        invalid += [dict(self.route['startNear'], **{key:value}) for key,value in
+            [('x',True),('y',float('nan')),('radius',False),('radius',0),('radius',-1),('radius',float('inf'))]]
+        for start in invalid:
+            with self.subTest(start=start), self.assertRaises(route_tool.RouteError):
+                route_tool.validate_route(dict(self.route, startNear=start))
+        with self.assertRaisesRegex(route_tool.RouteError, 'controller mode'):
+            route_tool.run_route(Path(self.temp.name), self.route, 'route-session')
+        self.assertFalse((Path(self.temp.name)/'request.json').exists())
+
+    def test_near_world_records_its_actual_measurement_before_navigation(self):
+        inventory = controller_scene('inventory')
+        pilot = ReplayPilot(self.clock, [dict(mission='questStep', source=inventory, result=dict(pausedInventory=True)),
+            dict(mission='navigation', source=inventory, result=dict(status='arrived', nextWaypointIndex=1))], source=self.world())
+        result = self.run_route(pilot)
+        self.assertEqual(result['status'], 'arrived')
+        self.assertEqual(result['route']['startNear'], self.route['startNear'])
+        witness = result['startNearVerified']
+        self.assertEqual((witness['session'], witness['frameId']), ('route-session', 2))
+        self.assertLess(witness['distance'], .01)
+        self.assertEqual([p.get('step',p['mission']) for p in pilot.calls if p['mission']!='observe'], ['worldInventory','navigation'])
+
+    def test_far_world_refuses_before_navigation_or_opted_in_combat(self):
+        for index, enemy in enumerate((False, True)):
+            self.progress = Path(self.temp.name)/f'far-{index}.json'
+            pilot = ReplayPilot(self.clock, source=self.world(far=True, enemies=enemy))
+            result = self.run_route(pilot, allow_field_combat=True)
+            self.assertEqual(result['status'], 'stopped')
+            self.assertIn('outside startNear', result['reason'])
+            self.assertEqual([p['mission'] for p in pilot.calls], ['observe'])
+            self.assertNotIn('startNearVerified', result)
+
+    def test_inventory_close_requires_a_new_eligible_world_start(self):
+        inventory = controller_scene('inventory')
+        pilot = ReplayPilot(self.clock, [
+            dict(mission='questStep', source=self.world(), result=dict(resumedWorld=True)),
+            dict(mission='questStep', source=inventory, result=dict(pausedInventory=True)),
+            dict(mission='navigation', source=inventory, result=dict(status='arrived', nextWaypointIndex=1))], source=inventory)
+        result = self.run_route(pilot)
+        self.assertEqual(result['status'], 'arrived')
+        self.assertEqual(result['startNearVerified']['frameId'], 4)
+        self.assertEqual([p.get('step',p['mission']) for p in pilot.calls if p['mission']!='observe'],
+            ['worldInventoryClose','worldInventory','navigation'])
+
+    def test_wrong_start_after_inventory_close_has_no_second_key_or_movement(self):
+        inventory = controller_scene('inventory')
+        pilot = ReplayPilot(self.clock, [dict(mission='questStep', source=self.world(far=True),
+            result=dict(resumedWorld=True))], source=inventory)
+        result = self.run_route(pilot)
+        self.assertEqual(result['status'], 'stopped')
+        self.assertEqual([p.get('step',p['mission']) for p in pilot.calls if p['mission']!='observe'], ['worldInventoryClose'])
+
+    def test_foreign_account_or_unlocated_dialogue_cannot_grant_the_start(self):
+        foreign = self.world(); foreign['ocr'][0]['text'] = 'UID: 123456789'
+        for index, source in enumerate((foreign, controller_scene('dialogue'))):
+            self.progress = Path(self.temp.name)/f'foreign-{index}.json'
+            pilot = ReplayPilot(self.clock, source=source)
+            result = self.run_route(pilot, allow_dialogue=True)
+            self.assertEqual(result['status'], 'waiting')
+            self.assertEqual([p['mission'] for p in pilot.calls], ['observe'])
+            self.assertNotIn('startNearVerified', result)
+
+    def test_start_measurement_refuses_stale_foreign_and_boolean_position(self):
+        source = self.world(); source['timestamp'] = self.clock.milliseconds()
+        for mutate in (lambda s:s.update(timestamp=s['timestamp']-1001), lambda s:s.update(session='old'),
+                       lambda s:s['map'].update(x=True)):
+            value = copy.deepcopy(source); mutate(value)
+            with self.assertRaises(route_tool.RouteError):
+                route_tool.require_start_near(value, 'route-session', '693306810', self.route['startNear'], self.clock.milliseconds())
+
+
 if __name__ == '__main__':
     unittest.main()
 

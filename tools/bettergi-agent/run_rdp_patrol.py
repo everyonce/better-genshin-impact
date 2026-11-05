@@ -1,5 +1,6 @@
 """Run a bounded, temperature-monitored Mondstadt patrol in an existing minimized BetterGI RDP window."""
 import argparse
+import importlib.util
 from concurrent.futures import ThreadPoolExecutor, wait
 from datetime import datetime, timezone
 import json
@@ -15,7 +16,7 @@ from threading import Event
 import time
 import uuid
 
-from hybrid_routes import EXECUTABLE_ROUTE_IDS, PATROL_STATIONS, STAIR_POST_ROUTE, STREET_PATROL_ROUTE, SURFACE_ROUTES, itinerary_legs
+from hybrid_routes import SCOUT_INLAND_GAP_ROUTE, EXECUTABLE_ROUTE_IDS, PATROL_STATIONS, STAIR_POST_ROUTE, STREET_PATROL_ROUTE, SURFACE_ROUTES, itinerary_legs
 from navigation_profiles import COURTYARD_PROFILE,SURFACE_PROFILE,NAVIGATION_PROFILES,required_profile
 from resident_runtime import atomic_json, control_module, read_control_document, select_child
 from destination_queue_limits import ENDURANCE, STANDARD
@@ -69,6 +70,10 @@ def options(argv=None, parser=None, *, warm=False):
                    help='Retain exact policy pixels inside the standard 160 MiB recording budget')
     p.add_argument('--native-combat-observation', action='store_true',
                    help='Retain read-only native health and red-bar candidates alongside navigation')
+    if not warm:
+        p.add_argument('--recover-known-obstacles', action='store_true',
+                       help='After the specific inland-rock stop, run one separately reported bounded ground detour')
+        p.add_argument('--expected-uid', help='Exact game UID required by the opt-in ground detour')
     args = p.parse_args(argv)
     if not warm:
         if required_profile(args.route_id)!=args.navigation_profile:
@@ -81,6 +86,10 @@ def options(argv=None, parser=None, *, warm=False):
             p.error('The surveyed bypass belongs only to the stair-post route')
         if args.route_id!=STREET_PATROL_ROUTE and (args.photo_station or args.photo_qualification or args.camera_calibration):
             p.error('Photo and calibrated-camera permissions remain bound to their existing street route')
+    if getattr(args, 'recover_known_obstacles', False):
+        if (args.route_id != SCOUT_INLAND_GAP_ROUTE or args.route_legs != 1
+                or not isinstance(args.expected_uid, str) or re.fullmatch(r'[0-9]{9,10}', args.expected_uid) is None):
+            p.error('--recover-known-obstacles requires the inland-gap route, --legs 1 and --expected-uid')
     if args.retain_policy_rgb and getattr(args, 'endurance', False):
         p.error('Exact policy capture requires the standard bounded collection profile')
     if getattr(args,'retain_station_rgb',False) and (not args.landmark_shadow or args.photo_station):
@@ -348,6 +357,156 @@ def supervise(future, folder, executable, deadline, state, series=None):
             state['telemetryError'] = error
 
 
+KNOWN_OBSTACLE_ERROR = 'hybrid_navigation:survey_obstacle_requires_inspection'
+KNOWN_OBSTACLE_START = dict(map='Teyvat', x=-1141.85, y=2274.03, radius=3)
+
+
+def known_obstacle_evidence(report, segment, state, broker, child):
+    """Recognize one closed software failure; this never grants current pose or input authority."""
+    if any(not isinstance(item, dict) for item in (report, segment, state, broker, child)):
+        return None
+    if (state.get('routeId') != SCOUT_INLAND_GAP_ROUTE or state.get('requestedLegs') != 1
+            or state.get('stopReason') is not None or state.get('stopRequested') is not False
+            or not state.get('runId') or report.get('runId') != state['runId']
+            or segment.get('residentRunId') != state['runId']
+            or report.get('status') != 'failed' or segment.get('status') != 'failed'
+            or report.get('error') != KNOWN_OBSTACLE_ERROR or segment.get('error') != KNOWN_OBSTACLE_ERROR
+            or report.get('windowsSessionId') != child['windowsSessionId']
+            or broker.get('timedOut') is not False or type(broker.get('returnCode')) is not int
+            or broker['returnCode'] == 0 or broker.get('windowsSessionId') != child['windowsSessionId']):
+        return None
+    identity = broker.get('commandIdentity', {})
+    if (not isinstance(identity, dict) or type(broker.get('commandProcessId')) is not int or broker['commandProcessId'] <= 0
+            or identity.get('processId') != broker['commandProcessId']
+            or identity.get('windowsSessionId') != child['windowsSessionId']):
+        return None
+    segments = report.get('segments')
+    if not isinstance(segments, list) or not segments or not isinstance(segments[-1], dict):
+        return None
+    last = segments[-1]
+    if (last.get('processId') != child['processId'] or last.get('instanceNonce') != child['instanceNonce']
+            or last.get('exitCode') != broker['returnCode']
+            or segment.get('segment', {}).get('number') != last.get('number')
+            or segment.get('segment', {}).get('leaseEnded') is not True
+            or type(segment.get('unappliedAcceptedActions')) is not int or segment['unappliedAcceptedActions'] != 0
+            or type(segment.get('serverDroppedReceipts')) is not int or segment['serverDroppedReceipts'] != 0):
+        return None
+    stop, continuity = segment.get('stop', {}), segment.get('continuity', {})
+    context = stop.get('executionContext', {})
+    tracked = context.get('trackedState', {})
+    if (stop.get('type') != 'stopped' or context.get('telemetryComplete') is not True
+            or context.get('active', 'missing') is not None or tracked.get('heldKeys') != []
+            or tracked.get('telemetryIncomplete') is not False
+            or continuity.get('pendingProposals') != [] or continuity.get('pendingRecoveryActions') != []):
+        return None
+    navigation = segment.get('hybridNavigation', {})
+    pose = navigation.get('lastPose', {})
+    if (navigation.get('routeId') != SCOUT_INLAND_GAP_ROUTE
+            or navigation.get('profileId') != 'mondstadt-combat-scout-v1'
+            or navigation.get('phase') != 'failed' or navigation.get('completedLegs') != 0
+            or navigation.get('failure') != 'survey_obstacle_requires_inspection'
+            or pose.get('state') != 'valid' or pose.get('layerId') != 'MapBack_2'
+            or any(type(pose.get(k)) not in (int, float) or not math.isfinite(pose[k])
+                   for k in ('x', 'y', 'positionConfidence', 'yawConfidence'))
+            or not .99 <= pose['positionConfidence'] <= 1 or not .2 <= pose['yawConfidence'] <= 1
+            or math.hypot(pose['x'] - KNOWN_OBSTACLE_START['x'], pose['y'] - KNOWN_OBSTACLE_START['y']) > KNOWN_OBSTACLE_START['radius']):
+        return None
+    return dict(error=KNOWN_OBSTACLE_ERROR, nativePose=pose, leaseEnded=True,
+                softwareHeldKeys=[], physicalInputDeliveryVerified=False)
+
+
+def route_launcher_module():
+    """Use the canonical ordinary-RDP route launcher, without generating an actor or seal."""
+    path = ROOT/'tools/quest-pilot/run-rdp-route.py'
+    spec = importlib.util.spec_from_file_location('_known_obstacle_route_launcher', path)
+    module = importlib.util.module_from_spec(spec)
+    exec(compile(path.read_bytes(), str(path), 'exec'), module.__dict__)
+    return module
+
+
+def recover_known_obstacle(args, folder, state, broker, root, child, *, series=None):
+    """Run at most one distinct detour after terminal GPU retirement; retain its original failure."""
+    if not getattr(args, 'recover_known_obstacles', False) or series is not None:
+        return None
+    try:
+        report = json.loads((folder/'patrol.json').read_text(encoding='utf-8-sig'))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(report, dict):
+        return None
+    segments = report.get('segments')
+    if (not isinstance(segments, list) or not segments or not isinstance(segments[-1], dict)
+            or type(segments[-1].get('number')) is not int or segments[-1]['number'] < 1):
+        return None
+    number = segments[-1]['number']
+    segment_path = folder/'patrol-segments'/f'{number:05d}.json'
+    if Path(segments[-1].get('report', '')).resolve() != segment_path.resolve():
+        return None
+    segment = json.loads(segment_path.read_text(encoding='utf-8-sig'))
+    evidence = known_obstacle_evidence(report, segment, state, broker, child)
+    if evidence is None:
+        return None
+    route = ROOT/'tools/quest-pilot/routes/mondstadt-scout-inland-detour.json'
+    progress, stop_path = folder/'detour-progress.json', folder/'detour.STOP'
+    recovery_path = folder/'known-obstacle-recovery.json'
+    recovery = dict(status='starting', originalGpuStatus='failed', originalEndpointReached=False,
+        originalGpuResult=str(folder/'patrol.json'), originalBrokerResult=str(folder/'broker.json'),
+        failedSegment=str(segment_path), obstacle=evidence, route=str(route), progress=str(progress))
+    with recovery_path.open('x', encoding='utf-8') as stream:
+        json.dump(recovery, stream)
+    state['knownObstacleRecovery'] = str(recovery_path)
+    atomic_json(folder/'error.json', dict(error=KNOWN_OBSTACLE_ERROR, originalGpuFailure=True))
+    finished = Event()
+
+    def forward_stop():
+        """Carry the original addressed STOP/pause into only this new route's stop file."""
+        while not finished.wait(CONTROL_POLL_SECONDS):
+            try:
+                command = addressed_control(folder/'patrol.json.control.json', state['runId'])['command']
+                reason = 'originalPatrolControl' if command != 'run' else None
+            except (OSError, ValueError) as error:
+                reason = 'originalPatrolControlUnavailable: ' + str(error)
+            if reason:
+                stop_path.write_text(reason, encoding='utf-8')
+                return reason
+        return None
+
+    try:
+        if addressed_control(folder/'patrol.json.control.json', state['runId'])['command'] != 'run':
+            raise RuntimeError('Original patrol STOP/pause prevents the alternate route.')
+        if any(path.exists() for path in (ROOT/'STOP', folder/'STOP', stop_path)):
+            raise RuntimeError('Operator STOP prevents the alternate route.')
+        if json.loads(route.read_text(encoding='utf-8-sig')).get('startNear') != KNOWN_OBSTACLE_START:
+            raise RuntimeError('The known detour must retain its exact fresh-start constraint.')
+        sample = log_sample(folder, args.nvidia_smi)
+        if 'error' in sample or sample['temperatureC'] >= STOP_C:
+            raise RuntimeError('Fresh GPU telemetry refuses the alternate route.')
+        module = route_launcher_module()
+        route_args = module.parse_args(['--route', str(route), '--progress', str(progress),
+            '--expected-uid', args.expected_uid, '--process-id', str(root['processId']),
+            '--stop-file', str(ROOT/'STOP'), '--stop-file', str(folder/'STOP'), '--stop-file', str(stop_path)])
+        # The wrapper rechecks this exact owner tuple before dispatch and in its
+        # worker. Its controller then qualifies the new account/session/pose.
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            monitor = pool.submit(forward_stop)
+            try:
+                outcome = module.run(route_args, expected_owner=dict(root=root, child=child))
+            finally:
+                finished.set()
+            stop_reason = monitor.result()
+        recovery['routeRun'] = outcome
+        if stop_reason:
+            recovery['stopReason'] = stop_reason
+        recovery['status'] = ('recovered_detour' if outcome.get('status') == 'arrived'
+            and outcome.get('exitCode') == 0 and outcome.get('pilotRetired') is True and not stop_reason else 'failed')
+    except (OSError, ValueError, RuntimeError) as error:
+        recovery.update(status='failed', error=str(error))
+    finally:
+        finished.set()
+        atomic_json(recovery_path, recovery)
+    return recovery
+
+
 def run(args, folder, *, series=None):
     """Dispatch a single bounded child job and retain the broker, GPU and independently audited route evidence."""
     for resource in (args.gpu_python, args.runner_python, args.ffmpeg, args.nvidia_smi, args.goal_embedding,
@@ -392,6 +551,9 @@ def run(args, folder, *, series=None):
         if state['runId'] or 'controlError' not in state:
             state['runId'] = pin_resident(folder, state['runId'])
         if state['stopReason'] or not result.get('success') or result.get('returnCode') != 0 or result.get('timedOut'):
+            recovery = recover_known_obstacle(args, folder, state, result, root, child, series=series)
+            if recovery is not None:
+                return recovery
             raise RuntimeError('Patrol stopped or broker failed. Inspect launcher.json and broker.json.')
         output = folder/'patrol.json'
         report = json.loads(output.read_text(encoding='utf-8-sig'))
@@ -445,11 +607,15 @@ def main():
     folder.mkdir(parents=True, exist_ok=False)
     print(f'Patrol evidence: {folder}', flush=True)
     try:
-        run(args, folder)
+        recovery = run(args, folder)
     except Exception as exc:
         atomic_json(folder/'error.json', {'error': str(exc)})
         print(str(exc), file=sys.stderr)
         return 1
+    if recovery is not None:
+        print(f"Known obstacle result: {recovery['status']}. Original GPU endpoint was not reached; "
+              f"see {folder/'known-obstacle-recovery.json'}.")
+        return 0 if recovery['status'] == 'recovered_detour' else 1
     print(f'Verified {args.route_legs} leg(s) on {args.route_id}.' if args.route_legs is not None
           else f'Verified {args.circuits} circuit(s).')
     return 0

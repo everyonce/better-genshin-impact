@@ -63,6 +63,13 @@ def validate_route(value):
             raise RouteError('Every waypoint must have numeric x/y and map Teyvat.')
         if set(point) != {'map', 'x', 'y'}:
             raise RouteError('Waypoint fields must be exactly map, x, and y.')
+    if 'startNear' in value:
+        start = value['startNear']
+        if (not isinstance(start, dict) or set(start) != {'map', 'x', 'y', 'radius'}
+                or start.get('map') != 'Teyvat'
+                or any(type(start.get(k)) not in (int, float) or not math.isfinite(start[k])
+                       for k in ('x', 'y', 'radius')) or start['radius'] <= 0):
+            raise RouteError('startNear requires exactly map Teyvat, finite x/y and a positive finite radius.')
     return value['objective'], waypoints
 
 
@@ -127,6 +134,8 @@ def run_route(root, route, session, *, max_segments=MAX_SEGMENTS, deadline_ms=MA
     if isinstance(deadline_ms, bool) or not isinstance(deadline_ms, int) or not 1000 <= deadline_ms <= MAX_DEADLINE_MS:
         raise RouteError(f'deadline-ms must be from 1000 to {MAX_DEADLINE_MS}.')
     objective, original_waypoints = validate_route(route)
+    if 'startNear' in route:
+        raise RouteError('startNear requires controller mode and a fresh account-bound world measurement.')
     next_index = 0
     for segment_number in range(1, max_segments + 1):
         ensure_no_outstanding_request(root)
@@ -631,6 +640,22 @@ def route_phase(source, expected_uid, objectives, *, allow_dialogue, journal_res
     return 'navigation', objective
 
 
+def require_start_near(source, session, expected_uid, start, now_ms):
+    """Bind an optional route start to the first eligible fresh world, never old progress."""
+    require_fresh_source(source, session, now_ms)
+    hud, position = source['hud'], source.get('map')
+    if (not source_account_matches(source, expected_uid) or hud.get('world') is not True
+            or hud.get('groundControls') is not True or hud.get('climbing')
+            or not isinstance(position, dict) or position.get('map') != start['map']
+            or any(type(position.get(k)) not in (int, float) or not math.isfinite(position[k]) for k in ('x', 'y'))):
+        raise RouteError('startNear requires fresh same-account grounded world coordinates.')
+    distance = math.hypot(position['x'] - start['x'], position['y'] - start['y'])
+    if distance > start['radius']:
+        raise RouteError('Fresh route start is outside startNear; no alternate movement was submitted.')
+    return dict(session=session, frameId=source['frameId'], timestamp=source['timestamp'],
+                position=dict(map=position['map'], x=position['x'], y=position['y']), distance=distance)
+
+
 def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=False, allow_field_combat=False,
                    continuation_objectives=(), max_segments=MAX_SEGMENTS, deadline_ms=MAX_DEADLINE_MS,
                    continue_from_progress=None,
@@ -654,6 +679,9 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
         route=dict(objective=objective, waypoints=points), expectedUid=expected_uid,
         nextWaypointIndex=0, navigationRequests=0, handoffs=0, pending=None, records=[],
         originalDeadlineMs=deadline_ms, startedAt=int(clock_ms()))
+    start_near = route.get('startNear')
+    if start_near is not None:
+        state['route']['startNear'] = dict(start_near)
     progress_path = Path(progress_path)
     with progress_path.open('x', encoding='utf-8') as stream:
         json.dump(state, stream)
@@ -822,6 +850,14 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
             if phase == 'wait':
                 state.update(status='waiting', reason=value)
                 break
+            # Inventory close may expose the field, but neither an inventory
+            # checkpoint nor historical progress can authorize the starting pose.
+            if start_near is not None and 'startNearVerified' not in state:
+                if phase not in ('navigation', 'combat', 'fieldCombat') or paused_navigation:
+                    state.update(status='waiting', reason='startNear needs a fresh eligible world before any route action')
+                    break
+                state['startNearVerified'] = require_start_near(source, pilot.session, expected_uid, start_near, now_ms)
+                save()
             if phase in ('combat', 'dialogue') and phase == last_phase:
                 state.update(status='waiting', reason='Completed phase has not cleared in fresh evidence')
                 break

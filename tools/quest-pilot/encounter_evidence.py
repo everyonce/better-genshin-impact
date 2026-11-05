@@ -54,6 +54,7 @@ def _selected(request, receipt, rewards):
         if result.get('talkTo', request['talkTo']) != request['talkTo']:
             raise ValueError('dialogue speaker differs from request')
         for role, key in [('npc-selected', 'interactionFrameId'), ('npc-greeting', 'greetingFrameId'),
+                          ('npc-menu', 'menuFrameId'), ('npc-farewell', 'farewellFrameId'),
                           ('npc-world-return', 'worldFrameId')]:
             if result.get(key) is not None:
                 yield role, result[key]

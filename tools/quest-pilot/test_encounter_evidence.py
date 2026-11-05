@@ -26,7 +26,8 @@ def encounter(fixture, start=3, dialogue=False):
     req = dict(session=sid, id=rid, mission='dialogue' if dialogue else 'questStep', expectedFrameId=start - 1)
     if dialogue:
         req['talkTo'] = 'Cyrus'
-        actions = dict(talkTo='Cyrus', interactionFrameId=start, greetingFrameId=start+1, worldFrameId=start+2)
+        actions = dict(talkTo='Cyrus', interactionFrameId=start, greetingFrameId=start+1, menuFrameId=start+1,
+                       farewellFrameId=start+1, worldFrameId=start+2)
     else:
         req['step'] = 'actTwoFieldCombat'
         actions = dict(nativeAttempted=True, beforeFrameId=start, afterFrameId=start+2,
@@ -108,7 +109,7 @@ class EncounterEvidenceTests(unittest.TestCase):
                 native = self.command.request_receipt_path(f.pilot, entry['session'], use['requestId'])
                 self.assertEqual(hashlib.sha256(native.read_bytes()).hexdigest(), use['receiptSha256'])
                 roles.add(use['role'])
-        self.assertTrue({'combat-reward','combat-before','combat-after','npc-selected','npc-greeting','npc-world-return'} <= roles)
+        self.assertTrue({'combat-reward','combat-before','combat-after','npc-selected','npc-greeting','npc-menu','npc-farewell','npc-world-return'} <= roles)
         self.assertEqual(summary, launcher.read(f.output / 'encounter-evidence.json'))
 
     def test_rejects_path_stamp_receipt_and_png_mismatches_and_expired_files(self):

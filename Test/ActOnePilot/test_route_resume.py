@@ -695,6 +695,15 @@ class GuardedPilotProtocolTests(unittest.TestCase):
             capture_output=True, text=True)
         self.assertEqual(actual.returncode, 0, actual.stderr)
 
+        self.write_heartbeat('idle', source['frameId'])
+        fields = dict(objective=request['objective'], waypoints=request['waypoints'], deadlineMs=10000,
+                      requireMeasuredGround=True)
+        deadline = self.clock.monotonic() + 5
+        with self.assertRaisesRegex(route_tool.RouteError, 'measured ground'):
+            self.pilot.execute('navigation', source, dict(fields, requireMeasuredGround=False), deadline, lambda _: None)
+        self.pilot.execute('navigation', source, fields, deadline, lambda _: None)
+        self.assertIs(read_json(self.root / 'request.json')['requireMeasuredGround'], True)
+
     def test_actual_engine_retains_native_navigation_handoff_cursor(self):
         engine = SCRIPT.parents[2] / 'BetterGenshinImpact/User/JsScript/ActOnePilot/engine.js'
         script = """

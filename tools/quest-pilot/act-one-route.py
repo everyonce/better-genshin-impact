@@ -313,6 +313,11 @@ class GuardedPilot:
         expected_fields = {'observe': set(), 'dialogue': set(), 'keyPress': {'key'},
                            'combat': {'objective', 'deadlineMs'},
                            'navigation': {'objective', 'waypoints', 'deadlineMs'}, 'questStep': {'step'}}
+        if mission == 'navigation' and fields.get('objective') == EXPLORATION_OBJECTIVE:
+            expected_fields['navigation'].add('requireMeasuredGround')
+            if fields.get('requireMeasuredGround', True) is not True:
+                raise RouteError('Exploration requires a measured ground scan.')
+            fields = dict(fields, requireMeasuredGround=True)
         if set(fields) != expected_fields[mission]:
             raise RouteError('Unexpected route-controller mission fields.')
         if mission == 'keyPress' and fields != {'key': 'VK_ESCAPE'}:

@@ -228,6 +228,7 @@ var ActOneMission = (function () {
         for (var w = 0; w < request.waypoints.length; w++) {
             waypointIndex = w;
             var target = request.waypoints[w];
+            var namedFinal = typeof request.talkTo === 'string' && w === request.waypoints.length - 1;
             while (true) {
                 api.checkStop();
                 if (api.now() - began >= request.deadlineMs) return stop('Navigation deadline reached');
@@ -323,9 +324,24 @@ var ActOneMission = (function () {
                     if(afterForward&&current&&current.map&&Math.hypot(current.map.x-afterForward.x,current.map.y-afterForward.y)>25) return stop('Map position jumped');
                     return stop('Waypoint farther than the allowed local segment');
                 }
+                // Only the original final waypoint can stop early at the requested, aligned F prompt.
+                var namedDistance = namedFinal ? Math.hypot(current.map.x-target.x,current.map.y-target.y) : Infinity;
+                var namedSelected = namedFinal && namedNpcPrompt(current, request.talkTo).selected;
+                if (namedFinal && (namedSelected || namedDistance <= 5)) {
+                    if (current.session !== request.session || !namedDialogueAccount(current, request.expectedUid) ||
+                        current.map.map !== target.map || current.hud.world !== true || current.hud.groundControls !== true ||
+                        current.hud.climbing || current.hud.unknownHud || current.hud.loading || current.hud.lowHealth ||
+                        current.hud.auto || current.hud.choice || current.hud.dialogueReady || current.hud.journal ||
+                        current.hud.bigMap || current.hud.tutorialStep || !validHealth(current.hud.health) ||
+                        current.hud.health.current/current.hud.health.max < .6)
+                        return stop('Named NPC approach requires fresh same-account safe ground');
+                    var approachStop = groundScanStopReason(current,api.now());
+                    if (approachStop) return stop(approachStop);
+                    if (namedSelected) { afterForward=null; stalled=0; break; }
+                }
                 if(current.hud.interact&&request.objective==='Enter the Knights of Favonius Headquarters') return stop('Interaction available');
-                if(guildObjective&&hasTargetF(current)&&hasTargetName(current,[request.objective==='Offer the Anemoculus to the Statue'?'Statue of The Seven':request.objective==='Speak to Lynn'?'Lynn':request.objective==='Talk to the informant'?'Vile':/^(?:Talk to Kaeya(?: at the meeting spot)?|Report to Kaeya)$/.test(request.objective)?'Kaeya':request.objective==="Go to the Adventurers' Guild and listen to their report"?'Cyrus':request.objective==='Talk to Wagner the blacksmith'?'Wagner':'Katheryne']))return stop('Town quest interaction available');
-                if(hasTargetF(current)&&['Talk to Amber','Talk to Kaeya','Talk to Lisa'].indexOf(request.objective)>=0&&hasTargetName(current,[request.objective.slice(8)])) return stop('Interaction available');
+                if(!namedFinal&&guildObjective&&hasTargetF(current)&&hasTargetName(current,[request.objective==='Offer the Anemoculus to the Statue'?'Statue of The Seven':request.objective==='Speak to Lynn'?'Lynn':request.objective==='Talk to the informant'?'Vile':/^(?:Talk to Kaeya(?: at the meeting spot)?|Report to Kaeya)$/.test(request.objective)?'Kaeya':request.objective==="Go to the Adventurers' Guild and listen to their report"?'Cyrus':request.objective==='Talk to Wagner the blacksmith'?'Wagner':'Katheryne']))return stop('Town quest interaction available');
+                if(!namedFinal&&hasTargetF(current)&&['Talk to Amber','Talk to Kaeya','Talk to Lisa'].indexOf(request.objective)>=0&&hasTargetName(current,[request.objective.slice(8)])) return stop('Interaction available');
                 if(hasTargetF(current)&&request.objective==='Enter the temple'&&hasTargetName(current,['Temple of the Falcon','Temple of the Wolf','Temple of the Lion'])) return stop('Interaction available');
                 if(current.hud.climbing) {
                     if(['Go to the Knights of Favonius Headquarters','Enter the Knights of Favonius Headquarters'].indexOf(request.objective)>=0) return stop('Unexpected climbing on headquarters approach');
@@ -361,7 +377,8 @@ var ActOneMission = (function () {
                 if (investigating && current.hud.interact) return stop('Interaction available');
                 var arrivalRadius=(statueHealingApproach(request,current)||request.objective==='Offer the Anemoculus to the Statue'||request.objective==='Talk to the informant'||request.objective==='Speak to Lynn'||request.objective==='Give the Chicken-Mushroom Skewer to Lynn')?0.5:guildObjective?2:request.objective==='Clear out the nearby hilichurl camp'?3:
                     ['Go to the Knights of Favonius Headquarters','Enter the Knights of Favonius Headquarters','Talk to Amber','Talk to Kaeya','Talk to Lisa','Enter the temple'].indexOf(request.objective)>=0?2:5;
-                if (!investigating && distance <= arrivalRadius) { afterForward = null; stalled = 0; break; }
+                if (namedFinal) arrivalRadius = Math.min(arrivalRadius, .75);
+                if ((!investigating || namedFinal) && distance <= arrivalRadius) { afterForward = null; stalled = 0; break; }
                 if (distance > 150) return stop('Waypoint farther than the allowed local segment');
                 if (afterForward) {
                     var moved = Math.hypot(current.map.x - afterForward.x, current.map.y - afterForward.y);
@@ -399,6 +416,9 @@ var ActOneMission = (function () {
                 var held = Math.floor(Math.min(request.objective==='Talk to the informant'&&distance<3?100:markerApproach || distance < 10 ? 250 : 800, request.deadlineMs - (api.now() - began)));
                 var travelHeld = travelHoldMs(request.objective, distance, arrivalRadius, request.deadlineMs - (api.now() - began));
                 if (travelHeld !== null) held = travelHeld;
+                // Slow the last few units, including quest routes that normally use fixed holds.
+                if (namedFinal && namedDistance <= 5)
+                    held = Math.min(held, Math.max(60, Math.floor((distance-arrivalRadius)/6*1000)));
                 if (held <= 0) return stop('Navigation deadline reached');
                 if(exploring&&typeof api.releaseClimb==='function'&&current.hud.groundControls&&!current.hud.climbing&&request.deadlineMs-(api.now()-began)<held+6500) return stop('Navigation stopped before movement to reserve incidental-climb recovery time');
                 if(lisaUnsafe(current)) return stop(lisaUnsafeReason(current));
@@ -439,6 +459,14 @@ var ActOneMission = (function () {
             return r.text.trim() === name && r.x >= 600 && r.x <= 1200 && r.y >= 820 && r.y < 900;
         }).length === 1;
     }
+    // Both navigation and interaction use the same single-frame, vertically aligned F/name pair.
+    function namedNpcPrompt(frame, name) {
+        var rows = frame.ocr || [];
+        var labels = rows.filter(function(r) { return r.text.trim() === name && r.x >= 1150 && r.x <= 1500 && r.y >= 450 && r.y <= 620; });
+        var prompts = rows.filter(function(r) { return r.text.trim() === 'F' && r.x >= 1080 && r.x <= 1170 && r.y >= 450 && r.y <= 620; });
+        return {labels:labels.length, prompts:prompts.length, selected:frame.hud.interact && labels.length === 1 && prompts.length === 1 &&
+            Math.abs(labels[0].y + labels[0].height / 2 - prompts[0].y - prompts[0].height / 2) < 25};
+    }
     // Match the account on the actual frame used for input, including after a scene transition.
     function namedDialogueAccount(frame, uid) {
         var matches = (frame.ocr || []).filter(function(row) {
@@ -454,17 +482,14 @@ var ActOneMission = (function () {
         if (!samePlayer(current)) return {status:'stopped', reason:'Named dialogue account changed'};
         if (current.hud.world) {
             for (var attempt = 0; ; attempt++) {
-                var h = current.hud, rows = current.ocr, hp = h.health;
-                var labels = rows.filter(function(r) { return r.text.trim() === request.talkTo && r.x >= 1150 && r.x <= 1500 && r.y >= 450 && r.y <= 620; });
-                var prompts = rows.filter(function(r) { return r.text.trim() === 'F' && r.x >= 1080 && r.x <= 1170 && r.y >= 450 && r.y <= 620; });
+                var h = current.hud, hp = h.health, prompt = namedNpcPrompt(current, request.talkTo);
                 if (!samePlayer(current) || !current.map || current.map.map !== 'Teyvat' || !h.world || !h.groundControls ||
                     h.auto || h.climbing || h.dialogueReady || h.choice || h.bigMap || h.journal || h.tutorialStep ||
-                    !validHealth(hp) || hp.current / hp.max < .6 || groundScanStopReason(current, api.now()) || labels.length !== 1)
+                    !validHealth(hp) || hp.current / hp.max < .6 || groundScanStopReason(current, api.now()) || prompt.labels !== 1)
                     return {status:'stopped', reason:'Named NPC is not selected on clear ground'};
-                if (h.interact && prompts.length === 1 &&
-                    Math.abs(labels[0].y + labels[0].height / 2 - prompts[0].y - prompts[0].height / 2) < 25) break;
+                if (prompt.selected) break;
                 // The label appeared one frame before F in recorded Amber frames 9051/9052.
-                if (prompts.length || attempt >= 2 || api.now() + 150 >= end)
+                if (prompt.prompts || attempt >= 2 || api.now() + 150 >= end)
                     return {status:'stopped', reason:'Named NPC interaction prompt is missing or unselected'};
                 api.checkStop(); await api.sleep(150); current = await observe();
             }

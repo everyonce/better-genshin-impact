@@ -274,7 +274,7 @@ function actOneRequestsGroundObservation(request,inventoryUiOnly,protecting,fram
     return !!request&&!inventoryUiOnly&&(request.mission==='observe'||
         request.mission==='questStep'&&request.step==='actTwoFaceRemainingEnemy'||
         request.mission==='dialogue'&&typeof request.talkTo==='string'||
-        request.mission==='navigation'&&request.objective==='Explore for Adventure Rank'&&request.requireMeasuredGround===true||
+        request.mission==='navigation'&&(typeof request.talkTo==='string'||request.objective==='Explore for Adventure Rank'&&request.requireMeasuredGround===true)||
         request.mission==='questStep'&&request.step==='actTwoFieldCombat'&&
             (protecting||request.entryScene==='world'&&Number.isInteger(request.expectedFrameId)&&frame===request.expectedFrameId+1));
 }

@@ -481,14 +481,14 @@ class GuardedPilot:
                     or not isinstance(fields.get('expectedUid'), str) or not re.fullmatch(r'[0-9]{9,10}', fields['expectedUid'])):
                 raise RouteError('Invalid direct field combat entry.')
             expected_fields['questStep'].update(('entryScene', 'expectedUid'))
-        if mission == 'dialogue' and 'talkTo' in fields:
-            expected_fields['dialogue'] = {'talkTo', 'expectedUid', 'deadlineMs'}
+        if mission in ('dialogue', 'navigation') and 'talkTo' in fields:
+            expected_fields[mission].update(('talkTo', 'expectedUid', 'deadlineMs'))
             if (not isinstance(fields['talkTo'], str) or fields['talkTo'] != fields['talkTo'].strip()
                     or re.fullmatch(r"[A-Za-z][A-Za-z '.-]{0,47}", fields['talkTo']) is None
                     or not isinstance(fields.get('expectedUid'), str)
                     or re.fullmatch(r'[0-9]{9,10}', fields['expectedUid']) is None
-                    or type(fields.get('deadlineMs')) is not int or not 1000 <= fields['deadlineMs'] <= 60000):
-                raise RouteError('Invalid named NPC conversation request.')
+                    or mission == 'dialogue' and (type(fields.get('deadlineMs')) is not int or not 1000 <= fields['deadlineMs'] <= 60000)):
+                raise RouteError('Invalid named NPC request.')
         if mission == 'navigation' and fields.get('objective') == EXPLORATION_OBJECTIVE:
             expected_fields['navigation'].add('requireMeasuredGround')
             if fields.get('requireMeasuredGround', True) is not True:
@@ -1390,6 +1390,9 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
             start = state['nextWaypointIndex']
             suffix = points[state['nextWaypointIndex']:]
             fields = dict(objective=value, waypoints=suffix, deadlineMs=min(45000, remaining - reserve))
+            if talk_to:
+                # Every resumed suffix still ends at the original named waypoint.
+                fields.update(talkTo=talk_to, expectedUid=expected_uid)
             if value == EXPLORATION_OBJECTIVE:
                 fields['requireMeasuredGround'] = True
             state['navigationRequests'] += 1

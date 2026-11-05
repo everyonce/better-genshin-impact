@@ -18,6 +18,7 @@ test('field combat uses a full-width scan on direct entry and final protection',
   assert.equal(scan(direct,true,false,8),false);
   assert.equal(scan(combat, true, true), false);
   assert.equal(scan({mission:'questStep', step:'actTwoNativeCombat'}, false, true), false);
+  assert.equal(scan({mission:'navigation',objective:'Talk to Amber',talkTo:'Amber'},false,false),true);
   assert.equal(scan({mission:'observe'}, false, false), true);
   assert.equal(scan({mission:'navigation', objective:'Explore for Adventure Rank', requireMeasuredGround:true}, false, false), true);
   assert.equal(scan({mission:'navigation', objective:'Explore for Adventure Rank'}, false, false), false);

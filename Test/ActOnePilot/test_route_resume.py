@@ -394,6 +394,8 @@ class SupervisedRouteControllerTests(unittest.TestCase):
         self.assertEqual(report['conversation']['npc'], 'Amber')
         self.assertEqual([q.get('step') or q['mission'] for q in pilot.calls if q['mission'] != 'observe'],
             ['navigation', 'worldInventoryClose', 'dialogue', 'worldInventory'])
+        navigation = next(q for q in pilot.calls if q['mission'] == 'navigation')
+        self.assertEqual((navigation['talkTo'], navigation['expectedUid']), ('Amber', '693306810'))
         conversation = next(q for q in pilot.calls if q['mission'] == 'dialogue')
         self.assertEqual((conversation['talkTo'], conversation['expectedUid']), ('Amber', '693306810'))
         self.assertLessEqual(conversation['deadlineMs'], 60000)
@@ -478,6 +480,16 @@ class SupervisedRouteControllerTests(unittest.TestCase):
         self.assertEqual(navigation[-1]['waypoints'], self.points[1:])
         self.assertEqual(report['records'][1]['receipt']['status'], 'failed')
         self.assertLess(self.clock.value - 100, 90)
+
+    def test_named_deadline_suffix_keeps_the_same_original_final_point_and_contact(self):
+        self.route['talkTo'] = 'Katheryne'
+        pilot = ReplayPilot(self.clock, [dict(mission='navigation',status='failed',seconds=10,
+            result=dict(status='stopped',reason='Navigation deadline reached',nextWaypointIndex=1)),
+            dict(mission='navigation',status='failed',result=dict(status='stopped',reason='Map coordinates stalled',nextWaypointIndex=0))])
+        self.run_controller(pilot)
+        plans = [r for r in pilot.calls if r['mission'] == 'navigation']
+        self.assertEqual([r['waypoints'] for r in plans], [self.points, self.points[1:]])
+        self.assertEqual([(p['talkTo'],p['expectedUid']) for p in plans], [('Katheryne','693306810')]*2)
 
     def test_zero_progress_deadline_never_retries(self):
         pilot = ReplayPilot(self.clock, [dict(mission='navigation', status='failed',

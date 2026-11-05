@@ -72,11 +72,12 @@ var ActOnePilot = (function () {
                 return 'Invalid direct field combat entry';
             allowed.push('entryScene', 'expectedUid');
         }
-        if (r.mission === 'dialogue' && r.talkTo !== undefined) {
-            allowed.push('talkTo', 'expectedUid', 'deadlineMs');
+        if ((r.mission === 'dialogue' || r.mission === 'navigation') && r.talkTo !== undefined) {
+            allowed.push('talkTo', 'expectedUid');
+            if (r.mission === 'dialogue') allowed.push('deadlineMs');
             if (typeof r.talkTo !== 'string' || !/^[A-Za-z][A-Za-z '.-]{0,47}$/.test(r.talkTo) || r.talkTo !== r.talkTo.trim() ||
                 typeof r.expectedUid !== 'string' || !/^[0-9]{9,10}$/.test(r.expectedUid) ||
-                !integer(r.deadlineMs, 1000, 60000)) return 'Invalid named conversation';
+                (r.mission === 'dialogue' && !integer(r.deadlineMs, 1000, 60000))) return 'Invalid named NPC request';
         }
         if (r.mission === 'combat') {
             allowed.push('objective','deadlineMs');

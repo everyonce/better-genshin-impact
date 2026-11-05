@@ -217,3 +217,57 @@ test('a hostile during inventory exit reports a protected zero-waypoint interrup
     assert.equal(context.actOneExplorationEntryThreat(request,o).reason,'Ground enemy scan did not establish clear ground');
     assert.equal(context.actOneExplorationEntryThreat({...request,requireMeasuredGround:false},o),null);
 });
+
+const katheryne = {map:'Teyvat',x:-913.51,y:2232.67};
+const shortOfBooth = {map:'Teyvat',x:-913.171875,y:2234.4805}; // Last measured position in city-katheryne-01.
+async function boothApproach({named=true,waypoints=[katheryne],start=shortOfBooth,change=()=>{}}={}) {
+    let now=8000, frameId=2;
+    const moves=[];
+    const plan={...request,waypoints,...(named?{talkTo:'Katheryne',expectedUid:'693306810'}:{})};
+    function readWorld(point) {
+        const o=frame(frameId++,now,point.y,'clear');
+        o.map={...point,cameraAngle:mission.bearing(point,katheryne)};
+        o.ocr=[{text:'UID: 693306810',x:1680,y:1050}];
+        return o;
+    }
+    const first=readWorld(start);change(first);
+    const api={now:()=>now,checkStop(){},sleep:async ms=>{now+=ms;},
+        runActTwoNavigationWithPause:(_inventory,_observe,walk)=>walk(first),
+        forward:async ms=>{moves.push(ms);now+=ms;},
+        rotate:()=>assert.fail('unexpected turn'),keyPress:()=>assert.fail('navigation attempted interaction')};
+    const result=await mission.runNavigation(plan,{hud:{}},api,async()=>{
+        assert.ok(moves.length===1,'extra movement after the close approach');
+        return readWorld({...katheryne,y:katheryne.y+.54});
+    });
+    return {result,moves};
+}
+test('the 1.84-unit Katheryne shortfall still advances once, with a bounded final hold',async()=>{
+    const {result,moves}=await boothApproach();
+    assert.equal(result.status,'arrived');assert.equal(result.nextWaypointIndex,1);
+    assert.equal(moves.length,1);assert.ok(moves[0]>=175&&moves[0]<=190);
+    for(const setup of [{start:{...katheryne,y:katheryne.y+.74}},{named:false},{waypoints:[katheryne,shortOfBooth]}]){
+        const arrival=await boothApproach(setup);
+        assert.equal(arrival.result.status,'arrived');assert.deepEqual(arrival.moves,[]);
+    }
+});
+test('only the exact selected name ends the final approach early; navigation never presses F',async()=>{
+    function prompt(o,name,dy=0){
+        o.hud.interact=true;
+        o.ocr.push({text:'F',x:1110,y:505,height:30},{text:name,x:1270,y:505+dy,height:30});
+    }
+    const aligned=await boothApproach({change:o=>prompt(o,'Katheryne')});
+    assert.equal(aligned.result.status,'arrived');assert.deepEqual(aligned.moves,[]);
+    for(const change of [o=>prompt(o,'Cyrus'),o=>prompt(o,'Katheryne',51)]){
+        const {moves}=await boothApproach({change});assert.equal(moves.length,1);
+    }
+    for(const change of [o=>{prompt(o,'Katheryne');o.ocr[0].text='UID: 123456789';},
+        o=>{prompt(o,'Katheryne');o.hud.enemyBarObservation.state='threat';}]){
+        const {result,moves}=await boothApproach({change});assert.equal(result.status,'stopped');assert.deepEqual(moves,[]);
+    }
+});
+test('named navigation requires an exact NPC and UID, and ordinary navigation keeps its existing schema',()=>{
+    const validate=r=>engine.validate(r,request.session,request.expectedFrameId,{},request.createdAt);
+    const named={...request,talkTo:'Katheryne',expectedUid:'693306810'};
+    assert.equal(validate(named),null);assert.equal(validate(request),null);
+    for(const change of [{expectedUid:null},{talkTo:' '},{mission:'observe'}])assert.ok(validate({...named,...change}));
+});

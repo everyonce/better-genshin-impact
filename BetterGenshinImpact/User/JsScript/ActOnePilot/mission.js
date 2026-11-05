@@ -43,7 +43,7 @@ var ActOneMission = (function () {
         if(measuredGroundAt!==undefined) {
             var gh=recentGround&&recentGround.hud,gp=gh&&gh.health,scan=h.enemyBarObservation;
             return !!(localGround&&Number.isFinite(measuredGroundAt)&&
-                gh.groundControls===true&&gh.climbing===false&&gp&&gp.current===4015&&gp.max===4015&&
+                gh&&gh.groundControls===true&&gh.climbing===false&&gp&&gp.current===4015&&gp.max===4015&&
                 Number.isInteger(recentGround.frameId)&&current.frameId>recentGround.frameId&&
                 groundScanStopReason(recentGround,measuredGroundAt)===null&&
                 h.climbing===true&&h.groundControls===false&&freshGroundScanIdentity(current,now)&&

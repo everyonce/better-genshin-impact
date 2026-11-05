@@ -272,7 +272,7 @@ function actOneEnemyBarSize(w,h) { return w>=2 && w<=300 && h>=3 && h<=12 && w/h
 // Keep field combat's attack detector until the final protector captures the pre-pause world.
 function actOneRequestsGroundObservation(request,inventoryUiOnly,protecting,frame) {
     return !!request&&!inventoryUiOnly&&(request.mission==='observe'||
-        request.mission==='questStep'&&(request.step==='actTwoFaceRemainingEnemy'||request.step==='namedWaypointRelook')||
+        request.mission==='questStep'&&(request.step==='actTwoFaceRemainingEnemy'||request.step==='actTwoFaceFieldEnemy'||request.step==='namedWaypointRelook')||
         request.mission==='dialogue'&&typeof request.talkTo==='string'||
         request.mission==='navigation'&&(typeof request.talkTo==='string'||request.objective==='Explore for Adventure Rank'&&request.requireMeasuredGround===true)||
         request.mission==='questStep'&&request.step==='actTwoFieldCombat'&&
@@ -296,8 +296,8 @@ function actOneWarningArrow(candidate,shapes){
        Math.abs(ix-28)>3||Math.abs(iy-24)>3||Math.abs(oy-iy)>7||side*(ox-ix)<5||side*(ox-ix)>14)return null;
     return {kind:'single-hostile-direction-arrow',side:side>0?'right':'left',x:c.x,y:c.y};
 }
-// The reward and the directional prompt must belong to the same recent field encounter.
-function actOneCombatSearchSide(o,request,receipt,before,reward,now){
+// Both camera searches require a direction shape from one current native capture.
+function actOneFieldArrowSide(o,request,now){
     var h=o&&o.hud,s=h&&h.enemyBarObservation,a=h&&h.hostileDirectionArrow,stamp=h&&h.captureStamp,p=o&&o.map;
     if(!o||!h||o.fastSample||o.mapPositionInherited||o.session!==request.session||!p||p.map!=='Teyvat'||!Number.isFinite(p.x)||!Number.isFinite(p.y)||h.swimming||
        !actTwoOriginalAccount(o.ocr)||h.world!==true||h.groundControls!==true||!h.health||
@@ -314,6 +314,12 @@ function actOneCombatSearchSide(o,request,receipt,before,reward,now){
     var raw=h.enemyBarDiagnostic&&h.enemyBarDiagnostic.fieldCandidates;
     if(!Array.isArray(raw)||raw.length!==1||!raw[0]||!Number.isFinite(a.x)||!Number.isFinite(a.y)||
        a.x!==raw[0].x||a.y!==raw[0].y||a.side!==(a.x>960?'right':'left'))return null;
+    return a.side;
+}
+// A post-defeat turn separately requires a recent, measured XP result.
+function actOneCombatSearchSide(o,request,receipt,before,reward,now){
+    var side=actOneFieldArrowSide(o,request,now);
+    if(!side)return null;
     var details=receipt&&receipt.details,r=details&&details.result,proof=r&&r.pauseProof;
     var ch=r&&Array.isArray(r.chunks)&&r.chunks[0];
     if(!ch||receipt.id!==request.combatRequestId||receipt.session!==o.session||receipt.mission!=='questStep'||
@@ -332,7 +338,7 @@ function actOneCombatSearchSide(o,request,receipt,before,reward,now){
        capture.source!=='game-capture-start'||!(before.timestamp<=actions[0].startedAt&&actions[0].startedAt<actions[0].finishedAt&&
        actions[0].finishedAt<=capture.capturedAt&&capture.capturedAt<=reward.timestamp&&reward.timestamp<=receipt.timestamp))return null;
     function rows(frame){return frame.ocr.filter(function(v){return v.x>=0&&v.x<650&&v.y>300&&v.y<850&&/character exp/i.test(v.text);});}
-    return !rows(before).length&&rows(reward).some(function(v){return /^(?:Obtained\s+)?Character EXP\s*(?:[×x+·]\s*)?[1-9][0-9]{0,4}$/i.test(v.text.trim());})?a.side:null;
+    return !rows(before).length&&rows(reward).some(function(v){return /^(?:Obtained\s+)?Character EXP\s*(?:[×x+·]\s*)?[1-9][0-9]{0,4}$/i.test(v.text.trim());})?side:null;
 }
 // An enemy arriving during the inventory transition is a route interruption at waypoint zero.
 function actOneExplorationEntryThreat(request,current) {
@@ -4290,6 +4296,39 @@ function createActOneAdapter(sessionId,options) {
                 result.fieldFrameId=current.frameId;result.fieldHealth=current.hud.health;result.reason=(finish?'Kaeya':'Amber')+' selected once; inspect before attacks';
             }catch(e){error=String(e&&e.message||e);result.reason=error;}finally{release();}
             return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error);
+        },
+        faceFieldEnemy: async function(initial,observe){
+            // A single unresolved first-contact turn is shared across adapters for this pilot session.
+            var used='reports/'+request.session+'-field-entry-camera.json';
+            if(request.expectedUid!=='693306810'||file.isExists(used)||initial.frameId!==request.expectedFrameId+1)
+                return {status:'completed',turnSent:false};
+            var source=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(request.expectedFrameId).padStart(4,'0')+'.json'));
+            var now=Date.now(),side=actOneFieldArrowSide(initial,request,now);
+            function matchingGround(o){
+                return o.hud&&!o.hud.interact&&!o.hud.aerialBossVisible&&Number.isFinite(o.map&&o.map.cameraAngle);
+            }
+            if(!side||source.frameId!==request.expectedFrameId||actOneFieldArrowSide(source,request,source.timestamp)!==side||
+               !matchingGround(source)||!matchingGround(initial)||now-source.timestamp>3500||
+               source.timestamp>=initial.hud.captureStamp.capturedAt||source.hud.health.current!==initial.hud.health.current||
+               source.hud.health.max!==initial.hud.health.max||Math.hypot(source.map.x-initial.map.x,source.map.y-initial.map.y)>2)
+                return {status:'completed',turnSent:false};
+            checkStop();ready();
+            if(!file.writeTextSync(used,JSON.stringify({id:request.id,frameId:initial.frameId,side:side}))||!file.isExists(used))
+                throw new Error('Could not retain the first-contact camera turn');
+            var dx=side==='right'?200:-200,started=Date.now();
+            events.push({type:'fieldEntryDirectionTurn',frameId:initial.frameId,dx:dx,startedAt:started});
+            moveMouseBy(dx,0);await sleep(250);
+            var o=await observe(),h=o&&o.hud,p=o&&o.map,stamp=h&&h.captureStamp;
+            var angle=p&&Math.abs((p.cameraAngle-initial.map.cameraAngle+540)%360-180);
+            var changed=!!(o&&o.session===request.session&&o.frameId>initial.frameId&&!o.fastSample&&!o.mapPositionInherited&&
+                actTwoOriginalAccount(o.ocr)&&h&&h.world===true&&h.groundControls===true&&!h.climbing&&!h.swimming&&!h.loading&&
+                !h.unknownHud&&!h.lowHealth&&!h.bigMap&&!h.journal&&!h.choice&&!h.dialogueReady&&!h.tutorialStep&&!h.auto&&
+                h.health&&h.health.max===initial.hud.health.max&&h.health.current>=h.health.max*.85&&h.health.current<=h.health.max&&
+                p&&p.map==='Teyvat'&&Number.isFinite(angle)&&angle>=4&&angle<=90&&Math.hypot(p.x-initial.map.x,p.y-initial.map.y)<=3&&
+                stamp&&stamp.session===request.session&&stamp.frameId===o.frameId&&stamp.source==='game-capture-start'&&
+                started<stamp.capturedAt&&stamp.capturedAt<=o.timestamp&&o.timestamp<=Date.now()&&Date.now()-stamp.capturedAt<=1000);
+            return {status:'completed',turnSent:true,viewChanged:changed,sourceFrameId:initial.frameId,frameId:o.frameId,
+                capturedAt:stamp&&stamp.capturedAt,side:side,dx:dx};
         },
         faceRemainingEnemy: async function(initial,observe){
             var id=request.combatRequestId,rf=request.rewardFrameId;

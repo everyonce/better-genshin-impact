@@ -963,6 +963,47 @@ class SupervisedRouteControllerTests(unittest.TestCase):
         self.assertEqual(route_tool.run_controller.__kwdefaults__['deadline_ms'], 90000)
         self.assertEqual(route_tool.run_route.__kwdefaults__['deadline_ms'], 90000)
 
+    def test_initial_arrow_is_camera_only_and_requires_new_measured_bars(self):
+        self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
+        for enabled, changed, after_bars in ((False, True, False), (True, False, False),
+                                              (True, True, False), (True, True, True)):
+            self.progress = Path(self.temp.name) / ('entry-%s-%s-%s.json' % (enabled,changed,after_bars))
+            arrow = controller_scene(objective='')
+            marker = dict(kind='single-hostile-direction-arrow', side='right', x=1451, y=428.5)
+            arrow['hud'].update(hostileDirectionArrow=marker,
+                                enemyBarDiagnostic=dict(fieldCandidates=[dict(x=1451, y=428.5)]))
+            post = controller_scene(objective='', enemies=True) if after_bars else arrow
+            turn = dict(mission='questStep', source=post, frames=2,
+                        result=dict(turnSent=True,viewChanged=changed,side='right',sourceFrameId=3,frameId=4))
+            steps = [turn] if enabled else []
+            if after_bars:
+                # Stop once the real controller requests combat from its later independent sample.
+                steps.append(dict(mission='questStep', status='failed'))
+            pilot = ReplayPilot(self.clock, steps, source=arrow)
+            execute = pilot.execute
+            def measure(mission, source, fields, deadline, save_pending):
+                result = execute(mission, source, fields, deadline, save_pending)
+                if fields.get('step') == 'actTwoFaceFieldEnemy':
+                    result['receipt']['details']['result']['capturedAt'] = self.clock.milliseconds()
+                if mission == 'observe' and pilot.source['hud'].get('hostileDirectionArrow'):
+                    pilot.source['hud']['enemyBarObservation'].update(state='ambiguous', candidateCount=1,
+                        acceptedCount=0, reason='unanchored_bar_shaped_components')
+                    result['observation'] = pilot.current()
+                return result
+            pilot.execute = measure
+            result = self.run_controller(pilot, allow_field_combat=enabled)
+            calls = [r.get('step', r['mission']) for r in pilot.calls]
+            self.assertEqual(calls.count('actTwoFaceFieldEnemy'), int(enabled))
+            self.assertNotIn('actTwoFaceRemainingEnemy',calls)
+            self.assertNotIn('navigation',calls)
+            self.assertFalse(result.get('fieldCombatRewards'))
+            if enabled:
+                self.assertEqual(calls[:2], ['observe','actTwoFaceFieldEnemy'])
+                self.assertEqual(calls[2:], ['observe','worldInventory'] if after_bars else ['observe'] if changed else [])
+                self.assertEqual(result['fieldEntryCamera']['viewChanged'], changed)
+            else:
+                self.assertEqual(set(calls), {'observe'})
+
     def test_post_defeat_arrow_requests_only_one_camera_turn_and_rechecks_ground(self):
         self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
         enemy, inv = controller_scene(objective='', enemies=True), controller_scene('inventory')

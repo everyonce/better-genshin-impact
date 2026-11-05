@@ -486,6 +486,10 @@ class GuardedPilot:
             if type(fields['deadlineMs']) is not int or not 6000 <= fields['deadlineMs'] <= 35000:
                 raise RouteError('Invalid field combat deadline.')
             expected_fields['questStep'].add('deadlineMs')
+        if mission == 'questStep' and fields.get('step') == 'actTwoFaceFieldEnemy':
+            if fields.get('expectedUid') != '693306810' or not field_entry_arrow(source, self.session, fields['expectedUid'], int(time.time()*1000)):
+                raise RouteError('First-contact search requires a fresh measured hostile arrow on healthy ground.')
+            expected_fields['questStep'].add('expectedUid')
         if mission == 'questStep' and fields.get('step') == 'actTwoFaceRemainingEnemy':
             if (re.fullmatch(r'mission-[0-9a-f]{32}', str(fields.get('combatRequestId'))) is None
                     or type(fields.get('rewardFrameId')) is not int
@@ -542,7 +546,7 @@ class GuardedPilot:
                           'actTwoStarfellInventoryTeleport'):
                 if not self.inventory_ready(source):
                     raise RouteError('A recognized inventory is required for this native step.')
-            elif step == 'actTwoFaceRemainingEnemy':
+            elif step in ('actTwoFaceFieldEnemy', 'actTwoFaceRemainingEnemy'):
                 if field_direction_side(source) is None:
                     raise RouteError('A measured single hostile direction arrow is required.')
             elif relook:
@@ -753,6 +757,20 @@ def field_direction_side(source):
             or arrow['side'] != ('right' if x > 960 else 'left')):
         return None
     return arrow['side']
+
+
+def field_entry_arrow(source, session, expected_uid, now_ms):
+    """One field marker can direct a camera turn while only measured bars admit combat."""
+    if (expected_uid != '693306810' or not positive_parking_field(source, session, expected_uid)
+            or not field_direction_side(source) or not unanchored_ground_scan(source, expected_uid, now_ms)):
+        return False
+    hud = source['hud']
+    hp = hud['health']
+    angle = source['map'].get('cameraAngle')
+    return (type(angle) in (float, int) and math.isfinite(angle)
+            and not any(hud.get(k) for k in ('interact', 'aerialBossVisible', 'lowHealth'))
+            and hp['current'] >= .85 * hp['max'] and not any(hud['objectives'])
+            and hud['enemyBarObservation']['candidateCount'] == 1)
 
 
 def field_search_reward(source, expected_uid, now_ms, state):
@@ -1258,6 +1276,15 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
             source = pilot.current()
             now_ms = clock_ms()
             require_fresh_source(source, pilot.session, now_ms)
+            entry_camera = state.get('fieldEntryCamera')
+            if entry_camera and 'verifiedFrameId' in entry_camera and 'independentFrameId' not in entry_camera:
+                stamp = source['hud'].get('captureStamp') or {}
+                if (source['frameId'] <= entry_camera['verifiedFrameId'] or stamp.get('frameId') != source['frameId']
+                        or stamp.get('session') != pilot.session or stamp.get('source') != 'game-capture-start'
+                        or type(stamp.get('capturedAt')) is not int or stamp['capturedAt'] <= entry_camera['capturedAt']):
+                    state.update(status='waiting', reason='Independent observation after field arrow turn is unavailable')
+                    break
+                entry_camera['independentFrameId'] = source['frameId']
             if resume_menu:
                 finish_arrival(menu_only=True)
                 break
@@ -1309,7 +1336,14 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
                 and state['records'][-2]['request'].get('step') == 'worldInventoryClose'))
             search_allowed = allow_field_combat and objective == EXPLORATION_OBJECTIVE
             reward = field_search_reward(source, expected_uid, now_ms, state) if search_allowed and phase == 'wait' else None
-            if (not reward and objective == EXPLORATION_OBJECTIVE and new_world and 'groundReacquisition' not in state
+            def can_face_first_enemy():
+                return (search_allowed and phase == 'wait' and inventory_navigation is None
+                        and not state.get('fieldCombatRewards') and 'fieldEntryCamera' not in state
+                        and field_entry_arrow(source, pilot.session, expected_uid, now_ms)
+                        and (not start_near or 'startNearVerified' in state or
+                             math.hypot(source['map']['x']-start_near['x'], source['map']['y']-start_near['y']) <= start_near['radius']))
+
+            if (not reward and not can_face_first_enemy() and objective == EXPLORATION_OBJECTIVE and new_world and 'groundReacquisition' not in state
                     and unanchored_ground_scan(source, expected_uid, now_ms)):
                 began = monotonic()
                 scan_deadline = min(deadline, began + 2.0)
@@ -1341,7 +1375,7 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
                         break
                     if search_allowed and phase == 'wait':
                         reward = field_search_reward(source, expected_uid, now_ms, state)
-                        if reward:
+                        if reward or can_face_first_enemy():
                             break
                     if not unanchored_ground_scan(source, expected_uid, now_ms):
                         phase, value = 'wait', 'Stationary reacquisition found threat or other unsafe evidence'
@@ -1363,6 +1397,26 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
                 if not source_account_matches(source, expected_uid) or not pilot.inventory_ready(source):
                     raise RouteError('Owned exploration pause is not verified in the fresh source.')
                 phase, value = 'navigation', inventory_navigation
+            if can_face_first_enemy() and deadline - monotonic() >= 3:
+                search = dict(sourceFrameId=source['frameId'], side=field_direction_side(source), turnSent=None)
+                state['fieldEntryCamera'] = search
+                save()
+                turn = dispatch('questStep', source, dict(step='actTwoFaceFieldEnemy', expectedUid=expected_uid))
+                post = pilot.current()
+                require_fresh_source(post, pilot.session, clock_ms())
+                if isinstance(turn, dict):
+                    search.update(turnSent=turn.get('turnSent'), viewChanged=turn.get('viewChanged'))
+                if (search['turnSent'] is not True or search.get('viewChanged') is not True or turn.get('side') != search['side']
+                        or type(turn.get('sourceFrameId')) is not int or type(turn.get('frameId')) is not int
+                        or not source['frameId'] < turn['sourceFrameId'] < turn['frameId'] <= post['frameId']
+                        or type(turn.get('capturedAt')) is not int
+                        or not source['timestamp'] < turn['capturedAt'] <= post['timestamp']
+                        or not positive_parking_field(post, pilot.session, expected_uid)):
+                    state.update(status='waiting', reason='Field arrow turn did not confirm a new measured view')
+                    break
+                search.update(verifiedFrameId=post['frameId'], capturedAt=turn['capturedAt'])
+                save()
+                continue  # The next ordinary observation must independently qualify combat or navigation.
             if phase == 'wait' and reward and deadline - monotonic() >= 3:
                 search = dict(combatRequestId=reward['requestId'], rewardFrameId=reward['rewardFrameId'],
                               frameId=source['frameId'], side=field_direction_side(source), turnSent=None)

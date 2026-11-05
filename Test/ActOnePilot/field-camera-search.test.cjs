@@ -46,22 +46,24 @@ test('single warning-ring chevron and separate diamond select only the indicated
     assert.equal(ctx.actOneWarningArrow({...cases[1].c,x:1250},cases[1].shapes),null);
 });
 
-function harness(left=false) {
-    const now=10000, files={}, moves=[], captures=[];
+function harness(left=false,entry=false) {
+    let now=10000;
+    const files={}, moves=[], captures=[];
     const ctx=vm.createContext({
         Date: {now:()=>now},
         genshin:{isRemoteDesktopSession:true, windowsSessionId:7,isGameForeground:true},
         file:{isExists:p=>Object.hasOwn(files,p),readTextSync:p=>files[p]??'',writeTextSync:(p,v)=>{files[p]=v;return true;}},
-        moveMouseBy:(x,y)=>moves.push([x,y]), sleep:async ms=>{assert.ok(ms>=60);},
+        moveMouseBy:(x,y)=>moves.push([x,y]), sleep:async ms=>{assert.ok(ms>=60);now+=ms;},
     });
     vm.runInContext(script,ctx);
     const request={mission:'questStep',step:'actTwoFaceRemainingEnemy',session,id:'new-request',
         expectedFrameId:33,combatRequestId:id,rewardFrameId:20,createdAt:9700};
+    if(entry){request.step='actTwoFaceFieldEnemy';request.expectedUid='693306810';delete request.rewardFrameId;delete request.combatRequestId;}
     const frame=(n,sample) => {
         sample=left?mirror(sample):sample;
         const timestamp=n===33?9500:9850;
         const stamp={frameId:n,session,capturedAt:timestamp-300};
-        return {session,frameId:n,timestamp,map:{map:'Teyvat',x:12,y:40},ocr:[uid],
+        return {session,frameId:n,timestamp,map:{map:'Teyvat',x:12,y:40,cameraAngle:223.5},ocr:[uid],
             hud:{world:true,groundControls:true,health:{current:3888,max:4015},objectives:[],enemyBars:[],
                 captureStamp:{...stamp,source:'game-capture-start'},
                 enemyBarObservation:{...stamp,version:1,kind:'normal-ground-enemy-observation-v1',
@@ -69,7 +71,8 @@ function harness(left=false) {
                 enemyBarDiagnostic:{fieldCandidates:[sample.c]},
                 hostileDirectionArrow:ctx.actOneWarningArrow(sample.c,sample.shapes)}};
     };
-    const source=frame(33,cases[1]), fresh=frame(34,cases[2]);
+    const source=frame(33,entry?cases[3]:cases[1]), fresh=frame(34,entry?cases[3]:cases[2]);
+    const post=frame(35,cases[3]);post.map.cameraAngle=left?204:243;
     const before={frameId:18,session,timestamp:1000,ocr:[uid],hud:{world:true,enemyBars:[{x:880}]}};
     const award={frameId:20,session,timestamp:5200,ocr:[uid,{text:'Character EXP  10',x:160,y:485}],
         hud:{world:true,captureStamp:{source:'game-capture-start',capturedAt:4800,frameId:20,session}}};
@@ -79,14 +82,17 @@ function harness(left=false) {
             chunks:[{actionId:id+':rotation:0',nativeReturned:true,beforeFrameId:18,afterFrameId:19}],
             pauseProof:{verified:true,kind:'inventory',session,sourceFrameId:25,pauseFrameId:27}}}};
     async function run() {
-        for(const o of [source,before,award])
+        for(const o of (entry?[source]:[source,before,award]))
             files['observations/'+session+'/frame-'+String(o.frameId).padStart(4,'0')+'.json']=JSON.stringify(o);
-        files['receipts/'+session+'/'+id+'.json']=JSON.stringify(receipt);
+        if(!entry)files['receipts/'+session+'/'+id+'.json']=JSON.stringify(receipt);
         const api=ctx.createActOneAdapter(7);
         api.beginMission(request);
+        if(entry)return api.faceFieldEnemy(fresh,async()=>{
+            captures.push(35);post.timestamp=now;post.hud.captureStamp.capturedAt=now-15;return post;
+        });
         return api.faceRemainingEnemy(fresh,async()=>{captures.push(35);return {frameId:35};});
     }
-    return {moves,captures,source,fresh,before,award,receipt,run};
+    return {moves,captures,source,fresh,post,before,award,receipt,request,run};
 }
 
 test('two fresh matching observations and an earned reward admit one camera-only turn, including after adapter refresh', async()=>{
@@ -112,5 +118,33 @@ test('stale or mismatched observations and unconfirmed awards grant zero input',
         const h=harness();change(h);
         assert.equal((await h.run()).turnSent,false,String(change));
         assert.deepEqual(h.moves,[]);assert.deepEqual(h.captures,[]);
+    }
+});
+
+test('first contact turns once from two sunlit field arrows without a reward; new view is required',async()=>{
+    for(const left of [false,true]){
+        const h=harness(left,true),turn=await h.run();
+        assert.equal(turn.turnSent,true);assert.equal(turn.viewChanged,true);assert.equal(turn.sourceFrameId,34);
+        assert.equal(turn.frameId,35);assert.deepEqual(h.moves,[[left?-200:200,0]]);assert.deepEqual(h.captures,[35]);
+        h.request.id='another-request';
+        assert.equal((await h.run()).turnSent,false);assert.equal(h.moves.length,1);
+    }
+    for(const change of [h=>{h.post.map.cameraAngle=223.5;},h=>{h.post.hud.climbing=true;},
+            h=>{h.post.hud.captureStamp.frameId=34;},h=>{h.post.map.x+=10;},h=>{h.post.ocr=[];}]){
+        const h=harness(false,true);change(h);const turn=await h.run();
+        assert.equal(turn.turnSent,true);assert.equal(turn.viewChanged,false);assert.equal(h.moves.length,1);
+    }
+});
+
+test('first-contact arrow cannot authorize a turn on ambiguous, unhealthy, foreign or stale scenes',async()=>{
+    for(const change of [
+        h=>{h.source.hud.hostileDirectionArrow.side='left';},h=>{h.fresh.hud.interact=true;},
+        h=>{h.source.hud.aerialBossVisible=true;},h=>{h.fresh.hud.health.current--;},h=>{h.source.ocr=[];},
+        h=>{h.fresh.hud.groundControls=false;},h=>{h.fresh.hud.enemyBars=[{}];},h=>{h.fresh.session='foreign';},
+        h=>{h.source.timestamp=8000;},h=>{h.source.map.x+=12;},h=>{h.fresh.hud.enemyBarObservation.candidateCount=2;},
+        h=>{h.fresh.hud.health.current=800;},h=>{h.request.expectedUid='123456789';},h=>{h.fresh.mapPositionInherited=true;}
+    ]){
+        const h=harness(false,true);change(h);
+        assert.equal((await h.run()).turnSent,false,String(change));assert.deepEqual(h.moves,[]);
     }
 });

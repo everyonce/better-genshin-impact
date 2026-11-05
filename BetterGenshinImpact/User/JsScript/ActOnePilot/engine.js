@@ -56,6 +56,10 @@ var ActOnePilot = (function () {
                 if (!integer(r.lookAmount,16,250)) return 'Invalid lookAmount';
             }
         }
+        if(r.mission==='questStep'&&r.step==='actTwoFaceFieldEnemy'){
+            if(r.expectedUid!=='693306810')return 'Invalid first-contact field account';
+            allowed.push('expectedUid');
+        }
         if(r.mission==='questStep'&&r.step==='actTwoFaceRemainingEnemy'){
             if(!/^mission-[0-9a-f]{32}$/.test(r.combatRequestId)||!integer(r.rewardFrameId,1,r.expectedFrameId-1))return 'Invalid prior combat reward';
             allowed.push('combatRequestId','rewardFrameId');

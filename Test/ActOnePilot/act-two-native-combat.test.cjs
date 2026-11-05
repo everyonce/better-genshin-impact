@@ -14,6 +14,19 @@ test('menu transition can settle, but low health and airborne world cannot prolo
  assert.equal(native.encounter(o,1000,'test',()=>true),false);
 });
 test('native encounter accepts fresh ordinary target without any level OCR',()=>assert.equal(native.encounter(frame(),1000,'test',()=>true),true));
+test('field approach remeasures camera and forward steps against a visible target',async()=>{
+ const acq=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-combat-acquisition.js');
+ const make=(id,x,y,h)=>{const o=frame();o.frameId=id;Object.assign(o.hud.enemyBars[0],{x,y,height:h});return o;};
+ const frames=[make(51,1080,440,5),make(52,1040,590,6),make(53,990,630,8)];
+ const actions=[],api={now:()=>1000,checkStop(){},eligible:o=>native.encounter(o,1000,'test',()=>true),
+  cameraDelta:acq.cameraDelta,turn:async(dx,o)=>actions.push(['turn',dx,o.frameId]),
+  forward:async o=>actions.push(['forward',o.frameId]),sleep:async()=>{},observe:async()=>frames.shift()};
+ const last=await native.approachFieldTarget(make(50,1424.5,463.5,5),api);
+ assert.equal(last.frameId,53);assert.deepEqual(actions,[['turn',200,50],['forward',51],['forward',52]]);
+ const lost=make(61,1080,440,5);lost.hud.enemyBars=[];
+ await assert.rejects(native.approachFieldTarget(make(60,1060,440,5),{...api,observe:async()=>lost}),/target or grounded health/);
+ const old=make(62,1060,440,5);await assert.rejects(native.approachFieldTarget(old,{...api,observe:async()=>old}),/new observation/);
+});
 test('camera shift and changed target count are unknown rather than no damage',()=>{
  const a=frame(),b=frame();b.map.cameraAngle=74;
  assert.equal(native.assessProgress(a,b).status,'target_association_unknown');

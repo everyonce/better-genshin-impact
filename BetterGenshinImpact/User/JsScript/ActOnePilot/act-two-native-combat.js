@@ -51,6 +51,31 @@
   const ambush=o&&thirdCamp(o.map)&&ambushObjective(o.hud&&o.hud.objectives);
   return (o&&o.hud&&o.hud.enemyBars||[]).filter(b=>[b.x,b.y,b.width,b.height,b.rectangularity].every(Number.isFinite)&&b.x>=350&&b.x<=1600&&b.y>=(ambush?30:200)&&b.y<=(ambush?900:850)&&b.width>=16&&b.width<=300&&b.height>=3&&b.height<=20&&b.width/b.height>=3.5&&b.rectangularity>=0.8&&b.rectangularity<=1.05);
  }
+ // Face the measured field target and approach in short steps. Rendered bar height and screen
+ // position set the walking budget; the remaining red width measures health, never range.
+ async function approachFieldTarget(initial,api){
+  let current=initial,turns=0,steps=0;
+  const started=api.now(),origin=initial.map;
+  for(;;){
+   api.checkStop();
+   if(!api.eligible(current))throw new Error('Field target or grounded health changed during approach');
+   if(Math.hypot(current.map.x-origin.x,current.map.y-origin.y)>12)throw new Error('Field combat approach exceeded its travel budget');
+   const bar=targets(current)[0],dx=api.cameraDelta([bar]);
+   if(dx===0&&(bar.height>=8||bar.y>=620||steps>=4))return current;
+   if(api.now()-started>=8500)throw new Error('Field combat approach time expired');
+   if(dx!==0){
+    if(turns>=4)throw new Error('Field combat target stayed outside the central view');
+    await api.turn(dx,current);turns++;
+   }else{
+    await api.forward(current);steps++;
+   }
+   await api.sleep(200);
+   const next=await api.observe();
+   if(!next||next.session!==initial.session||!Number.isInteger(next.frameId)||next.frameId<=current.frameId)
+    throw new Error('Field combat approach needs a new observation');
+   current=next;
+  }
+ }
  function thirdCamp(m){return !!m&&Math.hypot(m.x+1220,m.y-2315)<=35;}
  function cyrusArea(m){return !!m&&(Math.hypot(m.x+1125,m.y-2230)<=50||Math.hypot(m.x+1415,m.y-2395)<=40||thirdCamp(m));}
  function encounter(o,now,session,original,group){
@@ -128,6 +153,6 @@
   if(p.shieldProbe===true){if(p.shieldReviewed!==true||p.nativeAvatar!=='Kaeya'||p.enemyLevel!==13)throw new Error('Reviewed Kaeya shield probe required');return {strategy:'English Whopperflower Shield Probe',seconds:2,deadlineMs:3000,sampleAfterMs:750,minimumHealth:.85};}
   return {strategy:p.nativeAvatar==='Lumina'?'English Ley Line Anemo':'English Ley Line Defense',seconds:6,deadlineMs:8000,sampleAfterMs:2500,minimumHealth:.5};
  }
- root.ActTwoNativeCombat={leyLineProfile,strategy,groupStrategy,ambushStrategy,entrySettled,pauseSeed,targetingParam,deadlineProbe,field,targets,encounter,finish,chunk,assessProgress,progress,sequence};
+ root.ActTwoNativeCombat={leyLineProfile,strategy,groupStrategy,ambushStrategy,entrySettled,pauseSeed,targetingParam,deadlineProbe,field,targets,approachFieldTarget,encounter,finish,chunk,assessProgress,progress,sequence};
  if(typeof module!=='undefined'&&module.exports)module.exports=root.ActTwoNativeCombat;
 })(typeof globalThis!=='undefined'?globalThis:this);

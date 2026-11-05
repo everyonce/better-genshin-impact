@@ -3981,6 +3981,19 @@ function createActOneAdapter(sessionId,options) {
                     moveMouseBy(alignDx,0);await sleep(180);current=acquire();result.alignedAcquisition=current;
                     if(!eligible(current))throw new Error('Fresh encounter required after camera alignment');
                 }
+                if(!group&&!finishing&&!probing){
+                    result.approach=[];
+                    current=await native.approachFieldTarget(current,{
+                        now:Date.now,checkStop:checkStop,eligible:eligible,cameraDelta:acquisition.cameraDelta,sleep:sleep,observe:observe,
+                        turn:async function(dx,o){
+                            checkStop();ready();result.approach.push({action:'turn',dx:dx,frameId:o.frameId});moveMouseBy(dx,0);
+                        },
+                        forward:async function(o){
+                            checkStop();ready();result.approach.push({action:'forward',ms:400,frameId:o.frameId});
+                            await boundedKey('VK_W',400,o.frameId);
+                        }
+                    });
+                }
                 if(group&&!finishing&&acquisition.ambushObjective(current.hud.objectives)&&
                    !acquisition.stationaryReady(current.acquisition?current.hud.enemyBars:native.targets(current)))throw new Error('Centered or close verified enemy required for stationary combat');
                 checkStop();ready();

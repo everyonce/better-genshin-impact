@@ -221,6 +221,31 @@ test('the post-defeat roster can expose both slot keys while Amber remains selec
  o.ocr.find(r=>r.text==='Amber').x+=25;assert.equal(tower.party(o,'Amber'),false);
 });
 
+
+test('recorded tower defeat takes three two-axis sight corrections and one charged release',async()=>{
+ // R77 native captures 12–17. Times are milliseconds from the selected Amber ground frame.
+ // Each row keeps the measured red rail and sight HUD, including the actual post-defeat transition.
+ const captures=[
+  [12,1060,508,971,229,64,1710,1026], [13,1836,1277,926,324,63,1712,1028],
+  [14,2549,2033,936,414,63,1712,1028], [15,3224,2753,919,489,63,1712,1028],
+  [16,4092,3659,918,479,62,1712,1028], [17,5073,4585,null,null,0,1584,1022]
+ ];
+ const source=structuredClone(missBefore),origin=source.timestamp,events=[];let now=origin;
+ source.frameId=11;source.hud.captureStamp={...source.hud.captureStamp,frameId:11,capturedAt:origin-373};
+ const result=await tower.aimedVolley(source,{...ctx(source),now:()=>now,deadline:now+35000,
+  checkStop(){},sleep:async ms=>{now+=ms;},original:()=>true,
+  key:async(k,f)=>events.push([k,f.frameId]),look:(x,y,f)=>events.push(['look',f.frameId,x,y]),
+  shoot:async f=>events.push(['release',f.frameId]),observe:async()=>{
+   const [id,time,captured,left,y,width,rx,ry]=captures.shift(),f=structuredClone(source);
+   now=origin+time;f.timestamp=now;f.frameId=id;f.hud.captureStamp={...f.hud.captureStamp,frameId:id,capturedAt:origin+captured};
+   f.hud.health={current:width?1743:1793,max:1809};f.hud.groundControls=!width;
+   f.hud.bowAimBars=width?[{left,y,width,height:4}]:[];
+   f.ocr=[{text:'R',x:rx,y:ry,width:19,height:20}];return f;
+  }});
+ assert.equal(result.nativeReturned,true);assert.equal(result.aim.shots.length,1);
+ assert.deepEqual(events,[['VK_R',11],['look',12,28,-155],['look',13,-1,-155],['look',14,6,-122],['release',15]]);
+});
+
 test('aimed bow tracks the head below a wounded HP rail independent of the remaining fill',()=>{
  const frame=structuredClone(missBefore);
  frame.hud.bowAimBars=[{left:927,y:485,width:13,height:4}];

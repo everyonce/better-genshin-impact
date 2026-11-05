@@ -62,6 +62,24 @@ try {
     $badDeps | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $depsPath
     Assert-Throws { Assert-PortableRuntime -Directory $fixture } 'both .NETCore.App and WindowsDesktop runtime packs'
 
+    # The current English package embeds the ASP.NET Core framework alongside WPF on .NET 10.
+    $config10 = (($runtimeConfig | ConvertTo-Json -Depth 10) -replace '8\.0','10.0') | ConvertFrom-Json
+    $config10.runtimeOptions.includedFrameworks += [pscustomobject]@{ name='Microsoft.AspNetCore.App'; version='10.0.31' }
+    $deps10 = (($deps | ConvertTo-Json -Depth 10) -replace '8\.0','10.0') | ConvertFrom-Json
+    $net10 = $deps10.targets.PSObject.Properties['.NETCoreApp,Version=v10.0/win-x64'].Value
+    $net10 | Add-Member -NotePropertyName 'runtimepack.Microsoft.AspNetCore.App.Runtime.win-x64/10.0.31' -NotePropertyValue ([pscustomobject]@{
+        runtime = [pscustomobject]@{ 'lib/net10.0/Microsoft.AspNetCore.dll' = [pscustomobject]@{} }
+    })
+    $config10 | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $runtimeConfigPath
+    $deps10 | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $depsPath
+    Assert-PortableRuntime -Directory $fixture | Out-Null
+    $config10.runtimeOptions.includedFrameworks[-1].version = '10.0.32'
+    $config10 | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $runtimeConfigPath
+    Assert-Throws { Assert-PortableRuntime -Directory $fixture } 'does not match runtimeconfig'
+    $net10.PSObject.Properties.Remove('runtimepack.Microsoft.AspNetCore.App.Runtime.win-x64/10.0.31')
+    $deps10 | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $depsPath
+    Assert-Throws { Assert-PortableRuntime -Directory $fixture } 'Microsoft.AspNetCore.App'
+
     Write-Output 'Portable-runtime preflight tests passed (valid self-contained fixture and rejection of framework-dependent config, missing host, and incomplete runtime packs).'
 }
 finally {

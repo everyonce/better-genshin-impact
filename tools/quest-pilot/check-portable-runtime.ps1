@@ -24,9 +24,10 @@ function Assert-PortableRuntime {
 
     $runtimeConfig = Read-RuntimeJson -Path (Join-Path $appRoot 'BetterGI.runtimeconfig.json') -MaxBytes 65536
     $runtimeOptions = $runtimeConfig.runtimeOptions
-    if ($null -eq $runtimeOptions -or $runtimeOptions.tfm -ne 'net8.0') {
-        throw 'Portable runtimeconfig must target net8.0.'
+    if ($null -eq $runtimeOptions -or $runtimeOptions.tfm -notin @('net8.0', 'net10.0')) {
+        throw 'Portable runtimeconfig must target a supported BetterGI runtime (net8.0 or net10.0).'
     }
+    $frameworkVersion = $runtimeOptions.tfm.Substring(3)
     if ($runtimeOptions.PSObject.Properties.Name -contains 'framework' -or
         $runtimeOptions.PSObject.Properties.Name -contains 'frameworks') {
         throw 'Framework-dependent runtimeconfig is not safe for a portable restart.'
@@ -34,41 +35,39 @@ function Assert-PortableRuntime {
 
     $included = @($runtimeOptions.includedFrameworks)
     $names = @($included | ForEach-Object { [string]$_.name } | Sort-Object -Unique)
-    if ($included.Count -ne 2 -or $names.Count -ne 2 -or
-        -not ($names -ccontains 'Microsoft.NETCore.App') -or
-        -not ($names -ccontains 'Microsoft.WindowsDesktop.App')) {
-        throw 'Portable runtimeconfig must include exactly Microsoft.NETCore.App and Microsoft.WindowsDesktop.App.'
+    $knownNames = @('Microsoft.NETCore.App', 'Microsoft.WindowsDesktop.App', 'Microsoft.AspNetCore.App')
+    if ($included.Count -ne $names.Count -or
+        @($names | Where-Object { $knownNames -cnotcontains $_ }).Count -or
+        $names -cnotcontains 'Microsoft.NETCore.App' -or $names -cnotcontains 'Microsoft.WindowsDesktop.App') {
+        throw 'Portable runtimeconfig must include .NETCore.App and WindowsDesktop.App and only recognized frameworks.'
     }
     foreach ($framework in $included) {
-        if ([string]$framework.version -notmatch '^8\.0\.[0-9]+$') {
+        if ([string]$framework.version -notmatch ('^' + [regex]::Escape($frameworkVersion) + '\.[0-9]+$')) {
             throw "Portable runtimeconfig has an unexpected framework version: $($framework.name) $($framework.version)"
         }
     }
 
     $deps = Read-RuntimeJson -Path (Join-Path $appRoot 'BetterGI.deps.json') -MaxBytes 33554432
     $targetName = [string]$deps.runtimeTarget.name
-    if ($targetName -notmatch '^\.NETCoreApp,Version=v8\.0/win-x64$') {
+    if ($targetName -cne ".NETCoreApp,Version=v$frameworkVersion/win-x64") {
         throw "Portable deps file has an unexpected runtime target: $targetName"
     }
     $target = $deps.targets.PSObject.Properties[$targetName].Value
     if ($null -eq $target) { throw 'Portable deps file is missing its win-x64 target.' }
-    $runtimePacks = @($target.PSObject.Properties | Where-Object {
-        $_.Name -like 'runtimepack.Microsoft.NETCore.App.Runtime.win-x64/*' -or
-        $_.Name -like 'runtimepack.Microsoft.WindowsDesktop.App.Runtime.win-x64/*'
-    })
-    if ($runtimePacks.Count -ne 2 -or
-        -not ($runtimePacks.Name | Where-Object { $_ -like 'runtimepack.Microsoft.NETCore.App.Runtime.win-x64/*' }) -or
-        -not ($runtimePacks.Name | Where-Object { $_ -like 'runtimepack.Microsoft.WindowsDesktop.App.Runtime.win-x64/*' })) {
-        throw 'Portable deps file must contain both .NETCore.App and WindowsDesktop runtime packs.'
-    }
-    foreach ($pack in $runtimePacks) {
+    # Every declared runtime has one matching local pack. Ref packs are independent of framework versions.
+    foreach ($frameworkName in $knownNames) {
+        $packs = @($target.PSObject.Properties | Where-Object { $_.Name -like "runtimepack.$frameworkName.Runtime.win-x64/*" })
+        if ($names -cnotcontains $frameworkName) {
+            if ($packs.Count) { throw "Portable runtimeconfig omits the declared runtime pack: $frameworkName" }
+            continue
+        }
+        if ($packs.Count -ne 1) {
+            throw "Portable deps file must contain both .NETCore.App and WindowsDesktop runtime packs and every declared framework: $frameworkName"
+        }
+        $pack = $packs[0]
         if (@($pack.Value.runtime.PSObject.Properties).Count -eq 0) {
             throw "Portable deps runtime pack has no runtime assets: $($pack.Name)"
         }
-        $frameworkName = if ($pack.Name -like 'runtimepack.Microsoft.NETCore.App.Runtime.win-x64/*') {
-            'Microsoft.NETCore.App'
-        }
-        else { 'Microsoft.WindowsDesktop.App' }
         $packVersion = ($pack.Name -split '/')[-1]
         $configuredVersion = [string](@($included | Where-Object { $_.name -ceq $frameworkName })[0].version)
         if ($packVersion -cne $configuredVersion) {

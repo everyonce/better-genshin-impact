@@ -86,6 +86,11 @@ var ActOnePilot = (function () {
                 typeof r.expectedUid !== 'string' || !/^[0-9]{9,10}$/.test(r.expectedUid) ||
                 (r.mission === 'dialogue' && !integer(r.deadlineMs, 1000, 60000))) return 'Invalid named NPC request';
         }
+        if (r.resumeMenuOnly !== undefined) {
+            if (r.mission !== 'dialogue' || typeof r.talkTo !== 'string' || r.resumeMenuOnly !== true)
+                return 'Menu-only resume requires a named dialogue';
+            allowed.push('resumeMenuOnly');
+        }
         if (r.mission === 'combat') {
             allowed.push('objective','deadlineMs');
             if (!combatObjective(r.objective) && r.objective !== 'Stormterror aerial encounter') return 'Unsupported combat objective';

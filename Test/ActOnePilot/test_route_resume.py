@@ -421,6 +421,32 @@ class SupervisedRouteControllerTests(unittest.TestCase):
         navigation = next(q for q in pilot.calls if q['mission'] == 'navigation')
         self.assertEqual(navigation['objective'], objective)
 
+    def test_open_named_menu_discovers_farewell_closes_without_travel_and_checks_the_return_pose(self):
+        self.route.update(objective=route_tool.EXPLORATION_OBJECTIVE, talkTo='Katheryne', resumeNamedDialogue=True,
+            waypoints=[dict(map='Teyvat',x=-913.51,y=2232.67)],startNear=dict(map='Teyvat',x=-913.51,y=2232.67,radius=5))
+        fixture = Path(__file__).with_name('katheryne-keyboard-menu-35.fixture.json')
+        menu = json.loads(fixture.read_bytes())
+        clear=controller_scene(objective='')
+        clear['map'].update(x=-913.332,y=2233.676)
+        inv=controller_scene('inventory')
+        for i,offset in enumerate((0,20)):
+            self.progress=Path(self.temp.name)/f'menu-{i}.json'
+            world=copy.deepcopy(clear);world['map']['x']+=offset
+            pilot=ReplayPilot(self.clock,[dict(mission='dialogue',source=world,frames=6,result=dict(status='completed',
+                reason='world_returned',talkTo='Katheryne',interactionFrameId=None,greetingFrameId=4,worldFrameId=8,
+                farewell=dict(label='Goodbye.',frameId=5))),dict(mission='questStep',source=inv,result=dict(pausedInventory=True))],
+                source=dict(menu,frameId=1))
+            report=self.run_controller(pilot)
+            self.assertEqual([x.get('step',x['mission']) for x in pilot.calls if x['mission']!='observe'],['dialogue','worldInventory'])
+            self.assertTrue(next(r for r in pilot.calls if r['mission']=='dialogue')['resumeMenuOnly'])
+            self.assertEqual(report['status']=='arrived',offset==0)
+            self.assertEqual(report['nextWaypointIndex'],1 if offset==0 else 0)
+        self.progress=Path(self.temp.name)/'closed.json'
+        pilot=ReplayPilot(self.clock,[],source=clear)
+        result=self.run_controller(pilot)
+        self.assertNotEqual(result['status'],'arrived')
+        self.assertEqual([r['mission'] for r in pilot.calls],['observe','observe'])
+
     def test_named_npc_missing_prompt_keeps_arrival_cursor_without_a_second_interaction(self):
         self.route['talkTo'] = 'Amber'
         pilot = ReplayPilot(self.clock, [

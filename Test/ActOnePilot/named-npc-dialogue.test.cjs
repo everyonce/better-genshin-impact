@@ -7,11 +7,11 @@ const greeting = require('./act-two-amber-final-11121.fixture.json');
 
 const uid = '693306810';
 const session = 'arrival-amber';
-function replay(frames, name = 'Amber', budget = 6000) {
+function replay(frames, name = 'Amber', budget = 6000, fields = {}) {
     let now = 1000, count = 0;
     const keys = [];
     const request = {id:'talk-test', mission:'dialogue', session, expectedFrameId:0, createdAt:now,
-        talkTo:name, expectedUid:uid, deadlineMs:budget};
+        talkTo:name, expectedUid:uid, deadlineMs:budget, ...fields};
     const api = {now:()=>now, checkStop(){}, sleep:async ms=>{ now += ms; },
         keyPress:async (key, source)=>keys.push([key, source && source.frameId]), chooseChoice:async label=>keys.push(['choice', label])};
     async function observe() {
@@ -104,6 +104,50 @@ test('named arrival records a greeting and leaves unknown, ambiguous and unconfi
         assert.deepEqual([result.greetingFrameId,result.menuFrameId],[1,2]);
         assert.deepEqual(keys.map(row=>row[0]),['VK_SPACE']);
     }
+});
+
+const guildKeyboard=require('./katheryne-keyboard-menu-35.fixture.json');
+function highlighted(index){
+    const scene=structuredClone(guildKeyboard);
+    scene.ocr.find(r=>r.text==='F').y=[639,711,782][index];
+    return scene;
+}
+test('recorded Auto-off frame 35 clicks only the confirmed Goodbye row and verifies the world',async()=>{
+    const {result,keys}=await replay([guildKeyboard,guildKeyboard,prompt],'Katheryne',8000,{resumeMenuOnly:true});
+    assert.deepEqual(keys,[['choice','Goodbye.']]);assert.equal(result.status,'completed');
+    assert.deepEqual([result.interactionFrameId,result.greetingFrameId,result.farewell.frameId,result.worldFrameId],[null,1,2,3]);
+});
+test('a persistent keyboard guide moves the highlight one observed step at a time before F',async()=>{
+    const scenes=[0,0,0,0,1,1,2,2].map(highlighted);
+    const {result,keys}=await replay([...scenes,prompt],'Katheryne',10000,{resumeMenuOnly:true});
+    assert.equal(result.status,'completed');assert.deepEqual(keys,[['choice','Goodbye.'],['VK_S',4],['VK_S',6],['VK_F',8]]);
+    assert.equal(result.farewell.confirmFrameId,8);
+});
+test('a stuck reward highlight, changed speaker, missing marker, and an already closed menu cannot confirm',async()=>{
+    const {result,keys}=await replay(Array(9).fill(guildKeyboard),'Katheryne',10000,{resumeMenuOnly:true});
+    assert.equal(result.reason,'named_menu_highlight_did_not_advance');
+    assert.deepEqual(keys,[['choice','Goodbye.'],['VK_S',4]]);
+    for(const change of [f=>f.ocr.find(r=>r.text==='Katheryne').text='Cyrus',
+        f=>f.ocr.find(r=>r.text==='F').y=590,f=>f.ocr.find(r=>r.text==='Goodbye.').text='Claim Rewards',
+        f=>f.ocr.push({...f.ocr.find(r=>r.text==='F')})]){
+        const altered=structuredClone(guildKeyboard);change(altered);
+        const {result,keys}=await replay([guildKeyboard,altered],'Katheryne',8000,{resumeMenuOnly:true});
+        assert.equal(result.status,'stopped');assert.deepEqual(keys,[]);
+    }
+    const closed=await replay([prompt],'Katheryne',8000,{resumeMenuOnly:true});
+    assert.deepEqual(closed.keys,[]);assert.equal(closed.result.status,'stopped');
+});
+test('the native Auto-off text click uses the exact last frame and never clicks its selected reward',()=>{
+    const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
+    const dir=path.resolve(__dirname,'../../BetterGenshinImpact/User/JsScript/ActOnePilot');
+    const source=fs.readFileSync(path.join(dir,'bgi.js'),'utf8');
+    const member=source.slice(source.indexOf('        chooseChoice: function'),source.indexOf('        rotate: function',source.indexOf('        chooseChoice: function'))).trim().replace(/,$/,'');
+    const frame=structuredClone(guildKeyboard),clicks=[];
+    const runtime={checkStop(){},lastObservation:frame,Date:{now:()=>frame.timestamp},request:{mission:'dialogue',session:frame.session,talkTo:'Katheryne',expectedUid:uid},
+        file:{readTextSync:n=>fs.readFileSync(path.join(dir,n),'utf8')},events:[],click:(x,y)=>clicks.push([x,y])};
+    const adapter=vm.runInNewContext('({'+member+'})',runtime);
+    assert.throws(()=>adapter.chooseChoice('Claim Adventure Rank Rewards',frame));assert.throws(()=>adapter.chooseChoice('Goodbye.',{...frame,frameId:34}));
+    adapter.chooseChoice('Goodbye.',frame);assert.deepEqual(clicks,[[1389,802]]);
 });
 
 test('a tutorial reached during a named conversation does not start the tutorial or claim a world return',async()=>{

@@ -83,6 +83,12 @@ def validate_route(value):
         raise RouteError('talkTo requires the exact displayed NPC name.')
     if 'teleportTo' in value and (not isinstance(value['teleportTo'], str) or value['teleportTo'] not in ROUTE_TELEPORT_STEPS):
         raise RouteError('teleportTo must identify a supported native teleport destination.')
+    if 'resumeNamedDialogue' in value:
+        if (value['resumeNamedDialogue'] is not True or not value.get('talkTo') or len(waypoints) != 1
+                or value.get('teleportTo') or value['objective'] != EXPLORATION_OBJECTIVE):
+            raise RouteError('Menu-only resume requires one named exploration destination without a teleport.')
+        if 'startNear' in value and any(value['startNear'][k] != waypoints[0][k] for k in ('map', 'x', 'y')):
+            raise RouteError('Menu-only startNear must be centered on the final waypoint.')
     return value['objective'], waypoints
 
 
@@ -490,6 +496,10 @@ class GuardedPilot:
                     or any(type(points[0][k]) not in (int, float) or not math.isfinite(points[0][k]) for k in ('x','y'))):
                 raise RouteError('One exact named relook waypoint is required.')
             expected_fields[mission].add('waypoints')
+        if mission == 'dialogue' and 'resumeMenuOnly' in fields:
+            if fields['resumeMenuOnly'] is not True or 'talkTo' not in fields:
+                raise RouteError('Menu-only resume needs an explicit named dialogue.')
+            expected_fields['dialogue'].add('resumeMenuOnly')
         if relook or mission in ('dialogue', 'navigation') and 'talkTo' in fields:
             expected_fields[mission].update(('talkTo', 'expectedUid'))
             if not relook:
@@ -963,6 +973,9 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
         nextWaypointIndex=0, navigationRequests=0, handoffs=0, pending=None, records=[],
         originalDeadlineMs=deadline_ms, startedAt=int(clock_ms()))
     talk_to = route.get('talkTo')
+    resume_menu = route.get('resumeNamedDialogue') is True
+    if resume_menu:
+        state['route']['resumeNamedDialogue'] = True
     if talk_to:
         state['route']['talkTo'] = talk_to
     destination = route.get('teleportTo')
@@ -1062,7 +1075,7 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
             raise RouteError('Mission did not complete; original result retained without retry.')
         return result
 
-    def finish_arrival():
+    def finish_arrival(*, menu_only=False):
         """Join the requested NPC interaction to the completed waypoint cursor before declaring arrival."""
         if not talk_to:
             state.update(status='arrived', reason='All native waypoint checkpoints are complete')
@@ -1074,7 +1087,16 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
         require_fresh_source(source, pilot.session, clock_ms())
         if not source_account_matches(source, expected_uid):
             raise RouteError('Named conversation arrival belongs to another account.')
-        if pilot.inventory_ready(source):
+        if menu_only:
+            # Native input still requires two independently captured, matching keyboard-menu frames.
+            rows = source['ocr']
+            seen_speaker = any(r.get('text', '').strip() == talk_to and 600 <= r.get('x', -1) <= 1200
+                               and 820 <= r.get('y', -1) < 900 for r in rows)
+            seen_exit = any(re.fullmatch(r'(?:goodbye|farewell|see you|bye)[.!]?', r.get('text', '').strip(), re.I)
+                            and 1260 <= r.get('x', -1) <= 1780 and 430 <= r.get('y', -1) < 820 for r in rows)
+            if source.get('map') is not None or source['hud'].get('world') is not False or not (seen_speaker and seen_exit):
+                raise RouteError('The named farewell menu is no longer open.')
+        elif pilot.inventory_ready(source):
             dispatch('questStep', source, dict(step='worldInventoryClose'))
             dispatch('observe', pilot.current(), {})
             source = pilot.current()
@@ -1085,7 +1107,10 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
         budget = min(60000, int((deadline - monotonic()) * 1000) - 7000)
         if budget < 1000:
             raise RouteError('Insufficient original deadline for the named conversation.')
-        result = dispatch('dialogue', source, dict(talkTo=talk_to, expectedUid=expected_uid, deadlineMs=budget))
+        fields = dict(talkTo=talk_to, expectedUid=expected_uid, deadlineMs=budget)
+        if menu_only:
+            fields['resumeMenuOnly'] = True
+        result = dispatch('dialogue', source, fields)
         terminal = pilot.current()
         require_fresh_source(terminal, pilot.session, clock_ms())
         if (not isinstance(result, dict) or result.get('status') != 'completed' or result.get('reason') != 'world_returned'
@@ -1094,6 +1119,17 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
                     source['frameId'] < result['greetingFrameId'] < result['worldFrameId'] <= terminal['frameId']
                 or not positive_parking_field(terminal, pilot.session, expected_uid)):
             raise RouteError('Conversation and return to the expected world are unverified.')
+        if menu_only:
+            farewell = result.get('farewell') or {}
+            if (result.get('interactionFrameId') is not None or type(farewell.get('frameId')) is not int
+                    or not result['greetingFrameId'] < farewell['frameId'] < result['worldFrameId']
+                    or not re.fullmatch(r'(?:goodbye|farewell|see you|bye)[.!]?', str(farewell.get('label', '')), re.I)):
+                raise RouteError('Menu-only exit lacks the witnessed farewell and resulting world.')
+            # The map is unavailable in a conversation. Measure its first world return before parking.
+            position = terminal['map']
+            distance = math.hypot(position['x'] - points[0]['x'], position['y'] - points[0]['y'])
+            state['resumedMenuArrival'] = dict(frameId=terminal['frameId'], x=position['x'], y=position['y'],
+                distance=distance, radius=start_near['radius'] if start_near else 2)
         state['conversation'] = dict(npc=talk_to, requestId=state['records'][-1]['request']['id'],
             greetingFrameId=result['greetingFrameId'], worldFrameId=result['worldFrameId'])
         save()
@@ -1102,6 +1138,11 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
         if (not isinstance(parked, dict) or parked.get('pausedInventory') is not True
                 or not source_account_matches(paused, expected_uid) or not pilot.inventory_ready(paused)):
             raise RouteError('Named conversation completed, but its final inventory pause is unverified.')
+        if menu_only:
+            proof = state['resumedMenuArrival']
+            if proof['distance'] > proof['radius']:
+                raise RouteError('Named conversation closed and parked, but the returned world is outside the destination radius.')
+            state['nextWaypointIndex'] = 1
         state.update(status='arrived', reason='Waypoints and the named conversation are complete')
 
     def protect_failed_exit():
@@ -1208,6 +1249,9 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
             source = pilot.current()
             now_ms = clock_ms()
             require_fresh_source(source, pilot.session, now_ms)
+            if resume_menu:
+                finish_arrival(menu_only=True)
+                break
             if (continuation is not None and state.get('continuationSlotMatched') is True
                     and pilot.continuation_unchanged(continuation)
                     and source_account_matches(source, expected_uid) and pilot.inventory_ready(source)):

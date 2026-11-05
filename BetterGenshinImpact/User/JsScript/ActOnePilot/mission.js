@@ -494,6 +494,68 @@ var ActOneMission = (function () {
         var matches = options.filter(function(r) { return /^(Goodbye|Farewell|See you|Bye)[.!]?$/i.test(r.text.trim()); });
         return matches.length === 1 ? matches[0].text.trim() : null;
     }
+    // The game can hide Auto during its keyboard-choice tutorial. Match the named scene and
+    // the actual three pieces of UI evidence: the tutorial, option rows, and aligned F marker.
+    function keyboardFarewell(frame, request) {
+        var h=frame&&frame.hud, rows=frame&&frame.ocr;
+        if(!h||frame.session!==request.session||frame.map!==null||h.world!==false||h.health||h.journal||h.bigMap||
+            h.tutorialStep||!Array.isArray(rows)||!namedDialogueAccount(frame,request.expectedUid)||!namedSpeakerVisible(frame,request.talkTo))return null;
+        function one(text,x1,x2,y1,y2){
+            return rows.filter(r=>r.text.trim()===text&&r.x>=x1&&r.x<=x2&&r.y>=y1&&r.y<=y2).length===1;
+        }
+        if(!one('Use the scroll wheel or WS keys to',600,1050,120,240)||!one('switch options',750,1150,180,280)||
+            !one('W',580,800,150,270)||!one('S',680,860,150,270))return null;
+        var options=rows.filter(r=>r.x>=1260&&r.x<=1780&&r.y>=430&&r.y<820&&r.text.trim()&&Number.isFinite(r.height)).sort((a,b)=>a.y-b.y);
+        var labels=options.map(r=>r.text.trim());
+        var markers=rows.filter(r=>r.text.trim()==='F'&&r.x>=1150&&r.x<=1260&&r.y>=430&&r.y<820&&Number.isFinite(r.height));
+        if(markers.length!==1||options.length<2||options.length>8||new Set(labels).size!==labels.length||
+            options.some((r,i)=>i>0&&r.y-options[i-1].y<32))return null;
+        var cy=markers[0].y+markers[0].height/2;
+        var active=options.filter(r=>Math.abs(r.y+r.height/2-cy)<23);
+        var exits=options.filter(r=>/^(Goodbye|Farewell|See you|Bye)[.!]?$/i.test(r.text.trim()));
+        if(active.length!==1||exits.length!==1)return null;
+        return {labels:labels,active:options.indexOf(active[0]),exit:options.indexOf(exits[0])};
+    }
+    // First use the ordinary targeted text click. If the guided menu remains open, use its
+    // printed W/S controls and remeasure every selection. F is restricted to the farewell itself.
+    async function leaveKeyboardMenu(api,observe,request,initial,end) {
+        var first=keyboardFarewell(initial,request),current=initial,presses=0,inputMs=0,record=null,menu=first;
+        var signature=JSON.stringify(first.labels);
+        async function refresh(delay) {
+            if(api.now()+delay>=end)return false;
+            api.checkStop();await api.sleep(delay);
+            var next=await observe();
+            if(!next||next.session!==request.session||!Number.isInteger(next.frameId)||next.frameId<=current.frameId||
+                !Number.isFinite(next.timestamp)||api.now()<next.timestamp||api.now()-next.timestamp>1000)return false;
+            current=next;menu=keyboardFarewell(current,request);
+            return true;
+        }
+        function sameMenu(){return menu&&JSON.stringify(menu.labels)===signature&&menu.exit===first.exit;}
+        function result(reason){return {current:current,presses:presses,inputMs:inputMs,farewell:record,reason:reason};}
+        if(!await refresh(180)||!sameMenu()||menu.active!==first.active)return result('named_menu_changed_before_exit');
+        var started=api.now(),label=menu.labels[menu.exit];
+        await api.chooseChoice(label,current);presses++;inputMs+=api.now()-started;
+        record={label:label,frameId:current.frameId,method:'click',highlightSteps:[]};
+        if(!await refresh(850))return result('named_menu_exit_unverified');
+        for(var steps=0;steps<=first.labels.length;steps++){
+            if(!menu)return result(null); // The caller verifies dialogue/world and supervises the pause.
+            if(!sameMenu())return result('named_menu_options_changed');
+            var from=menu.active,delta=Math.sign(menu.exit-from),key=delta>0?'VK_S':delta<0?'VK_W':'VK_F';
+            if(!await refresh(140)||!sameMenu()||menu.active!==from)return result('named_menu_highlight_changed');
+            api.checkStop();started=api.now();await api.keyPress(key,current);presses++;inputMs+=api.now()-started;
+            if(delta===0)record.confirmFrameId=current.frameId;
+            else record.highlightSteps.push({frameId:current.frameId,key:key,from:menu.labels[from]});
+            // Do not replay an input on a slow frame. Wait briefly for the actual next highlight.
+            for(var poll=0;poll<4;poll++){
+                if(!await refresh(poll===0?300:180))return result('named_menu_exit_unverified');
+                if(!menu)return result(null);
+                if(!sameMenu())return result('named_menu_options_changed');
+                if(delta!==0&&menu.active!==from)break;
+            }
+            if(delta===0||menu.active!==from+delta)return result('named_menu_highlight_did_not_advance');
+        }
+        return result('named_menu_exit_unverified');
+    }
     function namedSpeakerVisible(current, name) {
         return current.ocr.filter(function(r) {
             return r.text.trim() === name && r.x >= 600 && r.x <= 1200 && r.y >= 820 && r.y < 900;
@@ -520,6 +582,8 @@ var ActOneMission = (function () {
         var end = api.now() + request.deadlineMs, current = await observe(), openingFrame = null;
         function samePlayer(frame) { return frame.session === request.session && namedDialogueAccount(frame, request.expectedUid); }
         if (!samePlayer(current)) return {status:'stopped', reason:'Named dialogue account changed'};
+        if (request.resumeMenuOnly && !keyboardFarewell(current,request))
+            return {status:'stopped',reason:'Verified named farewell menu is no longer open'};
         if (current.hud.world) {
             for (var attempt = 0; ; attempt++) {
                 var h = current.hud, hp = h.health, prompt = namedNpcPrompt(current, request.talkTo);
@@ -549,8 +613,9 @@ var ActOneMission = (function () {
                 await api.sleep(200); current = await observe(); continue;
             }
             if ((openingFrame === null || current.frameId > openingFrame) && namedSpeakerVisible(current, request.talkTo) &&
-                current.map === null && current.hud.world === false && !current.hud.health && current.hud.auto === true &&
-                (current.hud.dialogueReady === true || current.hud.choice === true)) {
+                current.map === null && current.hud.world === false && !current.hud.health &&
+                (current.hud.auto === true && (current.hud.dialogueReady === true || current.hud.choice === true) ||
+                 keyboardFarewell(current,request))) {
                 var remaining = Math.floor(end - api.now());
                 if (remaining < 1000) break;
                 var result = await runDialogue(api, observe, {initial:current, deadlineMs:remaining, namedRequest:request});
@@ -575,8 +640,14 @@ var ActOneMission = (function () {
         while (api.now() - began < deadlineMs && presses < maxPresses) {
             api.checkStop();
             if (options.namedRequest) {
-                if (current.session !== options.namedRequest.session || !namedDialogueAccount(current, options.namedRequest.expectedUid))
+                if (current.session !== options.namedRequest.session || !namedDialogueAccount(current, options.namedRequest.expectedUid)) {
+                    // A confirmed exit can briefly hide the UID during the world transition. Send no input in the fade.
+                    if(farewell&&current.session===options.namedRequest.session&&!current.hud.world&&!(current.ocr||[]).some(
+                        r=>r.x>1600&&r.y>1020&&/[0-9]{9,10}/.test(r.text))){
+                        await api.sleep(180);current=await observe();continue;
+                    }
                     return {status:'stopped', reason:'Named dialogue account changed'};
+                }
                 // The arrival owns conversation only. A tutorial or reward is a different task.
                 if (current.hud.tutorialStep || current.hud.characterAcquired ||
                     typeof api.actTwoHideoutTutorialReady === 'function' && api.actTwoHideoutTutorialReady(current))
@@ -648,6 +719,13 @@ var ActOneMission = (function () {
                 if (options.namedRequest) {
                     if (farewell) { // A slow closing menu must never receive a second selection.
                         await api.sleep(200); current = await observe(); continue;
+                    }
+                    if (keyboardFarewell(current,options.namedRequest)) {
+                        var exit=await leaveKeyboardMenu(api,observe,options.namedRequest,current,began+deadlineMs);
+                        presses+=exit.presses;inputMs+=exit.inputMs;current=exit.current;farewell=exit.farewell;
+                        if(exit.reason)return {status:'stopped',reason:exit.reason,menuFrameId:current.frameId,
+                            presses:presses,inputMs:inputMs,farewell:farewell};
+                        continue;
                     }
                     choice = namedFarewell(current, options.namedRequest.talkTo, namedOptions);
                     if (!choice) return {status:'stopped', reason:'named_dialogue_no_farewell', menuFrameId:current.frameId,
@@ -2002,6 +2080,6 @@ var ActOneMission = (function () {
             if(current&&current.hud&&current.hud.climbing) grounded=0;
         }
     }
-    return { guildNavigationFromInventory:guildNavigationFromInventory, travelHoldMs:travelHoldMs, reviewedClimbRelease:reviewedClimbRelease, settledClimbLanding:settledClimbLanding, statueHealingApproach:statueHealingApproach, runNavigation: runNavigation, runDialogue: runDialogue, runQuestStep:runQuestStep, bearing: bearing, objectiveMatches: objectiveMatches, selectDialogueChoice: selectDialogueChoice };
+    return { keyboardFarewell:keyboardFarewell, guildNavigationFromInventory:guildNavigationFromInventory, travelHoldMs:travelHoldMs, reviewedClimbRelease:reviewedClimbRelease, settledClimbLanding:settledClimbLanding, statueHealingApproach:statueHealingApproach, runNavigation: runNavigation, runDialogue: runDialogue, runQuestStep:runQuestStep, bearing: bearing, objectiveMatches: objectiveMatches, selectDialogueChoice: selectDialogueChoice };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = ActOneMission;

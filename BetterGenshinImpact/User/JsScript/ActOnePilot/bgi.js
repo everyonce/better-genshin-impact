@@ -9328,9 +9328,19 @@ function createActOneAdapter(sessionId,options) {
             events.push({type:'characterAcquiredContinue',character:lastObservation.hud.characterAcquired,frameId:lastObservation.frameId,startedAt:Date.now()});
             click(1700,900);
         },
-        chooseChoice: function (label) {
+        chooseChoice: function (label,source) {
             checkStop();
-            if (!lastObservation || Date.now() - lastObservation.timestamp > 1000 || !lastObservation.hud.choice) throw new Error('Fresh dialogue choice required');
+            var age=lastObservation?Date.now()-lastObservation.timestamp:Infinity;
+            if (!lastObservation || !Number.isFinite(age) || age<0 || age>1000) throw new Error('Fresh dialogue choice required');
+            if(source){
+                // A tutorial can hide Auto. Recheck the actual latest frame before using the same text click.
+                if(!request||request.mission!=='dialogue'||!request.talkTo||source.session!==request.session||
+                    source.session!==lastObservation.session||source.frameId!==lastObservation.frameId||
+                    source.timestamp!==lastObservation.timestamp||source.screenshotPath!==lastObservation.screenshotPath)
+                    throw new Error('Named choice source is stale');
+                var proof=eval(file.readTextSync('mission.js')+'\nActOneMission.keyboardFarewell;')(lastObservation,request);
+                if(!proof||proof.labels[proof.exit]!==label)throw new Error('Verified named farewell required');
+            }else if(!lastObservation.hud.choice)throw new Error('Fresh dialogue choice required');
             var matches = lastObservation.ocr.filter(function (r) { return r.text.trim() === label && r.x > 1000 && r.y > 430 && r.y < 830; });
             if (matches.length !== 1) throw new Error('Dialogue option is ambiguous');
             var row = matches[0]; events.push({ type: 'dialogueChoice', label: label, frameId: lastObservation.frameId, startedAt: Date.now() });

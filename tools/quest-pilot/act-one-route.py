@@ -15,6 +15,9 @@ ROOT = APP / 'User/JsScript/ActOnePilot'
 MAX_DEADLINE_MS = 90_000
 MAX_SEGMENTS = 3
 EXPLORATION_OBJECTIVE = 'Explore for Adventure Rank'
+# Each name resolves to an existing native teleport that verifies its own destination.
+ROUTE_TELEPORT_STEPS = {'temple-of-the-lion': 'actTwoLionTeleport',
+                        'mondstadt-gate': 'actTwoGateTeleport', 'starfell-lake': 'actTwoStarfellTeleport'}
 # Leave capture time before another stationary observation; retirement alone cannot grant input.
 STATIONARY_OBSERVATION_RESERVE_SECONDS = 1.0
 PASSIVE_TERMINAL_SETTLEMENT_SECONDS = 1.0
@@ -73,6 +76,8 @@ def validate_route(value):
                 or any(type(start.get(k)) not in (int, float) or not math.isfinite(start[k])
                        for k in ('x', 'y', 'radius')) or start['radius'] <= 0):
             raise RouteError('startNear requires exactly map Teyvat, finite x/y and a positive finite radius.')
+    if 'teleportTo' in value and (not isinstance(value['teleportTo'], str) or value['teleportTo'] not in ROUTE_TELEPORT_STEPS):
+        raise RouteError('teleportTo must identify a supported native teleport destination.')
     return value['objective'], waypoints
 
 
@@ -137,8 +142,8 @@ def run_route(root, route, session, *, max_segments=MAX_SEGMENTS, deadline_ms=MA
     if isinstance(deadline_ms, bool) or not isinstance(deadline_ms, int) or not 1000 <= deadline_ms <= MAX_DEADLINE_MS:
         raise RouteError(f'deadline-ms must be from 1000 to {MAX_DEADLINE_MS}.')
     objective, original_waypoints = validate_route(route)
-    if 'startNear' in route:
-        raise RouteError('startNear requires controller mode and a fresh account-bound world measurement.')
+    if 'startNear' in route or 'teleportTo' in route:
+        raise RouteError('startNear and teleportTo require controller mode and a fresh account-bound world measurement.')
     next_index = 0
     for segment_number in range(1, max_segments + 1):
         ensure_no_outstanding_request(root)
@@ -443,10 +448,17 @@ class GuardedPilot:
             raise RouteError('Unexpected route-controller mission fields.')
         if mission == 'keyPress' and fields != {'key': 'VK_ESCAPE'}:
             raise RouteError('Only the fixed Journal-close operation is available.')
-        if mission == 'questStep' and fields['step'] not in ('worldInventory', 'worldInventoryClose', 'actTwoNativeCombat', 'actTwoFieldCombat'):
-            raise RouteError('Unsupported exploration inventory operation.')
-        if mission == 'questStep' and fields['step'] != 'worldInventory' and not self.inventory_ready(source):
-            raise RouteError('A recognized inventory is required before returning to the field.')
+        if mission == 'questStep':
+            step = fields['step']
+            if step in ROUTE_TELEPORT_STEPS.values():
+                if not regional_map_ready(source):
+                    raise RouteError('Native map teleport requires an open regional map.')
+            elif step in ('worldInventoryClose', 'actTwoNativeCombat', 'actTwoFieldCombat', 'actTwoWorldMap',
+                          'actTwoStarfellInventoryTeleport'):
+                if not self.inventory_ready(source):
+                    raise RouteError('A recognized inventory is required for this native step.')
+            elif step != 'worldInventory':
+                raise RouteError('Unsupported exploration inventory operation.')
         if mission == 'navigation':
             self.command.validate_navigation_plan(fields, fields['deadlineMs'])
         self._admit(source, passive=mission == 'observe')
@@ -552,6 +564,12 @@ def source_account_matches(source, expected_uid):
             if match:
                 matches.append(match.group(1))
     return matches == [expected_uid]
+
+
+def regional_map_ready(source):
+    """Distinguish the regional map from an unrelated menu before dispatching native map travel."""
+    hud = source['hud']
+    return hud.get('bigMap') is True and hud.get('world') is False and not hud.get('journal')
 
 
 def ground_scan_matches(source, now_ms, state, count, *, candidate_count=None, max_age_ms=1000):
@@ -707,6 +725,9 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
         route=dict(objective=objective, waypoints=points), expectedUid=expected_uid,
         nextWaypointIndex=0, navigationRequests=0, handoffs=0, pending=None, records=[],
         originalDeadlineMs=deadline_ms, startedAt=int(clock_ms()))
+    destination = route.get('teleportTo')
+    if destination is not None:
+        state['route']['teleportTo'] = destination
     start_near = route.get('startNear')
     if start_near is not None:
         state['route']['startNear'] = dict(start_near)
@@ -847,7 +868,47 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
             protection['requestIds'] = [r['request']['id'] for r in state['records'][protection['originalRecordCount']:]]
             protection['finishedAt'] = int(clock_ms())
 
+    def travel_source():
+        """Use a newly captured same-account view after each native menu transition."""
+        dispatch('observe', pilot.current(), {})
+        source = pilot.current()
+        require_fresh_source(source, pilot.session, clock_ms())
+        if not source_account_matches(source, expected_uid):
+            raise RouteError('Teleport requires the expected account on the current game screen.')
+        return source
+
+    def teleport_before_route():
+        """Travel once, then release the verified arrival inventory for normal route decisions."""
+        source = travel_source()
+        if source['hud'].get('world') is True:
+            dispatch('questStep', source, dict(step='worldInventory'))
+            source = travel_source()
+        step = ROUTE_TELEPORT_STEPS[destination]
+        if not regional_map_ready(source):
+            if not pilot.inventory_ready(source):
+                raise RouteError('Teleport requires the world, inventory or regional map.')
+            if destination == 'starfell-lake':
+                step = 'actTwoStarfellInventoryTeleport'
+            else:
+                dispatch('questStep', source, dict(step='actTwoWorldMap'))
+                source = travel_source()
+                if not regional_map_ready(source):
+                    raise RouteError('The native regional map did not open.')
+        result = dispatch('questStep', source, dict(step=step))
+        if (not protected_inventory(result) or result.get('step') != step
+                or result.get('teleportAttempted') is not True or result.get('destinationReached') is not True):
+            raise RouteError('Native teleport did not confirm the requested destination and inventory.')
+        state['teleportArrival'] = dict(destination=destination, requestId=state['records'][-1]['request']['id'],
+                                        fieldFrameId=result.get('fieldFrameId'), position=result.get('fieldPosition'))
+        save()
+        source = travel_source()
+        if not pilot.inventory_ready(source):
+            raise RouteError('Fresh inventory at the teleport destination is unavailable.')
+        dispatch('questStep', source, dict(step='worldInventoryClose'))
+
     try:
+        if destination is not None:
+            teleport_before_route()
         while monotonic() < deadline:
             if pilot.stopped():
                 raise RouteError('Operator STOP prevents further route input.')

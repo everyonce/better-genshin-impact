@@ -1,0 +1,8 @@
+{
+  "objective": "Explore for Adventure Rank",
+  "teleportTo": "temple-of-the-lion",
+  "startNear": {"map": "Teyvat", "x": -1427.42, "y": 1661.83, "radius": 20},
+  "waypoints": [
+    {"map": "Teyvat", "x": -1390.082, "y": 1647.763}
+  ]
+}

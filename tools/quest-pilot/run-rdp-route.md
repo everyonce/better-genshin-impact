@@ -10,6 +10,8 @@ python -B tools/quest-pilot/run-rdp-route.py `
   --allow-field-combat
 ```
 
+An optional `teleportTo` field in a route JSON selects `temple-of-the-lion`, `mondstadt-gate`, or `starfell-lake`. BetterGI opens the map when needed and verifies arrival before walking the waypoints. Travel uses the same route deadline. A route with `startNear` checks its starting position after teleporting.
+
 The launcher discovers the connected child and verifies the running game against BetterGI’s configured executable, Windows session, window, and process start time. Use `--process-id PID` to select a child when several are connected. It uses Node from the console PATH. Use `--node PATH` to select an installed `node.exe`.
 
 - Repeat `--route PATH` to run up to 20 routes on one pilot. Each route starts after the previous route verifies arrival. A verified inventory handoff lets the next route skip an extra menu transition.

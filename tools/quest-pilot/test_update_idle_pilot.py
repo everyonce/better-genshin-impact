@@ -46,6 +46,86 @@ class IdleUpdateTests(unittest.TestCase):
             self.assertEqual((self.pilot/name).read_bytes(),before.replace(b'\n',b'\r\n'))
         self.assertFalse(any((self.pilot/p).exists() for p in u.LEASES))
 
+    def test_new_helpers_precede_all_existing_scripts_under_both_leases(self):
+        self.blobs.update({'leaf.js':(None,b''),'helper.js':(None,b'leaf()\n')})
+        def replace(source,dest,before_replace):
+            self.assertTrue(all((self.pilot/p).is_file() for p in u.LEASES))
+            self.assertEqual((self.pilot/'leaf.js').read_bytes(),b'')
+            self.assertEqual((self.pilot/'helper.js').read_bytes(),b'leaf()\n')
+            u.PROTO.replace_pending(source,dest,before_replace=before_replace)
+        result=self.update(replace=replace)
+        self.assertEqual(result['publicationOrder'],['leaf.js','helper.js','a.js','b.js'])
+        self.assertEqual(result['files']['leaf.js'],dict(operation='add',originalSha256=None,
+                         fromGitSha256=None,toGitSha256=u.sha(b'')))
+        self.assertFalse((self.out/'original-helper.js').exists())
+        self.assertFalse((self.out/'stage-helper.js').exists())
+        self.assertEqual(result['status'],'installed')
+
+    def test_mixed_rollback_restores_references_then_removes_our_additions(self):
+        self.blobs['helper.js']=(None,b'helper')
+        def replace(source,dest,before_replace):
+            self.assertEqual((self.pilot/'helper.js').read_bytes(),b'helper')
+            if source.name=='stage-b.js':raise OSError('failed reference')
+            u.PROTO.replace_pending(source,dest,before_replace=before_replace)
+        with self.assertRaisesRegex(OSError,'failed reference'):self.update(replace=replace)
+        result=u.read(self.out/'result.json')
+        self.assertEqual((result['status'],result['restored']),('rolled_back',['a.js','helper.js']))
+        self.assertEqual((self.pilot/'a.js').read_bytes(),b'old a\r\n')
+        self.assertFalse((self.pilot/'helper.js').exists())
+        self.assertFalse(any((self.pilot/p).exists() for p in u.LEASES))
+
+    def test_preexisting_equal_dependency_is_foreign(self):
+        self.blobs['helper.js']=(None,b'helper')
+        (self.pilot/'helper.js').write_bytes(b'helper')
+        with self.assertRaisesRegex(RuntimeError,'occupied'):self.update()
+        self.assertEqual((self.pilot/'helper.js').read_bytes(),b'helper')
+        self.assertEqual((self.pilot/'a.js').read_bytes(),b'old a\r\n')
+
+    def test_intervening_claim_does_not_overwrite_or_remove_foreign_file(self):
+        self.blobs['helper.js']=(None,b'helper')
+        publish=u.publish_addition
+        def claim(staged,dest):
+            dest.write_bytes(b'other owner')
+            publish(staged,dest)
+        with patch.object(u,'publish_addition',claim), self.assertRaises(FileExistsError):self.update()
+        self.assertEqual((self.pilot/'helper.js').read_bytes(),b'other owner')
+        self.assertEqual((self.pilot/'a.js').read_bytes(),b'old a\r\n')
+
+    def test_modified_new_file_is_left_for_recovery(self):
+        self.blobs['helper.js']=(None,b'helper')
+        def replace(*args,**kwargs):
+            (self.pilot/'helper.js').write_bytes(b'edited')
+            raise OSError('interrupted')
+        with self.assertRaisesRegex(OSError,'interrupted'):self.update(replace=replace)
+        self.assertEqual((self.pilot/'helper.js').read_bytes(),b'edited')
+        self.assertEqual(u.read(self.out/'result.json')['status'],'recovery_required')
+        self.assertTrue(all((self.pilot/p).is_file() for p in u.LEASES))
+
+    def test_equal_bytes_from_a_different_file_are_left_for_recovery(self):
+        self.blobs['helper.js']=(None,b'helper')
+        def replace(*args,**kwargs):
+            other=self.pilot/'other';other.write_bytes(b'helper')
+            os.replace(other,self.pilot/'helper.js')
+            raise OSError('file identity changed')
+        with self.assertRaisesRegex(OSError,'identity changed'):self.update(replace=replace)
+        self.assertEqual((self.pilot/'helper.js').read_bytes(),b'helper')
+        self.assertEqual(u.read(self.out/'result.json')['status'],'recovery_required')
+
+    def test_only_an_empty_source_tree_result_is_a_new_script(self):
+        old,new='a'*40,'b'*40
+        regular=b'100644 blob '+b'1'*40+b'\t'+(u.PREFIX+'helper.js').encode()+b'\0'
+        symlink=regular.replace(b'100644',b'120000')
+        for before,after,valid in ((b'',regular,True),(b'',b'',False),(symlink,regular,False),(b'',symlink,False)):
+            def git(command,**kwargs):
+                if 'rev-parse' in command:return command[-1][:40].encode()
+                if 'ls-tree' in command:return before if old in command else after
+                self.assertIn('cat-file',command)
+                return b''
+            with self.subTest(before=before,after=after), patch.object(u.subprocess,'check_output',git):
+                if valid:self.assertEqual(u.committed(old,new,['helper.js'])[1]['helper.js'],[None,b''])
+                else:
+                    with self.assertRaisesRegex(RuntimeError,'regular Git file'):u.committed(old,new,['helper.js'])
+
     def test_loss_of_ownership_after_swap_retains_evidence_and_leases(self):
         def check():
             if (self.pilot/'a.js').read_bytes()==b'new a\n':raise RuntimeError('owner changed')

@@ -65,7 +65,11 @@ def committed(before, after, names):
     for name in names:
         pair=[]
         for version in versions:
-            entry=git('ls-tree','-z',version,'--',PREFIX+name).rstrip(b'\0')
+            entry=git('ls-tree','-z',version,'--',PREFIX+name)
+            if version==versions[0] and entry==b'':
+                pair.append(None)
+                continue
+            entry=entry.rstrip(b'\0')
             meta,sep,path=entry.partition(b'\t')
             require(sep and path.decode()==PREFIX+name and meta.startswith(b'100644 blob '),
                     'Missing regular Git file '+name)
@@ -114,6 +118,37 @@ def exclusive(path, data):
         os.fsync(stream.fileno())
 
 
+def publish_addition(staged, path):
+    """Publish complete bytes without overwriting any competing claim on the new filename."""
+    if os.name=='nt':
+        os.rename(staged,path)  # Windows rename has no replace-existing flag.
+    else:
+        os.link(staged,path)
+
+
+def remove_addition(path, installed, expected):
+    """Remove only our file. On Windows pin the checked file against concurrent writes and renames."""
+    def verify(stream):
+        require(os.path.samestat(os.fstat(stream.fileno()), installed) and stream.read()==expected,
+                'Added file changed: '+path.name)
+    if os.name!='nt':
+        with path.open('rb') as stream:
+            verify(stream)
+            path.unlink()
+        return
+    import _winapi
+    import ctypes
+    import msvcrt
+    # GENERIC_READ | DELETE, share-read only, OPEN_REPARSE_POINT. Delete via this same handle.
+    handle=_winapi.CreateFile(str(path), _winapi.GENERIC_READ | 0x10000, 1, 0, _winapi.OPEN_EXISTING, 0x00200000, 0)
+    with os.fdopen(msvcrt.open_osfhandle(handle,os.O_RDONLY | os.O_BINARY),'rb') as stream:
+        verify(stream)
+        dispose=ctypes.c_ubyte(1)
+        set_info=ctypes.WinDLL('kernel32',use_last_error=True).SetFileInformationByHandle
+        if not set_info(ctypes.c_void_p(handle),4,ctypes.byref(dispose),ctypes.sizeof(dispose)):
+            raise ctypes.WinError(ctypes.get_last_error())
+
+
 def install(pilot, output, blobs, check, no_links, replace=PROTO.replace_pending):
     """Own both public leases during the batch and restore only our proven writes on failure."""
     no_links(pilot)
@@ -121,7 +156,10 @@ def install(pilot, output, blobs, check, no_links, replace=PROTO.replace_pending
     require(pilot.stat().st_dev==output.stat().st_dev, 'Evidence and installed scripts must share a volume.')
     token=json.dumps(dict(launchId='idle-pilot-update-'+output.name,output=str(output))).encode()
     owned=[]; changed=[]; original={}; release=True
-    report=dict(files={},status='preparing')
+    added={}
+    # Install new dependencies first, in caller order. Roll back in the reverse publication order.
+    order=sorted(blobs,key=lambda name:blobs[name][0] is not None)
+    report=dict(files={},publicationOrder=order,status='preparing')
     def guard():
         check()
         require(all(path.read_bytes()==token for path in owned), 'An update lease changed.')
@@ -146,22 +184,45 @@ def install(pilot, output, blobs, check, no_links, replace=PROTO.replace_pending
         guard()
         for name,(before,after) in blobs.items():
             path=pilot/name
-            no_links(path)
-            disk=path.read_bytes()
-            require(disk==before or (b'\r' not in before and disk==before.replace(b'\n',b'\r\n')),
-                    'Installed bytes disagree with --from-ref: '+name)
+            disk=None
+            if before is None:
+                no_links(pilot)
+                require(not os.path.lexists(path),'New script slot is already occupied: '+name)
+            else:
+                no_links(path)
+                disk=path.read_bytes()
+                require(disk==before or (b'\r' not in before and disk==before.replace(b'\n',b'\r\n')),
+                        'Installed bytes disagree with --from-ref: '+name)
+                exclusive(output/('original-'+name),disk)
             original[name]=disk
-            exclusive(output/('original-'+name),disk)
             exclusive(output/('stage-'+name),after)
-            report['files'][name]=dict(originalSha256=sha(disk),fromGitSha256=sha(before),toGitSha256=sha(after))
+            report['files'][name]=dict(operation='add' if before is None else 'replace',
+                originalSha256=None if disk is None else sha(disk),
+                fromGitSha256=None if before is None else sha(before),toGitSha256=sha(after))
         report['status']='prepared'
         save(output/'result.json',report)
-        for name,(_,after) in blobs.items():
+        for name in order:
+            before,after=blobs[name]
             staged=output/('stage-'+name)
             require(staged.read_bytes()==after,'Staged Git blob changed: '+name)
-            swap(name,staged,original[name])
-            changed.append(name)
+            if before is None:
+                guard()
+                no_links(pilot)
+                no_links(staged)
+                with staged.open('rb') as stream:
+                    added[name]=os.fstat(stream.fileno())
+                    require(stream.read()==after,'Staged Git blob changed: '+name)
+                publish_addition(staged,pilot/name)
+                changed.append(name)
+                if os.name!='nt':staged.unlink()
+            else:
+                swap(name,staged,original[name])
+                changed.append(name)
         guard()
+        for name,installed in added.items():
+            path=pilot/name
+            no_links(path)
+            require(os.path.samestat(path.stat(),installed),'Added file identity changed: '+name)
         require(all((pilot/name).read_bytes()==blobs[name][1] for name in changed),'Installed readback failed.')
         report['status']='installed'
         save(output/'result.json',report)
@@ -169,6 +230,14 @@ def install(pilot, output, blobs, check, no_links, replace=PROTO.replace_pending
         report.update(status='failed',error=str(error),swapped=list(changed),restored=[])
         try:
             for name in reversed(changed):
+                if name in added:
+                    guard()
+                    path=pilot/name
+                    no_links(path)
+                    remove_addition(path,added[name],blobs[name][1])
+                    require(not os.path.lexists(path),'New script slot changed during rollback: '+name)
+                    report['restored'].append(name)
+                    continue
                 backup=(output/('original-'+name)).read_bytes()
                 require(backup==original[name], 'Original backup changed: '+name)
                 staged=output/('restore-'+name)

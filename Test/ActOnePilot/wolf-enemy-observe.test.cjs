@@ -8,6 +8,27 @@ const packageDir=path.resolve(__dirname,'../../BetterGenshinImpact/User/JsScript
 const source=fs.readFileSync(path.join(packageDir,'bgi.js'),'utf8');
 const row=(text,x,y,width=50,height=20)=>({text,x,y,width,height});
 
+// Compute 8-connected component bounds from the exact threshold pixels in a replay tile.
+function tileComponents(pixels,w,h){
+  const remaining=new Set(pixels),components=[];
+  while(remaining.size){
+    const first=remaining.values().next().value,stack=[first];
+    remaining.delete(first);
+    let left=w,top=h,right=0,bottom=0;
+    while(stack.length){
+      const at=stack.pop(),x=at%w,y=Math.floor(at/w);
+      left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);
+      for(let yy=Math.max(0,y-1);yy<=Math.min(h-1,y+1);yy++){
+        for(let xx=Math.max(0,x-1);xx<=Math.min(w-1,x+1);xx++){
+          const i=yy*w+xx;if(remaining.delete(i))stack.push(i);
+        }
+      }
+    }
+    components.push({x:left,y:top,width:right-left+1,height:bottom-top+1});
+  }
+  return components;
+}
+
 async function observeStep(step, missionName='questStep', options={}) {
   // Frame 66 bar bounds are x=651..812, y=364..377. A bar pixel is RGB(255,90,90),
   // or BGR(90,90,255), which must survive the detector color threshold.
@@ -47,12 +68,12 @@ async function observeStep(step, missionName='questStep', options={}) {
         inRange:(low,high)=>{
           const tile=(options.terrainTiles||[]).find(t=>x>=t.x&&y>=t.y&&x+w<=t.x+t.w&&y+h<=t.y+t.h);
           if(tile){
-            let pixelCount=0;
+            const pixels=[];
             for(let j=y;j<y+h;j++)for(let i=x;i<x+w;i++){
               const k=3*((j-tile.y)*tile.w+i-tile.x);
-              if([tile.rgb[k+2],tile.rgb[k+1],tile.rgb[k]].every((v,c)=>v>=low.values[c]&&v<=high.values[c]))pixelCount++;
+              if([tile.rgb[k+2],tile.rgb[k+1],tile.rgb[k]].every((v,c)=>v>=low.values[c]&&v<=high.values[c]))pixels.push((j-y)*w+i-x);
             }
-            return {pixelCount,dispose(){}};
+            return {pixelCount:pixels.length,findContoursAsArray:()=>tileComponents(pixels,w,h),dispose(){}};
           }
           if(x===350&&y===100) enemyScans++;
           const bgr=[90,90,255];
@@ -399,6 +420,48 @@ test('sparse warm street texture requires all fringe pixels and a warm surroundi
   const anchored=await sample(null,[...groundRows(),row('Lv. 5',881,359,40,18)]);
   assert.equal(anchored.enemyBarObservation.state,'threat');assert.equal(anchored.enemyBars.length,1);
 });
+const cookingSource=require('./cooking-glow.fixture.json');
+function cookingFrame(sample,change){
+  const contours=sample.raw.map(b=>({x:b.x-b.width/2,y:b.y-b.height/2-30,width:b.width,height:b.height,
+    area:b.rectangularity*(b.width-1)*(b.height-1)}));
+  const tile=sample.rgbZlib?{...sample.tile,rgb:require('node:zlib').inflateSync(Buffer.from(sample.rgbZlib,'base64'))}:null;
+  const rows=[...sample.rows];
+  if(change)change(tile,rows,contours);
+  return measure({terrainTiles:tile?[tile]:[],contours,rows,health:sample.health,map:sample.map});
+}
+test('all five original stationary fountain frames resolve only the dim oven fringe',async()=>{
+  for(const sample of cookingSource.city){
+    const h=(await cookingFrame(sample)).observation.hud;
+    assert.equal(h.enemyBarObservation.state,'clear','frame '+sample.frame);
+    assert.equal(h.groundControls,true);assert.deepEqual(h.health,{current:3988,max:4015});
+    assert.equal(h.enemyBarDiagnostic.cookingGlows.length,sample.raw.length);
+    assert.equal(h.enemyBarDiagnostic.rawCandidates.length,sample.raw.length);
+    assert.equal(h.enemyBarObservation.candidateCount,0);
+  }
+});
+test('brightness, diagonal shape, compact core, surrounding material and absent enemy labels are all necessary',async()=>{
+  const sample=cookingSource.city[0];
+  const set=(t,x,y,r,g,b)=>{const i=3*((y-t.y)*t.w+x-t.x);t.rgb.set([r,g,b],i);};
+  for(const change of [
+    t=>set(t,1163,468,255,90,90), // A single UI-red pixel in the shared tile.
+    t=>set(t,1163,468,225,90,90), // Remove the upper-left end of just one red fragment.
+    t=>{for(let x=t.x;x<t.x+t.w;x++)for(let y=461;y<466;y++)set(t,x,y,255,209,126);}, // A long horizontal damage trail.
+    t=>{for(let i=0;i<t.rgb.length;i+=3)if(t.rgb[i]<=245&&t.rgb[i+1]<=120)t.rgb[i]=120;}, // The orange halo disappeared.
+    (_t,rows)=>rows.push(row('Lv.5',1141,433,44,16))
+  ]){
+    const h=(await cookingFrame(sample,change)).observation.hud;
+    assert.notEqual(h.enemyBarObservation.state,'clear');
+    assert.ok(h.enemyBarObservation.candidateCount>0||h.enemyBars.length>0);
+  }
+});
+test('retained Gate hilichurl, post-hit target, warning-ring and Temple enemy stay in the field scan',async()=>{
+  for(const sample of cookingSource.combat){
+    const h=(await cookingFrame(sample)).observation.hud;
+    assert.equal(h.enemyBarObservation.state,sample.expectedThreat?'threat':'ambiguous',sample.run+' '+sample.frame);
+    assert.equal(h.enemyBarDiagnostic.cookingGlows,undefined);
+  }
+});
+
 test('extra tiny components stay unresolved when their pixel-probe budget is exhausted',async()=>{
   const cases=Array.from({length:9},(_,i)=>warmStreetCase(900+i*16));
   const hud=(await measure({contours:cases.map(c=>c.contour),terrainTiles:cases.map(c=>c.tile)})).observation.hud;

@@ -3723,6 +3723,41 @@ function createActOneAdapter(sessionId,options) {
                 return {x:bar.x,y:bar.y,redPixels:red,warmRedPixels:warm,warmRimMinimum:material-w*h,rimPixels:rim};
             }finally{dispose(outer);dispose(inner);}
         }
+        // A small oven glow has a diagonal dim-red fringe next to a compact yellow core and red halo.
+        // A straight rail, a nearby level label, UI red in the same tile or a warning-ring fragment stays unresolved.
+        function cookingGlow(bar){
+            var cv=OpenCvSharp.OpenCvSharp,w=bar.width,h=bar.height,x=bar.x-w/2,y=bar.y-h/2;
+            var cx=Math.round(bar.x),cy=Math.round(bar.y),tile=null,gold=null;
+            function count(crop,lo,hi){
+                var mask=crop.srcMat.inRange(new cv.Scalar(lo[0],lo[1],lo[2]),new cv.Scalar(hi[0],hi[1],hi[2]));
+                try{return Number(cv.Cv2.countNonZero(mask));}finally{dispose(mask);}
+            }
+            function redAt(px,py){
+                var point=img.deriveCrop(px,py,1,1);
+                try{return count(point,[75,75,230],[110,110,255]);}finally{dispose(point);}
+            }
+            try{
+                tile=img.deriveCrop(cx-16,cy-16,33,33);
+                if(count(tile,[75,75,251],[110,110,255])!==0 ||
+                   redAt(x,y)!==1 || redAt(x+w-1,y+h-1)!==1 || redAt(x+w-1,y)!==0 || redAt(x,y+h-1)!==0)return null;
+                gold=tile.srcMat.inRange(new cv.Scalar(35,172,249),new cv.Scalar(140,250,255));
+                var pixels=Number(cv.Cv2.countNonZero(gold));
+                if(!Number.isInteger(pixels)||pixels<32||pixels>120)return null;
+                var shapes=gold.findContoursAsArray(cv.RetrievalModes.External,cv.ContourApproximationModes.ApproxSimple);
+                if(!shapes||(shapes.length===undefined?shapes.Length:shapes.length)!==1)return null;
+                var rect=cv.Cv2.boundingRect(shapes[0]);
+                var bx=Number(rect.x===undefined?rect.X:rect.x),by=Number(rect.y===undefined?rect.Y:rect.y);
+                var bw=Number(rect.width===undefined?rect.Width:rect.width),bh=Number(rect.height===undefined?rect.Height:rect.height);
+                if(![bx,by,bw,bh].every(Number.isInteger)||bx<2||by<2||bx+bw>31||by+bh>31||
+                   bw<7||bw>16||bh<5||bh>10||bw<bh||bw>bh*2.1||pixels<bw*bh*.5)return null;
+                var left=cx-16+bx,top=cy-16+by,right=left+bw-1,bottom=top+bh-1;
+                var gap=bar.y<top?top-bar.y:bar.y-bottom;
+                if(gap<.5||gap>5||bar.x<left-4||bar.x>right+4)return null;
+                var hot=count(tile,[54,198,253],[130,245,255]),halo=count(tile,[55,25,180],[140,120,245]);
+                if(!Number.isInteger(hot)||hot<12||hot>pixels||!Number.isInteger(halo)||halo<150||halo>450)return null;
+                return {x:bar.x,y:bar.y,core:{x:left,y:top,width:bw,height:bh},yellowPixels:pixels,hotPixels:hot,haloPixels:halo};
+            }finally{dispose(gold);dispose(tile);}
+        }
         // Count the orange body immediately above or below a possible flame tip.
         function flamePixels(x,y) {
             var patch=null,color=null;
@@ -3784,7 +3819,7 @@ function createActOneAdapter(sessionId,options) {
                 // Small near-square fragments in the side HUD are not field bars. Wide edge bars
                 // and same-image level-anchored depleted bars remain candidates, never silently clear.
                 enemyBarDiagnostic.flameTips=[];
-                var terrainReads=0;
+                var terrainReads=0,glowReads=0;
                 enemyBarDiagnostic.fieldCandidates=candidates.filter(function(bar){
                     if(actOneOutdoorEnemyBarCandidate(bar,rows))return true;
                     // In a camp flame, a short red tip sits above a bright orange plume.
@@ -3806,6 +3841,16 @@ function createActOneAdapter(sessionId,options) {
                         if(terrain){
                             if(!enemyBarDiagnostic.warmTerrain)enemyBarDiagnostic.warmTerrain=[];
                             enemyBarDiagnostic.warmTerrain.push(terrain);
+                            return false;
+                        }
+                    }
+                    if(glowReads<4&&bar.width>=2&&bar.width<=10&&bar.height>=3&&bar.height<=7&&bar.width<=2.5*bar.height&&
+                       bar.rectangularity<=.5&&Math.hypot(bar.x-960,bar.y-540)<420){
+                        glowReads++;
+                        var glow=cookingGlow(bar);
+                        if(glow){
+                            if(!enemyBarDiagnostic.cookingGlows)enemyBarDiagnostic.cookingGlows=[];
+                            enemyBarDiagnostic.cookingGlows.push(glow);
                             return false;
                         }
                     }

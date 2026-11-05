@@ -498,10 +498,22 @@ class SupervisedRouteControllerTests(unittest.TestCase):
             with self.subTest(kind=kind):
                 self.progress = Path(self.temp.name) / ('scan-' + kind + '.json')
                 pilot = self.reacquisition_pilot(['ambiguous', kind, 'clear'])
-                report = self.run_controller(pilot, allow_field_combat=True)
+                report = self.run_controller(pilot, allow_field_combat=kind != 'threat')
                 self.assertIn(report['status'], ('waiting', 'stopped'))
                 self.assertEqual([r['mission'] for r in pilot.calls], ['observe', 'observe'])
                 self.assertFalse(report['groundReacquisition'].get('measuredClear', False))
+
+    def test_reacquired_hostile_prepares_opted_in_combat_instead_of_walking(self):
+        self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
+        inv = controller_scene('inventory')
+        pilot = self.reacquisition_pilot(['ambiguous', 'threat'], [
+            dict(mission='questStep', source=inv, result=dict(pausedInventory=True)),
+            dict(mission='questStep', status='stopped', source=inv, result=dict(nativeAttempted=False))])
+        report = self.run_controller(pilot, allow_field_combat=True)
+        self.assertEqual(report['groundReacquisition']['frames'][-1]['state'], 'threat')
+        self.assertFalse(report['groundReacquisition']['measuredClear'])
+        self.assertEqual([r.get('step',r['mission']) for r in pilot.calls],
+            ['observe','observe','worldInventory','observe','actTwoFieldCombat'])
 
     def test_non_fragment_initial_failures_never_enter_reacquisition(self):
         self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE

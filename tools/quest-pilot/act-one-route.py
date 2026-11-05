@@ -837,8 +837,9 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
                     samples.append(dict(frameId=source['frameId'], capturedAt=stamp,
                                         state=scan.get('state'), reason=scan.get('reason')))
                     phase, value = route_phase(source, expected_uid, authorized_objectives,
-                        allow_dialogue=False, journal_resume=False, now_ms=now_ms)
-                    if phase == 'navigation' and value == EXPLORATION_OBJECTIVE:
+                        allow_dialogue=False, journal_resume=False, now_ms=now_ms,
+                        allow_field_combat=allow_field_combat)
+                    if phase == 'fieldCombat' or (phase == 'navigation' and value == EXPLORATION_OBJECTIVE):
                         break
                     if not unanchored_ground_scan(source, expected_uid, now_ms):
                         phase, value = 'wait', 'Stationary reacquisition found threat or other unsafe evidence'

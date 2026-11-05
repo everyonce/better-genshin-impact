@@ -52,3 +52,13 @@ The included `routes/mondstadt-city-to-katheryne.json` follows BetterGI's packag
 For model comparisons, pass `--save-encounter-frames` to the public launcher. During each leg, the worker watches that leg's progress for settled combat and named NPC requests. It retains original PNG/JSON pairs for combat before and after frames, verified Character EXP rewards, and named NPC selection, greeting and return to the world. The limit is 16 unique frames and 32 MiB of paired files across the whole launch. The capture uses disk files only.
 
 Open `encounter-evidence.json` beside `worker-result.json` to find frame paths, roles, session and frame IDs, request IDs, and SHA-256 digests of both files and their immutable native receipt. A sample can support several roles. The worker verifies the receipt, capture stamp, screenshot path and PNG integrity before publishing each pair. Expired, mismatched and over-budget frames are listed under `issues` (up to 16 diagnostic entries). The canonical progress and exit code continue to describe the gameplay result, including failed legs. Run `python -B tools/quest-pilot/test_encounter_evidence.py -v` for the capture regressions.
+
+## Update idle pilot scripts
+
+After a public route has retired, replace named scripts in its existing RDP child. Pass the completed run’s `.rdp` directory, the Git commit matching the installed files, the desired commit and the top-level JavaScript filenames, for example:
+
+```powershell
+python -B tools/quest-pilot/update-idle-pilot.py --completed-run artifacts/route-run-01.rdp --from-ref 2958bbb3 --to-ref d4987de2 bgi.js
+```
+
+The next pilot launch loads the new scripts. The command prints its evidence directory under `artifacts/pilot-updates`. It stores the original bytes and SHA-256 hashes of the installed and committed versions and rolls back a partial update while the same owner is idle. A `recovery_required` receipt lists any files restored before ownership or file verification failed. The remaining leases keep public routes from starting with a partial installation.

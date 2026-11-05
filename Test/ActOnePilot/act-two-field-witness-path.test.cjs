@@ -1,12 +1,13 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const source=fs.readFileSync('BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js','utf8');
+const eyeDefense=fs.readFileSync(require.resolve('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-eye-defense.js'),'utf8');
 const body=source.slice(source.indexOf('runActTwoField: async function'),source.indexOf('runActTwoWindriseSlime: async function'));
 test('field witness loading accepts new-session padded frames and later large frames',async()=>{
  for(const id of [1,131,999,1000,10627]){
   const reads=[],plan={witnessFrameId:id,regionMapFrameId:2},paths={
    'world-inventory.js':'function actOneWorldInventoryClosePermission(){return true;}',
    'act-two-field.js':'var ActTwoField={plan:()=>true,regionalMap:()=>true,cameraPlan:()=>false,eventReposition:()=>false,ready:()=>false,originalWitnessFailure:()=>"witness_field_conditions"};',
-   'act-two-eye-defense.js':fs.readFileSync(require.resolve('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-eye-defense.js'),'utf8'),
+   'act-two-eye-defense.js':eyeDefense,
    'act-two-field-request.json':JSON.stringify(plan),
    [`observations/s/frame-${String(id).padStart(4,'0')}.json`]:JSON.stringify({session:'s',frameId:id}),
    'observations/s/frame-0002.json':JSON.stringify({session:'s',frameId:2})};

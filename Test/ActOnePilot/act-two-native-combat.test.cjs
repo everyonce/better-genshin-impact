@@ -380,3 +380,23 @@ test('field encounter never extends a route deadline that is already close',asyn
  assert.equal(result.turns.length,0);assert.equal(result.reason,'native_drain_headroom');
  assert.equal(h.runs,0);
 });
+
+test('timed Temple approach moves past four distant samples and attacks only after reaching the measured lunge view',async()=>{
+ const h=sequenceHarness({observation(o,runs,n){
+  o.hud.enemyBars.forEach(b=>Object.assign(b,{y:n<5?418:498,height:n<5?6:4}));
+ }});
+ h.initial.hud.enemyBars.forEach(b=>Object.assign(b,{y:418,height:6}));
+ h.api.encounterDeadline=h.api.now()+35000;
+ const r=await native.fieldSequence(h.initial,h.api);
+ assert.equal(h.actions.indexOf('rotation'),5);
+ assert.equal(r.turns[0].beforeBars[0].y,498);
+});
+
+test('a route with eight distant samples cannot equate spent walk budget with melee range',async()=>{
+ const distant=o=>o.hud.enemyBars.forEach(b=>Object.assign(b,{y:427,height:5}));
+ const h=sequenceHarness({observation:distant});distant(h.initial);
+ h.api.encounterDeadline=h.api.now()+35000;
+ const r=await native.fieldSequence(h.initial,h.api);
+ assert.equal(h.runs,0);assert.equal(r.approachBudget.steps,8);
+ assert.match(r.error,/outside measured attack range/);
+});

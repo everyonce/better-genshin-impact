@@ -136,16 +136,22 @@
  async function approachFieldTarget(initial,api){
   let current=initial,turns=api.approachBudget?api.approachBudget.turns:0,steps=api.approachBudget?api.approachBudget.steps:0;
   const started=api.now(),origin=api.origin||initial.map;
-  if(api.pack)api={...api,deadline:Math.min(api.deadline||Infinity,started+8500)};
+  const routeApproach=api.pack&&Number.isFinite(api.encounterDeadline);
+  const approachMs=routeApproach?14000:8500;
+  if(api.pack)api={...api,deadline:Math.min(api.deadline||Infinity,started+approachMs)};
   for(;;){
    api.checkStop();
    if(api.pack)current=await reacquireFieldTarget(current,api);
    if(!api.eligible(current))throw new Error('Field target or grounded health changed during approach');
-   if(Math.hypot(current.map.x-origin.x,current.map.y-origin.y)>12)throw new Error('Field combat approach exceeded its travel budget');
+   if(Math.hypot(current.map.x-origin.x,current.map.y-origin.y)>(routeApproach?22:12))throw new Error('Field combat approach exceeded its travel budget');
    const bar=fieldTarget(current,api.pack),dx=api.cameraDelta([bar]);
-   // A measured post-hit trail already places a centered foe in reach of the preceding rotation.
-   if(dx===0&&(api.pack&&bar.damageTrail||bar.height>=8||bar.y>=620||steps>=4))return current;
-   if(api.now()-started>=8500)throw new Error('Field combat approach time expired');
+   // In the Temple capture a centered four-pixel bar at y=498 was within Kaeya's lunge;
+   // the four-step approach ended at y=418 in a later capture and both swings missed.
+   const inReach=(api.pack&&bar.damageTrail)||bar.height>=8||bar.y>=620||
+    (routeApproach&&bar.y>=490&&bar.height>=4);
+   if(dx===0&&(inReach||!routeApproach&&steps>=4))return current;
+   if(routeApproach&&dx===0&&steps>=8)throw new Error('Field target stayed outside measured attack range');
+   if(api.now()-started>=approachMs)throw new Error('Field combat approach time expired');
    if(api.pack&&api.now()+600>=api.deadline)throw new Error('Field combat approach lacks input headroom');
    if(dx!==0){
     if(turns>=4)throw new Error('Field combat target stayed outside the central view');

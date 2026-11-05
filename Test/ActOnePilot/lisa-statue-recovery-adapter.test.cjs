@@ -446,6 +446,45 @@ test('temple teleport refuses missing, duplicate, locked and stale panel evidenc
   assert.equal((await f.adapter.runLisaTempleTeleport(initial,f.observe)).teleportAttempted,false);assert.equal(f.inputs.length,0);
 });
 
+// Real 1920x1080 gate-camp map, R77 city-endurance frame 8. The footer is optional evidence.
+function gateCityMapRows(){return [
+ row('Cider Lake',516,20,159,35),row('200/200',1624,32,119,29),row('Starfell Lake',1044,89,191,35),
+ row('Whispering Woods',786,232,273,41),row('Mondstadt',490,288,161,35),row('Windrise',978,741,133,34),
+ row('Fastarfevalley',1555,965,241,64),row('Exploration Progress: 16%',1501,1017,291,32),
+ row('UID: 693306810',1680,1048,183,29)];}
+test('city landmarks invoke the native fixed waypoint once and require independently measured arrival',async()=>{
+ for(const reached of [true,false]){
+  const f=prepare({step:'actTwoCityTeleport',initialScreen:'map',mapRows:gateCityMapRows()});
+  f.context.genshin.getPositionFromMap=()=>{
+   if(f.getScreen()!=='field')throw Error('map has no minimap coordinates');
+   return reached?{x:-867.684,y:2281.378}:{x:-1186.08,y:2206.1};
+  };
+  const initial=await f.adapter.observe('lion-adapter-test',2);
+  const result=await f.adapter.runLisaWindriseTeleport(initial,async()=>{
+   const o=await f.observe();
+   if(f.getScreen()==='field')o.ocr.push(row('UID: 693306810',1680,1048,183,29));
+   return o;
+  });
+  assert.equal(result.teleportAttempted,true,JSON.stringify(result));
+  assert.deepEqual(JSON.parse(JSON.stringify(f.nativeCalls.filter(x=>x.kind==='tp'))),
+                   [{kind:'tp',x:-867.68,y:2281.38,flag:false}]);
+  assert.equal(result.destinationReached,reached,JSON.stringify(result));
+  if(reached){assert.ok(result.fieldFrameId>initial.frameId);assert.equal(result.pauseVerified,true);}
+ }
+});
+test('city travel refuses ambiguous, selected, stale and foreign regional map evidence before native input',async()=>{
+ for(const change of [o=>o.ocr.splice(0,1), o=>o.ocr.push(row('Mondstadt',490,288)),
+     o=>o.ocr.find(r=>r.text==='Windrise').y=30, o=>o.ocr.push(row('Teleport',1600,990)),
+     o=>o.timestamp-=1001,o=>o.session='other',o=>o.hud.bigMap=false,
+     o=>o.ocr.find(r=>r.text.includes('UID')).text='UID: 123456789']){
+  const f=prepare({step:'actTwoCityTeleport',initialScreen:'map',mapRows:gateCityMapRows()});
+  const initial=await f.adapter.observe('lion-adapter-test',2);
+  change(initial);
+  const result=await f.adapter.runLisaWindriseTeleport(initial,f.observe);
+  assert.equal(result.teleportAttempted,false,JSON.stringify(result));assert.equal(f.nativeCalls.length,0);
+ }
+});
+
 test('Act II Lion teleport is fixed to the known temple and requires regional map proof',async()=>{
  const f=prepare({step:'actTwoLionTeleport',initialScreen:'map',mapPosition:{x:-1436.901,y:1659.013},
  mapRows:[row('Mondstadt',549,146,166,36),row('Windrise',1038,600,137,34),row('Galesong Hill',1603,983,191,39),row('Exploration Progress: 0%',1509,1020,284,29),row('200/200',1616,30,129,35),row('UID: 693306810',1690,1050,170,24)]});

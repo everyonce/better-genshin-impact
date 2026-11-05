@@ -581,6 +581,28 @@ function actOneStarfellMapFooter(rows) {
     }).length===1;});
     return verified?footer[0]:null;
 }
+// These three map labels are visible from the gate camp even when OCR loses the regional footer.
+function actTwoMondstadtMapLabels(rows){
+    var names=['Mondstadt','Cider Lake','Windrise'],labels=[];
+    for(var name of names){
+        var matches=rows.filter(function(r){return r.text===name;});
+        if(matches.length!==1)return null;
+        labels.push(matches[0]);
+    }
+    return labels;
+}
+// Confirm a fresh unselected Mondstadt map. Native navigation owns projection and waypoint selection.
+function actTwoCityTravelMap(o,now,session){
+    if(!o||o.session!==session||!Number.isInteger(o.frameId)||!Number.isFinite(o.timestamp)||
+       now<o.timestamp||now-o.timestamp>1000||o.map!==null||!Array.isArray(o.ocr)||!actTwoOriginalAccount(o.ocr))return null;
+    var h=o.hud;
+    if(!h||h.bigMap!==true||h.world||h.health||h.journal||h.auto||h.dialogueReady||h.choice||
+       o.ocr.some(function(r){return r.x>=1250&&/^(?:Teleport|Teleport Waypoint|Navigate|Confirm|Cancel)$/.test(r.text.trim());}))return null;
+    var labels=actTwoMondstadtMapLabels(o.ocr);
+    if(!labels||!labels.every(function(r){return r.x>=0&&r.x<1920&&r.y>=0&&r.y<=900;}))return null;
+    var city=labels[0],lake=labels[1],windrise=labels[2];
+    return lake.y<city.y&&city.y<windrise.y&&city.x<windrise.x?labels:null;
+}
 function actOneLocalPauseProof(o,now,session) {
     if(!o||o.session!==session||!Number.isInteger(o.frameId)||!Number.isFinite(o.timestamp)||!Number.isFinite(now)||
        now<o.timestamp||now-o.timestamp>1000||!o.hud||!Array.isArray(o.ocr))return null;
@@ -5456,7 +5478,7 @@ function createActOneAdapter(sessionId,options) {
         runActTwoMapClose: async function(initial,observe){
             var proof=actOneLocalPauseProof(initial,Date.now(),request.session);
             var zoomedMap=initial&&initial.session===request.session&&Date.now()>=initial.timestamp&&Date.now()-initial.timestamp<=1000&&initial.hud.bigMap&&!initial.hud.world&&!initial.hud.dialogueReady&&
-                ['Mondstadt','Cider Lake','Windrise'].every(function(name){return (initial.ocr||[]).filter(function(r){return r.text===name;}).length===1;});
+                actTwoMondstadtMapLabels(initial.ocr||[]);
             var riftPanel=initial&&initial.session===request.session&&Date.now()>=initial.timestamp&&Date.now()-initial.timestamp<=1000&&!initial.hud.world&&!initial.hud.dialogueReady&&[['Forsaken Rift',1480,15],['Domain unlocks at Adventure Rank 25',1463,868],['Navigate',1620,987]].every(function(a){return (initial.ocr||[]).some(function(r){return r.text===a[0]&&Math.abs(r.x-a[1])<15&&Math.abs(r.y-a[2])<15;});});
             var artifactPanel=initial&&initial.session===request.session&&Date.now()>=initial.timestamp&&Date.now()-initial.timestamp<=1000&&!initial.hud.world&&!initial.hud.dialogueReady&&[['Thorny Crown of the',1485,0],['Mountain Wind',1485,33],['Navigate',1617,983]].every(function(a){return (initial.ocr||[]).some(function(r){return r.text===a[0]&&Math.abs(r.x-a[1])<15&&Math.abs(r.y-a[2])<15;});});
             if((!proof||proof.kind!=='map')&&!zoomedMap&&!riftPanel&&!artifactPanel)throw new Error('Fresh verified map required');
@@ -6815,9 +6837,11 @@ function createActOneAdapter(sessionId,options) {
             var inventoryRefusal={status:'stopped',step:'actTwoStarfellInventoryTeleport',
                 reason:'Fresh original-account inventory required',teleportAttempted:false,questComplete:false};
             if(inventoryTeleport&&!inventoryReady())return inventoryRefusal;
+            var cityLandmarks=city&&actTwoCityTravelMap(initial,Date.now(),request.session);
+            var regionalMap=proof&&proof.kind==='map'&&(actTwoTeleport&&actOneStarfellMapFooter(rows)||
+                rows.some(function(r){return /^(Starfell Valley|Starfell Valleyale|Galesong\s*Hill)$/.test(r.text.trim())||actTwoTeleport&&r.text.trim()==='Windwail Highland';}));
             if(!inventoryTeleport&&(!request||request.mission!=='questStep'||(!actTwoTeleport&&request.step!=='lisaWindriseTeleport')||actTwoTeleport&&!actTwoOriginalAccount(rows)||
-               !proof||proof.kind!=='map'||
-               !(actTwoTeleport&&actOneStarfellMapFooter(rows))&&!rows.some(function(r){return /^(Starfell Valley|Starfell Valleyale|Galesong\s*Hill)$/.test(r.text.trim())||actTwoTeleport&&r.text.trim()==='Windwail Highland';})||
+               !regionalMap&&!cityLandmarks||
                request.step==='actTwoSpringvaleTeleport'&&!rows.some(function(r){return r.text.trim()==='Galesong Hill'&&r.x>=1500&&r.y>=950;})))
                 return {status:'stopped',step:'lisaWindriseTeleport',reason:'Fresh Windrise regional map required',teleportAttempted:false,questComplete:false};
             var lastInputFrame=initial.frameId,event=null;
@@ -6825,21 +6849,30 @@ function createActOneAdapter(sessionId,options) {
                 checkStop();ready();
                 // Helper reads and heartbeat checks cannot extend the original 1000 ms source admission.
                 if(inventoryTeleport&&!inventoryReady())return inventoryRefusal;
+                if(cityLandmarks&&!actTwoCityTravelMap(initial,Date.now(),request.session))
+                    return {status:'stopped',step:request.step,reason:'Regional map evidence expired',teleportAttempted:false,questComplete:false};
                 attempted=true;
                 event={type:request.step,frameId:initial.frameId,x:destination.x,y:destination.y,startedAt:Date.now()};events.push(event);
+                if(cityLandmarks)event.source={kind:'mondstadtLandmarks',session:initial.session,frameId:initial.frameId,
+                    labels:cityLandmarks.map(function(r){return {text:r.text,x:r.x,y:r.y};})};
                 if(inventoryTeleport)event.source={session:inventorySource.session,frameId:inventorySource.frameId,
                     capturedAt:inventorySource.capturedAt,timestamp:inventorySource.timestamp,screenshotPath:inventorySource.screenshotPath};
                 try{await genshin.tp(destination.x,destination.y,false);}finally{event.finishedAt=Date.now();}
                 var arrived=false;
                 for(var poll=0;poll<8;poll++){
                     checkStop();await sleep(350);current=await observe();
-                    // Only this inventory entry adds explicit living numeric HP and the fixed Teyvat map.
+                    // Independently measure the city arrival on a later living, grounded Teyvat frame.
+                    var cityArrival=!city||current.session===request.session&&current.frameId>lastInputFrame&&
+                        Number.isFinite(current.timestamp)&&current.timestamp<=Date.now()&&Date.now()-current.timestamp<=1000&&
+                        !current.fastSample&&!current.mapPositionInherited&&current.map&&current.map.map==='Teyvat'&&
+                        current.hud.health&&Number.isInteger(current.hud.health.current)&&Number.isInteger(current.hud.health.max)&&
+                        current.hud.health.current>0&&current.hud.health.current<=current.hud.health.max;
                     if((inventoryTeleport?inventoryGate.fresh(current,Date.now(),request.session,lastInputFrame)&&
                         inventoryGate.originalUid(current)&&current.hud.world===true&&current.hud.groundControls===true&&
                         current.hud.health&&Number.isInteger(current.hud.health.current)&&Number.isInteger(current.hud.health.max)&&
                         current.hud.health.current>0&&current.hud.health.max>0&&current.hud.health.current<=current.hud.health.max&&
                         current.map&&current.map.map==='Teyvat'&&current.hud.climbing===false:actTwoTeleport?actTwoOriginalAccount(current.ocr)&&current.hud.world&&current.hud.groundControls&&current.hud.health&&!current.hud.climbing:actOneLionFalconWaypointReady(current,Date.now(),request.session))&&current.map&&
-                       Math.hypot(current.map.x-destination.x,current.map.y-destination.y)<=20){arrived=true;break;}
+                       cityArrival&&Math.hypot(current.map.x-destination.x,current.map.y-destination.y)<=20){arrived=true;break;}
                     if(actOneLocalPauseProof(current,Date.now(),request.session))break;
                 }
                 result={status:arrived?'completed':'stopped',step:request.step,teleportAttempted:true,

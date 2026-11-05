@@ -426,6 +426,117 @@ class SupervisedRouteControllerTests(unittest.TestCase):
         self.assertEqual([r.get('step', r['mission']) for r in pilot.calls],
                          ['observe', 'worldInventoryClose', 'observe'])
 
+    def reacquisition_pilot(self, scans, script=()):
+        """Replay fresh capture identities with the actual unanchored-fragment contract."""
+        pilot = ReplayPilot(self.clock, script, source=controller_scene(objective=''))
+        original = pilot.execute
+        pilot.observation_deadlines = []
+        previous_capture = None
+
+        def execute(mission, source, fields, deadline, save_pending, **kwargs):
+            """Only passive sensor outcomes are substituted; no hidden input is produced."""
+            nonlocal previous_capture
+            outcome = original(mission, source, fields, deadline, save_pending)
+            if mission == 'observe' and pilot.source['hud'].get('groundControls'):
+                pilot.observation_deadlines.append(deadline)
+                kind = scans.pop(0) if scans else 'clear'
+                scan = pilot.source['hud']['enemyBarObservation']
+                if kind != 'clear':
+                    scan.update(state='ambiguous', reason='unanchored_bar_shaped_components',
+                                candidateCount=1, acceptedCount=0)
+                if kind == 'threat':
+                    pilot.source['hud']['enemyBars'] = [dict(x=950, y=300, width=100, height=8)]
+                    scan.update(state='threat', acceptedCount=1, reason='outdoor_bar_candidates')
+                elif kind in ('unavailable', 'overloaded'):
+                    scan.update(state=kind, reason='detector_overloaded' if kind == 'overloaded' else 'detector_unavailable')
+                elif kind == 'low':
+                    pilot.source['hud']['health']['current'] = 800
+                elif kind == 'foreign':
+                    pilot.source['ocr'][0]['text'] = 'UID: 111111111'
+                elif kind == 'duplicate':
+                    scan['capturedAt'] = previous_capture
+                    pilot.source['hud']['captureStamp']['capturedAt'] = previous_capture
+                elif kind == 'late':
+                    self.clock.advance(2)
+                elif kind == 'stale':
+                    scan['capturedAt'] -= 1001
+                    pilot.source['hud']['captureStamp']['capturedAt'] = scan['capturedAt']
+                previous_capture = scan['capturedAt']
+                outcome['observation'] = copy.deepcopy(pilot.source)
+            return outcome
+
+        pilot.execute = execute
+        return pilot
+
+    def test_stationary_fragments_then_clear_allows_only_existing_navigation_entry(self):
+        self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
+        inv = controller_scene('inventory')
+        pilot = self.reacquisition_pilot(['ambiguous', 'ambiguous', 'clear'], [
+            dict(mission='questStep', source=inv, result=dict(pausedInventory=True)), self.arrival(3, inv)])
+        report = self.run_controller(pilot)
+        self.assertEqual(report['status'], 'arrived', report.get('reason'))
+        self.assertEqual([r.get('step', r['mission']) for r in pilot.calls],
+                         ['observe', 'observe', 'observe', 'worldInventory', 'observe', 'navigation'])
+        proof = report['groundReacquisition']
+        self.assertEqual([r['state'] for r in proof['frames']], ['ambiguous', 'ambiguous', 'clear'])
+        self.assertTrue(proof['measuredClear'])
+        self.assertLessEqual(proof['elapsedMilliseconds'], 2000)
+        self.assertEqual(pilot.observation_deadlines[1], pilot.observation_deadlines[2])
+
+    def test_stationary_reacquisition_stops_at_four_distinct_ambiguous_frames(self):
+        self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
+        pilot = self.reacquisition_pilot(['ambiguous'] * 5)
+        report = self.run_controller(pilot)
+        self.assertEqual(report['status'], 'waiting')
+        self.assertEqual([r['mission'] for r in pilot.calls], ['observe'] * 4)
+        self.assertEqual(len(report['groundReacquisition']['frames']), 4)
+        self.assertFalse(report['groundReacquisition']['measuredClear'])
+
+    def test_reacquisition_stops_immediately_on_threat_or_other_ambiguity(self):
+        self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
+        for kind in ('threat', 'unavailable', 'overloaded', 'low', 'foreign', 'duplicate', 'stale', 'late'):
+            with self.subTest(kind=kind):
+                self.progress = Path(self.temp.name) / ('scan-' + kind + '.json')
+                pilot = self.reacquisition_pilot(['ambiguous', kind, 'clear'])
+                report = self.run_controller(pilot, allow_field_combat=True)
+                self.assertIn(report['status'], ('waiting', 'stopped'))
+                self.assertEqual([r['mission'] for r in pilot.calls], ['observe', 'observe'])
+                self.assertFalse(report['groundReacquisition'].get('measuredClear', False))
+
+    def test_non_fragment_initial_failures_never_enter_reacquisition(self):
+        self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
+        for kind in ('unavailable', 'overloaded', 'low', 'foreign', 'stale'):
+            with self.subTest(kind=kind):
+                self.progress = Path(self.temp.name) / ('initial-' + kind + '.json')
+                pilot = self.reacquisition_pilot([kind, 'clear'])
+                report = self.run_controller(pilot)
+                self.assertEqual(report['status'], 'waiting')
+                self.assertEqual([r['mission'] for r in pilot.calls], ['observe'])
+                self.assertNotIn('groundReacquisition', report)
+
+    def test_reacquisition_budget_is_clipped_to_original_outer_deadline(self):
+        self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
+        start = self.clock.monotonic()
+        pilot = self.reacquisition_pilot(['ambiguous'] * 4)
+        report = self.run_controller(pilot, deadline_ms=1000)
+        self.assertEqual(report['status'], 'waiting')
+        self.assertTrue(all(value <= start + 1 for value in pilot.observation_deadlines))
+
+    def test_actual_camp_fragment_geometry_is_ambiguous_not_clear(self):
+        # Actual retained mw3mq547/76, mw3mwa08/5 and mw3n18xv/2 observations:
+        # these tiny unanchored red components authorize observation only.
+        for x, y, width, height, rectangularity in (
+                (1375.5, 180.5, 11, 9, .05625), (1374.5, 184, 9, 6, .25),
+                (1352, 188, 12, 14, .03146853146853147)):
+            source = controller_scene(objective='')
+            source['timestamp'] = self.clock.milliseconds(); record_ground_scan(source)
+            source['hud']['enemyBarObservation'].update(state='ambiguous',
+                reason='unanchored_bar_shaped_components', candidateCount=1, acceptedCount=0)
+            source['hud']['enemyBarDiagnostic'] = dict(fieldCandidates=[dict(
+                x=x, y=y, width=width, height=height, rectangularity=rectangularity)])
+            self.assertTrue(route_tool.unanchored_ground_scan(source, '693306810', self.clock.milliseconds()))
+            self.assertFalse(route_tool.ground_scan_is_clear(source, self.clock.milliseconds()))
+
     def test_invalid_progress_falls_back_to_existing_inventory_bootstrap(self):
         self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
         inv, ground = controller_scene('inventory'), controller_scene(objective='')

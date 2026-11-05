@@ -537,7 +537,7 @@ def source_account_matches(source, expected_uid):
     return matches == [expected_uid]
 
 
-def ground_scan_matches(source, now_ms, state, count):
+def ground_scan_matches(source, now_ms, state, count, *, candidate_count=None):
     """Match the requested count to native evidence from this exact, still-fresh ground frame."""
     hud = source['hud']
     scan = hud.get('enemyBarObservation')
@@ -553,7 +553,8 @@ def ground_scan_matches(source, now_ms, state, count):
             and type(scan.get('capturedAt')) is int and scan['capturedAt'] == captured_at
             and type(scan.get('version')) is int and scan['version'] == 1
             and scan.get('kind') == 'normal-ground-enemy-observation-v1' and scan.get('state') == state
-            and type(scan.get('candidateCount')) is int and scan['candidateCount'] == count
+            and type(scan.get('candidateCount')) is int
+            and scan['candidateCount'] == (count if candidate_count is None else candidate_count)
             and type(scan.get('acceptedCount')) is int and scan['acceptedCount'] == count
             and isinstance(hud.get('enemyBars'), list) and len(hud['enemyBars']) == count)
 
@@ -561,6 +562,20 @@ def ground_scan_matches(source, now_ms, state, count):
 def ground_scan_is_clear(source, now_ms):
     """Keep ordinary exploration restricted to a measured empty field."""
     return ground_scan_matches(source, now_ms, 'clear', 0)
+
+
+def unanchored_ground_scan(source, expected_uid, now_ms):
+    """Allow passive reacquisition only when unanchored red fragments are the sole refusal."""
+    if (source.get('fastSample') or source.get('mapPositionInherited')
+            or route_phase(source, expected_uid, [EXPLORATION_OBJECTIVE], allow_dialogue=False,
+                           journal_resume=False, now_ms=now_ms) !=
+               ('wait', 'Exploration requires a fresh enemy scan showing clear ground')):
+        return False
+    scan = source['hud'].get('enemyBarObservation')
+    count = scan.get('candidateCount') if isinstance(scan, dict) else None
+    return (type(count) is int and 1 <= count <= 64
+            and scan.get('reason') == 'unanchored_bar_shaped_components'
+            and ground_scan_matches(source, now_ms, 'ambiguous', 0, candidate_count=count))
 
 
 def route_phase(source, expected_uid, objectives, *, allow_dialogue, journal_resume, now_ms=None,
@@ -679,10 +694,12 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
                 and type(result.get('beforeFrameId')) is int and type(result.get('afterFrameId')) is int
                 and result['beforeFrameId'] < result['afterFrameId'])
 
-    def dispatch(mission, source, fields, *, allow_deadline_checkpoint=False, expected_previous=None):
+    def dispatch(mission, source, fields, *, allow_deadline_checkpoint=False, expected_previous=None,
+                 observation_deadline=None):
         """Keep the original request/receipt result, including a failed native handoff."""
         options = {} if expected_previous is None else dict(expected_previous=expected_previous)
-        outcome = pilot.execute(mission, source, fields, deadline, pending, **options)
+        active_deadline = deadline if observation_deadline is None else min(deadline, observation_deadline)
+        outcome = pilot.execute(mission, source, fields, active_deadline, pending, **options)
         if expected_previous is not None:
             state['continuationSlotMatched'] = outcome.get('predecessorMatched') is True
         request, receipt, observed = outcome['request'], outcome['receipt'], outcome['observation']
@@ -759,6 +776,44 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
             phase, value = route_phase(source, expected_uid, authorized_objectives,
                 allow_dialogue=allow_dialogue, journal_resume=journal_resume, now_ms=now_ms,
                 allow_field_combat=allow_field_combat)
+            # One stationary retry window per controller, only at initial field
+            # entry or after the existing Inventory-close transition. No keys,
+            # camera changes or movement occur while the scan is ambiguous.
+            new_world = (len(state['records']) == 1 or (len(state['records']) >= 2
+                and state['records'][-2]['request'].get('step') == 'worldInventoryClose'))
+            if (objective == EXPLORATION_OBJECTIVE and new_world and 'groundReacquisition' not in state
+                    and unanchored_ground_scan(source, expected_uid, now_ms)):
+                began = monotonic()
+                scan_deadline = min(deadline, began + 2.0)
+                scan = source['hud']['enemyBarObservation']
+                samples = [dict(frameId=source['frameId'], capturedAt=scan['capturedAt'],
+                                state=scan['state'], reason=scan['reason'])]
+                state['groundReacquisition'] = dict(startedAt=int(now_ms), maximumFrames=4,
+                    maximumMilliseconds=2000, frames=samples)
+                while len(samples) < 4 and monotonic() < scan_deadline:
+                    if pilot.stopped():
+                        raise RouteError('Operator STOP prevents stationary ground reacquisition.')
+                    dispatch('observe', source, {}, observation_deadline=scan_deadline)
+                    source = pilot.current()
+                    now_ms = clock_ms()
+                    require_fresh_source(source, pilot.session, now_ms)
+                    scan = source['hud'].get('enemyBarObservation')
+                    stamp = scan.get('capturedAt') if isinstance(scan, dict) else None
+                    if (monotonic() >= scan_deadline or type(stamp) is not int
+                            or source['frameId'] <= samples[-1]['frameId'] or stamp <= samples[-1]['capturedAt']):
+                        phase, value = 'wait', 'Stationary reacquisition expired or did not produce a distinct capture'
+                        break
+                    samples.append(dict(frameId=source['frameId'], capturedAt=stamp,
+                                        state=scan.get('state'), reason=scan.get('reason')))
+                    phase, value = route_phase(source, expected_uid, authorized_objectives,
+                        allow_dialogue=False, journal_resume=False, now_ms=now_ms)
+                    if phase == 'navigation' and value == EXPLORATION_OBJECTIVE:
+                        break
+                    if not unanchored_ground_scan(source, expected_uid, now_ms):
+                        phase, value = 'wait', 'Stationary reacquisition found threat or other unsafe evidence'
+                        break
+                state['groundReacquisition']['elapsedMilliseconds'] = round((monotonic() - began) * 1000, 3)
+                state['groundReacquisition']['measuredClear'] = phase == 'navigation' and value == EXPLORATION_OBJECTIVE
             paused_navigation = inventory_navigation is not None
             if paused_navigation:
                 if not source_account_matches(source, expected_uid) or not pilot.inventory_ready(source):

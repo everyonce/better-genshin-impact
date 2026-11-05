@@ -62,7 +62,8 @@ test('pipe and public frame sequences are separate; wrong identity, stale or rep
     const identity = {session:'route-session',processId:11,windowsSessionId:3,gameProcessId:22};
     const c = {session:identity.session,frameId:9,observedAtUnixMs:1000,expectedUid:'693306810',
         objective:request.objective,waypoint:target,requestId:'live-request'};
-    const f = {session:c.session,frameId:9,capturedAt:1000};
+    // engine.observe publishes the capture-start identity in hud, not on the top-level snapshot.
+    const f = {session:c.session,frameId:9,hud:{captureStamp:{capturedAt:1000}}};
     const s = {...identity,protocolVersion:1,type:'steeringSuggestion',sourceEpoch:'d'.repeat(32),frameId:119,capturedAtUnixMs:1080,publishedAtUnixMs:1104,
         validUntilUnixMs:1330,context:c,steering:{forward:true,holdMs:50}};
     const decision = (sample=s, current=f, now=1120, consumed=0) => decide(sample,c,identity,current,now,800,consumed);
@@ -72,7 +73,7 @@ test('pipe and public frame sequences are separate; wrong identity, stale or rep
     for (const key of ['session','requestId','expectedUid','objective','frameId','observedAtUnixMs','waypoint'])
         assert.equal(decision({...s,context:{...c,[key]:null}}),'context_mismatch');
     assert.equal(decision(s,{...f,frameId:10}),'context_mismatch');
-    assert.equal(decision(s,{...f,capturedAt:999}),'context_mismatch');
+    assert.equal(decision(s,{...f,hud:{captureStamp:{capturedAt:999}}}),'context_mismatch');
     assert.equal(decision({...s,sourceEpoch:null}),'context_mismatch');
     assert.equal(decision(s,f,1330),'expired_or_replayed');
     assert.equal(decision(s,f,1120,119),'expired_or_replayed');

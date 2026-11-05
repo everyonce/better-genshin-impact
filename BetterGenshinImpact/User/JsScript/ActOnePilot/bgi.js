@@ -2310,7 +2310,8 @@ function actOneGpuSteeringDecision(s,c,identity,frame,now,nativeMs,lastConsumed)
         s.processId!==identity.processId || s.gameProcessId!==identity.gameProcessId || s.windowsSessionId!==identity.windowsSessionId ||
         !e || e.session!==c.session || e.requestId!==c.requestId || e.expectedUid!==c.expectedUid || e.objective!==c.objective ||
         e.frameId!==frame.frameId || e.frameId!==c.frameId || e.observedAtUnixMs!==c.observedAtUnixMs ||
-        frame.session!==c.session || frame.capturedAt!==c.observedAtUnixMs || !v || !w || v.map!==w.map || v.x!==w.x || v.y!==w.y)
+        frame.session!==c.session || !frame.hud || !frame.hud.captureStamp ||
+        frame.hud.captureStamp.capturedAt!==c.observedAtUnixMs || !v || !w || v.map!==w.map || v.x!==w.x || v.y!==w.y)
         return 'context_mismatch';
     if (!Number.isSafeInteger(s.frameId) || s.frameId<=lastConsumed || !Number.isSafeInteger(s.capturedAtUnixMs) ||
         !Number.isSafeInteger(s.publishedAtUnixMs) || !Number.isSafeInteger(s.validUntilUnixMs) ||

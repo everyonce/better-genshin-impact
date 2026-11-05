@@ -15,6 +15,9 @@ ROOT = APP / 'User/JsScript/ActOnePilot'
 MAX_DEADLINE_MS = 90_000
 MAX_SEGMENTS = 3
 EXPLORATION_OBJECTIVE = 'Explore for Adventure Rank'
+# Leave capture time before another stationary observation; retirement alone cannot grant input.
+STATIONARY_OBSERVATION_RESERVE_SECONDS = 1.0
+PASSIVE_TERMINAL_SETTLEMENT_SECONDS = 1.0
 
 
 class RouteError(RuntimeError):
@@ -499,8 +502,13 @@ class GuardedPilot:
                     frame = self.command.validate_terminal_receipt(request, receipt, observed)
                     # Passive observations have no pending input to settle. Confirm the idle frame
                     # across polls while its ground scan is still fresh enough for the next decision.
+                    settlement_seconds = max(0, min(5, deadline - time.monotonic()))
+                    if mission == 'observe':
+                        # Only this already-validated terminal observe receives read-only grace.
+                        # The request, acquisition and subsequent input deadlines stay unchanged.
+                        settlement_seconds = max(PASSIVE_TERMINAL_SETTLEMENT_SECONDS, settlement_seconds)
                     settled = self.command.wait_for_controller_quiescence(self.root, self.session, self.pid,
-                        self.wts, frame, timeout_seconds=max(0, min(5, deadline - time.monotonic())),
+                        self.wts, frame, timeout_seconds=settlement_seconds,
                         stable_seconds=0.05 if mission == 'observe' else 0.4)
                     if not settled['controllerQuiescent']:
                         raise RouteError('Terminal request has no settled controller proof.')
@@ -888,7 +896,8 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
                                 state=scan['state'], reason=scan['reason'])]
                 state['groundReacquisition'] = dict(startedAt=int(now_ms), maximumFrames=4,
                     maximumMilliseconds=2000, frames=samples)
-                while len(samples) < 4 and monotonic() < scan_deadline:
+                while (len(samples) < 4
+                       and scan_deadline - monotonic() >= STATIONARY_OBSERVATION_RESERVE_SECONDS):
                     if pilot.stopped():
                         raise RouteError('Operator STOP prevents stationary ground reacquisition.')
                     dispatch('observe', source, {}, observation_deadline=scan_deadline)

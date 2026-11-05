@@ -483,6 +483,59 @@ class SupervisedRouteControllerTests(unittest.TestCase):
         self.assertLessEqual(proof['elapsedMilliseconds'], 2000)
         self.assertEqual(pilot.observation_deadlines[1], pilot.observation_deadlines[2])
 
+    def test_stationary_observe_reserves_one_second_before_the_next_request(self):
+        """A completed slow refresh cannot trigger another capture with under one second left."""
+        self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
+        for remaining, expected_count in ((.999, 2), (1.0, 3)):
+            with self.subTest(remaining=remaining):
+                self.progress = Path(self.temp.name) / ('reserve-' + str(remaining) + '.json')
+                pilot = self.reacquisition_pilot(['ambiguous'] * 5)
+                original = pilot.execute
+
+                def delayed(mission, source, fields, deadline, save_pending, **kwargs):
+                    """Model capture work before its new publication, retaining a fresh exact source."""
+                    outcome = original(mission, source, fields, deadline, save_pending, **kwargs)
+                    if len(pilot.calls) == 2:
+                        self.clock.value = deadline - remaining
+                        pilot.source['timestamp'] = self.clock.milliseconds()
+                        for name in ('captureStamp', 'enemyBarObservation'):
+                            pilot.source['hud'][name]['capturedAt'] = pilot.source['timestamp']
+                        outcome['observation'] = copy.deepcopy(pilot.source)
+                    return outcome
+
+                pilot.execute = delayed
+                report = self.run_controller(pilot)
+                self.assertEqual(report['status'], 'waiting')
+                self.assertEqual([r['mission'] for r in pilot.calls], ['observe'] * expected_count)
+                self.assertIsNone(report['pending'])
+                self.assertIsNone(pilot.pending)
+                self.assertFalse(report['groundReacquisition']['measuredClear'])
+
+    def test_terminal_observe_settlement_does_not_extend_stationary_action_window(self):
+        """A retired receipt after the scan deadline remains recorded but cannot grant movement."""
+        self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
+        pilot = self.reacquisition_pilot(['ambiguous', 'clear'])
+        original = pilot.execute
+
+        def after_window(mission, source, fields, deadline, save_pending, **kwargs):
+            """Represent read-only settlement finishing after the original scan deadline."""
+            outcome = original(mission, source, fields, deadline, save_pending, **kwargs)
+            if len(pilot.calls) == 2:
+                self.clock.value = deadline + .1
+                pilot.source['timestamp'] = self.clock.milliseconds()
+                record_ground_scan(pilot.source)
+                outcome['observation'] = copy.deepcopy(pilot.source)
+            return outcome
+
+        pilot.execute = after_window
+        report = self.run_controller(pilot)
+        self.assertEqual(report['status'], 'waiting')
+        self.assertIn('expired', report['reason'])
+        self.assertEqual([r['mission'] for r in pilot.calls], ['observe', 'observe'])
+        self.assertEqual(report['records'][-1]['receipt']['status'], 'completed')
+        self.assertIsNone(report['pending'])
+        self.assertFalse(report['groundReacquisition']['measuredClear'])
+
     def test_stationary_reacquisition_stops_at_four_distinct_ambiguous_frames(self):
         self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
         pilot = self.reacquisition_pilot(['ambiguous'] * 5)
@@ -918,6 +971,103 @@ class GuardedPilotProtocolTests(unittest.TestCase):
         self.assertIsNone(self.pilot.pending)
         self.assertEqual(saved, [outcome['request']])
         self.pilot.close(); self.assertFalse(self.pilot.lock.exists())
+
+    def test_terminal_observe_gets_read_only_grace_and_releases_its_lease(self):
+        """Use the real quiescence loop with a valid receipt but delayed native idle publication."""
+        original = self.terminal
+        began = self.clock.monotonic()
+        deadline = began + .2
+
+        def terminal_before_idle(request, status='completed'):
+            """Publish exact terminal evidence before the corresponding idle heartbeat."""
+            original(request, status)
+            self.write_heartbeat('running', self.source['frameId'], request['id'])
+
+        def settle(seconds):
+            """Only advance the inert clock and publish the same owner's idle status."""
+            self.clock.advance(seconds)
+            if self.clock.monotonic() >= began + .4:
+                self.write_heartbeat('idle', self.source['frameId'])
+
+        self.terminal = terminal_before_idle
+        self.fake_time.sleep = settle
+        outcome = self.pilot.execute('observe', self.source, {}, deadline, lambda _: None)
+        self.assertEqual(outcome['receipt']['status'], 'completed')
+        self.assertGreater(self.clock.monotonic(), deadline)
+        self.assertLessEqual(self.clock.monotonic(), began + 1.1)
+        self.assertEqual([name for name, _ in self.writes], ['request.json'])
+        self.assertIsNone(self.pilot.pending)
+        self.pilot.close()
+        self.assertFalse(self.pilot.lock.exists())
+        # Grace does not renew publication authority for a subsequent input.
+        with self.assertRaisesRegex(route_tool.RouteError, 'deadline expired'):
+            self.pilot.execute('keyPress', self.source, {'key': 'VK_ESCAPE'}, deadline, lambda _: None)
+        self.assertEqual([name for name, _ in self.writes], ['request.json'])
+
+    def test_terminal_observe_grace_is_bounded_and_keeps_unsettled_lease(self):
+        """A still-active heartbeat cannot acquire an unlimited retirement wait."""
+        original = self.terminal
+
+        def never_idle(request, status='completed'):
+            """Retain the valid receipt while keeping the exact controller active."""
+            original(request, status)
+            self.write_heartbeat('running', self.source['frameId'], request['id'])
+
+        self.terminal = never_idle
+        self.fake_time.sleep = self.clock.advance
+        began = self.clock.monotonic()
+        with mock.patch.object(self.command, 'wait_for_controller_quiescence',
+                               wraps=self.command.wait_for_controller_quiescence) as wait:
+            with self.assertRaisesRegex(route_tool.RouteError, 'no settled controller'):
+                self.pilot.execute('observe', self.source, {}, began + .05, lambda _: None)
+        self.assertEqual(wait.call_args.kwargs['timeout_seconds'], 1.0)
+        self.assertLessEqual(self.clock.monotonic() - began, 1.11)
+        self.assertIsNotNone(self.pilot.pending)
+        self.pilot.close()
+        self.assertTrue(self.pilot.lock.exists())
+        self.assertEqual([name for name, _ in self.writes], ['request.json'])
+
+    def test_terminal_input_mission_receives_no_passive_grace(self):
+        """The original input deadline still bounds its 400 ms settlement requirement."""
+        began = self.clock.monotonic()
+        with mock.patch.object(self.command, 'wait_for_controller_quiescence',
+                               wraps=self.command.wait_for_controller_quiescence) as wait:
+            with self.assertRaisesRegex(route_tool.RouteError, 'no settled controller'):
+                self.pilot.execute('combat', self.source,
+                    dict(objective='Defeat the nearby hilichurls', deadlineMs=1000), began + .05, lambda _: None)
+        self.assertLessEqual(wait.call_args.kwargs['timeout_seconds'], .051)
+        self.assertIsNotNone(self.pilot.pending)
+        self.assertEqual([name for name, _ in self.writes], ['request.json'])
+
+    def test_missing_terminal_observe_has_no_grace_or_replay(self):
+        """An unresolved request takes the original cancellation path and retains uncertainty."""
+        self.pending_mode = True
+        self.fake_time.sleep = self.clock.advance
+        with mock.patch.object(self.command, 'wait_for_controller_quiescence') as wait:
+            with self.assertRaisesRegex(route_tool.RouteError, 'terminal outcome is unresolved'):
+                self.pilot.execute('observe', self.source, {}, self.clock.monotonic() + .05, lambda _: None)
+        wait.assert_not_called()
+        self.assertIsNotNone(self.pilot.pending)
+        self.assertEqual([name for name, _ in self.writes], ['request.json', 'stop.json'])
+
+    def test_foreign_terminal_observe_cannot_enter_settlement_grace(self):
+        """Receipt identity remains mandatory before any additional read-only wait."""
+        original = self.terminal
+
+        def foreign(request, status='completed'):
+            """Mutate only the retained terminal envelope's session."""
+            original(request, status)
+            path = self.command.request_receipt_path(self.root, self.pilot.session, request['id'])
+            receipt = read_json(path); receipt['session'] = 'foreign-session'
+            path.write_text(json.dumps(receipt), encoding='utf-8')
+
+        self.terminal = foreign
+        with mock.patch.object(self.command, 'wait_for_controller_quiescence') as wait:
+            with self.assertRaisesRegex(route_tool.RouteError, 'receipt identity differs'):
+                self.pilot.execute('observe', self.source, {}, self.clock.monotonic() + .05, lambda _: None)
+        wait.assert_not_called()
+        self.assertIsNotNone(self.pilot.pending)
+        self.assertEqual([name for name, _ in self.writes], ['request.json'])
 
     def completed_exploration(self):
         """Retain a native-shaped arrived route with field, B, pause and terminal frames."""

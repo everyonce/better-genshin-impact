@@ -85,8 +85,8 @@ def arguments():
     parser.add_argument('--output', required=True)
     parser.add_argument('--cache-root', default='artifacts/agent/compatibility')
     parser.add_argument('--samples', type=int, default=20)
-    parser.add_argument('--sample-mode', choices=['latest', 'independent'], default='latest',
-                        help='Independent GameScaling cases cycle images, reset history, and use seed+round for matched-image sampling comparisons')
+    parser.add_argument('--sample-mode', choices=['latest', 'independent', 'sequence'], default='latest',
+                        help='Latest replays a timed stream; independent resets GameScaling on each image; sequence feeds every model the ordered clip with history')
     parser.add_argument('--warmup', type=int, default=2)
     parser.add_argument('--fps', type=float, default=30)
     parser.add_argument('--history', type=int, default=None)
@@ -213,6 +213,8 @@ def main():
         if args.sample_mode == 'latest':
             stream = LatestFrameStream(frames, args.fps)
             stream.thread.start()
+        elif args.sample_mode == 'sequence':
+            report['scope'] = 'Ordered saved-image clip with model history; timing measures inference on each supplied frame.'
         else:
             report['scope'] = 'Independent saved-image comparison; empty history and seed+round per case. No stream-queue or gameplay capability claim.'
         previous = -1
@@ -221,12 +223,12 @@ def main():
             if stream is not None:
                 frame_id, published_ns, frame = stream.take(previous)
             else:
-                # Same image/round gets the same seed in every comparison arm.
-                # The validated decode graph is retained while chat history resets.
-                policy.reset()
-                sample_seed = args.seed + index // len(frames)
-                torch.manual_seed(sample_seed)
-                np.random.seed(sample_seed)
+                # Independent snapshots reset per image; ordered clips keep temporal context within each pass.
+                if args.sample_mode == 'independent' or index % len(frames) == 0:
+                    policy.reset()
+                    sample_seed = args.seed + index // len(frames)
+                    torch.manual_seed(sample_seed)
+                    np.random.seed(sample_seed)
                 frame_id, frame = index, frames[index % len(frames)]
                 published_ns = time.perf_counter_ns()
             inference_start_ns = time.perf_counter_ns()

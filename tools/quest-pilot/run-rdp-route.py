@@ -427,7 +427,7 @@ def run(args, *, expected_owner=None, dependencies=None):
                   launcherResult=str(output / 'launcher-result.json'), pilotRetired=False, owner=owner)
     try:
         budget = 80 + len(routes) * (args.deadline_ms // 1000 + 20)
-        broker = rdp.run_command(owner['root'], argv, REPO, sys.executable, budget, output / 'jobs', 1024 * 1024)
+        broker = rdp.run_command(owner['root'], argv, str(REPO), sys.executable, budget, str(output / 'jobs'), 1024 * 1024)
         save(output / 'broker-result.json', broker)
         worker = read(output / 'worker-result.json')
         report['pilotRetired'] = worker.get('pilotRetired') is True
@@ -456,7 +456,7 @@ def main():
         result = run_worker(config, control=control, rdp=rdp)
     else:
         result = run(parse_args())
-    print(json.dumps(result))
+    print(json.dumps({key: value for key, value in result.items() if key != 'owner'}))
     return result['exitCode']
 
 

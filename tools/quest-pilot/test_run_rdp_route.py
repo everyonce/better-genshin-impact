@@ -257,7 +257,9 @@ class LauncherTests(unittest.TestCase):
         f = Fixture(self.root)
         source = Path(f.config['routes'][0]['path'])
         original = source.read_bytes()
-        def broker(root, argv, *unused):
+        def broker(root, argv, work_dir, python_exe, timeout, job_dir, output_limit):
+            self.assertIsInstance(work_dir, str)
+            self.assertIsInstance(job_dir, str)
             """Run only the inert worker fixture behind the public console admission."""
             f.config = launcher.read(argv[-2])
             self.assertEqual(Path(f.config['routes'][0]['path']).read_bytes(), original)

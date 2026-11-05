@@ -56,6 +56,10 @@ var ActOnePilot = (function () {
                 if (!integer(r.lookAmount,16,250)) return 'Invalid lookAmount';
             }
         }
+        if(r.mission==='questStep'&&r.step==='actTwoFaceRemainingEnemy'){
+            if(!/^mission-[0-9a-f]{32}$/.test(r.combatRequestId)||!integer(r.rewardFrameId,1,r.expectedFrameId-1))return 'Invalid prior combat reward';
+            allowed.push('combatRequestId','rewardFrameId');
+        }
         // A route may spend its remaining encounter time in the field before parking.
         if (r.mission === 'questStep' && r.step === 'actTwoFieldCombat' && r.deadlineMs !== undefined) {
             if (!integer(r.deadlineMs, 6000, 35000)) return 'Invalid field combat deadline';

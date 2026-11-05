@@ -812,6 +812,45 @@ class SupervisedRouteControllerTests(unittest.TestCase):
         combat_index = next(i for i,r in enumerate(pilot.calls) if r.get('step') == 'actTwoFieldCombat')
         self.assertEqual([r['mission'] for r in pilot.calls[combat_index + 1:]], ['observe', 'navigation'])
 
+    def test_post_defeat_arrow_requests_only_one_camera_turn_and_rechecks_ground(self):
+        self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
+        enemy, inv = controller_scene(objective='', enemies=True), controller_scene('inventory')
+        arrow = controller_scene(objective='')
+        marker = dict(kind='single-hostile-direction-arrow', side='right', x=1431.5, y=659.5)
+        arrow['hud'].update(hostileDirectionArrow=marker,
+                            enemyBarDiagnostic=dict(fieldCandidates=[dict(x=1431.5, y=659.5)]))
+        pause = dict(mission='questStep', source=inv, result=dict(pausedInventory=True))
+        action = dict(mission='questStep', status='stopped', source=inv, frames=5, result=dict(nativeGroup=False,
+            nativeAttempted=True, nativeReturned=True, beforeFrameId=4, afterFrameId=5,
+            pauseVerified=True, pauseProof=dict(session='route-session', verified=True, kind='inventory'), chunks=[{}]))
+        pilot = ReplayPilot(self.clock, [pause, action, dict(mission='questStep', source=arrow,
+            result=dict(worldVisible=True)), dict(mission='questStep', source=arrow, result=dict(turnSent=True))],
+            source=enemy)
+        pilot.archived_frame = mock.Mock()
+        execute = pilot.execute
+
+        def measured(mission, source, fields, deadline, save_pending):
+            outcome = execute(mission, source, fields, deadline, save_pending)
+            outcome['receipt']['timestamp'] = self.clock.milliseconds()
+            if mission == 'observe' and pilot.source['hud'].get('hostileDirectionArrow'):
+                pilot.source['hud']['enemyBarObservation'].update(state='ambiguous', candidateCount=1,
+                    acceptedCount=0, reason='unanchored_bar_shaped_components')
+                outcome['observation'] = pilot.current()
+            return outcome
+
+        pilot.execute = measured
+        def earned(record, uid, archived):
+            return dict(requestId=record['request']['id'], rewardFrameId=5, pauseSourceFrameId=6,
+                        minimumDefeated=1, measuredClear=False)
+        with mock.patch.object(route_tool, 'field_combat_feedback', side_effect=earned):
+            result = self.run_controller(pilot, allow_field_combat=True)
+        self.assertEqual(result['status'], 'waiting')
+        self.assertEqual([r.get('step', r['mission']) for r in pilot.calls],
+            ['observe', 'worldInventory', 'observe', 'actTwoFieldCombat', 'observe', 'worldInventoryClose',
+             'observe', 'actTwoFaceRemainingEnemy', 'observe'])
+        self.assertEqual(len(result['fieldCameraSearches']), 1)
+        self.assertIs(result['fieldCameraSearches'][0]['turnSent'], True)
+
     def test_threat_interrupt_preserves_completed_waypoints_before_reinspection(self):
         self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
         inv, clear = controller_scene('inventory'), controller_scene(objective='')

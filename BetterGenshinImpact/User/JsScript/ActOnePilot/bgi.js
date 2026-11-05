@@ -272,9 +272,62 @@ function actOneEnemyBarSize(w,h) { return w>=2 && w<=300 && h>=3 && h<=12 && w/h
 // Keep field combat's attack detector until the final protector captures the pre-pause world.
 function actOneRequestsGroundObservation(request,inventoryUiOnly,protecting) {
     return !!request&&!inventoryUiOnly&&(request.mission==='observe'||
+        request.mission==='questStep'&&request.step==='actTwoFaceRemainingEnemy'||
         request.mission==='dialogue'&&typeof request.talkTo==='string'||
         request.mission==='navigation'&&request.objective==='Explore for Adventure Rank'&&request.requireMeasuredGround===true||
         protecting&&request.mission==='questStep'&&request.step==='actTwoFieldCombat');
+}
+// A warning arrow has an outer pink chevron and a separate diamond on the screen's warning ring.
+function actOneWarningArrow(candidate,shapes){
+    var c=candidate;
+    if(!c||![c.x,c.y,c.width,c.height].every(Number.isFinite)||c.width<10||c.width>20||c.height<7||c.height>18||
+       Math.abs(c.x-960)<390||Math.abs(c.y-540)>230||Math.abs(Math.hypot(c.x-960,c.y-540)-495)>42)return null;
+    var pieces=shapes.filter(function(s){return s.area>=4;}).sort(function(a,b){return b.area-a.area;});
+    if(pieces.length!==2)return null;
+    var outer=pieces[0],inner=pieces[1],side=c.x>960?1:-1;
+    var ox=outer.x+outer.width/2,oy=outer.y+outer.height/2,ix=inner.x+inner.width/2,iy=inner.y+inner.height/2;
+    if(outer.width<23||outer.width>33||outer.height<22||outer.height>34||outer.area<115||outer.area>225||
+       inner.width<10||inner.width>19||inner.height<7||inner.height>18||inner.area<42||inner.area>97||
+       Math.abs(ix-28)>3||Math.abs(iy-24)>3||Math.abs(oy-iy)>7||side*(ox-ix)<5||side*(ox-ix)>14)return null;
+    return {kind:'single-hostile-direction-arrow',side:side>0?'right':'left',x:c.x,y:c.y};
+}
+// The reward and the directional prompt must belong to the same recent field encounter.
+function actOneCombatSearchSide(o,request,receipt,before,reward,now){
+    var h=o&&o.hud,s=h&&h.enemyBarObservation,a=h&&h.hostileDirectionArrow,stamp=h&&h.captureStamp,p=o&&o.map;
+    if(!o||!h||o.fastSample||o.mapPositionInherited||o.session!==request.session||!p||p.map!=='Teyvat'||!Number.isFinite(p.x)||!Number.isFinite(p.y)||h.swimming||
+       !actTwoOriginalAccount(o.ocr)||h.world!==true||h.groundControls!==true||!h.health||
+       !Number.isInteger(h.health.current)||!Number.isInteger(h.health.max)||h.health.max<=0||
+       h.health.current<h.health.max*.85||h.health.current>h.health.max||h.loading||h.unknownHud||h.lowHealth||
+       h.climbing||h.tutorialStep||h.journal||h.bigMap||h.choice||h.dialogueReady||h.auto||
+       !Array.isArray(h.objectives)||h.objectives.some(function(v){return typeof v!=='string'||v.trim();})||
+       !Array.isArray(h.enemyBars)||h.enemyBars.length||!s||!stamp||!a||a.kind!=='single-hostile-direction-arrow'||
+       a.side!=='right'&&a.side!=='left'||s.state!=='ambiguous'||s.reason!=='unanchored_bar_shaped_components'||
+       s.version!==1||s.kind!=='normal-ground-enemy-observation-v1'||s.candidateCount!==1||s.acceptedCount!==0||s.frameId!==o.frameId||s.session!==request.session||
+       stamp.source!=='game-capture-start'||stamp.frameId!==o.frameId||stamp.session!==o.session||
+       stamp.capturedAt!==s.capturedAt||!Number.isFinite(stamp.capturedAt)||!Number.isFinite(o.timestamp)||stamp.capturedAt>o.timestamp||
+       o.timestamp>now||now-stamp.capturedAt>1000)return null;
+    var raw=h.enemyBarDiagnostic&&h.enemyBarDiagnostic.fieldCandidates;
+    if(!Array.isArray(raw)||raw.length!==1||!raw[0]||!Number.isFinite(a.x)||!Number.isFinite(a.y)||
+       a.x!==raw[0].x||a.y!==raw[0].y||a.side!==(a.x>960?'right':'left'))return null;
+    var details=receipt&&receipt.details,r=details&&details.result,proof=r&&r.pauseProof;
+    var ch=r&&Array.isArray(r.chunks)&&r.chunks[0];
+    if(!ch||receipt.id!==request.combatRequestId||receipt.session!==o.session||receipt.mission!=='questStep'||
+       receipt.status!=='stopped'||r.nativeGroup!==false||r.nativeReturned!==true||r.pauseVerified!==true||
+       !proof||!proof.verified||proof.kind!=='inventory'||proof.session!==o.session||!ch.nativeReturned||
+       ch.actionId!==receipt.id+':rotation:0'||!before||!reward||before.frameId!==ch.beforeFrameId||
+       before.session!==o.session||reward.session!==o.session||reward.frameId!==request.rewardFrameId||
+       !(before.frameId<ch.afterFrameId&&ch.afterFrameId<=reward.frameId&&reward.frameId<=proof.sourceFrameId&&
+         proof.sourceFrameId<proof.pauseFrameId&&proof.pauseFrameId<=receipt.frameId&&receipt.frameId<o.frameId)||
+       !Number.isFinite(receipt.timestamp)||receipt.timestamp>now||now-receipt.timestamp>45000||
+       !before.hud||!reward.hud||!before.hud.world||!reward.hud.world||!Array.isArray(before.hud.enemyBars)||
+       !before.hud.enemyBars.length||!actTwoOriginalAccount(before.ocr)||!actTwoOriginalAccount(reward.ocr))return null;
+    var actions=(details.inputEvents||[]).filter(function(e){return e.type==='actTwoNativeCombat'&&e.frameId===before.frameId&&e.actionId===ch.actionId;});
+    var capture=reward.hud.captureStamp;
+    if(actions.length!==1||!capture||capture.session!==o.session||capture.frameId!==reward.frameId||
+       capture.source!=='game-capture-start'||!(before.timestamp<=actions[0].startedAt&&actions[0].startedAt<actions[0].finishedAt&&
+       actions[0].finishedAt<=capture.capturedAt&&capture.capturedAt<=reward.timestamp&&reward.timestamp<=receipt.timestamp))return null;
+    function rows(frame){return frame.ocr.filter(function(v){return v.x>=0&&v.x<650&&v.y>300&&v.y<850&&/character exp/i.test(v.text);});}
+    return !rows(before).length&&rows(reward).some(function(v){return /^(?:Obtained\s+)?Character EXP\s*(?:[×x+·]\s*)?[1-9][0-9]{0,4}$/i.test(v.text.trim());})?a.side:null;
 }
 // An enemy arriving during the inventory transition is a route interruption at waypoint zero.
 function actOneExplorationEntryThreat(request,current) {
@@ -3196,6 +3249,22 @@ function createActOneAdapter(sessionId,options) {
             }
         } finally { release(); event.finishedAt = Date.now(); }
     }
+    // Restrict the warning-color measurement to the one ambiguous field component.
+    function readHostileDirection(img,c){
+        if(!c||!Number.isFinite(c.x)||!Number.isFinite(c.y)||Math.abs(c.x-960)<390||
+           Math.abs(Math.hypot(c.x-960,c.y-540)-495)>42||c.width<10||c.width>20||c.height<7||c.height>18)return null;
+        var crop=null,mask=null,C=OpenCvSharp.OpenCvSharp;
+        try{
+            crop=img.deriveCrop(Math.round(c.x)-28,Math.round(c.y)-24,57,49);
+            mask=crop.srcMat.inRange(new C.Scalar(82,75,245),new C.Scalar(110,98,255));
+            var contours=mask.findContoursAsArray(C.RetrievalModes.External,C.ContourApproximationModes.ApproxSimple);
+            var count=contours.length===undefined?contours.Length:contours.length,shapes=[];
+            if(!Number.isInteger(count)||count>24)return null;
+            for(var i=0;i<count;i++){var b=C.Cv2.boundingRect(contours[i]);
+                shapes.push({x:Number(b.x),y:Number(b.y),width:Number(b.width),height:Number(b.height),area:Number(C.Cv2.contourArea(contours[i],false))});}
+            return actOneWarningArrow(c,shapes);
+        }finally{dispose(mask);dispose(crop);}
+    }
     function readRows(img, x, y, w, h) {
         var found,rows=[],ocrStart=Date.now();
         try { found=img.findMulti(RecognitionObject.Ocr(x, y, w, h)); }
@@ -4137,6 +4206,29 @@ function createActOneAdapter(sessionId,options) {
                 result.fieldFrameId=current.frameId;result.fieldHealth=current.hud.health;result.reason=(finish?'Kaeya':'Amber')+' selected once; inspect before attacks';
             }catch(e){error=String(e&&e.message||e);result.reason=error;}finally{release();}
             return finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error);
+        },
+        faceRemainingEnemy: async function(initial,observe){
+            var id=request.combatRequestId,rf=request.rewardFrameId;
+            if(!/^mission-[0-9a-f]{32}$/.test(id)||!Number.isInteger(rf)||rf<1)throw Error('Invalid combat reward identity');
+            var receipt=JSON.parse(file.readTextSync('receipts/'+request.session+'/'+id+'.json'));
+            var chunks=receipt.details&&receipt.details.result&&receipt.details.result.chunks;
+            function frame(n){return JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(n).padStart(4,'0')+'.json'));}
+            var used='reports/'+request.session+'-direction-search-'+id+'.json',side=null;
+            if(!file.isExists(used)&&initial.frameId===request.expectedFrameId+1&&Array.isArray(chunks)&&chunks[0]&&Number.isInteger(chunks[0].beforeFrameId)){
+                var before=frame(chunks[0].beforeFrameId),award=frame(rf),source=frame(request.expectedFrameId),now=Date.now();
+                var initialSide=actOneCombatSearchSide(initial,request,receipt,before,award,now);
+                if(initialSide&&now-source.timestamp<=3500&&source.timestamp<=initial.hud.captureStamp.capturedAt&&
+                   actOneCombatSearchSide(source,request,receipt,before,award,source.timestamp)===initialSide)side=initialSide;
+            }
+            if(!side)return {status:'completed',turnSent:false,reason:'Fresh unused combat reward and matching directional markers required'};
+            checkStop();ready();
+            // Mark before turning so a refresh or interrupted acknowledgement cannot rotate twice.
+            if(!file.writeTextSync(used,JSON.stringify({requestId:request.id,frameId:initial.frameId,rewardFrameId:rf,side:side}))||!file.isExists(used))
+                throw new Error('Could not retain the one-use direction receipt');
+            var dx=side==='right'?200:-200;
+            events.push({type:'fieldCombatDirectionTurn',combatRequestId:id,frameId:initial.frameId,dx:dx,startedAt:Date.now()});
+            moveMouseBy(dx,0);await sleep(250);var after=await observe();
+            return {status:'completed',turnSent:true,side:side,dx:dx,frameId:after.frameId};
         },
         runActTwoNativeCombat: async function(initial,observe){
             var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
@@ -9787,6 +9879,10 @@ function createActOneAdapter(sessionId,options) {
                                 groundEnemy.candidateCount?'ambiguous':'clear';
                             groundEnemy.reason=enemyBarDiagnostic.overloaded?'detector_overloaded':hud.enemyBars.length?
                                 'outdoor_bar_candidates':groundEnemy.candidateCount?'unanchored_bar_shaped_components':'no_bar_shaped_components';
+                            if(groundEnemy.state==='ambiguous'&&groundEnemy.candidateCount===1&&enemyBarDiagnostic.fieldCandidates){
+                                try{var arrow=readHostileDirection(img,enemyBarDiagnostic.fieldCandidates[0]);if(arrow)hud.hostileDirectionArrow=arrow;}
+                                catch(arrowError){/* An unreadable marker grants no camera action. */}
+                            }
                         }catch(groundEnemyError){
                             hud.enemyBars=[];hud.enemyBarDiagnostic=enemyBarDiagnostic;
                             groundEnemy.reason='detector_result_unavailable_or_rejected';

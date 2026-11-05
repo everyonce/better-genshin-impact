@@ -594,6 +594,7 @@ var ActOneMission = (function () {
             }
         });
         if(name==='actTwoPauseProbe')return api.runActTwoPauseProbe(observation,observe);
+        if(name==='actTwoFaceRemainingEnemy')return api.faceRemainingEnemy(observation,observe);
         if(name==='actTwoNativeCombat'||name==='actTwoFieldCombat'||name==='actTwoNativeGroup'||name==='actTwoNativeFinish'||name==='actTwoNativeDeadlineProbe')return api.runActTwoNativeCombat(observation,observe);
         if(name==='actTwoEmergencyMap')return api.runActTwoEmergencyMap(observation,observe);
         if(name==='actTwoEmergencySwitch')return api.runActTwoEmergencySwitch(observation,observe);

@@ -213,10 +213,16 @@
    budget(7000);
    if(!candidate(current,api))throw Error('Healthy recognized party member and one surveyed tower target required');
    const startAvatar=party(current,'Kaeya')?'Kaeya':'Amber';result.startedAs=startAvatar;
-   await fresh(100);
-   if(!candidate(current,api)||!party(current,startAvatar)||initial.hud.health.max!==current.hud.health.max||
-      !scan(current,'threat',1)||!samePose(initial,current)||!associated(bar(initial),bar(current),32))
-    throw Error('Tower hostile did not repeat on the independent ground scan');
+   // The red rail vanishes briefly during the enemy's attack. Reacquire the same
+   // hostile at the same pose before switching; an empty capture never permits a shot.
+   let repeated=false;
+   for(let probe=0;probe<(api.aimed?4:1);probe++){
+    await fresh(probe?150:100);
+    if(!base(current,api)||!party(current,startAvatar)||initial.hud.health.max!==current.hud.health.max||!samePose(initial,current))break;
+    repeated=candidate(current,api)&&scan(current,'threat',1)&&associated(bar(initial),bar(current),40);
+    if(repeated||bar(current))break;
+   }
+   if(!repeated)throw Error('Tower hostile did not repeat on the independent ground scan');
    const anchor=current;
    if(startAvatar==='Kaeya'){
     await api.key('VK_2',current);result.switched=true;
@@ -229,6 +235,9 @@
     }
    }else{restoreActiveAmber=true;}
    budget(5200);
+   if(api.aimed){
+    for(let probe=0;probe<3&&!bar(current)&&base(current,api)&&party(current,'Amber')&&samePose(anchor,current);probe++)await fresh(140);
+   }
    if(!base(current,api)||!party(current,'Amber')||!samePose(anchor,current)||!scan(current,'threat',1)||!associated(bar(anchor),bar(current),60))
     throw Error('Healthy active Amber and the same elevated hostile required');
    if(!api.aimed&&!aligned(current)){

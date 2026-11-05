@@ -64,9 +64,13 @@
   return !!(Array.isArray(bars)&&n>=1&&n<=3&&bars.length===n&&Array.isArray(h.objectives)&&h.objectives.every(t=>typeof t==='string'&&!t.trim()));
  }
  // The route's threat observation can only request a new independently measured engine capture.
- function worldEntry(o,request,now,original,towerCandidate){
-  if(request.step!=='actTwoFieldCombat'||request.entryScene!=='world'||!Number.isInteger(request.expectedFrameId)||
-     !o||o.frameId!==request.expectedFrameId+1||!(encounter(o,now,request.session,original,false,true)||towerCandidate&&towerCandidate(o)))return false;
+ function worldEntry(o,request,now,original,towerCandidate,first){
+  if(request.step!=='actTwoFieldCombat'||request.entryScene!=='world'||!Number.isInteger(request.expectedFrameId)||!o)return false;
+  const exact=o.frameId===request.expectedFrameId+1;
+  const reacquired=!exact&&first&&first.session===request.session&&first.frameId===request.expectedFrameId+1&&
+   o.frameId>first.frameId&&o.frameId<=first.frameId+4&&o.hud.captureStamp.capturedAt>first.hud.captureStamp.capturedAt&&
+   towerCandidate&&towerCandidate(o)&&first.map&&o.map&&Math.hypot(first.map.x-o.map.x,first.map.y-o.map.y)<=1.25;
+  if(!exact&&!reacquired||!(encounter(o,now,request.session,original,false,true)||towerCandidate&&towerCandidate(o)))return false;
   const h=o.hud,stamp=h.captureStamp,scan=h.enemyBarObservation,d=h.enemyBarDiagnostic||{},bars=h.enemyBars;
   const candidates=d.fieldCandidates===undefined?bars:d.fieldCandidates;
   if(h.loading||h.unknownHud||h.lowHealth||d.overloaded||!Array.isArray(candidates)||candidates.length<bars.length||candidates.length>64||

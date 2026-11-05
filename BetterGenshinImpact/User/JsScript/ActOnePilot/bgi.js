@@ -4650,7 +4650,18 @@ function createActOneAdapter(sessionId,options) {
                 if(worldEntry){
                     // The engine took this request's first new frame. Revalidate it before any input.
                     result.entryScene='world';result.entryFrameId=initial.frameId;
-                    if(!native.worldEntry(initial,request,Date.now(),original,towerCandidate))throw new Error('Direct field entry requires a fresh measured original-account pack');
+                    var admitted=native.worldEntry(initial,request,Date.now(),original,towerCandidate);
+                    if(!admitted&&tower&&initial.frameId===request.expectedFrameId+1&&tower.base(initial,towerContext)&&tower.party(initial,'Kaeya')){
+                        // The level-one archer's red rail can disappear while its projectile hits Kaeya.
+                        // Stay at the accepted location and require a new positive scan before any input.
+                        for(var retry=0;retry<4&&!admitted;retry++){
+                            await sleep(150);current=await observeTower();
+                            if(!tower.base(current,towerContext)||!tower.party(current,'Kaeya')||!tower.samePose(initial,current))break;
+                            admitted=native.worldEntry(current,request,Date.now(),original,towerCandidate,initial);
+                        }
+                    }
+                    if(!admitted)throw new Error('Direct field entry requires a fresh measured original-account pack');
+                    result.entryFrameId=current.frameId;
                 }else{
                     await boundedKey('VK_ESCAPE',60,initial.frameId);
                     if(ambushWitness){await sleep(550);current=acquire();result.acquisition=current;}

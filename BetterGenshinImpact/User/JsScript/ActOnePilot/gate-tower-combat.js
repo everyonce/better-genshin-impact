@@ -19,11 +19,15 @@
  function row(o,text,x1,x2,y1,y2){
   return (o.ocr||[]).filter(r=>String(r.text).trim()===text&&r.x>=x1&&r.x<=x2&&r.y>=y1&&r.y<=y2).length;
  }
- // The active party member lacks its switch key. Require the other member's actual key as positive evidence.
+ // The active slot's key is dim. If full OCR misses a benched key as well, the two named
+ // rows must independently match the measured active/benched layout of this English party.
  function party(o,active){
   const k2=row(o,'2',1840,1900,330,410),k3=row(o,'3',1840,1900,420,480);
-  return row(o,'Amber',1640,1810,330,410)===1&&row(o,'Kaeya',1640,1810,420,480)===1&&
-   (active==='Kaeya'?k2===1&&k3===0&&o.hud.health.max===4015:k3===1&&k2===0&&o.hud.health.max!==4015);
+  if(row(o,'Amber',1640,1810,330,410)!==1||row(o,'Kaeya',1640,1810,420,480)!==1)return false;
+  if(active==='Kaeya')return o.hud.health.max===4015&&k3===0&&(k2===1||k2===0&&
+   row(o,'Amber',1683,1700,340,352)===1&&row(o,'Kaeya',1658,1678,443,456)===1);
+  return o.hud.health.max!==4015&&k2===0&&(k3===1||k3===0&&o.hud.health.max===1809&&
+   row(o,'Amber',1656,1674,350,363)===1&&row(o,'Kaeya',1686,1705,428,442)===1);
  }
  function bar(o){
   const bars=o&&o.hud&&o.hud.enemyBars,visible=Array.isArray(bars)&&bars.length===1&&bars[0];
@@ -45,7 +49,7 @@
    s.candidateCount===count&&s.acceptedCount===count&&Array.isArray(d.fieldCandidates)&&d.fieldCandidates.length===count&&
    Array.isArray(h.enemyBars)&&h.enemyBars.length===count);
  }
- function candidate(o,api){return base(o,api)&&party(o,'Kaeya')&&!!bar(o);}
+ function candidate(o,api){return base(o,api)&&(party(o,'Kaeya')||party(o,'Amber'))&&!!bar(o);}
  function samePose(a,b){
   return pose(a)&&pose(b)&&Math.hypot(a.map.x-b.map.x,a.map.y-b.map.y)<=1.25&&
    Math.abs((a.map.cameraAngle-b.map.cameraAngle+540)%360-180)<=4;
@@ -64,7 +68,7 @@
  // One normal arrow per request. Only fresh measured impact can permit a later request to fire again.
  async function run(initial,index,api){
   const result={assessment:'unconfirmed',restored:false,switched:false},turns=[];
-  let current=initial;
+  let current=initial,restoreActiveAmber=false;
   async function fresh(delay){
    api.checkStop();const earliest=api.now();await api.sleep(delay);const next=await api.observe(),s=next&&next.hud&&next.hud.captureStamp;
    if(!s||s.source!=='game-capture-start'||s.session!==initial.session||s.frameId!==next.frameId||next.session!==initial.session||
@@ -76,14 +80,25 @@
   function budget(ms){api.checkStop();if(api.deadline-api.now()<ms)throw Error('Tower shot deadline reached');}
   try{
    budget(7000);
-   if(!candidate(current,api))throw Error('Healthy Kaeya and one surveyed tower target required');
+   if(!candidate(current,api))throw Error('Healthy recognized party member and one surveyed tower target required');
+   const startAvatar=party(current,'Kaeya')?'Kaeya':'Amber';result.startedAs=startAvatar;
    await fresh(100);
-   if(!candidate(current,api)||!scan(current,'threat',1)||!samePose(initial,current)||!associated(bar(initial),bar(current),32))
+   if(!candidate(current,api)||!party(current,startAvatar)||initial.hud.health.max!==current.hud.health.max||
+      !scan(current,'threat',1)||!samePose(initial,current)||!associated(bar(initial),bar(current),32))
     throw Error('Tower hostile did not repeat on the independent ground scan');
-   const kaeya=current;await api.key('VK_2',current);result.switched=true;
-   for(let probe=0;probe<3;probe++){await fresh(probe?150:400);if(base(current,api)&&party(current,'Amber'))break;}
+   const anchor=current;
+   if(startAvatar==='Kaeya'){
+    await api.key('VK_2',current);result.switched=true;
+    for(let probe=0;probe<3;probe++){await fresh(probe?150:400);if(base(current,api)&&party(current,'Amber'))break;}
+    if(base(current,api)&&party(current,'Amber')&&row(current,'3',1840,1900,420,480)===0){
+     // Repeat the geometric fallback after the switch animation on a second real capture.
+     const selected=current;await fresh(120);
+     if(!samePose(selected,current)||!scan(selected,'threat',1)||!associated(bar(selected),bar(current),18))
+      throw Error('Selected Amber and tower target did not repeat');
+    }
+   }else{restoreActiveAmber=true;}
    budget(5200);
-   if(!base(current,api)||!party(current,'Amber')||!samePose(kaeya,current)||!scan(current,'threat',1)||!associated(bar(kaeya),bar(current),60))
+   if(!base(current,api)||!party(current,'Amber')||!samePose(anchor,current)||!scan(current,'threat',1)||!associated(bar(anchor),bar(current),60))
     throw Error('Healthy active Amber and the same elevated hostile required');
    const before=current,turn={actionId:api.actionId(index),beforeFrameId:before.frameId,beforeHealth:before.hud.health,
     beforeBars:[bar(before)],nativeAttempted:true,nativeReturned:false,startedAt:api.now()};turns.push(turn);
@@ -99,9 +114,12 @@
    result.impactFrameId=current.frameId;
   }catch(e){result.error=String(e&&e.message||e);}
   finally{
-   if(result.switched){try{
+   if(result.switched||restoreActiveAmber){try{
     await fresh(100);
-    if(base(current,api)&&party(current,'Amber')){await api.key('VK_3',current);await fresh(400);}
+    if(base(current,api)&&party(current,'Amber')){
+     await api.key('VK_3',current);
+     for(let probe=0;probe<3;probe++){await fresh(probe?150:400);if(base(current,api)&&party(current,'Kaeya'))break;}
+    }
     result.restored=base(current,api)&&party(current,'Kaeya');
    }catch(e){result.error=result.error||String(e&&e.message||e);}}
   }

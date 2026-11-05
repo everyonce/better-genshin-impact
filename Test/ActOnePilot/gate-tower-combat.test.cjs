@@ -3,6 +3,7 @@ const assert=require('node:assert/strict');
 const tower=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/gate-tower-combat.js');
 const native=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-native-combat.js');
 const [distant,approach,first,measured]=require('./fixtures/r77-gate-watchtower.json');
+const [kaeyaAtGate,switching,amber1,amber2,amber3]=require('./fixtures/r77-gate-amber-switch.json');
 const original=o=>o.ocr.some(r=>r.x>1600&&r.y>1020&&r.text.includes('693306810'));
 const ctx=o=>({now:()=>o.timestamp,session:o.session,original});
 
@@ -87,4 +88,38 @@ test('a depleted survivor requires the native level-one rail or the same capture
  const level={text:'Lv.1',x:tip.x-5,y:tip.y-28,width:21,height:14};o.ocr.push(level);assert.equal(tower.bar(o).width,7);
  o.ocr.pop();o.hud.enemyBars=[{...measured.hud.enemyBars[0],depletedRail:{remainingRed:tip,level}}];
  assert.equal(tower.bar(o).width,7);level.text='Lv.6';assert.equal(tower.bar(o),null);
+});
+test('recorded pre-switch, transitional and selected rows distinguish the actual Amber with 1809 HP',()=>{
+ assert.equal(tower.party(kaeyaAtGate,'Kaeya'),true);assert.equal(tower.party(kaeyaAtGate,'Amber'),false);
+ assert.equal(tower.candidate(switching,ctx(switching)),false);
+ for(const o of [amber1,amber2,amber3]){
+  assert.equal(tower.candidate(o,ctx(o)),true);assert.equal(tower.party(o,'Amber'),true);assert.equal(tower.party(o,'Kaeya'),false);
+ }
+ for(const edit of [o=>o.ocr.find(r=>r.text==='Kaeya').x-=25,o=>o.ocr.find(r=>r.text==='Amber').y-=8,
+  o=>o.ocr.push({text:'2',x:1856,y:351}),o=>o.hud.health.max=1733]){
+  const o=structuredClone(amber1);edit(o);assert.equal(tower.party(o,'Amber'),false);
+ }
+});
+test('starting as verified Amber takes a second independent threat frame, never switches to slot 2, and verifies Kaeya afterward',async()=>{
+ const o=structuredClone(amber1),inputs=[];let now=o.timestamp,sequence=[amber2,amber3];
+ // The start, repeat and no-impact samples above are actual captures. The successful return
+ // to Kaeya below is synthetic and tests the routing contract only.
+ function from(record,id){
+  const v=structuredClone(record),delta=amber3.timestamp+900*(id-13)-v.timestamp;v.timestamp+=delta;v.frameId=id;
+  v.hud.captureStamp.frameId=id;v.hud.captureStamp.capturedAt+=delta;
+  v.hud.enemyBarObservation.frameId=id;v.hud.enemyBarObservation.capturedAt+=delta;return v;
+ }
+ sequence.push(from(amber3,14),from(amber3,15),from(amber3,16),from(amber3,17),from(kaeyaAtGate,18));
+ const api={...ctx(o),now:()=>now,deadline:now+30000,checkStop(){},sleep:async()=>{},
+  observe:async()=>{const v=sequence.shift();now=v.timestamp;return v;},rewards:native.rewardFeedback,
+  key:async k=>{inputs.push(k);},actionId:()=> 'arrow',fire:async()=>{inputs.push('native-arrow');return {nativeReturned:true};}};
+ const res=await tower.run(o,0,api);assert.deepEqual(inputs,['native-arrow','VK_3']);
+ assert.equal(res.result.startedAs,'Amber');assert.equal(res.result.switched,false);assert.equal(res.result.restored,true);
+ assert.equal(res.result.assessment,'unconfirmed');
+});
+test('ambiguous named rows in the second captured Amber scene never shoot or change character',async()=>{
+ const o=structuredClone(amber2);o.ocr.find(r=>r.text==='Amber').x+=28;
+ let now=amber1.timestamp;const api={...ctx(amber1),now:()=>now,deadline:now+30000,checkStop(){},sleep:async()=>{},
+   observe:async()=>{now=o.timestamp;return o;},key:async()=>assert.fail(),fire:async()=>assert.fail()};
+ const res=await tower.run(amber1,0,api);assert.equal(res.turns.length,0);assert.equal(res.result.restored,false);
 });

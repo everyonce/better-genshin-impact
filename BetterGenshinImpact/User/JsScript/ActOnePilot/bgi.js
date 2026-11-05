@@ -3305,6 +3305,16 @@ function createActOneAdapter(sessionId,options) {
         } finally {dispose(mask);dispose(hsv);dispose(crop);}
     }
     function readEnemyBars(img, rows, level, nativeAcquisition, groundObservation) {
+        // Count the orange body immediately above or below a possible flame tip.
+        function flamePixels(x,y) {
+            var patch=null,color=null;
+            try {
+                patch=img.deriveCrop(x,y,25,10);
+                color=patch.srcMat.inRange(new OpenCvSharp.OpenCvSharp.Scalar(0,145,235),
+                    new OpenCvSharp.OpenCvSharp.Scalar(100,215,255));
+                return Number(OpenCvSharp.OpenCvSharp.Cv2.countNonZero(color));
+            } finally {dispose(color);dispose(patch);}
+        }
         enemyBarDiagnostic={level:level||1,candidates:0,localReads:[],greenMask:null};
         var top=nativeAcquisition===true?30:100;
         var left=nativeAcquisition===true||level===12||level===13?0:350;
@@ -3355,13 +3365,22 @@ function createActOneAdapter(sessionId,options) {
                 if(candidates.length>64){enemyBarDiagnostic.overloaded=true;return [];}
                 // Small near-square fragments in the side HUD are not field bars. Wide edge bars
                 // and same-image level-anchored depleted bars remain candidates, never silently clear.
+                enemyBarDiagnostic.flameTips=[];
                 enemyBarDiagnostic.fieldCandidates=candidates.filter(function(bar){
                     if(actOneOutdoorEnemyBarCandidate(bar,rows))return true;
-                    // Camp flames can leave tiny, nearly square outlines with almost no filled area.
-                    // Keep short solid bars, thin horizontal segments, and all level-anchored fragments.
-                    var sparseOutline=bar.height>=6&&bar.width<=12&&bar.width>=bar.height&&
-                        bar.width<=1.5*bar.height&&bar.rectangularity<0.1;
-                    return !sparseOutline&&(bar.x>=350&&bar.x<=1600||bar.width/bar.height>=3.5);
+                    // In a camp flame, a short red tip sits above a bright orange plume.
+                    // An uncertain fragment stays in the field scan until the same image proves both colors.
+                    var shortTip=bar.height>=6&&bar.height<=13&&bar.width>=5&&bar.width<=14&&
+                        bar.width<=1.8*bar.height&&bar.rectangularity<0.5;
+                    if(shortTip&&bar.y>=16&&bar.y<=1060&&bar.x>=13&&bar.x<=1906){
+                        var below=flamePixels(Math.round(bar.x)-12,Math.round(bar.y)+4);
+                        var above=flamePixels(Math.round(bar.x)-12,Math.round(bar.y)-15);
+                        if(Number.isInteger(below)&&Number.isInteger(above)&&below>=100&&below<=250&&above>=0&&above<=25){
+                            enemyBarDiagnostic.flameTips.push({x:bar.x,y:bar.y,orangePixelsBelow:below,orangePixelsAbove:above});
+                            return false;
+                        }
+                    }
+                    return bar.x>=350&&bar.x<=1600||bar.width/bar.height>=3.5;
                 });
             }
             // Uncharted outdoor walking must stop for a visible red bar even when

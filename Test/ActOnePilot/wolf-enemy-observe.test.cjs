@@ -30,7 +30,7 @@ async function observeStep(step, missionName='questStep', options={}) {
       Scalar:class{constructor(a,b,c){this.values=[a,b,c];}},
       RetrievalModes:{External:0},ContourApproximationModes:{ApproxSimple:0},
       Cv2:{boundingRect:c=>c,contourArea:c=>options.area===undefined?c.area===undefined?Math.max(0,((c.width||c.Width)-1)*((c.height||c.Height)-1)):c.area:options.area,
-        countNonZero:()=>options.redPixels===undefined?100:options.redPixels}
+        countNonZero:mask=>mask.flameCount===undefined?(options.redPixels??100):mask.flameCount}
     }},
     captureGameRegion:()=>({width:1920,height:1080,srcMat:{},
       findMulti:roi=>{const rows=fullRows.filter(r=>!roi||r.x>=roi.x&&r.y>=roi.y&&r.x<roi.x+roi.w&&r.y<roi.y+roi.h).map(r=>({...r}));rows.count=rows.length;return rows;},
@@ -40,7 +40,7 @@ async function observeStep(step, missionName='questStep', options={}) {
           const bgr=[90,90,255];
           const pixelPass=bgr.every((v,i)=>v>=low.values[i]&&v<=high.values[i]);
           if(x===0&&y===30)groundScans++;
-          return {findContoursAsArray:()=>{
+          return {flameCount:w===25&&h===10?(options.flameCounts?.[y]??0):undefined,findContoursAsArray:()=>{
             if(x===0&&y===30){if(options.detectorError)throw Error('inert detector failure');
               return Object.hasOwn(options,'contours')?options.contours:[];}
             return x===350&&y===100&&pixelPass?[bar]:[];
@@ -114,17 +114,25 @@ test('edge and depleted bar-shaped candidates rejected by level OCR remain ambig
 test('sparse camp torch outline is diagnostic only; dense or anchored fragments still stop exploration',async()=>{
   // Gate-to-camp frame 76: a flame at (1375.5,180.5) produced 4.5 pixels of contour area in an 11×9 box.
   const torch={x:1370,y:146,width:11,height:9,area:4.5};
-  const clear=await measure({contours:[torch],redPixels:38});
+  const clear=await measure({contours:[torch],redPixels:38,flameCounts:{185:144,166:0}});
   assert.equal(clear.observation.hud.enemyBarObservation.state,'clear');
   assert.equal(clear.observation.hud.enemyBarDiagnostic.rawCandidates[0].rectangularity,.05625);
   assert.equal(clear.observation.hud.enemyBarObservation.candidateCount,0);
-  const dense=await measure({contours:[{...torch,area:60}]});
+  const flicker={x:1370,y:151,width:9,height:6,area:10};
+  const clearFlicker=await measure({contours:[flicker],flameCounts:{188:151,169:0}});
+  assert.equal(clearFlicker.observation.hud.enemyBarObservation.state,'clear');
+  assert.equal(clearFlicker.observation.hud.enemyBarDiagnostic.flameTips[0].orangePixelsBelow,151);
+  for(const flameCounts of [{},{185:95,166:0},{185:144,166:100}]){
+    const fragment=await measure({contours:[torch],flameCounts});
+    assert.equal(fragment.observation.hud.enemyBarObservation.state,'ambiguous');
+  }
+  const dense=await measure({contours:[{...torch,area:60}],flameCounts:{185:144}});
   assert.equal(dense.observation.hud.enemyBarObservation.state,'ambiguous');
   const tiny=await measure({contours:[{...torch,width:3,height:3,area:0.1}]});
   assert.equal(tiny.observation.hud.enemyBarObservation.state,'ambiguous');
   const horizontal=await measure({contours:[{...torch,width:26,height:5}]});
   assert.equal(horizontal.observation.hud.enemyBarObservation.state,'ambiguous');
-  const anchored=await measure({contours:[torch],rows:[...groundRows(),row('Lv.6',1355,153,36,16)]});
+  const anchored=await measure({contours:[torch],flameCounts:{185:144},rows:[...groundRows(),row('Lv.6',1355,153,36,16)]});
   assert.equal(anchored.observation.hud.enemyBarObservation.state,'threat');
 });
 

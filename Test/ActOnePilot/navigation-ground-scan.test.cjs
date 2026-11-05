@@ -58,6 +58,15 @@ test('a new hostile stops the next movement even after a clear initial frame', a
     assert.equal(result.reason, 'Enemy observed during exploration');
 });
 
+test('a completed guild greeting does not block free exploration away from the counter', async () => {
+    const initial = frame(2, 8000, 2564, 'clear');
+    initial.hud.interact = true;
+    initial.ocr.push({text: 'F', x: 1121, y: 534}, {text: 'Katheryne', x: 1220, y: 535});
+    const {result, moves} = await run(initial, now => frame(3, now, 2552, 'clear'));
+    assert.equal(result.status, 'arrived');
+    assert.equal(moves.length, 1);
+});
+
 test('measured clear frames allow the normal route to arrive', async () => {
     const {result, moves} = await run(frame(2, 8000, 2564, 'clear'), now => frame(3, now, 2552, 'clear'));
     assert.equal(moves.length, 1);

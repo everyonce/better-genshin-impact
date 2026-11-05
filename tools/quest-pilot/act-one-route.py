@@ -651,7 +651,7 @@ def require_fresh_source(source, session, now_ms):
 
 
 def source_account_matches(source, expected_uid):
-    """Reject conflicting or duplicate numeric account evidence in the native UID region."""
+    """Accept one physical account read, including a full-screen/cropped pair in older observations."""
     matches = []
     for row in source['ocr']:
         if not isinstance(row, dict) or not isinstance(row.get('text'), str):
@@ -660,8 +660,26 @@ def source_account_matches(source, expected_uid):
                 and type(row.get('y')) in (int, float) and row['y'] > 1020):
             match = re.fullmatch(r'(?:UID)?[: ]*([0-9]{9,10})', row['text'].strip())
             if match:
-                matches.append(match.group(1))
-    return matches == [expected_uid]
+                if match.group(1) != expected_uid:
+                    return False
+                matches.append(row)
+    if len(matches) != 2:
+        return len(matches) == 1
+    # Old native captures may retain the labelled and bare readings of the same printed digits.
+    bare = next((r for r in matches if re.fullmatch(r'[0-9]{9,10}', r['text'].strip())), None)
+    named = next((r for r in matches if re.fullmatch(r'UID[: ]+[0-9]{9,10}', r['text'].strip())), None)
+    if not bare or not named:
+        return False
+    for r in matches:
+        if (not all(type(r.get(k)) in (int, float) and math.isfinite(r[k]) for k in ('x','y','width','height'))
+                or r['width'] < 60 or r['height'] < 6 or r['x'] < 1680 or r['y'] < 1040
+                or r['x'] + r['width'] > 1870 or r['y'] + r['height'] > 1080):
+            return False
+    overlap = min(bare['y']+bare['height'], named['y']+named['height']) - max(bare['y'], named['y'])
+    return (15 <= bare['x'] - named['x'] <= 72
+            and abs(bare['x']+bare['width'] - named['x']-named['width']) <= 5
+            and overlap >= .75 * min(bare['height'], named['height'])
+            and abs(bare['y']+bare['height']/2 - named['y']-named['height']/2) <= 8)
 
 
 def regional_map_ready(source):

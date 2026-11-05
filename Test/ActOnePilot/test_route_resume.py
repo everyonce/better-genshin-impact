@@ -523,6 +523,21 @@ class SupervisedRouteControllerTests(unittest.TestCase):
         self.assertEqual(self.run_controller(pilot)['status'], 'stopped')
         self.assertEqual(len(pilot.calls), 2)
 
+    def test_guild_native_uid_pair_identifies_one_physical_read_in_archived_frames(self):
+        fixture = json.loads(Path(__file__).with_name('guild-uid-frame-6.fixture.json').read_text('utf-8'))
+        bare, named = fixture['rows']
+        def matches(rows, uid='123456789'):
+            return route_tool.source_account_matches(dict(ocr=rows), uid)
+        self.assertTrue(matches([bare, named]))
+        self.assertTrue(matches([named, bare]))
+        self.assertTrue(matches([dict(r, text=r['text'].replace('123456789','1234567890'))
+                                 for r in [bare,named]], '1234567890'))
+        for pair in [[bare,dict(named,text='UID:123456780')],[bare,dict(named,x=named['x']+12)],
+                     [bare,dict(named,y=1066)],[bare,dict(named,width=None)],[bare,dict(named,x=1679)],
+                     [bare,dict(named,text=bare['text'])],[named,named],[bare,named,dict(bare,x=1610)]]:
+            self.assertFalse(matches(pair), pair)
+        self.assertFalse(matches([bare,named], '987654321'))
+
     def test_uid_expected_plus_conflicting_or_duplicate_is_ambiguous(self):
         for index, text in enumerate(['UID: 111111111', '693306810']):
             self.progress = Path(self.temp.name) / ('uid-' + str(index) + '.json')

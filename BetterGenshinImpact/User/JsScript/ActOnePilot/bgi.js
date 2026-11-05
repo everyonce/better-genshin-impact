@@ -83,9 +83,28 @@ function actTwoIndoorSafe(o,now,session){
     var hint=hp&&hp.current===4015&&hp.max===4015&&(h.objectives||[]).slice(0,2).join('').replace(/[^A-Za-z]/g,'')==='SolvethemysteryGotoKaeyaattheKnightsofFavoniusHQforahint';
     return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&actTwoOriginalAccount(o.ocr)&&h&&h.groundControls&&!h.climbing&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.journal&&!h.bigMap&&!(h.enemyBars||[]).length&&(original||hint));
 }
+// A scaled read can include the UID prefix while full-screen OCR bounds only its digits.
+// Collapse exactly one labelled/bare pair within the fixed UID crop and keep the original labelled row.
+function actOneCanonicalUidRows(rows) {
+    var ids=(rows||[]).filter(function(r){return r&&typeof r.text==='string'&&r.x>1600&&r.y>1020&&/^(?:UID)?[: ]*[0-9]{9,10}$/.test(String(r.text||'').trim());});
+    if(ids.length!==2)return rows;
+    var bare=ids.find(function(r){return /^[0-9]{9,10}$/.test(r.text.trim());});
+    var named=ids.find(function(r){return /^UID[: ]+[0-9]{9,10}$/.test(r.text.trim());});
+    if(!bare||!named||named.text.trim().replace(/^UID[: ]+/,'')!==bare.text.trim())return rows;
+    function inCrop(r){
+        return [r.x,r.y,r.width,r.height].every(Number.isFinite)&&r.width>=60&&r.height>=6&&r.x>=1680&&r.y>=1040&&
+            r.x+r.width<=1870&&r.y+r.height<=1080;
+    }
+    if(!inCrop(bare)||!inCrop(named))return rows;
+    var prefix=bare.x-named.x,overlap=Math.min(bare.y+bare.height,named.y+named.height)-Math.max(bare.y,named.y);
+    if(prefix<15||prefix>72||Math.abs(bare.x+bare.width-named.x-named.width)>5||
+        overlap<0.75*Math.min(bare.height,named.height)||
+        Math.abs(bare.y+bare.height/2-named.y-named.height/2)>8)return rows;
+    return rows.filter(function(r){return r!==bare;});
+}
 function actTwoOriginalAccount(rows) {
-    var identities=(rows||[]).filter(function(r){return r.x>1600&&r.y>1030&&/^(?:UID)?[: ]*\d{9}(?:C?ape)?$/.test(String(r.text||'').trim());});
-    return identities.length>0&&identities.every(function(r){return /693306810(?:C?ape)?$/.test(String(r.text||'').trim());});
+    var identities=(actOneCanonicalUidRows(rows)||[]).filter(function(r){return r.x>1600&&r.y>1020&&/^(?:UID)?[: ]*\d{9,10}(?:C?ape)?$/.test(String(r.text||'').trim());});
+    return identities.length===1&&/^(?:UID)?[: ]*693306810(?:C?ape)?$/.test(String(identities[0].text||'').trim());
 }
 function actOneObjectiveRows(rows, expected) {
     // Close crystal approach also requires the cropped height/distance reading.
@@ -772,7 +791,7 @@ function actOneNamedMenuMarker(rows,request,readCrop) {
 }
 function actOneMergeControlCropRows(fullRows, cropRows, x, y) {
     var mapped=(cropRows||[]).map(function(r){return {text:String(r.text||''),x:x+Number(r.x)/3,y:y+Number(r.y)/3,width:Number(r.width)/3,height:Number(r.height)/3};});
-    var merged=(fullRows||[]).slice();
+    var merged=(fullRows||[]).slice(),uidAdded=false;
     mapped.forEach(function(crop){
         // Full-frame OCR and its enlarged control crop can read the same label.
         // Collapse only geometrically overlapping copies of the exact text;
@@ -786,9 +805,12 @@ function actOneMergeControlCropRows(fullRows, cropRows, x, y) {
                 h=Math.max(0,Math.min(full.y+full.height,crop.y+crop.height)-Math.max(full.y,crop.y));
             return w*h>=0.75*Math.min(full.width*full.height,crop.width*crop.height);
         });
-        if(!duplicate)merged.push(crop);
+        if(!duplicate){
+            merged.push(crop);
+            if(crop.x>=1680&&crop.y>=1040&&/^(?:UID)?[: ]*[0-9]{9,10}$/.test(crop.text.trim()))uidAdded=true;
+        }
     });
-    return merged;
+    return uidAdded?actOneCanonicalUidRows(merged):merged;
 }
 function actOneGroundControlEvidence(rows) {
     var controls=(rows||[]).filter(function(r){return /^(E|Q|Space)$/.test(String(r.text||'').trim())&&r.x>1500&&r.x<1880&&r.y>=990&&r.y<=1045;});
@@ -9534,7 +9556,7 @@ function createActOneAdapter(sessionId,options) {
                         function(error){return {saved:false,error:String(error&&error.message||error)};});
                     pngScheduleMs=Date.now()-schedule0;pngWriteMode='overlapped';
                 }
-                var o0 = Date.now(), rows = actOneJoinStatueGuide(readRows(img, 0, 0, 1920, 1080));
+                var o0 = Date.now(), rows = actOneCanonicalUidRows(actOneJoinStatueGuide(readRows(img, 0, 0, 1920, 1080)));
                 rows=actOneNamedMenuMarker(rows,request,()=>scaledRows(img,1175,600,85,240));
                 if(request&&request.step==='actTwoCooking'){
                     rows=actOneMergeControlCropRows(rows,scaledRows(img,1310,120,490,110),1310,120);

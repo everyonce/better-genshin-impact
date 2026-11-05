@@ -233,6 +233,7 @@ var ActOneMission = (function () {
                 'Enemy bar present during Lisa navigation');
         }
         async function stop(reason) {
+            if (useAdviser) api.gpuAdviserStopped(current,reason);
             var result={ status: 'stopped', reason: reason, nextWaypointIndex: waypointIndex, inputMs: totalInputMs, turns: turns, movements: movements, jumpRecoveries: jumpRecoveries, climbSteps:climbSteps, climbReleases:climbReleases };
             if(/health|stalled|deadline/i.test(reason)&&typeof api.pauseWorldInventory==='function') {
                 current=await observe();
@@ -265,9 +266,13 @@ var ActOneMission = (function () {
         if(['Defeat the nearby hilichurls','Clear out the nearby hilichurl camp'].indexOf(request.objective)>=0) {
             for(var resumePoll=0;resumePoll<6 && !current.hud.world && !current.hud.dialogueReady && !current.hud.choice;resumePoll++){api.checkStop();await api.sleep(350);current=await observe();}
         }
+        var useAdviser=exploring && request.requireMeasuredGround===true && !!api.gpuAdviserUid &&
+            (!request.expectedUid || request.expectedUid===api.gpuAdviserUid);
+        try {
         for (var w = 0; w < request.waypoints.length; w++) {
             waypointIndex = w;
             var target = request.waypoints[w];
+            if (useAdviser) api.setGpuAdviserWaypoint(target);
             var namedFinal = typeof request.talkTo === 'string' && w === request.waypoints.length - 1;
             while (true) {
                 api.checkStop();
@@ -463,12 +468,26 @@ var ActOneMission = (function () {
                 if (held <= 0) return stop('Navigation deadline reached');
                 if(exploring&&typeof api.releaseClimb==='function'&&current.hud.groundControls&&!current.hud.climbing&&request.deadlineMs-(api.now()-began)<held+6500) return stop('Navigation stopped before movement to reserve incidental-climb recovery time');
                 if(lisaUnsafe(current)) return stop(lisaUnsafeReason(current));
+                // The GPU may shorten this particular approved forward hold. Rotation, recovery and other input remain native.
+                if (useAdviser && stalled===0 && current.session===request.session &&
+                    current.hud.groundControls===true && !current.hud.climbing && !current.mapPositionInherited &&
+                    !current.hud.interact && !current.hud.loading && !current.hud.unknownHud && !current.hud.swimming &&
+                    !current.hud.choice && !current.hud.dialogueReady && !current.hud.tutorialStep && !current.hud.auto &&
+                    !current.hud.bigMap && !current.hud.journal && !namedFinal && !markerApproach &&
+                    namedDialogueAccount(current,api.gpuAdviserUid) && groundScanStopReason(current,api.now())===null) {
+                    held=api.gpuAdvisedForwardMs(current,target,held);
+                    if (groundScanStopReason(current,api.now()) || api.now()-began+held>request.deadlineMs)
+                        return stop('Measured navigation frame expired before forward');
+                }
                 afterForward = { x: current.map.x, y: current.map.y, minProgress: travelHeld === null ? 0.5 : Math.min(0.5, held / 1000), groundWitness: current.hud.groundControls&&!current.hud.climbing?current:null, groundWitnessAt: request.requireMeasuredGround?scanCheckedAt:null };
                 var inputStarted = api.now(); await api.forward(held); totalInputMs += api.now() - inputStarted; movements++;
                 await api.sleep(150); current = await observe();
             }
         }
         return { status: 'arrived', nextWaypointIndex: request.waypoints.length, inputMs: totalInputMs, turns: turns, movements: movements, jumpRecoveries: jumpRecoveries, climbSteps:climbSteps, climbReleases:climbReleases };
+        } finally {
+            if (useAdviser) api.setGpuAdviserWaypoint(null);
+        }
     }
     function selectDialogueChoice(current) {
         if (!current.hud.choice) return null;

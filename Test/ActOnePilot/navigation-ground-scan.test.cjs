@@ -21,12 +21,12 @@ function frame(id, now, y, state) {
                 candidateCount: state === 'clear' ? 0 : 1, acceptedCount: state === 'threat' ? 1 : 0}}};
 }
 
-async function run(first, next) {
+async function run(first, next, extensions = {}) {
     let now = 8000;
     const moves = [];
     const api = {now: () => now, checkStop() {}, sleep: async ms => { now += ms; },
         runActTwoNavigationWithPause: (_source, _observe, runField) => runField(first),
-        forward: async ms => { moves.push(ms); now += ms; }, rotate: () => assert.fail('unexpected turn')};
+        forward: async ms => { moves.push(ms); now += ms; }, rotate: () => assert.fail('unexpected turn'), ...extensions};
     const result = await mission.runNavigation(request, first, api, async () => next(now));
     return {result, moves};
 }
@@ -36,6 +36,67 @@ test('request validation limits measured ground to free exploration', () => {
     assert.equal(validate(request), null);
     for (const value of [{...request, requireMeasuredGround: false}, {...request, objective: 'Talk to Amber'},
                          {...request, mission: 'observe'}]) assert.ok(validate(value));
+});
+
+test('only a measured same-account native forward uses a smaller model hold; every exit revokes its waypoint', async () => {
+    function sample(state, shownUid) {
+        const f = frame(2, 8000, 2536, state);
+        f.ocr = [{text:'UID: '+shownUid, x:1702, y:1046}];
+        return f;
+    }
+    for (const [state, shownUid, expected] of [['clear','693306810',[50]], ['clear','123456789',[800]], ['threat','693306810',[]]]) {
+        const armed = [], veto = [];
+        const model = {gpuAdviserUid:'693306810', setGpuAdviserWaypoint:w=>armed.push(w),
+            gpuAdviserStopped:(_f,reason)=>veto.push(reason), gpuAdvisedForwardMs:()=>50};
+        const {moves} = await run(sample(state,shownUid), now=>frame(3,now,2552,'clear'),model);
+        assert.deepEqual(moves,expected);
+        assert.deepEqual(armed,[target,null]);
+        assert.equal(veto.length,state==='threat'?1:0);
+    }
+});
+
+test('pipe and public frame sequences are separate; wrong identity, stale or replayed frames leave the native owner in control', () => {
+    const fs = require('node:fs'), vm = require('node:vm');
+    const filename = require.resolve('../../BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js');
+    const decide = vm.runInNewContext(fs.readFileSync(filename,'utf8')+'\nactOneGpuSteeringDecision;');
+    const identity = {session:'route-session',processId:11,windowsSessionId:3,gameProcessId:22};
+    const c = {session:identity.session,frameId:9,observedAtUnixMs:1000,expectedUid:'693306810',
+        objective:request.objective,waypoint:target,requestId:'live-request'};
+    const f = {session:c.session,frameId:9,capturedAt:1000};
+    const s = {...identity,protocolVersion:1,type:'steeringSuggestion',sourceEpoch:'d'.repeat(32),frameId:119,capturedAtUnixMs:1080,publishedAtUnixMs:1104,
+        validUntilUnixMs:1330,context:c,steering:{forward:true,holdMs:50}};
+    const decision = (sample=s, current=f, now=1120, consumed=0) => decide(sample,c,identity,current,now,800,consumed);
+    assert.equal(decision(),50);
+    assert.equal(decide(s,c,identity,f,1120,45,0),45);
+    for (const key of ['session','processId','windowsSessionId','gameProcessId']) assert.equal(decision({...s,[key]:0}),'context_mismatch');
+    for (const key of ['session','requestId','expectedUid','objective','frameId','observedAtUnixMs','waypoint'])
+        assert.equal(decision({...s,context:{...c,[key]:null}}),'context_mismatch');
+    assert.equal(decision(s,{...f,frameId:10}),'context_mismatch');
+    assert.equal(decision(s,{...f,capturedAt:999}),'context_mismatch');
+    assert.equal(decision({...s,sourceEpoch:null}),'context_mismatch');
+    assert.equal(decision(s,f,1330),'expired_or_replayed');
+    assert.equal(decision(s,f,1120,119),'expired_or_replayed');
+    assert.equal(decision({...s,capturedAtUnixMs:999}),'expired_or_replayed');
+    assert.equal(decision({...s,validUntilUnixMs:99999}),'expired_or_replayed');
+    assert.equal(decision({...s,steering:{forward:false,holdMs:50}}),'no_forward_agreement');
+    assert.equal(decision({...s,steering:{forward:true,holdMs:500}}),'no_forward_agreement');
+});
+
+test('frame-pipe opt-in is polled once per second and opens only for the exact pilot', () => {
+    const fs = require('node:fs'), vm = require('node:vm');
+    const main = fs.readFileSync(require.resolve('../../BetterGenshinImpact/User/JsScript/ActOnePilot/main.js'),'utf8');
+    const code = main.slice(main.indexOf('    var gpuAdviserIdentity='), main.indexOf('    function heartbeat('));
+    let config=null, checks=0;
+    const calls=[];
+    const ctx={session:'rdp-run',runner:{},genshin:{betterGiProcessId:31,windowsSessionId:4},
+        file:{isExists:()=>{checks++;return config!==null;},readTextSync:()=>JSON.stringify(config)},
+        questFrames:{start:(...args)=>calls.push(args)}};
+    vm.runInNewContext(code,ctx);ctx.openGpuAdviser(1000);ctx.openGpuAdviser(1100);
+    assert.equal(checks,1);assert.equal(calls.length,0);
+    config={version:1,session:'old',processId:31,windowsSessionId:4,gameProcessId:88,expectedUid:'693306810'};
+    ctx.openGpuAdviser(2000);assert.equal(calls.length,0);
+    config.session=ctx.session;ctx.openGpuAdviser(3000);ctx.openGpuAdviser(4000);
+    assert.deepEqual(calls,[[ctx.session,31,4,88]]);assert.equal(checks,3);
 });
 
 test('unmeasured, stale, or mismatched ground stops before a movement', async () => {

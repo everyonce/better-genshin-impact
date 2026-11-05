@@ -2296,9 +2296,36 @@ function actOneInventoryUiRevisionHash(source) {
     return hash;
 }
 
+// A pipe frame has its own sequence. Its echoed context must identify this exact native game image.
+function actOneGpuSteeringDecision(s,c,identity,frame,now,nativeMs,lastConsumed) {
+    if (!s || !c) return 'unavailable';
+    var e=s.context, w=c.waypoint, v=e&&e.waypoint;
+    if (s.protocolVersion!==1 || s.type!=='steeringSuggestion' || !/^[0-9a-f]{32}$/i.test(s.sourceEpoch) || s.session!==identity.session ||
+        s.processId!==identity.processId || s.gameProcessId!==identity.gameProcessId || s.windowsSessionId!==identity.windowsSessionId ||
+        !e || e.session!==c.session || e.requestId!==c.requestId || e.expectedUid!==c.expectedUid || e.objective!==c.objective ||
+        e.frameId!==frame.frameId || e.frameId!==c.frameId || e.observedAtUnixMs!==c.observedAtUnixMs ||
+        frame.session!==c.session || frame.capturedAt!==c.observedAtUnixMs || !v || !w || v.map!==w.map || v.x!==w.x || v.y!==w.y)
+        return 'context_mismatch';
+    if (!Number.isSafeInteger(s.frameId) || s.frameId<=lastConsumed || !Number.isSafeInteger(s.capturedAtUnixMs) ||
+        !Number.isSafeInteger(s.publishedAtUnixMs) || !Number.isSafeInteger(s.validUntilUnixMs) ||
+        s.capturedAtUnixMs<c.observedAtUnixMs || s.capturedAtUnixMs>s.publishedAtUnixMs || s.publishedAtUnixMs>now ||
+        now>=s.validUntilUnixMs || s.validUntilUnixMs>s.capturedAtUnixMs+350) return 'expired_or_replayed';
+    if (!s.steering || s.steering.forward!==true || !Number.isInteger(s.steering.holdMs) ||
+        s.steering.holdMs<40 || s.steering.holdMs>250) return 'no_forward_agreement';
+    return Math.min(nativeMs,s.steering.holdMs);
+}
 function createActOneAdapter(sessionId,options) {
     // The startup setting is retained across every request refresh.
     var inventoryUiOnly=!!options&&options.inventoryUiOnlyV1===true;
+    var adviser=options&&options.gpuAdviserIdentity, adviserTarget=null, adviserContext=null, lastAdviserEpoch=null, lastAdvisedFrame=0;
+    // Publish before OCR of this image finishes. Inference and native perception can proceed independently.
+    function publishAdviserContext(session,frame,startedAt) {
+        if (!adviser || !adviserTarget || !request || request.mission!=='navigation' || request.session!==session) return;
+        adviserContext={session:session,frameId:frame,observedAtUnixMs:startedAt,expectedUid:adviser.expectedUid,
+            objective:request.objective,waypoint:adviserTarget,requestId:request.id};
+        try { if (!file.writeTextSync('reports/quest-adviser-context.json',JSON.stringify(adviserContext))) adviserContext=null; }
+        catch (_) { adviserContext=null; }
+    }
     var pauseProtectionActive=false,pauseProtectionObserver=null,pauseProtectionKeys=Object.create(null),pauseProtectionLastInputFrame=-1,pauseProtectionLastStatusAt=-Infinity;
     function loadLocalPause(){
         var protector=eval(file.readTextSync('local-pause.js')+'\nActOneLocalPause;');
@@ -3842,6 +3869,36 @@ function createActOneAdapter(sessionId,options) {
     }
     return {
         inventoryUiOnlyV1: function () {return inventoryUiOnly;},
+        // A new waypoint or a terminal return revokes every context published for the previous one.
+        gpuAdviserUid: adviser ? adviser.expectedUid : null,
+        gpuAdviserStopped: function (frame,reason) {
+            if (adviser) events.push({type:'gpuSteeringDecision',status:'rejected',reason:'native_navigation_stop',
+                frameId:frame&&frame.frameId,nativeReason:reason,startedAt:Date.now()});
+        },
+        setGpuAdviserWaypoint: function (target) {
+            if (!adviser) return;
+            adviserTarget=target ? {map:target.map,x:target.x,y:target.y} : null;
+            adviserContext=null;
+            if (!target) try { file.writeTextSync('reports/quest-adviser-context.json','null'); } catch (_) {}
+        },
+        gpuAdvisedForwardMs: function (frame,target,nativeMs) {
+            if (!adviser) return nativeMs;
+            var now=Date.now(), suggestion=null, result='unavailable';
+            try {
+                if (adviserTarget && target.x===adviserTarget.x && target.y===adviserTarget.y && target.map===adviserTarget.map &&
+                    adviserContext && lastObservation && lastObservation.frameId===frame.frameId) {
+                    suggestion=JSON.parse(file.readTextSync('reports/quest-adviser-latest.json'));
+                    result=actOneGpuSteeringDecision(suggestion,adviserContext,adviser,frame,Date.now(),nativeMs,
+                        suggestion&&suggestion.sourceEpoch===lastAdviserEpoch?lastAdvisedFrame:0);
+                }
+            } catch (_) {}
+            var accepted=typeof result==='number';
+            if (accepted) { lastAdviserEpoch=suggestion.sourceEpoch; lastAdvisedFrame=suggestion.frameId; }
+            events.push({type:'gpuSteeringDecision',frameId:frame.frameId,pipeFrameId:suggestion&&suggestion.frameId,
+                status:accepted?'accepted':'rejected',reason:accepted?'measured_native_forward_agrees':result,
+                sourceEpoch:suggestion&&suggestion.sourceEpoch,nativeMs:nativeMs,holdMs:accepted?result:nativeMs,startedAt:now});
+            return accepted?result:nativeMs;
+        },
         setHeartbeat: function (callback) {heartbeat=callback;},
         heartbeat: function (_,force) {if(heartbeat)heartbeat(force===true);},
         now: function () { return Date.now(); }, sleep: function (ms) { return sleep(ms); }, checkStop: checkStop,
@@ -9427,6 +9484,7 @@ function createActOneAdapter(sessionId,options) {
             try {
                 if (Number(img.width) !== 1920 || Number(img.height) !== 1080) throw new Error('1920x1080 capture required');
                 var png = 'observations/' + session + '/frame-' + String(frame).padStart(4, '0') + '.png';
+                if (adviserTarget) publishAdviserContext(session,frame,t0);
                 if(typeof file.writeImageAsync==='function') {
                     // The runtime clones this capture before returning. Its owned copy
                     // can encode while this thread recognizes the same immutable frame.

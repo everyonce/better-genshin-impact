@@ -4,11 +4,33 @@ eval(file.readTextSync('bgi.js'));
 (async function () {
     var prior = null, adapter = null, runner = null, metrics = null, session = null, lastHeartbeat = 0, failure = null,
         safetyFault = null, safetyFaultAt = 0, wolfExposureArmed = false, internalWolfSequence = 0;
+    var gpuAdviserIdentity=null, gpuAdviserError=null, gpuConfigCheckedAt=-Infinity, gpuConfigAttempt=null;
+    // The route launcher publishes this opt-in only after it knows the owned pilot session.
+    function openGpuAdviser(now) {
+        if (!runner || !session || gpuAdviserIdentity || now-gpuConfigCheckedAt<1000) return;
+        gpuConfigCheckedAt=now;
+        try {
+            if (!file.isExists('gpu-adviser-config.json')) return;
+            var raw=file.readTextSync('gpu-adviser-config.json');
+            if (raw===gpuConfigAttempt) return;
+            gpuConfigAttempt=raw;
+            var c=JSON.parse(raw);
+            if (!c || c.version!==1 || c.session!==session || c.processId!==Number(genshin.betterGiProcessId) ||
+                c.windowsSessionId!==Number(genshin.windowsSessionId) || !Number.isInteger(c.gameProcessId) || c.gameProcessId<=0 ||
+                typeof c.expectedUid!=='string' || !/^[0-9]{9,10}$/.test(c.expectedUid)) return;
+            // The host checks the actual game/window/process binding before opening its read-only frame pipe.
+            questFrames.start(session,c.processId,c.windowsSessionId,c.gameProcessId);
+            gpuAdviserIdentity=c;
+        } catch(error) { gpuAdviserError=String(error && error.message || error); }
+    }
     function heartbeat(force,override) {
         var now=Date.now();if(!force&&now-lastHeartbeat<1000)return;
+        if (!override || override==='idle') openGpuAdviser(now);
         var state=runner?runner.getState():{state:'starting',frameId:0,activeRequestId:null};
         var value={version:1,fieldCombatWorldEntry:true,processId:Number(genshin.betterGiProcessId),windowsSessionId:Number(genshin.windowsSessionId),remoteDesktop:genshin.isRemoteDesktopSession===true,session:session,
             state:override||(safetyFault?'faulted':state.state),heartbeatAt:now,frameId:state.frameId,activeRequestId:state.activeRequestId,error:failure||safetyFault};
+        value.gpuAdviserFrameStream=!!gpuAdviserIdentity;
+        if(gpuAdviserError)value.gpuAdviserError=gpuAdviserError;
         if(!Number.isInteger(value.processId)||value.processId<=0)throw new Error('Updated BetterGI host with controller identity is required');
         if(!file.writeTextSync('controller-status.json',JSON.stringify(value)))throw new Error('Cannot publish controller heartbeat');
         lastHeartbeat=now;
@@ -612,7 +634,7 @@ eval(file.readTextSync('bgi.js'));
                 // Between completed missions there are no held keys. Refresh only
                 // trusted package code, preserving the runner's session and nonce state.
                 eval(file.readTextSync('bgi.js'));
-                var refreshed = createActOneAdapter(genshin.windowsSessionId,{inventoryUiOnlyV1:inventoryUiOnly});
+                var refreshed = createActOneAdapter(genshin.windowsSessionId,{inventoryUiOnlyV1:inventoryUiOnly,gpuAdviserIdentity:gpuAdviserIdentity});
                 refreshed.setHeartbeat(heartbeat);
                 Object.keys(refreshed).forEach(function (key) { adapter[key] = refreshed[key]; });
                 eval(file.readTextSync('mission.js'));
@@ -656,6 +678,7 @@ eval(file.readTextSync('bgi.js'));
     } finally {
         try { if (adapter) adapter.release(); }
         finally {try {heartbeat(true,failure?'faulted':'stopped');}catch(e){log.info('Controller heartbeat unavailable: '+String(e&&e.message||e));}
+            if(gpuAdviserIdentity)try { await questFrames.stop(); } catch(e){log.info('GPU frame stream stop: '+String(e&&e.message||e));}
             try { if (metrics) setGameMetrics(metrics[0], metrics[1], metrics[2]); } finally { dispatcher.clearAllTriggers(); } }
     }
 })();

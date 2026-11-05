@@ -127,6 +127,10 @@ public class EngineExtend
         engine.AddHostObject("keyMouseScript", new KeyMouseScript(runtime, workDir, ct));
         engine.AddHostObject("pathingScript", new AutoPathingScript(runtime, allConfig, workDir, config, ct, repositoryResources));
         engine.AddHostObject("genshin", new Dependence.Genshin(runtime, allConfig, ct, screenshots));
+        // Bind the read-only frame pipe only to the installed quest pilot and its own cancellation token.
+        if (string.Equals(System.IO.Path.TrimEndingDirectorySeparator(System.IO.Path.GetFullPath(workDir)),
+            System.IO.Path.GetFullPath(Global.Absolute("User/JsScript/ActOnePilot")), StringComparison.OrdinalIgnoreCase))
+            engine.AddHostObject("questFrames", new QuestFrameObserver(runtime, ct));
         engine.AddHostObject("characterDevelopmentTask", new CharacterDevelopmentTask(runtime, ct));
         engine.AddHostObject("log", new Log());
         engine.AddHostObject("file", new LimitedFile(workDir)); // 限制文件访问

@@ -2237,6 +2237,6 @@ var ActOneMission = (function () {
             if(current&&current.hud&&current.hud.climbing) grounded=0;
         }
     }
-    return { keyboardFarewell:keyboardFarewell, guildNavigationFromInventory:guildNavigationFromInventory, travelHoldMs:travelHoldMs, reviewedClimbRelease:reviewedClimbRelease, settledClimbLanding:settledClimbLanding, statueHealingApproach:statueHealingApproach, runNavigation: runNavigation, runDialogue: runDialogue, runQuestStep:runQuestStep, bearing: bearing, objectiveMatches: objectiveMatches, selectDialogueChoice: selectDialogueChoice };
+    return { keyboardFarewell:keyboardFarewell, guildNavigationFromInventory:guildNavigationFromInventory, travelHoldMs:travelHoldMs, reviewedClimbRelease:reviewedClimbRelease, settledClimbLanding:settledClimbLanding, statueHealingApproach:statueHealingApproach, navigationTurnPixels: navigationTurnPixels, runNavigation: runNavigation, runDialogue: runDialogue, runQuestStep:runQuestStep, bearing: bearing, objectiveMatches: objectiveMatches, selectDialogueChoice: selectDialogueChoice };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = ActOneMission;

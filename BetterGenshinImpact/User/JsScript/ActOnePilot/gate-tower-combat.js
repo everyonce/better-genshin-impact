@@ -52,9 +52,25 @@
  function candidate(o,api){
   if(!base(o,api)||!party(o,'Kaeya')&&!party(o,'Amber'))return false;
   const b=bar(o),yaw=(o.map.cameraAngle-292.5+540)%360-180;
-  if(!b||yaw< -19||yaw>12)return false;
+  if(!b||Math.hypot(o.map.x+1186.1875,o.map.y-2206.267578125)>3||yaw< -19||yaw>12)return false;
   // The post-hit 278-degree view still presents the same high platform to the right.
-  return yaw>=-12?b.x<=1150:Math.abs(b.x-(1036-7*yaw))<=90;
+  return yaw>=-12&&b.x<=1150||Math.abs(b.x-(1036-7*yaw))<=90;
+ }
+ // The verified 64-to-41 hit started at 292.5 degrees with red left edge x=1004.
+ // A damaged bar gets shorter from the right; its left edge remains the projection reference.
+ function firingError(o){
+  const b=bar(o);
+  return b?{yaw:(o.map.cameraAngle-292.5+540)%360-180,x:b.x-b.width/2-1004}:null;
+ }
+ function aligned(o){
+  const e=firingError(o);return !!(e&&Math.abs(e.yaw)<=5&&Math.abs(e.x)<=60);
+ }
+ function sameTurningTarget(before,after){
+  const a=bar(before),b=bar(after);
+  if(!a||!b||!recoilPose(before,after)||Math.abs(a.width-b.width)>6||Math.abs(a.y-b.y)>28)return false;
+  const yaw=(after.map.cameraAngle-before.map.cameraAngle+540)%360-180;
+  const travel=-Math.sign(yaw)*((b.x-b.width/2)-(a.x-a.width/2));
+  return Math.abs(a.height-b.height)<=3&&travel>=-22&&travel<=Math.abs(yaw)*25+28;
  }
  function samePose(a,b){
   return pose(a)&&pose(b)&&Math.hypot(a.map.x-b.map.x,a.map.y-b.map.y)<=1.25&&
@@ -126,6 +142,32 @@
    budget(5200);
    if(!base(current,api)||!party(current,'Amber')||!samePose(anchor,current)||!scan(current,'threat',1)||!associated(bar(anchor),bar(current),60))
     throw Error('Healthy active Amber and the same elevated hostile required');
+   if(!aligned(current)){
+    result.alignment=[];
+    for(let attempt=0;attempt<2&&!aligned(current);attempt++){
+     budget(6200);
+     const before=current,e=firingError(before),coarse=Math.abs(e.yaw)>3;
+     // Use the shared navigation heading convention for the coarse return and a small
+     // visual trim confined to four degrees around the observed successful direction.
+     const error=coarse?e.yaw:e.yaw-Math.max(-4,Math.min(4,e.yaw+e.x/12));
+     if(Math.abs(error)<1.5||Math.abs(error)>19)throw Error('Tower target outside the verified firing projection');
+     const command=Math.max(-16,Math.min(16,error)),trace={beforeFrameId:before.frameId,yawError:e.yaw,leftError:e.x,requestedDegrees:-command};
+     result.alignment.push(trace);trace.dx=await api.turn(command,before);
+     await fresh(260);trace.afterFrameId=current.frameId;
+     if(!candidate(current,api)||!party(current,'Amber')||current.hud.health.max!==before.hud.health.max||
+        !scan(current,'threat',1)||!sameTurningTarget(before,current))
+      throw Error('Fresh healthy Amber and continuous tower target required after camera turn');
+     const seen=firingError(current);trace.observedYawError=seen.yaw;trace.observedLeftError=seen.x;
+     if(!aligned(current)&&(coarse?Math.abs(seen.yaw)>Math.abs(e.yaw)-2:Math.abs(seen.x)>Math.abs(e.x)-8))
+      throw Error('Tower camera turn did not improve the measured alignment');
+    }
+    if(!aligned(current))throw Error('Tower target stayed outside the verified firing projection');
+    const alignedFrame=current;await fresh(120);
+    if(!candidate(current,api)||!party(current,'Amber')||!scan(current,'threat',1)||!samePose(alignedFrame,current)||
+       !associated(bar(alignedFrame),bar(current),25)||!aligned(current)||current.hud.health.max!==alignedFrame.hud.health.max)
+     throw Error('Calibrated tower firing alignment did not repeat on a new capture');
+    budget(5200);
+   }
    const before=current,turn={actionId:api.actionId(index),beforeFrameId:before.frameId,beforeHealth:before.hud.health,
     beforeBars:[bar(before)],nativeAttempted:true,nativeReturned:false,startedAt:api.now()};turns.push(turn);
    try{Object.assign(turn,await api.fire(before,index));}finally{turn.finishedAt=api.now();}
@@ -157,6 +199,6 @@
   }
   return {current,turns,result};
  }
- root.GateTowerCombat={candidate,base,party,bar,scan,samePose,feedback,run};
+ root.GateTowerCombat={candidate,base,party,bar,scan,samePose,aligned,feedback,run};
  if(typeof module!=='undefined'&&module.exports)module.exports=root.GateTowerCombat;
 })(typeof globalThis!=='undefined'?globalThis:this);

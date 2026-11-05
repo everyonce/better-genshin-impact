@@ -1,0 +1,1073 @@
+[
+ {
+  "session": "mw3x5yoo-2invxke2wxi",
+  "frameId": 7,
+  "timestamp": 1793905770198,
+  "map": {
+   "x": -1186.076171875,
+   "y": 2206.099609375,
+   "map": "Teyvat",
+   "cameraAngle": 277.5
+  },
+  "ocr": [
+   {
+    "text": "Lumina",
+    "x": 1680,
+    "y": 256,
+    "width": 85,
+    "height": 29
+   },
+   {
+    "text": "1",
+    "x": 1856,
+    "y": 262,
+    "width": 31,
+    "height": 27
+   },
+   {
+    "text": "Amber",
+    "x": 1668,
+    "y": 355,
+    "width": 73,
+    "height": 23
+   },
+   {
+    "text": "Kaeya",
+    "x": 1694,
+    "y": 437,
+    "width": 71,
+    "height": 29
+   },
+   {
+    "text": "3",
+    "x": 1854,
+    "y": 443,
+    "width": 33,
+    "height": 29
+   },
+   {
+    "text": "Lisa",
+    "x": 1718,
+    "y": 530,
+    "width": 47,
+    "height": 25
+   },
+   {
+    "text": "4",
+    "x": 1856,
+    "y": 536,
+    "width": 31,
+    "height": 27
+   },
+   {
+    "text": "Q",
+    "x": 1802,
+    "y": 1026,
+    "width": 31,
+    "height": 27
+   },
+   {
+    "text": "693306810",
+    "x": 1728,
+    "y": 1048,
+    "width": 135,
+    "height": 29
+   }
+  ],
+  "hud": {
+   "auto": false,
+   "climbing": false,
+   "groundControls": true,
+   "enemyBars": [
+    {
+     "x": 1210,
+     "y": 162.5,
+     "width": 42,
+     "height": 3,
+     "rectangularity": 0.9634146341463414
+    }
+   ],
+   "tutorialStep": null,
+   "dialogueReady": false,
+   "choice": false,
+   "journal": false,
+   "bigMap": false,
+   "health": {
+    "current": 1776,
+    "max": 1809
+   },
+   "lowHealth": false,
+   "world": true,
+   "interact": false,
+   "objectives": [],
+   "enemyBarDiagnostic": {
+    "level": "any",
+    "candidates": 1,
+    "localReads": [],
+    "greenMask": null,
+    "contourCount": 7,
+    "redPixels": 128,
+    "rawCandidates": [
+     {
+      "x": 1210,
+      "y": 162.5,
+      "width": 42,
+      "height": 3,
+      "rectangularity": 0.9634146341463414
+     }
+    ],
+    "flameTips": [],
+    "fieldCandidates": [
+     {
+      "x": 1210,
+      "y": 162.5,
+      "width": 42,
+      "height": 3,
+      "rectangularity": 0.9634146341463414
+     }
+    ],
+    "solidCores": []
+   },
+   "enemyBarObservation": {
+    "version": 1,
+    "kind": "normal-ground-enemy-observation-v1",
+    "state": "threat",
+    "session": "mw3x5yoo-2invxke2wxi",
+    "frameId": 7,
+    "capturedAt": 1793905769826,
+    "reason": "outdoor_bar_candidates",
+    "candidateCount": 1,
+    "acceptedCount": 1
+   },
+   "captureStamp": {
+    "session": "mw3x5yoo-2invxke2wxi",
+    "frameId": 7,
+    "capturedAt": 1793905769826,
+    "source": "game-capture-start"
+   }
+  }
+ },
+ {
+  "session": "mw3x5yoo-2invxke2wxi",
+  "frameId": 8,
+  "timestamp": 1793905770799,
+  "map": {
+   "x": -1186.076171875,
+   "y": 2206.099609375,
+   "map": "Teyvat",
+   "cameraAngle": 277.5
+  },
+  "ocr": [
+   {
+    "text": "Lumina",
+    "x": 1680,
+    "y": 256,
+    "width": 85,
+    "height": 29
+   },
+   {
+    "text": "1",
+    "x": 1858,
+    "y": 262,
+    "width": 27,
+    "height": 27
+   },
+   {
+    "text": "Amber",
+    "x": 1666,
+    "y": 355,
+    "width": 75,
+    "height": 23
+   },
+   {
+    "text": "Kaeya",
+    "x": 1688,
+    "y": 433,
+    "width": 78,
+    "height": 36
+   },
+   {
+    "text": "3",
+    "x": 1854,
+    "y": 443,
+    "width": 33,
+    "height": 29
+   },
+   {
+    "text": "Lisa",
+    "x": 1718,
+    "y": 530,
+    "width": 47,
+    "height": 23
+   },
+   {
+    "text": "4",
+    "x": 1856,
+    "y": 536,
+    "width": 31,
+    "height": 27
+   },
+   {
+    "text": "R",
+    "x": 1588,
+    "y": 1024,
+    "width": 29,
+    "height": 29
+   },
+   {
+    "text": "Q",
+    "x": 1802,
+    "y": 1026,
+    "width": 31,
+    "height": 27
+   },
+   {
+    "text": "693306810",
+    "x": 1730,
+    "y": 1048,
+    "width": 133,
+    "height": 29
+   }
+  ],
+  "hud": {
+   "auto": false,
+   "climbing": false,
+   "groundControls": true,
+   "enemyBars": [
+    {
+     "x": 1200.5,
+     "y": 179,
+     "width": 41,
+     "height": 4,
+     "rectangularity": 0.9916666666666667
+    }
+   ],
+   "tutorialStep": null,
+   "dialogueReady": false,
+   "choice": false,
+   "journal": false,
+   "bigMap": false,
+   "health": {
+    "current": 1776,
+    "max": 1809
+   },
+   "lowHealth": false,
+   "world": true,
+   "interact": false,
+   "objectives": [],
+   "enemyBarDiagnostic": {
+    "level": "any",
+    "candidates": 1,
+    "localReads": [],
+    "greenMask": null,
+    "contourCount": 7,
+    "redPixels": 168,
+    "rawCandidates": [
+     {
+      "x": 1200.5,
+      "y": 179,
+      "width": 41,
+      "height": 4,
+      "rectangularity": 0.9916666666666667
+     }
+    ],
+    "flameTips": [],
+    "fieldCandidates": [
+     {
+      "x": 1200.5,
+      "y": 179,
+      "width": 41,
+      "height": 4,
+      "rectangularity": 0.9916666666666667
+     }
+    ],
+    "solidCores": []
+   },
+   "enemyBarObservation": {
+    "version": 1,
+    "kind": "normal-ground-enemy-observation-v1",
+    "state": "threat",
+    "session": "mw3x5yoo-2invxke2wxi",
+    "frameId": 8,
+    "capturedAt": 1793905770405,
+    "reason": "outdoor_bar_candidates",
+    "candidateCount": 1,
+    "acceptedCount": 1
+   },
+   "captureStamp": {
+    "session": "mw3x5yoo-2invxke2wxi",
+    "frameId": 8,
+    "capturedAt": 1793905770405,
+    "source": "game-capture-start"
+   }
+  }
+ },
+ {
+  "session": "mw3x5yoo-2invxke2wxi",
+  "frameId": 9,
+  "timestamp": 1793905772124,
+  "map": {
+   "x": -1186.076171875,
+   "y": 2206.099609375,
+   "map": "Teyvat",
+   "cameraAngle": 282
+  },
+  "ocr": [
+   {
+    "text": "Lumina",
+    "x": 1682,
+    "y": 258,
+    "width": 81,
+    "height": 23
+   },
+   {
+    "text": "1",
+    "x": 1854,
+    "y": 262,
+    "width": 35,
+    "height": 29
+   },
+   {
+    "text": "Amber",
+    "x": 1670,
+    "y": 355,
+    "width": 67,
+    "height": 23
+   },
+   {
+    "text": "2",
+    "x": 1858,
+    "y": 353,
+    "width": 27,
+    "height": 27
+   },
+   {
+    "text": "3",
+    "x": 1856,
+    "y": 445,
+    "width": 29,
+    "height": 27
+   },
+   {
+    "text": "Lisa",
+    "x": 1714,
+    "y": 524,
+    "width": 53,
+    "height": 32
+   },
+   {
+    "text": "4",
+    "x": 1854,
+    "y": 536,
+    "width": 35,
+    "height": 27
+   },
+   {
+    "text": "R",
+    "x": 1586,
+    "y": 1024,
+    "width": 35,
+    "height": 29
+   },
+   {
+    "text": "Q",
+    "x": 1802,
+    "y": 1026,
+    "width": 31,
+    "height": 27
+   },
+   {
+    "text": "693306810",
+    "x": 1730,
+    "y": 1048,
+    "width": 133,
+    "height": 29
+   },
+   {
+    "text": "Kaeya",
+    "x": 1693.6666666666667,
+    "y": 437,
+    "width": 72,
+    "height": 29
+   }
+  ],
+  "hud": {
+   "auto": false,
+   "climbing": false,
+   "groundControls": true,
+   "enemyBars": [
+    {
+     "x": 1094,
+     "y": 179,
+     "width": 40,
+     "height": 4,
+     "rectangularity": 0.9786324786324786
+    }
+   ],
+   "tutorialStep": null,
+   "dialogueReady": false,
+   "choice": false,
+   "journal": false,
+   "bigMap": false,
+   "health": {
+    "current": 1760,
+    "max": 1809
+   },
+   "lowHealth": false,
+   "world": true,
+   "interact": false,
+   "objectives": [],
+   "enemyBarDiagnostic": {
+    "level": "any",
+    "candidates": 1,
+    "localReads": [],
+    "greenMask": null,
+    "contourCount": 7,
+    "redPixels": 162,
+    "rawCandidates": [
+     {
+      "x": 1094,
+      "y": 179,
+      "width": 40,
+      "height": 4,
+      "rectangularity": 0.9786324786324786
+     }
+    ],
+    "flameTips": [],
+    "fieldCandidates": [
+     {
+      "x": 1094,
+      "y": 179,
+      "width": 40,
+      "height": 4,
+      "rectangularity": 0.9786324786324786
+     }
+    ],
+    "solidCores": []
+   },
+   "enemyBarObservation": {
+    "version": 1,
+    "kind": "normal-ground-enemy-observation-v1",
+    "state": "threat",
+    "session": "mw3x5yoo-2invxke2wxi",
+    "frameId": 9,
+    "capturedAt": 1793905771693,
+    "reason": "outdoor_bar_candidates",
+    "candidateCount": 1,
+    "acceptedCount": 1
+   },
+   "captureStamp": {
+    "session": "mw3x5yoo-2invxke2wxi",
+    "frameId": 9,
+    "capturedAt": 1793905771693,
+    "source": "game-capture-start"
+   }
+  }
+ },
+ {
+  "session": "mw3x5yoo-2invxke2wxi",
+  "frameId": 10,
+  "timestamp": 1793905772791,
+  "map": {
+   "x": -1186.076171875,
+   "y": 2206.099609375,
+   "map": "Teyvat",
+   "cameraAngle": 282
+  },
+  "ocr": [
+   {
+    "text": "Lumina",
+    "x": 1680,
+    "y": 256,
+    "width": 85,
+    "height": 29
+   },
+   {
+    "text": "0",
+    "x": 1852,
+    "y": 258,
+    "width": 37,
+    "height": 35
+   },
+   {
+    "text": "Kaeya",
+    "x": 1688,
+    "y": 433,
+    "width": 78,
+    "height": 36
+   },
+   {
+    "text": "3",
+    "x": 1858,
+    "y": 445,
+    "width": 27,
+    "height": 27
+   },
+   {
+    "text": "Lisa",
+    "x": 1718,
+    "y": 530,
+    "width": 47,
+    "height": 25
+   },
+   {
+    "text": "4",
+    "x": 1856,
+    "y": 536,
+    "width": 29,
+    "height": 27
+   },
+   {
+    "text": "Q",
+    "x": 1802,
+    "y": 1026,
+    "width": 31,
+    "height": 27
+   },
+   {
+    "text": "UID: 693306810",
+    "x": 1684,
+    "y": 1048,
+    "width": 179,
+    "height": 29
+   },
+   {
+    "text": "Amber",
+    "x": 1661,
+    "y": 354,
+    "width": 84,
+    "height": 25.333333333333332
+   }
+  ],
+  "hud": {
+   "auto": false,
+   "climbing": false,
+   "groundControls": true,
+   "enemyBars": [
+    {
+     "x": 1139,
+     "y": 169.5,
+     "width": 40,
+     "height": 5,
+     "rectangularity": 0.9871794871794872
+    }
+   ],
+   "tutorialStep": null,
+   "dialogueReady": false,
+   "choice": false,
+   "journal": false,
+   "bigMap": false,
+   "health": {
+    "current": 1760,
+    "max": 1809
+   },
+   "lowHealth": false,
+   "world": true,
+   "interact": false,
+   "objectives": [],
+   "enemyBarDiagnostic": {
+    "level": "any",
+    "candidates": 1,
+    "localReads": [],
+    "greenMask": null,
+    "contourCount": 7,
+    "redPixels": 203,
+    "rawCandidates": [
+     {
+      "x": 1139,
+      "y": 169.5,
+      "width": 40,
+      "height": 5,
+      "rectangularity": 0.9871794871794872
+     }
+    ],
+    "flameTips": [],
+    "fieldCandidates": [
+     {
+      "x": 1139,
+      "y": 169.5,
+      "width": 40,
+      "height": 5,
+      "rectangularity": 0.9871794871794872
+     }
+    ],
+    "solidCores": []
+   },
+   "enemyBarObservation": {
+    "version": 1,
+    "kind": "normal-ground-enemy-observation-v1",
+    "state": "threat",
+    "session": "mw3x5yoo-2invxke2wxi",
+    "frameId": 10,
+    "capturedAt": 1793905772361,
+    "reason": "outdoor_bar_candidates",
+    "candidateCount": 1,
+    "acceptedCount": 1
+   },
+   "captureStamp": {
+    "session": "mw3x5yoo-2invxke2wxi",
+    "frameId": 10,
+    "capturedAt": 1793905772361,
+    "source": "game-capture-start"
+   }
+  }
+ },
+ {
+  "session": "mw3x5yoo-2invxke2wxi",
+  "frameId": 11,
+  "timestamp": 1793905773383,
+  "map": {
+   "x": -1186.076171875,
+   "y": 2206.099609375,
+   "map": "Teyvat",
+   "cameraAngle": 282
+  },
+  "ocr": [
+   {
+    "text": "Lumina",
+    "x": 1680,
+    "y": 256,
+    "width": 85,
+    "height": 29
+   },
+   {
+    "text": "1",
+    "x": 1847,
+    "y": 254,
+    "width": 46,
+    "height": 43
+   },
+   {
+    "text": "Kaeya",
+    "x": 1688,
+    "y": 433,
+    "width": 79,
+    "height": 37
+   },
+   {
+    "text": "3",
+    "x": 1856,
+    "y": 445,
+    "width": 29,
+    "height": 27
+   },
+   {
+    "text": "Lisa",
+    "x": 1718,
+    "y": 530,
+    "width": 47,
+    "height": 25
+   },
+   {
+    "text": "4",
+    "x": 1856,
+    "y": 536,
+    "width": 29,
+    "height": 27
+   },
+   {
+    "text": "R",
+    "x": 1588,
+    "y": 1024,
+    "width": 29,
+    "height": 27
+   },
+   {
+    "text": "Q",
+    "x": 1802,
+    "y": 1026,
+    "width": 31,
+    "height": 27
+   },
+   {
+    "text": "693306810",
+    "x": 1730,
+    "y": 1048,
+    "width": 133,
+    "height": 29
+   },
+   {
+    "text": "Amber",
+    "x": 1648,
+    "y": 354.6666666666667,
+    "width": 98.33333333333333,
+    "height": 24.666666666666668
+   }
+  ],
+  "hud": {
+   "auto": false,
+   "climbing": false,
+   "groundControls": true,
+   "enemyBars": [
+    {
+     "x": 1157,
+     "y": 171,
+     "width": 42,
+     "height": 4,
+     "rectangularity": 0.983739837398374
+    }
+   ],
+   "tutorialStep": null,
+   "dialogueReady": false,
+   "choice": false,
+   "journal": false,
+   "bigMap": false,
+   "health": {
+    "current": 1760,
+    "max": 1809
+   },
+   "lowHealth": false,
+   "world": true,
+   "interact": false,
+   "objectives": [],
+   "enemyBarDiagnostic": {
+    "level": "any",
+    "candidates": 1,
+    "localReads": [],
+    "greenMask": null,
+    "contourCount": 7,
+    "redPixels": 171,
+    "rawCandidates": [
+     {
+      "x": 1157,
+      "y": 171,
+      "width": 42,
+      "height": 4,
+      "rectangularity": 0.983739837398374
+     }
+    ],
+    "flameTips": [],
+    "fieldCandidates": [
+     {
+      "x": 1157,
+      "y": 171,
+      "width": 42,
+      "height": 4,
+      "rectangularity": 0.983739837398374
+     }
+    ],
+    "solidCores": []
+   },
+   "enemyBarObservation": {
+    "version": 1,
+    "kind": "normal-ground-enemy-observation-v1",
+    "state": "threat",
+    "session": "mw3x5yoo-2invxke2wxi",
+    "frameId": 11,
+    "capturedAt": 1793905773004,
+    "reason": "outdoor_bar_candidates",
+    "candidateCount": 1,
+    "acceptedCount": 1
+   },
+   "captureStamp": {
+    "session": "mw3x5yoo-2invxke2wxi",
+    "frameId": 11,
+    "capturedAt": 1793905773004,
+    "source": "game-capture-start"
+   }
+  }
+ },
+ {
+  "session": "mw3x5yoo-2invxke2wxi",
+  "frameId": 13,
+  "timestamp": 1793905774860,
+  "map": {
+   "x": -1186.076171875,
+   "y": 2206.099609375,
+   "map": "Teyvat",
+   "cameraAngle": 282
+  },
+  "ocr": [
+   {
+    "text": "Lumina",
+    "x": 1682,
+    "y": 258,
+    "width": 81,
+    "height": 23
+   },
+   {
+    "text": "6",
+    "x": 1806,
+    "y": 270,
+    "width": 15,
+    "height": 15
+   },
+   {
+    "text": "1",
+    "x": 1858,
+    "y": 262,
+    "width": 27,
+    "height": 27
+   },
+   {
+    "text": "2",
+    "x": 1856,
+    "y": 353,
+    "width": 33,
+    "height": 29
+   },
+   {
+    "text": "Kaeya",
+    "x": 1664,
+    "y": 441,
+    "width": 88,
+    "height": 36
+   },
+   {
+    "text": "isa",
+    "x": 1726,
+    "y": 536,
+    "width": 33,
+    "height": 15
+   },
+   {
+    "text": "4",
+    "x": 1856,
+    "y": 536,
+    "width": 31,
+    "height": 27
+   },
+   {
+    "text": "Q",
+    "x": 1802,
+    "y": 1026,
+    "width": 29,
+    "height": 27
+   },
+   {
+    "text": "693306810",
+    "x": 1732,
+    "y": 1048,
+    "width": 131,
+    "height": 29
+   },
+   {
+    "text": "Amber",
+    "x": 1683.6666666666667,
+    "y": 345.6666666666667,
+    "width": 80.66666666666667,
+    "height": 29.666666666666668
+   }
+  ],
+  "hud": {
+   "auto": false,
+   "climbing": false,
+   "groundControls": true,
+   "enemyBars": [
+    {
+     "x": 1146,
+     "y": 189,
+     "width": 40,
+     "height": 4,
+     "rectangularity": 0.9829059829059829
+    }
+   ],
+   "tutorialStep": null,
+   "dialogueReady": false,
+   "choice": false,
+   "journal": false,
+   "bigMap": false,
+   "health": {
+    "current": 3919,
+    "max": 4015
+   },
+   "lowHealth": false,
+   "world": true,
+   "interact": false,
+   "objectives": [],
+   "enemyBarDiagnostic": {
+    "level": "any",
+    "candidates": 1,
+    "localReads": [],
+    "greenMask": null,
+    "contourCount": 7,
+    "redPixels": 163,
+    "rawCandidates": [
+     {
+      "x": 1146,
+      "y": 189,
+      "width": 40,
+      "height": 4,
+      "rectangularity": 0.9829059829059829
+     }
+    ],
+    "flameTips": [],
+    "fieldCandidates": [
+     {
+      "x": 1146,
+      "y": 189,
+      "width": 40,
+      "height": 4,
+      "rectangularity": 0.9829059829059829
+     }
+    ],
+    "solidCores": []
+   },
+   "enemyBarObservation": {
+    "version": 1,
+    "kind": "normal-ground-enemy-observation-v1",
+    "state": "threat",
+    "session": "mw3x5yoo-2invxke2wxi",
+    "frameId": 13,
+    "capturedAt": 1793905774473,
+    "reason": "outdoor_bar_candidates",
+    "candidateCount": 1,
+    "acceptedCount": 1
+   },
+   "captureStamp": {
+    "session": "mw3x5yoo-2invxke2wxi",
+    "frameId": 13,
+    "capturedAt": 1793905774473,
+    "source": "game-capture-start"
+   }
+  }
+ },
+ {
+  "session": "mw3x5yoo-2invxke2wxi",
+  "frameId": 14,
+  "timestamp": 1793905775273,
+  "map": {
+   "x": -1186.076171875,
+   "y": 2206.099609375,
+   "map": "Teyvat",
+   "cameraAngle": 282
+  },
+  "ocr": [
+   {
+    "text": "Lumina",
+    "x": 1682,
+    "y": 257,
+    "width": 83,
+    "height": 24
+   },
+   {
+    "text": "2",
+    "x": 1804,
+    "y": 264,
+    "width": 17,
+    "height": 21
+   },
+   {
+    "text": "1",
+    "x": 1858,
+    "y": 262,
+    "width": 27,
+    "height": 27
+   },
+   {
+    "text": "2",
+    "x": 1856,
+    "y": 353,
+    "width": 33,
+    "height": 29
+   },
+   {
+    "text": "Kaeya",
+    "x": 1667,
+    "y": 443,
+    "width": 76,
+    "height": 32
+   },
+   {
+    "text": "4",
+    "x": 1856,
+    "y": 536,
+    "width": 29,
+    "height": 27
+   },
+   {
+    "text": "Q",
+    "x": 1802,
+    "y": 1026,
+    "width": 31,
+    "height": 27
+   },
+   {
+    "text": "693306810",
+    "x": 1732,
+    "y": 1048,
+    "width": 131,
+    "height": 29
+   },
+   {
+    "text": "Amber",
+    "x": 1683,
+    "y": 343.6666666666667,
+    "width": 82.66666666666667,
+    "height": 32.666666666666664
+   }
+  ],
+  "hud": {
+   "auto": false,
+   "climbing": false,
+   "groundControls": true,
+   "enemyBars": [
+    {
+     "x": 1146,
+     "y": 185,
+     "width": 40,
+     "height": 6,
+     "rectangularity": 0.8128205128205128
+    }
+   ],
+   "tutorialStep": null,
+   "dialogueReady": false,
+   "choice": false,
+   "journal": false,
+   "bigMap": false,
+   "health": {
+    "current": 3919,
+    "max": 4015
+   },
+   "lowHealth": false,
+   "world": true,
+   "interact": false,
+   "objectives": [],
+   "enemyBarDiagnostic": {
+    "level": "any",
+    "candidates": 1,
+    "localReads": [],
+    "greenMask": null,
+    "contourCount": 7,
+    "redPixels": 208,
+    "rawCandidates": [
+     {
+      "x": 1146,
+      "y": 185,
+      "width": 40,
+      "height": 6,
+      "rectangularity": 0.8128205128205128
+     }
+    ],
+    "flameTips": [],
+    "fieldCandidates": [
+     {
+      "x": 1146,
+      "y": 185,
+      "width": 40,
+      "height": 6,
+      "rectangularity": 0.8128205128205128
+     }
+    ],
+    "solidCores": []
+   },
+   "enemyBarObservation": {
+    "version": 1,
+    "kind": "normal-ground-enemy-observation-v1",
+    "state": "threat",
+    "session": "mw3x5yoo-2invxke2wxi",
+    "frameId": 14,
+    "capturedAt": 1793905774886,
+    "reason": "outdoor_bar_candidates",
+    "candidateCount": 1,
+    "acceptedCount": 1
+   },
+   "captureStamp": {
+    "session": "mw3x5yoo-2invxke2wxi",
+    "frameId": 14,
+    "capturedAt": 1793905774886,
+    "source": "game-capture-start"
+   }
+  }
+ }
+]

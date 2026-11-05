@@ -4675,6 +4675,13 @@ function createActOneAdapter(sessionId,options) {
                             deadline:deadline,sleep:sleep,observe:observeTower,rewards:native.rewardFeedback,
                             actionId:function(i){return request.id+':rotation:'+i;},
                             key:function(k,frame){checkStop();ready();return boundedKey(k,60,frame.frameId);},
+                            turn:function(error,frame){
+                                checkStop();ready();var pixels=eval(file.readTextSync('mission.js')+'\nActOneMission.navigationTurnPixels;'),
+                                    dx=pixels(error);
+                                if(!Number.isInteger(dx)||!dx||Math.abs(dx)>152)throw Error('Tower camera turn outside measured heading range');
+                                events.push({type:'gateTowerCameraAlignment',frameId:frame.frameId,dx:dx,dy:0,startedAt:Date.now()});
+                                moveMouseBy(dx,0);return dx;
+                            },
                             fire:function(frame,i){checkStop();ready();return runChunk(frame,i,true);}
                         });},
                         fieldReady:function(o){return native.field(o,Date.now(),request.session,original,true);},

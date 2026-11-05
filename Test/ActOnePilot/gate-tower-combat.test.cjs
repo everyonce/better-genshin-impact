@@ -5,12 +5,15 @@ const native=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-tw
 const [distant,approach,first,measured]=require('./fixtures/r77-gate-watchtower.json');
 const [kaeyaAtGate,switching,amber1,amber2,amber3]=require('./fixtures/r77-gate-amber-switch.json');
 const [atGate,shotBefore,flash,damaged,settling]=require('./fixtures/r77-gate-ranged-impact.json');
+const [missStart,missBefore,missAfter]=require('./fixtures/r77-gate-missed-shot.json');
+const mission=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/mission.js');
 const original=o=>o.ocr.some(r=>r.x>1600&&r.y>1020&&r.text.includes('693306810'));
 const ctx=o=>({now:()=>o.timestamp,session:o.session,original});
 
 test('real gate frames retain one high tower bar; the ordinary melee filter stays unchanged',()=>{
  assert.equal(tower.candidate(distant,ctx(distant)),false);
- for(const o of [approach,first,measured])assert.equal(tower.candidate(o,ctx(o)),true);
+ assert.equal(tower.candidate(approach,ctx(approach)),false);assert.ok(native.targets(approach).length);
+ for(const o of [first,measured])assert.equal(tower.candidate(o,ctx(o)),true);
  assert.equal(native.targets(measured).length,0);assert.equal(tower.scan(measured,'threat',1),true);
  const req={step:'actTwoFieldCombat',entryScene:'world',session:measured.session,expectedFrameId:103,
   expectedUid:'693306810',createdAt:measured.hud.captureStamp.capturedAt-1};
@@ -170,4 +173,42 @@ test('the native shot waits through the verified moving-camera impact, then re-o
  const res=await tower.run(atGate,0,api);
  assert.deepEqual(inputs,[['shot',8],['VK_3',12]]);assert.equal(res.result.assessment,'damage');assert.equal(res.result.restored,true);
  assert.equal(res.turns[0].assessment.evidence,'tracked_red_fill_and_adjacent_gold_tail');assert.equal(res.result.impactFrameId,10);
+});
+test('the recorded successful shot is inside the accepted firing projection; the recorded miss needs a camera turn',()=>{
+ assert.equal(tower.aligned(shotBefore),true);assert.equal(tower.aligned(missBefore),false);
+ assert.equal(tower.candidate(missBefore,ctx(missBefore)),true);
+ assert.equal(mission.navigationTurnPixels(missBefore.map.cameraAngle-292.5),120);
+ assert.equal(tower.feedback(missBefore,missAfter,{...ctx(missAfter),rewards:native.rewardFeedback},'one'),'unconfirmed');
+});
+function alignReplay(bad){
+ const id='r:0',events=[],later=(n,kaeya=false)=>{
+  const v=structuredClone(kaeya?kaeyaAtGate:missBefore),delta=missBefore.timestamp+1000*(n-8)-v.timestamp;
+  v.frameId=n;v.timestamp+=delta;v.session=missBefore.session;v.map=structuredClone(missBefore.map);v.map.cameraAngle=292.5;
+  v.hud.captureStamp.frameId=n;v.hud.captureStamp.capturedAt+=delta;v.hud.captureStamp.session=v.session;
+  v.hud.enemyBarObservation.frameId=n;v.hud.enemyBarObservation.capturedAt+=delta;v.hud.enemyBarObservation.session=v.session;
+  v.hud.enemyBars[0].x=1004+v.hud.enemyBars[0].width/2;return v;
+ };
+ const observations=[missBefore,later(9),later(10),later(11),later(12),later(13),later(14),later(15,true)];
+ if(bad)bad(observations);
+ let now=missStart.timestamp;
+ return {events,api:{...ctx(missStart),now:()=>now,deadline:now+30000,checkStop(){},sleep:async()=>{},
+  observe:async()=>{const v=observations.shift();now=v.timestamp;return v;},rewards:native.rewardFeedback,
+  key:async(k,v)=>events.push([k,v.frameId]),actionId:()=>id,
+  turn:async(error,v)=>{const dx=mission.navigationTurnPixels(error);events.push(['camera',v.frameId,dx]);return dx;},
+  fire:async v=>{events.push(['shot',v.frameId]);return {nativeReturned:true};}}};
+}
+test('a camera-only native heading correction and two independently aligned threat frames precede the next arrow',async()=>{
+ const h=alignReplay(),r=await tower.run(missStart,0,h.api);
+ assert.deepEqual(h.events,[['camera',8,120],['shot',10],['VK_3',14]]);
+ assert.equal(r.result.alignment.length,1);assert.equal(r.result.alignment[0].afterFrameId,9);
+ assert.equal(r.result.assessment,'unconfirmed');assert.equal(r.result.restored,true);
+});
+test('unhelpful turn, changed target, conflicting identity or a lost second sight generates no shot',async()=>{
+ for(const edit of [s=>{s[1]=structuredClone(s[1]);s[1].map.cameraAngle=277.5;s[1].hud.enemyBars[0].x=1203;},
+  s=>s[1].map.x+=4,s=>s[1].hud.enemyBars[0].width+=15,s=>s[2].ocr=s[2].ocr.filter(r=>r.text!=='Amber'),
+  s=>s[2].hud.enemyBarObservation.state='ambiguous']){
+  const h=alignReplay(edit),r=await tower.run(missStart,0,h.api);
+  assert.equal(h.events.filter(e=>e[0]==='camera').length,1);assert.equal(h.events.some(e=>e[0]==='shot'),false);
+  assert.ok(r.result.error);
+ }
 });

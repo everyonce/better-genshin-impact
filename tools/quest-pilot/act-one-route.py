@@ -1633,6 +1633,11 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
                 if not returned_rotation(rotation):
                     raise RouteError('Native field rotation and its inventory pause were not established.')
                 state['fieldRotations'] += 1
+                tower = rotation.get('gateTower')
+                if tower is not None and (tower.get('restored') is not True or tower.get('assessment') not in ('damage', 'defeat')):
+                    state.update(status='waiting', reason='Gate tower arrow or return to Kaeya was not confirmed')
+                    save()
+                    break
                 evidence = None
                 if rotation.get('chunks'):
                     evidence = field_combat_feedback(state['records'][-1], expected_uid, pilot.archived_frame)

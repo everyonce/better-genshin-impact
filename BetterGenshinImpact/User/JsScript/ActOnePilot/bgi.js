@@ -2404,7 +2404,7 @@ function createActOneAdapter(sessionId,options) {
         receipt.pulses.push(recordPulse(s,now,horizon));
         return horizon;
     }
-    var pauseProtectionActive=false,pauseProtectionObserver=null,pauseProtectionKeys=Object.create(null),pauseProtectionLastInputFrame=-1,pauseProtectionLastStatusAt=-Infinity;
+    var towerGroundRequested=false,pauseProtectionActive=false,pauseProtectionObserver=null,pauseProtectionKeys=Object.create(null),pauseProtectionLastInputFrame=-1,pauseProtectionLastStatusAt=-Infinity;
     function loadLocalPause(){
         var protector=eval(file.readTextSync('local-pause.js')+'\nActOneLocalPause;');
         if(!protector||typeof protector.ensure!=='function')throw new Error('Local verified-pause protector is required before unpausing');
@@ -4156,6 +4156,7 @@ function createActOneAdapter(sessionId,options) {
             if(value.mission==='questStep'&&value.step==='actTwoWallAttachmentTiming')names.push('act-two-wall-attachment-timing.js','climb-stamina.js','world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&value.step==='actTwoWallMicroAscent')names.push('act-two-wall-micro-ascent.js','climb-stamina.js','world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&['actTwoNativeCombat','actTwoFieldCombat','actTwoNativeGroup','actTwoNativeFinish','actTwoNativeDeadlineProbe'].indexOf(value.step)>=0)names.push('act-two-native-combat.js','world-inventory.js','local-pause.js');
+            if(value.mission==='questStep'&&value.step==='actTwoFieldCombat')names.push('gate-tower-combat.js');
             if(value.mission==='questStep'&&value.step==='actTwoInformantCombat')names.push('act-two-informant-combat.js','world-inventory.js','local-pause.js');
             if(value.mission==='navigation'&&value.objective==='Meet Lisa at the temple')names.push('world-inventory.js','local-pause.js');
             if(value.mission==='questStep'&&value.step==='windriseReveal')names.push('windrise-reveal.js','world-inventory.js','local-pause.js','statue-dialogue.js','paused-navigation-anchor.js');
@@ -4565,6 +4566,11 @@ function createActOneAdapter(sessionId,options) {
             var finishing=request.step==='actTwoNativeFinish',permit=null,prior=null,witness=null;
             if(finishing){permit=JSON.parse(file.readTextSync('act-two-native-finish-request.json'));if(!/^mission-[a-f0-9]{32}$/.test(permit.priorId))throw new Error('Invalid prior combat receipt');prior=JSON.parse(file.readTextSync('receipts/'+request.session+'/'+permit.priorId+'.json'));var wf=prior.details&&prior.details.result&&prior.details.result.afterFrameId;if(!Number.isInteger(wf))throw new Error('Missing prior combat frame');witness=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(wf).padStart(4,'0')+'.json'));}
             var pack=request.step==='actTwoFieldCombat',probing=request.step==='actTwoNativeDeadlineProbe',group=!probing&&!pack&&request.step!=='actTwoNativeCombat',current=initial,result={status:'stopped',nativeGroup:group,nativeAttempted:false,damageConfirmed:false,defeatConfirmed:false},error=null;
+            var tower=pack?eval(file.readTextSync('gate-tower-combat.js')+'\nGateTowerCombat;'):null;
+            var towerContext={now:Date.now,session:request.session,original:original};
+            function towerCandidate(o){return !!tower&&tower.candidate(o,towerContext);}
+            function towerBars(o){var b=tower&&tower.bar(o);return b?[b]:[];}
+            async function observeTower(){towerGroundRequested=true;try{return await observe();}finally{towerGroundRequested=false;}}
             var acquisition=eval(file.readTextSync('act-two-combat-acquisition.js')+'\nActTwoCombatAcquisition;'),ambushWitness=null,defenseParam=null,acquisitionImage=null,acquisitionImageAt=null;
             if(group&&!finishing){
                 for(var wf=initial.frameId-1;wf>Math.max(0,initial.frameId-32);wf--){
@@ -4576,7 +4582,7 @@ function createActOneAdapter(sessionId,options) {
                 if(ambushWitness)defenseParam=native.targetingParam(new AutoFightParam('English Cyrus Defense'),true);
             }
             function original(o){return actTwoOriginalAccount(o.ocr||[]);}
-            function eligible(o){if(o&&o.acquisition)return acquisition.eligible(o,initial,ambushWitness,Date.now());if(probing)return native.deadlineProbe(o,Date.now(),request.session,original);return finishing?native.finish(o,witness,prior,permit,request,Date.now(),original):native.encounter(o,Date.now(),request.session,original,group,pack);}
+            function eligible(o){if(towerCandidate(o))return true;if(o&&o.acquisition)return acquisition.eligible(o,initial,ambushWitness,Date.now());if(probing)return native.deadlineProbe(o,Date.now(),request.session,original);return finishing?native.finish(o,witness,prior,permit,request,Date.now(),original):native.encounter(o,Date.now(),request.session,original,group,pack);}
             function acquire(){
                 checkStop();ready();var capturedAt=Date.now(),img=captureGameRegion();
                 try{
@@ -4594,7 +4600,7 @@ function createActOneAdapter(sessionId,options) {
                 if(worldEntry){
                     // The engine took this request's first new frame. Revalidate it before any input.
                     result.entryScene='world';result.entryFrameId=initial.frameId;
-                    if(!native.worldEntry(initial,request,Date.now(),original))throw new Error('Direct field entry requires a fresh measured original-account pack');
+                    if(!native.worldEntry(initial,request,Date.now(),original,towerCandidate))throw new Error('Direct field entry requires a fresh measured original-account pack');
                 }else{
                     await boundedKey('VK_ESCAPE',60,initial.frameId);
                     if(ambushWitness){await sleep(550);current=acquire();result.acquisition=current;}
@@ -4625,16 +4631,16 @@ function createActOneAdapter(sessionId,options) {
                 checkStop();ready();
                 if(finishing){permit.usedAt=Date.now();var saved=JSON.stringify(permit);if(!file.writeTextSync('act-two-native-finish-request.json',saved)||file.readTextSync('act-two-native-finish-request.json')!==saved)throw new Error('Finishing permission consumption failed');result.finishing=true;}
                 if(!pack){result.beforeFrameId=current.frameId;result.beforeHealth=current.hud.health;result.beforeBars=current.acquisition?acquisition.framingTargets(current.hud.enemyBars):native.targets(current);result.nativeAttempted=true;}
-                async function runChunk(o,index){
-                    var rotation=probing?'凯亚 '+Array(200).fill('wait(0.05)').join(', '):group&&!finishing?(acquisition.ambushObjective(o.hud.objectives)?native.ambushStrategy:native.groupStrategy):native.strategy;
+                async function runChunk(o,index,ranged){
+                    var rotation=ranged===true?'attack':probing?'凯亚 '+Array(200).fill('wait(0.05)').join(', '):group&&!finishing?(acquisition.ambushObjective(o.hud.objectives)?native.ambushStrategy:native.groupStrategy):native.strategy;
                     var defensive=group&&!finishing&&acquisition.ambushObjective(o.hud.objectives);
                     if(defensive&&!acquisition.stationaryReady(o.acquisition?o.hud.enemyBars:native.targets(o)))throw new Error('Centered or close verified enemy required for stationary combat');
-                    var event={type:'actTwoNativeCombat',engine:defensive?'AutoFightTask':'RunCombatScript',strategy:defensive?'English Cyrus Defense':rotation,chunkIndex:index,frameId:o.frameId,startedAt:Date.now()};events.push(event);
-                    if(pack){event.actionId=request.id+':rotation:'+index;result.nativeAttempted=true;if(result.beforeFrameId===undefined){result.beforeFrameId=o.frameId;result.beforeHealth=o.hud.health;result.beforeBars=native.targets(o);}}
+                    var event={type:'actTwoNativeCombat',engine:defensive?'AutoFightTask':'RunCombatScript',strategy:defensive?'English Cyrus Defense':rotation,avatar:ranged===true?'Amber':undefined,chunkIndex:index,frameId:o.frameId,startedAt:Date.now()};events.push(event);
+                    if(pack){event.actionId=request.id+':rotation:'+index;result.nativeAttempted=true;if(result.beforeFrameId===undefined){result.beforeFrameId=o.frameId;result.beforeHealth=o.hud.health;result.beforeBars=ranged===true?towerBars(o):native.targets(o);}}
                     try{var completed=await native.chunk({
                         createCancellation:function(){return dispatcher.GetLinkedCancellationTokenSource();},
                         armDeadline:function(cts,ms){cts.CancelAfter(ms);},
-                        run:function(script,token){if(defensive)return dispatcher.RunAutoFightTask(defenseParam||native.targetingParam(new AutoFightParam('English Cyrus Defense'),true),token);return dispatcher.RunCombatScript(script,script===native.ambushStrategy?null:'凯亚',token);},
+                        run:function(script,token){if(defensive)return dispatcher.RunAutoFightTask(defenseParam||native.targetingParam(new AutoFightParam('English Cyrus Defense'),true),token);return dispatcher.RunCombatScript(script,ranged===true?'安柏':script===native.ambushStrategy?null:'凯亚',token);},
                         release:function(){release();try{keyUp('VK_W');}finally{try{keyUp('VK_E');}finally{try{keyUp('VK_Q');}finally{try{keyUp('VK_3');}finally{try{keyUp('VK_D');}finally{leftButtonUp();rightButtonUp();}}}}}}
                     },function(){checkStop();ready();},{now:Date.now,sleep:sleep,timeoutMs:4000,strategy:rotation,sampleAfterMs:900,sample:defensive?async function(){
                         var sampled=await observe(),hp=sampled.hud&&sampled.hud.health;
@@ -4653,6 +4659,14 @@ function createActOneAdapter(sessionId,options) {
                         encounterDeadline:Number.isInteger(request.deadlineMs)?request.createdAt+request.deadlineMs:undefined,
                         now:Date.now,checkStop:checkStop,eligible:eligible,sleep:sleep,observe:observe,run:runChunk,
                         actionId:function(index){return request.id+':rotation:'+index;},
+                        towerCandidate:towerCandidate,
+                        runTower:function(o,index,deadline){return tower.run(o,index,{now:Date.now,session:request.session,original:original,
+                            checkStop:function(){checkStop();ready();if(Date.now()>=deadline)throw Error('Tower encounter deadline reached');},
+                            deadline:deadline,sleep:sleep,observe:observeTower,rewards:native.rewardFeedback,
+                            actionId:function(i){return request.id+':rotation:'+i;},
+                            key:function(k,frame){checkStop();ready();return boundedKey(k,60,frame.frameId);},
+                            fire:function(frame,i){checkStop();ready();return runChunk(frame,i,true);}
+                        });},
                         fieldReady:function(o){return native.field(o,Date.now(),request.session,original,true);},
                         emptyField:function(o){return native.emptyField(o,Date.now(),request.session,original);},
                         cameraDelta:acquisition.cameraDelta,
@@ -4675,6 +4689,8 @@ function createActOneAdapter(sessionId,options) {
                     result.completedRotations=fieldBatch.turns.filter(function(t){return t.nativeReturned===true;}).length;
                     result.sequenceStartedAt=fieldBatch.startedAt;result.sequenceDeadline=fieldBatch.deadline;result.sequenceFinishedAt=fieldBatch.finishedAt;
                     result.reacquisition=fieldBatch.reacquisition;result.approachBudget=fieldBatch.approachBudget;
+                    if(fieldBatch.towerResult){result.gateTower=fieldBatch.towerResult;
+                        result.damageConfirmed=result.gateTower.assessment==='damage';result.defeatConfirmed=result.gateTower.assessment==='defeat';}
                     result.reason=fieldBatch.reason;if(fieldBatch.error)error=fieldBatch.error;
                 }else if(group&&!finishing&&!ambushWitness){
                     var batch=await native.sequence(current,{now:Date.now,sleep:sleep,eligible:eligible,run:runChunk,observe:observe});
@@ -9755,7 +9771,7 @@ function createActOneAdapter(sessionId,options) {
                 if (readyError) throw readyError;
             } else ready();
             enemyBarDiagnostic=null;ocrPrimitiveMs=0;ocrReadCount=0;
-            var groundEnemyRequested=actOneRequestsGroundObservation(request,inventoryUiOnly,pauseProtectionActive,frame);
+            var groundEnemyRequested=actOneRequestsGroundObservation(request,inventoryUiOnly,pauseProtectionActive||towerGroundRequested,frame);
             var t0 = Date.now(), img = captureGameRegion(), captureMs = Date.now() - t0;
             var pngPending=null,pngScheduleMs=0,pngWaitMs=0,pngMs=0,pngWriteMode='synchronous';
             try {

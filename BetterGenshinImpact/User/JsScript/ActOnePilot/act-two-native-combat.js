@@ -64,9 +64,9 @@
   return !!(Array.isArray(bars)&&n>=1&&n<=3&&bars.length===n&&Array.isArray(h.objectives)&&h.objectives.every(t=>typeof t==='string'&&!t.trim()));
  }
  // The route's threat observation can only request a new independently measured engine capture.
- function worldEntry(o,request,now,original){
+ function worldEntry(o,request,now,original,towerCandidate){
   if(request.step!=='actTwoFieldCombat'||request.entryScene!=='world'||!Number.isInteger(request.expectedFrameId)||
-     !o||o.frameId!==request.expectedFrameId+1||!encounter(o,now,request.session,original,false,true))return false;
+     !o||o.frameId!==request.expectedFrameId+1||!(encounter(o,now,request.session,original,false,true)||towerCandidate&&towerCandidate(o)))return false;
   const h=o.hud,stamp=h.captureStamp,scan=h.enemyBarObservation,d=h.enemyBarDiagnostic||{},bars=h.enemyBars;
   const candidates=d.fieldCandidates===undefined?bars:d.fieldCandidates;
   if(h.loading||h.unknownHud||h.lowHealth||d.overloaded||!Array.isArray(candidates)||candidates.length<bars.length||candidates.length>64||
@@ -119,7 +119,7 @@
   const started=api.now(),timed=Number.isFinite(api.encounterDeadline);
   const deadline=timed?Math.min(started+35000,api.encounterDeadline):started+15000,turns=[];
   const limit=timed?6:3;
-  let current=initial,reason='rotation_limit',error=null;
+  let current=initial,reason='rotation_limit',error=null,towerResult=null;
   const scope={...api,pack:true,deadline,origin:initial.map,approachBudget:{turns:0,steps:0},reacquisition:{remaining:2,frames:[]},
    checkStop(){api.checkStop();if(api.now()>=deadline)throw new Error('Field sequence deadline reached');}};
   try{
@@ -130,6 +130,10 @@
     current=await approachFieldTarget(current,scope);scope.checkStop();
     if(!api.eligible(current)){reason='encounter_or_health_guard';break;}
     if(deadline-api.now()<4500){reason='native_drain_headroom';break;}
+    if(api.towerCandidate&&api.towerCandidate(current)){
+     const ranged=await api.runTower(current,index,deadline);turns.push(...ranged.turns);current=ranged.current;
+     towerResult=ranged.result;error=towerResult.error||null;reason=error||'Gate tower shot: '+towerResult.assessment;break;
+    }
     const before=current,turn={actionId:api.actionId(index),beforeFrameId:before.frameId,beforeHealth:before.hud.health,beforeBars:targets(before),startedAt:api.now(),nativeAttempted:true,nativeReturned:false};turns.push(turn);
     try{Object.assign(turn,await api.run(before,index));}catch(e){turn.error=String(e&&e.message||e);throw e;}finally{turn.finishedAt=api.now();}
     await api.sleep(150);current=await api.observe();
@@ -142,7 +146,7 @@
     if(!api.fieldReady(current)){reason='encounter_or_health_guard';break;}
    }
   }catch(e){error=String(e&&e.message||e);reason=error;}
-  return {current,turns,reason,error,startedAt:started,finishedAt:api.now(),deadline,reacquisition:scope.reacquisition,approachBudget:scope.approachBudget,
+  return {current,turns,reason,error,towerResult,startedAt:started,finishedAt:api.now(),deadline,reacquisition:scope.reacquisition,approachBudget:scope.approachBudget,
    nativeReturned:turns.length>0&&turns.every(t=>t.nativeReturned===true)};
  }
  // Convert the one exact level label in a scaled local crop back to game coordinates.
@@ -197,6 +201,7 @@
    if(api.pack)current=await reacquireFieldTarget(current,api);
    if(!api.eligible(current))throw new Error('Field target or grounded health changed during approach');
    if(Math.hypot(current.map.x-origin.x,current.map.y-origin.y)>(routeApproach?22:12))throw new Error('Field combat approach exceeded its travel budget');
+   if(api.towerCandidate&&api.towerCandidate(current))return current;
    const bar=fieldTarget(current,api.pack),dx=api.cameraDelta([bar]);
    // In the Temple capture a centered four-pixel bar at y=498 was within Kaeya's lunge;
    // the four-step approach ended at y=418 in a later capture and both swings missed.
@@ -302,6 +307,6 @@
   if(p.shieldProbe===true){if(p.shieldReviewed!==true||p.nativeAvatar!=='Kaeya'||p.enemyLevel!==13)throw new Error('Reviewed Kaeya shield probe required');return {strategy:'English Whopperflower Shield Probe',seconds:2,deadlineMs:3000,sampleAfterMs:750,minimumHealth:.85};}
   return {strategy:p.nativeAvatar==='Lumina'?'English Ley Line Anemo':'English Ley Line Defense',seconds:6,deadlineMs:8000,sampleAfterMs:2500,minimumHealth:.5};
  }
- root.ActTwoNativeCombat={localLevel,leyLineProfile,strategy,groupStrategy,ambushStrategy,entrySettled,worldEntry,pauseSeed,targetingParam,deadlineProbe,field,targets,fieldTarget,sameFieldPose,emptyField,reacquireFieldTarget,fieldSequence,approachFieldTarget,encounter,finish,chunk,assessProgress,progress,sequence};
+ root.ActTwoNativeCombat={rewardFeedback,localLevel,leyLineProfile,strategy,groupStrategy,ambushStrategy,entrySettled,worldEntry,pauseSeed,targetingParam,deadlineProbe,field,targets,fieldTarget,sameFieldPose,emptyField,reacquireFieldTarget,fieldSequence,approachFieldTarget,encounter,finish,chunk,assessProgress,progress,sequence};
  if(typeof module!=='undefined'&&module.exports)module.exports=root.ActTwoNativeCombat;
 })(typeof globalThis!=='undefined'?globalThis:this);

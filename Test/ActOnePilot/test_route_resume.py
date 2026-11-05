@@ -953,6 +953,22 @@ class SupervisedRouteControllerTests(unittest.TestCase):
                          ['worldInventory','actTwoFieldCombat','worldInventoryClose','worldInventory','navigation'])
         self.assertFalse(returned['result']['defeatConfirmed'])
 
+    def test_missed_or_unrestored_tower_shot_does_not_dispatch_another_action(self):
+        self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
+        for assessment, restored in [('unconfirmed', True), ('damage', False)]:
+            self.progress = Path(self.temp.name) / (assessment + '.json')
+            enemy, inv = controller_scene(objective='', enemies=True), controller_scene('inventory')
+            returned = dict(mission='questStep', status='stopped', source=inv, result=dict(
+                nativeGroup=False, nativeAttempted=True, nativeReturned=True, beforeFrameId=3,
+                afterFrameId=4, pauseVerified=True, pauseProof=dict(verified=True, kind='inventory', session='route-session'),
+                gateTower=dict(assessment=assessment, restored=restored)))
+            pilot = ReplayPilot(self.clock, [returned], source=enemy)
+            pilot.supports_field_combat_world_entry = mock.Mock(return_value=True)
+            report = self.run_controller(pilot, allow_field_combat=True)
+            self.assertEqual(report['status'], 'waiting')
+            self.assertEqual(report['fieldRotations'], 1)
+            self.assertEqual([r.get('step') for r in pilot.calls if r['mission'] != 'observe'], ['actTwoFieldCombat'])
+
     def test_capable_pilot_enters_measured_world_pack_without_inventory_round_trip(self):
         self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
         enemy = controller_scene(objective='', enemies=True)

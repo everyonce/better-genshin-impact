@@ -3901,6 +3901,16 @@ function createActOneAdapter(sessionId,options) {
                     var rotations=events.filter(function(e){return e.type==='actTwoNativeCombat';});
                     var last=rotations[rotations.length-1],age=last?Date.now()-last.finishedAt:NaN;
                     if(last&&last.nativeReturned===true&&last.actionId===request.id+':rotation:'+last.chunkIndex&&age>=0&&age<=2500){
+                        // A tower arrow can hit during native camera rotation. Attach the measured gold
+                        // tail to the same accepted red bar, retaining its red width and avoiding cycles.
+                        if(towerGroundRequested&&last.avatar==='Amber'&&outdoor.length===1){
+                            var towerRed=outdoor[0];
+                            if(towerRed.width>=2&&towerRed.width<=110&&towerRed.y>=120&&towerRed.y<=270){
+                                var towerGold=readDamageTrail(towerRed,last.actionId);
+                                if(towerGold)towerRed.towerDamageTail={actionId:last.actionId,x:towerGold.x,y:towerGold.y,
+                                    width:towerGold.width,height:towerGold.height,rectangularity:towerGold.rectangularity};
+                            }
+                        }
                         var fragments=candidates.filter(function(red){return red.x>=350&&red.x<=1600&&red.y>=200&&red.y<=850&&
                             red.width>=2&&red.width<16&&red.height>=3&&red.height<=12&&Number.isFinite(red.rectangularity)&&red.rectangularity>=.25;});
                         if(fragments.length<=8)for(var fi=0;fi<fragments.length;fi++){
@@ -9985,6 +9995,12 @@ function createActOneAdapter(sessionId,options) {
                         var windriseAmberRows=scaledRows(img,1650,390,100,45);
                         rows=actOneMergeControlCropRows(rows,windriseAmberRows,1650,390);ocrMs=Date.now()-o0;
                     }
+                }
+                if(request&&request.mission==='questStep'&&request.step==='actTwoFieldCombat'&&pos&&pos.map==='Teyvat'&&
+                   Math.hypot(pos.x+1186.1875,pos.y-2206.267578125)<=5.5&&hp&&!auto&&!journal&&!bigMap&&
+                   ['Amber','Kaeya'].some(function(n){return !rows.some(function(r){return r.text===n&&r.x>1640&&r.x<1810&&r.y>330&&r.y<480;});})){
+                    var towerNames=scaledRows(img,1648,334,140,137).filter(function(r){return r.text==='Amber'||r.text==='Kaeya';});
+                    rows=actOneMergeControlCropRows(rows,towerNames,1648,334);ocrMs=Date.now()-o0;
                 }
                 if(request&&(request.mission==='observe'||request.mission==='questStep'&&['lionFieldCombat','lionFieldProbe','lisaStatueRecovery','lisaTeamInspect','lisaClimb','lisaVisualMove','lisaGlide','lisaCloseThreat'].indexOf(request.step)>=0||lisaNavigationRequest())&&
                    objectiveRows.some(function(r){return actOneLisaObjective(r.text)||request.step==='lisaStatueRecovery'&&['Talk to Lisa','Enter the temple'].indexOf(r.text.trim())>=0;})&&hp&&!auto&&!journal&&!bigMap&&!choice&&!tutorialStep&&

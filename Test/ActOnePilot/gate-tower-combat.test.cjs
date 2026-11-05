@@ -4,6 +4,7 @@ const tower=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/gate-to
 const native=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/act-two-native-combat.js');
 const [distant,approach,first,measured]=require('./fixtures/r77-gate-watchtower.json');
 const [kaeyaAtGate,switching,amber1,amber2,amber3]=require('./fixtures/r77-gate-amber-switch.json');
+const [atGate,shotBefore,flash,damaged,settling]=require('./fixtures/r77-gate-ranged-impact.json');
 const original=o=>o.ocr.some(r=>r.x>1600&&r.y>1020&&r.text.includes('693306810'));
 const ctx=o=>({now:()=>o.timestamp,session:o.session,original});
 
@@ -122,4 +123,51 @@ test('ambiguous named rows in the second captured Amber scene never shoot or cha
  let now=amber1.timestamp;const api={...ctx(amber1),now:()=>now,deadline:now+30000,checkStop(){},sleep:async()=>{},
    observe:async()=>{now=o.timestamp;return o;},key:async()=>assert.fail(),fire:async()=>assert.fail()};
  const res=await tower.run(amber1,0,api);assert.equal(res.turns.length,0);assert.equal(res.result.restored,false);
+});
+// Replay the same narrow gold mask against lossless native RGB pixels immediately to the
+// right of the red bar. The real frame 10 contains an uninterrupted rectangle, 17 by 4.
+function measuredTail(o,id){
+ const c=o.rawRailCrop,buf=Buffer.from(c.rgb24,'base64');let x0=c.width,x1=-1,y0=c.height,y1=-1,n=0;
+ for(let y=0;y<c.height;y++)for(let x=0;x<c.width;x++){
+  const k=(y*c.width+x)*3;
+  if(buf[k]<249||buf[k+1]<204||buf[k+1]>214||buf[k+2]<120||buf[k+2]>132)continue;
+  x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y);n++;
+ }
+ const width=x1-x0+1,height=y1-y0+1;
+ if(width<16||height<3||n!==width*height)return null;
+ return {actionId:id,x:c.x+x0+width/2,y:c.y+y0+height/2,width,height,rectangularity:1};
+}
+test('real native shot follows the turning camera and proves a red-to-gold fill transition; the earlier body flash alone cannot',()=>{
+ const o=structuredClone(damaged),id='one:rotation:0',api={...ctx(o),rewards:native.rewardFeedback};
+ assert.equal(measuredTail(shotBefore,id),null);assert.equal(measuredTail(flash,id),null);assert.equal(measuredTail(settling,id),null);
+ const g=measuredTail(o,id);assert.deepEqual([g.width,g.height],[17,4]);o.hud.enemyBars[0].towerDamageTail=g;
+ assert.equal(tower.feedback(shotBefore,flash,{...ctx(flash),rewards:native.rewardFeedback},id),'unconfirmed');
+ assert.equal(tower.feedback(shotBefore,o,api,id),'damage');assert.equal(tower.candidate(o,ctx(o)),true);
+ for(const edit of [v=>{delete v.hud.enemyBars[0].towerDamageTail;},v=>v.hud.enemyBars[0].towerDamageTail.actionId='old-shot',
+  v=>v.hud.enemyBars[0].towerDamageTail.x+=6,v=>v.hud.enemyBars[0].x-=45,v=>v.hud.enemyBars[0].towerDamageTail.y+=6,
+  v=>v.map.x+=3,v=>v.map.cameraAngle=250,v=>v.hud.enemyBarObservation.acceptedCount=2]){
+  const v=structuredClone(o);edit(v);assert.equal(tower.feedback(shotBefore,v,api,id),'unconfirmed');
+ }
+});
+test('re-entry refuses another bearing even with the same coordinates, health and red pixels',()=>{
+ for(const edit of [v=>v.map.cameraAngle=260,v=>v.hud.enemyBars[0].x=850]){
+  const v=structuredClone(damaged);edit(v);assert.equal(tower.candidate(v,ctx(v)),false);
+ }
+});
+test('the native shot waits through the verified moving-camera impact, then re-observes ambiguous roster without pressing a key',async()=>{
+ const id='one:rotation:0',hit=structuredClone(damaged);hit.hud.enemyBars[0].towerDamageTail=measuredTail(hit,id);
+ function later(record,n){
+  const v=structuredClone(record),delta=settling.timestamp+900*(n-11)-v.timestamp;v.frameId=n;v.timestamp+=delta;
+  v.session=atGate.session;v.hud.captureStamp.session=v.session;v.hud.enemyBarObservation.session=v.session;
+  v.hud.captureStamp.frameId=n;v.hud.captureStamp.capturedAt+=delta;v.hud.enemyBarObservation.frameId=n;
+  v.hud.enemyBarObservation.capturedAt+=delta;return v;
+ }
+ const kaeya=later(kaeyaAtGate,13);kaeya.map=structuredClone(hit.map);
+ const sequence=[shotBefore,flash,hit,settling,later(hit,12),kaeya],inputs=[];let now=atGate.timestamp;
+ const api={...ctx(atGate),now:()=>now,deadline:now+30000,checkStop(){},sleep:async()=>{},
+  observe:async()=>{const v=sequence.shift();now=v.timestamp;return v;},rewards:native.rewardFeedback,
+  key:async(k,v)=>{inputs.push([k,v.frameId]);},actionId:()=>id,fire:async v=>{inputs.push(['shot',v.frameId]);return {nativeReturned:true};}};
+ const res=await tower.run(atGate,0,api);
+ assert.deepEqual(inputs,[['shot',8],['VK_3',12]]);assert.equal(res.result.assessment,'damage');assert.equal(res.result.restored,true);
+ assert.equal(res.turns[0].assessment.evidence,'tracked_red_fill_and_adjacent_gold_tail');assert.equal(res.result.impactFrameId,10);
 });

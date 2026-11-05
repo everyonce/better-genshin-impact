@@ -1,0 +1,749 @@
+[
+ {
+  "session": "mw3wygor-fjrkfze8d9v",
+  "frameId": 7,
+  "timestamp": 1793905420352,
+  "map": {
+   "x": -1186.248046875,
+   "y": 2206.416015625,
+   "map": "Teyvat",
+   "cameraAngle": 292.5
+  },
+  "ocr": [
+   {
+    "text": "Lumina",
+    "x": 1680,
+    "y": 256,
+    "width": 85,
+    "height": 29
+   },
+   {
+    "text": "Amber",
+    "x": 1662,
+    "y": 355,
+    "width": 81,
+    "height": 23
+   },
+   {
+    "text": "Kaeya",
+    "x": 1694,
+    "y": 437,
+    "width": 71,
+    "height": 29
+   },
+   {
+    "text": "3",
+    "x": 1860,
+    "y": 449,
+    "width": 21,
+    "height": 19
+   },
+   {
+    "text": "Lisa",
+    "x": 1714,
+    "y": 524,
+    "width": 53,
+    "height": 32
+   },
+   {
+    "text": "4",
+    "x": 1856,
+    "y": 536,
+    "width": 31,
+    "height": 27
+   },
+   {
+    "text": "Q",
+    "x": 1802,
+    "y": 1026,
+    "width": 31,
+    "height": 27
+   },
+   {
+    "text": "693306810",
+    "x": 1730,
+    "y": 1048,
+    "width": 133,
+    "height": 29
+   }
+  ],
+  "hud": {
+   "auto": false,
+   "climbing": false,
+   "groundControls": true,
+   "enemyBars": [
+    {
+     "x": 1043.5,
+     "y": 166.5,
+     "width": 65,
+     "height": 5,
+     "rectangularity": 0.986328125
+    }
+   ],
+   "tutorialStep": null,
+   "dialogueReady": false,
+   "choice": false,
+   "journal": false,
+   "bigMap": false,
+   "health": {
+    "current": 1793,
+    "max": 1809
+   },
+   "lowHealth": false,
+   "world": true,
+   "interact": false,
+   "objectives": [],
+   "enemyBarDiagnostic": {
+    "level": "any",
+    "candidates": 1,
+    "localReads": [],
+    "greenMask": null,
+    "contourCount": 7,
+    "redPixels": 325,
+    "rawCandidates": [
+     {
+      "x": 1043.5,
+      "y": 166.5,
+      "width": 65,
+      "height": 5,
+      "rectangularity": 0.986328125
+     }
+    ],
+    "flameTips": [],
+    "fieldCandidates": [
+     {
+      "x": 1043.5,
+      "y": 166.5,
+      "width": 65,
+      "height": 5,
+      "rectangularity": 0.986328125
+     }
+    ],
+    "solidCores": []
+   },
+   "enemyBarObservation": {
+    "version": 1,
+    "kind": "normal-ground-enemy-observation-v1",
+    "state": "threat",
+    "session": "mw3wygor-fjrkfze8d9v",
+    "frameId": 7,
+    "capturedAt": 1793905419970,
+    "reason": "outdoor_bar_candidates",
+    "candidateCount": 1,
+    "acceptedCount": 1
+   },
+   "captureStamp": {
+    "session": "mw3wygor-fjrkfze8d9v",
+    "frameId": 7,
+    "capturedAt": 1793905419970,
+    "source": "game-capture-start"
+   }
+  },
+  "rawRailCrop": {
+   "x": 1076,
+   "y": 162,
+   "width": 45,
+   "height": 9,
+   "rgb24": "MU10Mk11MU12MU13MUx2MUt1MEp0MUpyMktyM0xzNVB3NlV8OFmBOluFOFuEOFqCOVh+OVmAOVqDO1yEOlqEOFiCN1eBOFeBOVmCOliAOVZ8OFV8N1V8N1V8N1Z9OFh+OVh+Oll/PV2DPFyCOlmANlF2MkpuLkZpL0ltMk91Mk91Mk90Mk1yMk51M052Mk53Mk13Mkx2MUt1MUt0MUpzMktyM0xzNFB2NlV8OFmBOVuFOVyFOVuDOVl/OVmAOVqCOVqDOFmCN1aAN1Z/OFiAO1uDO1mBOVV8OFV7N1V7OFZ8OFd9OVd/OFd+OVh/PFyDPFuCOVh/NlF2MktvL0drMEpuNFB2M090Mk5yMUxwR1NzM093Mk93Mk53Mkx2Mkx2MUx1Mkt0MktzM010NFF4NlZ9OFmCOl2GOl6GOlyEOVmAOFmAOFmBOFmCOFeBN1V+OFZ+OViAPFuDO1qBOVV8OFR7N1R7OFZ8OFd9OFd+OFZ+OFd/O1uDO1qCOVh+NVF2MkxwL0hsMUpvNFB1M09zMk1xMUtvhF9sM1B4M094M094M094M094M095Mk54Mk53M1B5NVR8OFeBOlyFPF+HPGCIO16FOVqBOFmBOFiBOFiBOFaAOFV/N1V9OFZ+PFmBO1mAN1Z9N1V7N1R6N1V7N1V8N1V9N1Z9N1d/OVmBOViAOFZ8NVF2MUxxL0ltMEpvM050Mk1yMUxxMElvoGFoM1B4M1B4M1B4M1B5M1B5M1B6M1B5M1B6NVN9N1aAOVmDPV+HPmOKPWKJO1+HOVqDOFiBOFeAOFaAOFZ/OFV+N1N8OFR8Old/Old/OFZ9N1V7NlR6NlV6NlV6NlV7NlZ9N1d+N1d/N1Z+NlV7NFB1MUxxMEpuMEpvMkxyMUxxMUtwMEhtrV1oM1B4M1B5M1B5MlB4M1B5NFF6M1F6NFJ8NleAOFmDOlqEP2KJQWaNPmSLO2CIOFuEOFiCOFaAOFV/OFV+OFR9N1J7N1J7OFR9OFZ+OVd9N1Z7NlV5NlR4NlR5NlR6NlV8NlZ+NVV+NVR8NFN6M091MkxwMEtvMEpvMUtwMUtwMUpvL0drY1RwM1B4Mk93Mk92MU50Mk50Mk51M093NFF5NVV+OFiBO1uDQGSKQmiOP2SMO2CIOFqDOFiBOFZ/OFV/OFR+OFN8OFN8OFN8OFR9OFZ9OVh8N1Z7NlV5NVN5NlN5NlR6NlV8NlV+NlZ+NVR8NVJ5M090MkxwMEtuMEpvMUtxMkxxMktwMEZrM092M1B4MU93MU50MU1xMUxwMUxxMk1zM1B3NVN9OFeAPFyDQWWLQ2qQP2WNPGCIOFqCOFiBOVZ/OVV/OFR+OFN8OFN9OFN9OFR9OFV8OVd8N1Z7NlR6NVN5NVN6NlR6NlV8NlV9NlZ+NlR8NVJ5M090MUxwMEtuMEpvMUtxMkxxMktwMEZqM1B4MU94MU52ME1zMEtxMEtvMUpuMkxwM050NFJ6N1Z/O1uCQWeNRGySQGaOPWGIOlyCOlqCOliBOlZ+OVV9OFR9OFR9OFR9OFN8OFR8N1Z8NlV7NVV6NlR6NlR6NVR7NlV8NlV9NlZ+NlR9NVJ6M090MUxwMEtuMEpuMEpvMkxxMktwMEVp"
+  }
+ },
+ {
+  "session": "mw3wygor-fjrkfze8d9v",
+  "frameId": 8,
+  "timestamp": 1793905421012,
+  "map": {
+   "x": -1186.248046875,
+   "y": 2206.416015625,
+   "map": "Teyvat",
+   "cameraAngle": 292.5
+  },
+  "ocr": [
+   {
+    "text": "Lumina",
+    "x": 1680,
+    "y": 256,
+    "width": 85,
+    "height": 29
+   },
+   {
+    "text": "Amber",
+    "x": 1664,
+    "y": 355,
+    "width": 77,
+    "height": 23
+   },
+   {
+    "text": "Kaeya",
+    "x": 1694,
+    "y": 437,
+    "width": 71,
+    "height": 29
+   },
+   {
+    "text": "Lisa",
+    "x": 1714,
+    "y": 524,
+    "width": 53,
+    "height": 32
+   },
+   {
+    "text": "4",
+    "x": 1856,
+    "y": 536,
+    "width": 33,
+    "height": 27
+   },
+   {
+    "text": "Q",
+    "x": 1802,
+    "y": 1026,
+    "width": 31,
+    "height": 27
+   },
+   {
+    "text": "693306810",
+    "x": 1730,
+    "y": 1048,
+    "width": 133,
+    "height": 29
+   }
+  ],
+  "hud": {
+   "auto": false,
+   "climbing": false,
+   "groundControls": true,
+   "enemyBars": [
+    {
+     "x": 1036,
+     "y": 171.5,
+     "width": 64,
+     "height": 5,
+     "rectangularity": 0.9861111111111112
+    }
+   ],
+   "tutorialStep": null,
+   "dialogueReady": false,
+   "choice": false,
+   "journal": false,
+   "bigMap": false,
+   "health": {
+    "current": 1793,
+    "max": 1809
+   },
+   "lowHealth": false,
+   "world": true,
+   "interact": false,
+   "objectives": [],
+   "enemyBarDiagnostic": {
+    "level": "any",
+    "candidates": 1,
+    "localReads": [],
+    "greenMask": null,
+    "contourCount": 7,
+    "redPixels": 320,
+    "rawCandidates": [
+     {
+      "x": 1036,
+      "y": 171.5,
+      "width": 64,
+      "height": 5,
+      "rectangularity": 0.9861111111111112
+     }
+    ],
+    "flameTips": [],
+    "fieldCandidates": [
+     {
+      "x": 1036,
+      "y": 171.5,
+      "width": 64,
+      "height": 5,
+      "rectangularity": 0.9861111111111112
+     }
+    ],
+    "solidCores": []
+   },
+   "enemyBarObservation": {
+    "version": 1,
+    "kind": "normal-ground-enemy-observation-v1",
+    "state": "threat",
+    "session": "mw3wygor-fjrkfze8d9v",
+    "frameId": 8,
+    "capturedAt": 1793905420592,
+    "reason": "outdoor_bar_candidates",
+    "candidateCount": 1,
+    "acceptedCount": 1
+   },
+   "captureStamp": {
+    "session": "mw3wygor-fjrkfze8d9v",
+    "frameId": 8,
+    "capturedAt": 1793905420592,
+    "source": "game-capture-start"
+   }
+  },
+  "rawRailCrop": {
+   "x": 1068,
+   "y": 167,
+   "width": 45,
+   "height": 9,
+   "rgb24": "MEpvMEpvMEpxMEtyMU1zM092NFF4NVJ5NFF5M1B4M1B5M1B5MlB4M1B5NFF6M1F6NFJ8NleAOFmDOlqEP2KJQWaNPmSLO2CIOFuEOFiCOFaAOFZ/OFV+OFR9N1J7N1J7OFR9OFZ+OVd9N1Z7NlV5NlR4NlR5NlR6NlV8NlZ+NVV+NVR8NFN6T1FqMEpwMEpxMExzMU50M092NFF4NFF5NFF5M1B4Mk93Mk92MU50Mk50Mk51M093NFF5NVV+OFiBO1uDQGSKQmiOP2SMO2CIOFqDOFiBOFZ/OFV/OFV+OFN8OFN8OFN8OFR9OFZ9OVh8N1Z7NlV5NVR5NlR5NlR6NlV8NlV+NlZ+NVR8NVJ5clVjO0trM0twMExzMU51M093NFB4NFF5M1B5M1B4MU93MU50MU1xMUxwMUxxMk1zM1B3NVN9OFeAPFyDQWWLQ2qQP2WNPGCIOFqCOFiBOVZ/OVV/OFR+OFN8OFN9OFN9OFR9OFV8OVd8N1Z7NlV6NVR5NVN6NlR6NlV8NlV9NlZ+NlR8NVJ5nVNXW01bO0xtMU10Mk52M093M1B4NFF5M1B5MU94MU52ME1zMEtxMEtvMUpuMkxwM050NFJ6N1Z/O1uCQWeNRGySQGaOPWGIOlyCOlqCOliBOlZ+OVV9OFR9OFR9OFR9OFN9OFR8N1Z8NlV7NVV6NlR6NlR6NlR7NlV8NlZ9NlZ+NlR9NVJ6qFFSYUtUPExsMU10Mk11Mk92M1B3M1B5M1B4MU94ME51MExzMEtxMEtwMUtvMkxxM010NFF5N1V8OlmAQWaMRW6UQWiQP2SLPWCHPV+GPV2FPFmAO1d/OFR+OFV+OFV+OFR9N1R8N1V8NlV7NlV6NlR6NlR6NlR7N1Z8N1Z+N1d/NlV9NVJ5ok5QWkdTO0xsMU11MUx0Mk52M1B3M1B5MlB4MU93ME51ME1zL0tyMEtxMUxxMk1zM051NE93N1J6OVZ8QWaLRm+UQmqSQWiQQWeOQGaNQGOKPl2EPFmBOVV/OVZ/OVZ/OFV+N1V9NlV8NlV7NlV6N1R6N1R6N1V7OFZ9OFd/OViAN1Z9NFJ4d1JfQktoNU1yMU11MU11Mk52MlB3M1B4MlB4MlB4MU52MU11MU10MU10Mk1zMU10Mk51M090NlF3OVV6QWSKRW6UQ2uUQ2uURGyURGuTQ2iPQGGHPVuCOlaAOleAOld/OVV9N1V8N1V7N1V7N1V6NlR5NlR5NlR6N1Z9OFd/OVmBN1Z9NVF3UlNsMk52MU52MU52MU11Mk52Mk93M1B4M1B5M1B5Mk94Mk93Mk93Mk92Mk51Mk51Mk91M090NlF2OVV6QGOJRGyURGyVRW2XRm+YR3CYRm2UQmOJPlyDOlaAO1eAO1eAOVV9OFV8N1V7N1V7N1V6NlR4NlR4NlR5N1Z9OFiAOVqCN1Z+NVF3O1BzM093Mk92MU52MU11Mk11Mk52NFF5NFF6NFF6NFF6M1F6NFJ5M1F4Mk92MlB3M1F4NFF4NlR7O1l/QGOLQ2uTQ2uVRW2XR3GaSXOaSXCXQ2SLPluCOVR7OlV+OlV/OFV9OFV8N1Z8N1Z7N1V7NlR5NlR5NlV6OFl/OluCOluCOFd+NFB3"
+  }
+ },
+ {
+  "session": "mw3wygor-fjrkfze8d9v",
+  "frameId": 9,
+  "timestamp": 1793905422648,
+  "map": {
+   "x": -1186.24609375,
+   "y": 2206.4150390625,
+   "map": "Teyvat",
+   "cameraAngle": 281.5
+  },
+  "ocr": [
+   {
+    "text": "Lumina",
+    "x": 1682,
+    "y": 257,
+    "width": 83,
+    "height": 24
+   },
+   {
+    "text": "0",
+    "x": 1854,
+    "y": 258,
+    "width": 37,
+    "height": 35
+   },
+   {
+    "text": "Amber",
+    "x": 1664,
+    "y": 355,
+    "width": 77,
+    "height": 23
+   },
+   {
+    "text": "Kaeya",
+    "x": 1688,
+    "y": 433,
+    "width": 78,
+    "height": 36
+   },
+   {
+    "text": "3",
+    "x": 1856,
+    "y": 445,
+    "width": 31,
+    "height": 27
+   },
+   {
+    "text": "Lisa",
+    "x": 1712,
+    "y": 524,
+    "width": 54,
+    "height": 33
+   },
+   {
+    "text": "4",
+    "x": 1854,
+    "y": 536,
+    "width": 35,
+    "height": 29
+   },
+   {
+    "text": "R",
+    "x": 1586,
+    "y": 1024,
+    "width": 33,
+    "height": 29
+   },
+   {
+    "text": "Q",
+    "x": 1802,
+    "y": 1026,
+    "width": 31,
+    "height": 27
+   },
+   {
+    "text": "693306810",
+    "x": 1730,
+    "y": 1048,
+    "width": 133,
+    "height": 29
+   }
+  ],
+  "hud": {
+   "auto": false,
+   "climbing": false,
+   "groundControls": true,
+   "enemyBars": [
+    {
+     "x": 1095,
+     "y": 177,
+     "width": 66,
+     "height": 6,
+     "rectangularity": 0.803076923076923
+    }
+   ],
+   "tutorialStep": null,
+   "dialogueReady": false,
+   "choice": false,
+   "journal": false,
+   "bigMap": false,
+   "health": {
+    "current": 1793,
+    "max": 1809
+   },
+   "lowHealth": false,
+   "world": true,
+   "interact": false,
+   "objectives": [],
+   "enemyBarDiagnostic": {
+    "level": "any",
+    "candidates": 1,
+    "localReads": [],
+    "greenMask": null,
+    "contourCount": 7,
+    "redPixels": 335,
+    "rawCandidates": [
+     {
+      "x": 1095,
+      "y": 177,
+      "width": 66,
+      "height": 6,
+      "rectangularity": 0.803076923076923
+     }
+    ],
+    "flameTips": [],
+    "fieldCandidates": [
+     {
+      "x": 1095,
+      "y": 177,
+      "width": 66,
+      "height": 6,
+      "rectangularity": 0.803076923076923
+     }
+    ],
+    "solidCores": []
+   },
+   "enemyBarObservation": {
+    "version": 1,
+    "kind": "normal-ground-enemy-observation-v1",
+    "state": "threat",
+    "session": "mw3wygor-fjrkfze8d9v",
+    "frameId": 9,
+    "capturedAt": 1793905422262,
+    "reason": "outdoor_bar_candidates",
+    "candidateCount": 1,
+    "acceptedCount": 1
+   },
+   "captureStamp": {
+    "session": "mw3wygor-fjrkfze8d9v",
+    "frameId": 9,
+    "capturedAt": 1793905422262,
+    "source": "game-capture-start"
+   }
+  },
+  "rawRailCrop": {
+   "x": 1128,
+   "y": 172,
+   "width": 45,
+   "height": 10,
+   "rgb24": "aHWObYGccIWecISfboKfbYKfbYKfbYCebYCebn+ebn+ebn+eb4Ccb3+bb36ZbnyYbnuXbXqWbXmTbHeQbHaPbHaObHaObHaOa3aNa3aOa3aPaniUaneVaXWUaXKNanCHbG+Da21/aGl8YmV4XWF2Wl90WF92V2B5VmB4VV93U1x0UFlxTlZtaXWNb4OdcYafcIWfb4KeboGeboGeboCeb4Cdb4CdcICecYCecYCdcYCbcX+acH2YcHyXb3uUb3mSbniPbneOb3eOb3eOb3eObneNbneObniPbnmTbnmUbXeTbnSNcnOHeXaDe3V/eXN9bGp4YWN0XGBzWV91WGF5V2B5Vl93U1x0UVlxT1dud3SKcYSecoefcYafcIKecIGecICecICdcICdcYCdcoGec4KedIGdc4Ccc3+acn6Ycn2WcnyUcnqRcXmPcXmOcXmNcnmOcXiNcHiMcHiNcXmPc3uTdn2UeX6UfX2Pg32KjIKGjoGCin5/d3B4Z2ZzXmFyW2B1WWF5WGB5V194VFx0UlpyUFdvnnSEc4Sec4afc4Wfc4OfcoKecoKec4Kdc4KddIKedYOedoOedoOddYGbdICZdH+XdH6VdX2TdXyRdHqOdHqNdXqNdXqNc3mMcXaKc3eLdXqOeX6Sh4eVmZKYoJSUppeRrJqQp5WLnYyEhXp6cGpzYmJyXGB0WmF4WWB5WF94VV11U1tyUlhxrXeDdoaedoefdoafdoOfdoOedYOedoOedoOed4OeeISfeYWfeYSdeIKbd4CZd3+Wd3+UeH6TeH2Qd3yOeHyOeHyNeHyNdnqLdHeJdnmLe32OiomTnpebtKejvq2ixLGgw6+buqaUrZqLkYJ9eG9zZmNxXWBzWmB2WWB3WF93Vl10VFtyUlhxrnuFeoifeoefeoafeYSeeYSeeYSeeYSeeYSeeoSfe4affIeffIWde4ObeoGYe4CWe4CUe3+Te36Qe32OfH6OfH6Oe36NenyLeXmJeXuLg4OPoZiWuauiz76w2siz38uy2MOny7adu6eSnIuBgHN1aWZxX2ByWl90WV51V110VlxzU1pxUVlwkYKSfYqffYmffIeee4WdfIWdfYWefYaefoaefoeff4iff4iff4eefoWbfYKXfoKVf4KTgIGSgIGQf3+OgYCOgoGPhIGOiISOj4eOmJGTpp2avbCk0MCv4dC759W76NS43smty7aetKCNmId/f3N0amVwYGBwW15yWl1yWF1yVlxyVFtwUllvfoibgIuff4qef4iefoadf4adgIedgYeegYmfgoqfgoqggoqfgomdgYaagISWgoSUhISShISRhIOQhIKOh4OPioWQj4iRmI+TpZiWtaeexran18ay5NK7793D793A69i63cmsxrGbqZWHkoJ7fHBzaWVwYF9vXF5wWlxwWFxwVlxxVFtwUllugYmdgoyggoqfgomegoicgoidg4idhIqehYufhoyhho2ghoyfhoqdhYiZhYWVh4WTiIWSiYWRiYWQiYWPjoiRlY6ToJaXraGcvKyiz7+u386569rB8d/F9OLG7tu+49Cy0LuitaGQl4V9hXZ3dWpyZ2JvYV5uXlxvW1tvWVpvVltwVFpvU1hthYuehYyghYufhYqehYqchomdhoqdh4ufiI2giY6iiY+hiY6fiYydiYmZiYeUjIiTjYiSjoiRkImRk4uRnJKVp5uataigxLWo08Ky4tK979/G9ubL9+XJ9OHE59S32MSpxLCZq5iKj356fXB1b2VxZmBuYV5tX1xtXFttWlptV1pvVVluVFht"
+  }
+ },
+ {
+  "session": "mw3wygor-fjrkfze8d9v",
+  "frameId": 10,
+  "timestamp": 1793905423170,
+  "map": {
+   "x": -1186.24609375,
+   "y": 2206.412109375,
+   "map": "Teyvat",
+   "cameraAngle": 279
+  },
+  "ocr": [
+   {
+    "text": "Lumina",
+    "x": 1680,
+    "y": 256,
+    "width": 85,
+    "height": 29
+   },
+   {
+    "text": "1",
+    "x": 1858,
+    "y": 262,
+    "width": 27,
+    "height": 27
+   },
+   {
+    "text": "Amber",
+    "x": 1668,
+    "y": 357,
+    "width": 65,
+    "height": 21
+   },
+   {
+    "text": "Kaeya",
+    "x": 1688,
+    "y": 433,
+    "width": 79,
+    "height": 37
+   },
+   {
+    "text": "3",
+    "x": 1856,
+    "y": 445,
+    "width": 31,
+    "height": 27
+   },
+   {
+    "text": "Lisa",
+    "x": 1715,
+    "y": 525,
+    "width": 52,
+    "height": 33
+   },
+   {
+    "text": "4",
+    "x": 1854,
+    "y": 536,
+    "width": 33,
+    "height": 27
+   },
+   {
+    "text": "Q",
+    "x": 1802,
+    "y": 1026,
+    "width": 31,
+    "height": 27
+   },
+   {
+    "text": "693306810",
+    "x": 1730,
+    "y": 1048,
+    "width": 137,
+    "height": 29
+   }
+  ],
+  "hud": {
+   "auto": false,
+   "climbing": false,
+   "groundControls": true,
+   "enemyBars": [
+    {
+     "x": 1120.5,
+     "y": 174,
+     "width": 41,
+     "height": 4,
+     "rectangularity": 0.9916666666666667
+    }
+   ],
+   "tutorialStep": null,
+   "dialogueReady": false,
+   "choice": false,
+   "journal": false,
+   "bigMap": false,
+   "health": {
+    "current": 1793,
+    "max": 1809
+   },
+   "lowHealth": false,
+   "world": true,
+   "interact": false,
+   "objectives": [],
+   "enemyBarDiagnostic": {
+    "level": "any",
+    "candidates": 1,
+    "localReads": [],
+    "greenMask": null,
+    "contourCount": 7,
+    "redPixels": 168,
+    "rawCandidates": [
+     {
+      "x": 1120.5,
+      "y": 174,
+      "width": 41,
+      "height": 4,
+      "rectangularity": 0.9916666666666667
+     }
+    ],
+    "flameTips": [],
+    "fieldCandidates": [
+     {
+      "x": 1120.5,
+      "y": 174,
+      "width": 41,
+      "height": 4,
+      "rectangularity": 0.9916666666666667
+     }
+    ],
+    "solidCores": []
+   },
+   "enemyBarObservation": {
+    "version": 1,
+    "kind": "normal-ground-enemy-observation-v1",
+    "state": "threat",
+    "session": "mw3wygor-fjrkfze8d9v",
+    "frameId": 10,
+    "capturedAt": 1793905422794,
+    "reason": "outdoor_bar_candidates",
+    "candidateCount": 1,
+    "acceptedCount": 1
+   },
+   "captureStamp": {
+    "session": "mw3wygor-fjrkfze8d9v",
+    "frameId": 10,
+    "capturedAt": 1793905422794,
+    "source": "game-capture-start"
+   }
+  },
+  "rawRailCrop": {
+   "x": 1141,
+   "y": 170,
+   "width": 45,
+   "height": 8,
+   "rgb24": "KS9AJCY0IjJJITtYIT5cID1bHTpZHTtZHjxZHjtYHjtWHjpUHzlTHzhRIDdPITZOIjZNJjhPKjlPLDdOLTVLLzJILi9FLTJKKz1gKkBmKT9kKD5iKD1hKj9jK0JmLUZrL0huMEpxMEtyMEtyMEtxMEpwMElwMElvMkxyNVJ3O12EPmKKPF6Ff1NQfGpRe3FeendnenhpeXdoeHZmeHZleHVkeXVkeXRjeXRheXNgenJfenJee3Fde3FcfXJdb2ZYPD5JLS9CLy0/Lis9LS1BLTVQKztbKT9kKT5iKT5hKj9jK0JmLUZrL0lvMEtyMExzMExzMEtyMEpxMElwMElvMk1zNVN5O12EPmKKO12D/4lo/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+1bFyVVBPLC9CLi1ALSw/LSs9Lyo7LTJKKT5jKT5iKT5hKj9jK0JnLUZsL0pwMUxzMU50MU10MExzMEpxMElwMElvMk5zNlV6O16FPmKJOluC/4lo/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+1bFyVVBOLC5BLi0/LSw/LSs+Lis9Li1CLTBJKjhYKT5iKj9jLEJnLkdsMEtxMk50Mk92MU51ME10MEpxMElwMElvMk50NlV7O16FPWGJOlqB/4lo/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+1bFyVU9OLC5BLi0/LSw+LSs+Lis9Lis+LixAKzdVKj9jK0BkLENnLkdsMUxyM092M1B4Mk93ME10MEtyMElwMElvMk50NlV9O12GPWCJOVh//4lo/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+1bFyVU9OLS5BLy1ALiw/LSo9Lik5LTBGKztcKj1gKj9jK0BkLUNnL0htMU1yM1B2M1F4MlB3MU52MEtzL0lwL0huM010OFd+O16GPF+IOFd+qmBQqYpcqI5ip5JoppRtpZVvpJRupJVvpJVvo5Vwo5Vwo5Vwo5VwopZwopVxopZxopZyopdzioRtQUtYKjdRLjZPLTRNLDJMLTFJLDdUKkBlK0BkK0BkK0BkLUNoL0htMUxyM1B3M1F4M1B4MU52MEtzL0lwL0duM051OFiAO16GO16HN1Z8KSErJyApJSo5IjJHIDhUHTpYGzlXGzpYGzpYGTtaGDtaFzpaFztbFzxcFjtdFjxeFj1fFz9iGkFlIUVoJ0VoLENmK0BkKj5jK0BkK0BlKz9kLEBlLEFmLEFlLUNoL0dsMUxyM1B3NFF4M1F4Mk92MUxzMElwL0hvM092OVqCO16GO12FNlR6"
+  }
+ },
+ {
+  "session": "mw3wygor-fjrkfze8d9v",
+  "frameId": 11,
+  "timestamp": 1793905423526,
+  "map": {
+   "x": -1186.24609375,
+   "y": 2206.4150390625,
+   "map": "Teyvat",
+   "cameraAngle": 278
+  },
+  "ocr": [
+   {
+    "text": "Lumina",
+    "x": 1680,
+    "y": 256,
+    "width": 87,
+    "height": 29
+   },
+   {
+    "text": "Kaeya",
+    "x": 1688,
+    "y": 433,
+    "width": 79,
+    "height": 37
+   },
+   {
+    "text": "3",
+    "x": 1860,
+    "y": 449,
+    "width": 23,
+    "height": 21
+   },
+   {
+    "text": "Lisa",
+    "x": 1715,
+    "y": 525,
+    "width": 52,
+    "height": 33
+   },
+   {
+    "text": "4",
+    "x": 1856,
+    "y": 536,
+    "width": 29,
+    "height": 27
+   },
+   {
+    "text": "Q",
+    "x": 1802,
+    "y": 1026,
+    "width": 29,
+    "height": 27
+   },
+   {
+    "text": "693306810",
+    "x": 1728,
+    "y": 1048,
+    "width": 135,
+    "height": 29
+   }
+  ],
+  "hud": {
+   "auto": false,
+   "climbing": false,
+   "groundControls": true,
+   "enemyBars": [
+    {
+     "x": 1133.5,
+     "y": 164,
+     "width": 41,
+     "height": 4,
+     "rectangularity": 0.9833333333333333
+    }
+   ],
+   "tutorialStep": null,
+   "dialogueReady": false,
+   "choice": false,
+   "journal": false,
+   "bigMap": false,
+   "health": {
+    "current": 1793,
+    "max": 1809
+   },
+   "lowHealth": false,
+   "world": true,
+   "interact": false,
+   "objectives": [],
+   "enemyBarDiagnostic": {
+    "level": "any",
+    "candidates": 1,
+    "localReads": [],
+    "greenMask": null,
+    "contourCount": 7,
+    "redPixels": 167,
+    "rawCandidates": [
+     {
+      "x": 1133.5,
+      "y": 164,
+      "width": 41,
+      "height": 4,
+      "rectangularity": 0.9833333333333333
+     }
+    ],
+    "flameTips": [],
+    "fieldCandidates": [
+     {
+      "x": 1133.5,
+      "y": 164,
+      "width": 41,
+      "height": 4,
+      "rectangularity": 0.9833333333333333
+     }
+    ],
+    "solidCores": []
+   },
+   "enemyBarObservation": {
+    "version": 1,
+    "kind": "normal-ground-enemy-observation-v1",
+    "state": "threat",
+    "session": "mw3wygor-fjrkfze8d9v",
+    "frameId": 11,
+    "capturedAt": 1793905423187,
+    "reason": "outdoor_bar_candidates",
+    "candidateCount": 1,
+    "acceptedCount": 1
+   },
+   "captureStamp": {
+    "session": "mw3wygor-fjrkfze8d9v",
+    "frameId": 11,
+    "capturedAt": 1793905423187,
+    "source": "game-capture-start"
+   }
+  },
+  "rawRailCrop": {
+   "x": 1154,
+   "y": 160,
+   "width": 45,
+   "height": 8,
+   "rgb24": "pG9fjnVfh3dfhnZeh3ZbiHRXh3JThnJVhnNZhXRbeGlXUEpJQj9FQj9FQT9EQT9EQD5EPjtEOzhDPjpDPztCPztDPztCPztCRU9aSVxqSVtpSFppR1loRVdpRFZuRll6TV58VWR6VGN4U2F2UV1zUFxwUFtuTlhqTFZmS1ZmTFdoTVhsTVtu1HBcxJJlv51ov55ov51mv5xkvptjvptkvpxmvpxmpYheWU1FQDk9QTo9QDo+QDo+Pzg+Pjc+PTY+Pjc9Pjc9Pjc9Pjc8PTc8QkRMRU9bSFhmSFppR1loRlhpRlhuRll6TF58VmR5VGJ3U2B1Ul5zUVxwUFtuTllpTVdmTFZlTFZoTFdsTltu/3Jh/7l3/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+2bRyaFtNQj5BQz9CREBDQz9EQTxEQDxEQT1DQDxDQDxDPzxCPzxCPzxCPTc+PjxERlNgR1ppRlhpR1lqR1puRVp7S158VWN4VGF1U19zU19yUl1wUFttT1pqTllnTVdmTFdoS1ZsTVpu/3Jh/7l3/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+2rRyaVxOQz9CRD9CQj1BQDtAPzk/Pzk+QDo+QDo/QDo/QDo/QDs/QDtAPjg9Pz1DRVFbR1djR1djRVVlRVZqR1p4Tl96VmR3VWJ0VGBzU19yUl1vUVtsT1lpTlhmTFZkTFdmTVhrT1tu/3Jh/7l3/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+2rRyalxORD9CRD9CQjtAQDk+Pzg8Pzg8QDk8QDk8QTo9QDk9QDo+QDo+QD1BQUNJRVFZR1ZfSFdgRVRiRVVoSlt2UGB5V2R2VmJ0VWByVF9xUl1vUVtsT1loTldlTFZjTVdmT1lrUFxu/3Jh/7l3/9F+/9F+/9F+/9F+/9F+/9F+/9F+/9F+2rRya11PRkBDRkBDRD5CQjxBQjw/Qzw+Qzw+Qzw+Qjw+Qjs/QTo+Pzk+REdOR1JaSVdfSllhSlljSFhlSFlqTV92U2N5WWZ3V2JzVWBwVF9wU11uUltrUFloT1hlTldkTlhmUFlqUVxuxHJoxJltxKVsw6RowqNnwqRnw6Zpw6huwqt1wat4qppyZ2RdUFJWUFFVTlBVTU9UTU5STU5QTk5PTU1PTE1QS01SSk1SSUxTTFdfTV5nTF1nS1xnS1xpS11qTF5uT2F3U2N4WWR1V2JxVWBvVF9uU11tUltrUVpnUFhlTldkT1dmUFhrUVxva3NybGleamRQaGBGZ19EZ2BEaWRJaGpWZXFoZHJvYnJzYG5xX21xXmxxXWtwXWpvW2ltW2hqXGdmW2ZnWmZpWGhuWGlwV2pyVmlxVGdxT2NvTWFvTGBwT2JwUWRyUGN3U2N2V2JxVmFvVV9uVF5tU11sU1xqUltoUVllT1dkTlZnT1dsUVxw"
+  }
+ }
+]

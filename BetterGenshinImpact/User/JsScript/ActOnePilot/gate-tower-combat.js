@@ -4,7 +4,7 @@
  function pose(o){
   const p=o&&o.map;
   return !!(p&&p.map==='Teyvat'&&Math.hypot(p.x+1186.1875,p.y-2206.267578125)<=5.5&&
-   Number.isFinite(p.cameraAngle)&&Math.abs((p.cameraAngle-292.5+540)%360-180)<=12);
+   Number.isFinite(p.cameraAngle));
  }
  function base(o,api){
   const h=o&&o.hud,p=h&&h.health,s=h&&h.captureStamp,now=api.now();
@@ -35,7 +35,7 @@
   // A nearly defeated archer can expose only a red tip. Use the native detector's independently
   // located level/rail, or the same ground capture's level, and always measure the actual red fill.
   const rail=visible.depletedRail,b=rail?rail.remainingRed:visible;
-  if(!b||![b.x,b.y,b.width,b.height,b.rectangularity].every(Number.isFinite)||b.x<780||b.x>1150||
+  if(!b||![b.x,b.y,b.width,b.height,b.rectangularity].every(Number.isFinite)||b.x<780||b.x>1280||
      b.y<120||b.y>270||b.width<2||b.width>110||b.height<3||b.height>9||b.rectangularity<.8||b.rectangularity>1.05)return null;
   if(!rail&&b.width>=16&&b.width/b.height>=3.5)return b;
   const labels=rail?[rail.level]:(o.ocr||[]);
@@ -49,7 +49,13 @@
    s.candidateCount===count&&s.acceptedCount===count&&Array.isArray(d.fieldCandidates)&&d.fieldCandidates.length===count&&
    Array.isArray(h.enemyBars)&&h.enemyBars.length===count);
  }
- function candidate(o,api){return base(o,api)&&(party(o,'Kaeya')||party(o,'Amber'))&&!!bar(o);}
+ function candidate(o,api){
+  if(!base(o,api)||!party(o,'Kaeya')&&!party(o,'Amber'))return false;
+  const b=bar(o),yaw=(o.map.cameraAngle-292.5+540)%360-180;
+  if(!b||yaw< -19||yaw>12)return false;
+  // The post-hit 278-degree view still presents the same high platform to the right.
+  return yaw>=-12?b.x<=1150:Math.abs(b.x-(1036-7*yaw))<=90;
+ }
  function samePose(a,b){
   return pose(a)&&pose(b)&&Math.hypot(a.map.x-b.map.x,a.map.y-b.map.y)<=1.25&&
    Math.abs((a.map.cameraAngle-b.map.cameraAngle+540)%360-180)<=4;
@@ -57,10 +63,30 @@
  function associated(a,b,limit){
   return !!(a&&b&&Math.abs((a.x-a.width/2)-(b.x-b.width/2))<=limit&&Math.abs(a.y-b.y)<=limit&&Math.abs(a.height-b.height)<=2);
  }
+ // A normal shot visibly rotated the camera 11–14.5 degrees without moving Amber.
+ // Credit moving-screen damage only when its red edge follows that turn AND the gold fill
+ // touches it and reconstructs the former bar length on the very same native shot.
+ function recoilPose(before,after){
+  return pose(before)&&pose(after)&&Math.hypot(before.map.x-after.map.x,before.map.y-after.map.y)<=1.25&&
+   Math.abs((after.map.cameraAngle-before.map.cameraAngle+540)%360-180)<=18;
+ }
+ function recoilDamage(before,after,id){
+  const a=bar(before),b=bar(after),g=b&&b.towerDamageTail;
+  if(!a||!b||!g||typeof id!=='string'||g.actionId!==id||!recoilPose(before,after)||
+     ![g.x,g.y,g.width,g.height,g.rectangularity].every(Number.isFinite))return false;
+  const dyaw=(after.map.cameraAngle-before.map.cameraAngle+540)%360-180;
+  const x0=a.x-a.width/2,x1=b.x-b.width/2,gap=g.x-g.width/2-(x1+b.width);
+  return Math.abs(x1-x0+7*dyaw)<=24&&Math.abs(a.y-b.y)<=12&&Math.abs(a.height-b.height)<=2&&
+   a.width-b.width>=Math.max(8,a.width*.12)&&g.width>=16&&g.rectangularity>=.85&&g.rectangularity<=1.05&&
+   gap>=0&&gap<=3&&Math.abs(g.y-b.y)<=2&&Math.abs(g.height-b.height)<=2&&
+   Math.abs(a.width-(b.width+gap+g.width))<=Math.max(8,a.width*.14);
+ }
  // Different character models can shift the camera slightly on a switch. Impact uses the same Amber pose.
- function feedback(before,after,api){
-  if(!base(after,api)||!party(after,'Amber')||!samePose(before,after)||before.hud.health.max!==after.hud.health.max)return 'unconfirmed';
+ function feedback(before,after,api,id){
+  if(!base(after,api)||!party(after,'Amber')||!recoilPose(before,after)||before.hud.health.max!==after.hud.health.max)return 'unconfirmed';
   if(scan(after,'clear',0)&&api.rewards(before,after).some(r=>/^(?:Obtained\s+)?Character EXP\s*(?:[×x+·]\s*)?[1-9][0-9]{0,4}$/i.test(r.text.trim())))return 'defeat';
+  if(scan(after,'threat',1)&&recoilDamage(before,after,id))return 'damage';
+  if(!samePose(before,after))return 'unconfirmed';
   const a=bar(before),b=bar(after);
   if(scan(after,'threat',1)&&associated(a,b,12)&&a.height===b.height&&a.width-b.width>=Math.max(8,a.width*.12))return 'damage';
   return 'unconfirmed';
@@ -105,17 +131,23 @@
    try{Object.assign(turn,await api.fire(before,index));}finally{turn.finishedAt=api.now();}
    if(turn.nativeReturned!==true)throw Error('Native Amber shot did not return');
    for(let probe=0;probe<3;probe++){
-    await fresh(probe?180:350);result.assessment=feedback(before,current,api);
-    if(result.assessment!=='unconfirmed'||!base(current,api)||!party(current,'Amber')||!samePose(before,current))break;
+    await fresh(probe?180:350);result.assessment=feedback(before,current,api,turn.actionId);
+    if(result.assessment!=='unconfirmed'||!base(current,api)||!recoilPose(before,current)||before.hud.health.max!==current.hud.health.max)break;
    }
    turn.afterFrameId=current.frameId;turn.afterHealth=current.hud.health;turn.afterBars=bar(current)?[bar(current)]:[];
-   turn.assessment={status:result.assessment,evidence:result.assessment==='damage'?'same_target_red_fill_loss':
+   turn.assessment={status:result.assessment,evidence:result.assessment==='damage'?
+    (recoilDamage(before,current,turn.actionId)?'tracked_red_fill_and_adjacent_gold_tail':'same_target_red_fill_loss'):
     result.assessment==='defeat'?'new_character_exp_and_clear_ground':null};
    result.impactFrameId=current.frameId;
   }catch(e){result.error=String(e&&e.message||e);}
   finally{
    if(result.switched||restoreActiveAmber){try{
-    await fresh(100);
+    // An impact animation can hide the active name in one capture. Only observe until a
+    // healthy named party member is visible again; never send a roster key on an ambiguous frame.
+    for(let probe=0;probe<3;probe++){
+     await fresh(probe?150:100);
+     if(!base(current,api)||party(current,'Amber')||party(current,'Kaeya'))break;
+    }
     if(base(current,api)&&party(current,'Amber')){
      await api.key('VK_3',current);
      for(let probe=0;probe<3;probe++){await fresh(probe?150:400);if(base(current,api)&&party(current,'Kaeya'))break;}

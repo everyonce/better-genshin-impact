@@ -351,8 +351,9 @@ def run_worker(config, *, control, rdp, execute=execute_route, game_probe=foregr
     chain_owned = False
     session = None
     game = None
-    state = dict(status='failed', exitCode=2, progress=str(progress), legs=[], pilotRetired=False,
+    state = dict(status='starting', progress=str(progress), legs=[], pilotRetired=False,
                  cleanupErrors=[], groupCreated=False, owner=config['owner'])
+    terminal_status = 'failed'
 
     def record():
         """Keep a single durable worker result, plus a multi-leg summary when requested."""
@@ -407,6 +408,7 @@ def run_worker(config, *, control, rdp, execute=execute_route, game_probe=foregr
 
     try:
         require(not progress.exists(), 'Existing progress is never resumed or replayed.')
+        record()
         verify_split_routes(config)
         if len(config['routes']) > 1:
             with progress.open('x', encoding='utf-8') as stream:
@@ -468,6 +470,7 @@ def run_worker(config, *, control, rdp, execute=execute_route, game_probe=foregr
                             gameProcessId=game['processId'], expectedUid=config['expectedUid'])
             adviser = adviser_factory(output, pilot, identity)
             state['gpuAdviser'] = adviser.summary
+            record()
             adviser.start(GPU_SETUP_SECONDS + 20 + len(config['routes']) * ((config['deadlineMs'] + 999)//1000 + 20))
             deadline = monotonic() + GPU_SETUP_SECONDS
             while True:
@@ -484,6 +487,7 @@ def run_worker(config, *, control, rdp, execute=execute_route, game_probe=foregr
                 state['encounterEvidence'] = archive.summary
             except Exception as exc:
                 state['encounterEvidence'] = dict(error=str(exc))
+        state['status'] = 'running'
         previous_progress = None
         for index, route in enumerate(config['routes']):
             not_stopped()
@@ -532,14 +536,21 @@ def run_worker(config, *, control, rdp, execute=execute_route, game_probe=foregr
             previous_progress = leg_progress
             if adviser:
                 adviser.check_alive()
-        state.update(status='arrived', exitCode=0)
+        terminal_status = 'arrived'
     except Exception as error:
         state['error'] = str(error)
     finally:
+        # Consumers can see the completed legs while native pilot / model retirement is still outstanding.
+        state['status'] = 'retiring' if start_attempted else 'finishing'
+        try:
+            record()
+        except Exception as exc:
+            state['cleanupErrors'].append('Worker status publication: ' + str(exc))
         if adviser:
             try:
-                if not adviser.finish() and state['status'] == 'arrived':
-                    state.update(status='gpu_unverified', canonicalStatus='arrived', exitCode=2,
+                if not adviser.finish() and terminal_status == 'arrived':
+                    terminal_status = 'gpu_unverified'
+                    state.update(canonicalStatus='arrived',
                                  error='GPU run has no verified successful adviser terminal; canonical route arrived.')
             except Exception as exc:
                 state['cleanupErrors'].append('GPU adviser: ' + str(exc))
@@ -583,7 +594,8 @@ def run_worker(config, *, control, rdp, execute=execute_route, game_probe=foregr
         except Exception as cleanup_error:
             state['cleanupErrors'].append(str(cleanup_error))
         if state['cleanupErrors'] or not state['pilotRetired']:
-            state.update(status='failed', exitCode=2)
+            terminal_status = 'failed'
+        state.update(status=terminal_status, exitCode=0 if terminal_status == 'arrived' else 2)
         record()
     return state
 

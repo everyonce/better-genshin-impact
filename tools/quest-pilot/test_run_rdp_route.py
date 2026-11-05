@@ -176,6 +176,65 @@ class LauncherTests(unittest.TestCase):
         self.assertFalse((f.pilot/'gpu-adviser-config.json').exists())
         self.assertTrue(result['leaseRemoved'])
 
+    def test_live_worker_and_chain_publish_nonterminal_status_through_gpu_start_legs_and_retirement(self):
+        f = Fixture(self.root,2)
+        seen = []
+        def inspect(phase,expected_leg_count):
+            worker = launcher.read(f.output/'worker-result.json')
+            chain = launcher.read(f.config['progress'])
+            self.assertEqual(chain.pop('kind'),'rdp-route-chain-v1')
+            self.assertEqual(worker,chain)
+            self.assertEqual(worker['status'],phase)
+            self.assertNotIn('exitCode',worker)
+            self.assertEqual(len(worker['legs']),expected_leg_count)
+            seen.append(phase)
+            return worker
+        exchange=f.exchange
+        def during_native_command(request,*args):
+            if isinstance(request,dict) and request['command']=='startPilot':
+                inspect('starting',0)
+            if isinstance(request,dict) and request['command']=='stopPilot':
+                self.assertTrue(all(leg['status']=='arrived' for leg in inspect('retiring',2)['legs']))
+            return exchange(request,*args)
+        f.exchange=during_native_command
+        def during_leg():
+            self.assertEqual(inspect('running',len(f.calls))['gpuAdviser']['status'],'running')
+        f.on_route=during_leg
+        class WatchingAdviser(launcher.GpuRouteAdviser):
+            def ready(adviser):
+                inspect('starting',0)
+                return super().ready()
+        with self.gpu_fixture(f):
+            result=f.worker(adviser_factory=WatchingAdviser)
+        self.assertEqual(seen,['starting','starting','running','running','retiring'])
+        self.assertEqual((result['status'],result['exitCode'],result['pilotRetired']),('arrived',0,True))
+        self.assertEqual(launcher.read(f.output/'worker-result.json'),result)
+        self.assertEqual(launcher.read(f.config['progress'])['exitCode'],0)
+
+    def test_preflight_and_retirement_errors_publish_a_terminal_failed_status(self):
+        for fail_at in ('preflight','retirement'):
+            f=Fixture(self.root/fail_at,2)
+            original=f.exchange
+            observed=[]
+            def fail_at_boundary(request,*args):
+                preflight=fail_at=='preflight' and request=='status'
+                retirement=fail_at=='retirement' and isinstance(request,dict) and request['command']=='stopPilot'
+                if preflight or retirement:
+                    snapshot=launcher.read(f.output/'worker-result.json')
+                    observed.append(snapshot['status'])
+                    self.assertNotIn('exitCode',snapshot)
+                    raise RuntimeError('simulated '+fail_at+' failure')
+                return original(request,*args)
+            f.exchange=fail_at_boundary
+            result=f.worker()
+            self.assertEqual(observed,['starting' if fail_at=='preflight' else 'retiring'])
+            self.assertEqual(len(f.calls),0 if fail_at=='preflight' else 2)
+            for saved in (result,launcher.read(f.output/'worker-result.json'),launcher.read(f.config['progress'])):
+                self.assertEqual((saved['status'],saved['exitCode']),('failed',2))
+            if fail_at=='retirement':
+                self.assertTrue(result['cleanupErrors'])
+                self.assertEqual([leg['status'] for leg in result['legs']],['arrived','arrived'])
+
     def test_arrival_without_real_native_gpu_frames_remains_unverified(self):
         f = Fixture(self.root)
         with self.gpu_fixture(f,accepted=0):

@@ -628,6 +628,71 @@ class SupervisedRouteControllerTests(unittest.TestCase):
         pilot.execute = execute
         return pilot
 
+    def test_grid_camera_never_looks_away_from_last_measured_hostile(self):
+        self.route['objective']=route_tool.EXPLORATION_OBJECTIVE
+        inv=controller_scene('inventory')
+        field=controller_scene(objective='')
+        field['hud']['enemyBarDiagnostic']=dict(fieldCandidates=[dict(x=945,y=277,width=11,height=6,rectangularity=.16)])
+        for reason,turn_expected in [('Enemy observed during exploration',False),
+                                     ('Ground enemy scan did not establish clear ground',True)]:
+            self.progress=Path(self.temp.name)/('last-threat-%d.json'%turn_expected)
+            pause=dict(mission='questStep',source=inv,result=dict(pausedInventory=True))
+            halt=dict(mission='navigation',status='failed',source=inv,result=dict(status='stopped',reason=reason,
+                nextWaypointIndex=1,pauseVerified=True,pauseProof=dict(verified=True,kind='inventory',session='route-session')))
+            script=[pause,halt,dict(mission='questStep',source=field,result=dict(worldVisible=True))]
+            if turn_expected:
+                script.append(dict(mission='questStep',pending=True))
+            pilot=self.reacquisition_pilot(['clear']+['ambiguous']*8,script)
+            self.run_controller(pilot,allow_field_combat=True)
+            turns=[q for q in pilot.calls if q.get('step')=='explorationWaypointRelook']
+            self.assertEqual(bool(turns),turn_expected)
+            if turns:
+                self.assertEqual(turns[0]['waypoints'],[self.points[1]])
+
+    def test_grid_relook_uses_committed_target_rechecks_then_stops_at_two(self):
+        target = dict(map='Teyvat', x=-1390.082, y=1647.763)
+        self.route.update(objective=route_tool.EXPLORATION_OBJECTIVE, waypoints=[target, self.points[-1]])
+        for mode in ('clear','ambiguous','threat','stale','unchanged','arrow'):
+            self.progress = Path(self.temp.name)/('grid-look-'+mode+'.json')
+            field = controller_scene(objective='')
+            field['map'].update(x=-1427.4238,y=1661.8262,cameraAngle=18.5)
+            fragment = dict(x=945.5,y=277,width=11,height=6,rectangularity=.16)
+            if mode=='arrow':
+                fragment.update(x=1451,y=428.5,width=14,height=9)
+            field['hud']['enemyBarDiagnostic'] = dict(fieldCandidates=[fragment])
+            turn = dict(mission='questStep',source=field,frames=3,result=dict(step='explorationWaypointRelook',
+                        waypoint=target,turnSent=True,viewChanged=mode!='unchanged',postScan='ambiguous'))
+            script = [turn, turn] if mode=='ambiguous' else [turn]
+            if mode=='clear':
+                script.extend([dict(mission='questStep',source=controller_scene('inventory'),result=dict(pausedInventory=True)),
+                               dict(mission='navigation',pending=True)])
+            if mode=='threat':
+                script.append(dict(mission='questStep',pending=True))
+            pilot = self.reacquisition_pilot(['ambiguous']*4+[mode if mode in ('clear','threat') else 'ambiguous']*4, script)
+            pilot.source.update(map=copy.deepcopy(field['map']))
+            pilot.source['hud']['enemyBarDiagnostic'] = copy.deepcopy(field['hud']['enemyBarDiagnostic'])
+            replay = pilot.execute
+            def execute(mission, source, fields, deadline, save_pending, **kwargs):
+                out = replay(mission,source,fields,deadline,save_pending,**kwargs)
+                turn_result = out['receipt']['details']['result']
+                if fields.get('step') == 'explorationWaypointRelook':
+                    turn_result.update(sourceFrameId=source['frameId']+2,frameId=pilot.source['frameId'],
+                                       capturedAt=pilot.source['timestamp'])
+                if mode=='stale' and mission=='observe' and any(q.get('step')=='explorationWaypointRelook' for q in pilot.calls):
+                    pilot.source['hud']['captureStamp']['capturedAt'] -= 100
+                return out
+            pilot.execute = execute
+            report=self.run_controller(pilot,allow_field_combat=True)
+            turns=[q for q in pilot.calls if q.get('step')=='explorationWaypointRelook']
+            self.assertEqual(len(turns),{'arrow':0,'ambiguous':2}.get(mode,1), (mode,report.get('reason')))
+            self.assertTrue(all(q['waypoints']==[target] and q['objective']==self.route['objective'] for q in turns))
+            self.assertEqual(any(q['mission']=='navigation' for q in pilot.calls),mode=='clear')
+            actions=[q.get('step',q['mission']) for q in pilot.calls]
+            if mode=='threat':
+                self.assertEqual(actions[-3:],['explorationWaypointRelook','observe','worldInventory'])
+            if mode=='stale':
+                self.assertIn('independently resolve',report.get('reason',''))
+
     def test_named_relook_needs_an_independent_clear_capture_before_travel(self):
         target = dict(map='Teyvat', x=-913.51, y=2232.67)
         self.route = dict(objective=route_tool.EXPLORATION_OBJECTIVE,talkTo='Katheryne',waypoints=[target])

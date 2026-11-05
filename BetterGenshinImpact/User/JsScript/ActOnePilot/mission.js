@@ -38,41 +38,69 @@ var ActOneMission = (function () {
     function waypointHeadingError(from,to){return (from.cameraAngle-bearing(from,to)+540)%360-180;}
     function navigationTurnPixels(error){return Math.max(-750,Math.min(750,Math.round(-8*error)));}
 
-    function namedRelookField(o,r,now){
+    function relookField(o,r,now,allowBars){
         var h=o&&o.hud,m=o&&o.map,p=h&&h.health;
         return !!(o&&o.session===r.session&&!o.fastSample&&!o.mapPositionInherited&&freshGroundScanIdentity(o,now)&&
             namedDialogueAccount(o,r.expectedUid)&&m&&m.map==='Teyvat'&&Number.isFinite(m.x)&&Number.isFinite(m.y)&&
             Number.isFinite(m.cameraAngle)&&h.world===true&&h.groundControls===true&&
             !h.auto&&!h.climbing&&!h.swimming&&!h.bigMap&&!h.journal&&!h.choice&&!h.dialogueReady&&!h.tutorialStep&&
             !h.lowHealth&&!h.loading&&!h.unknownHud&&!h.aerialBossVisible&&!h.hostileDirectionArrow&&
-            validHealth(p)&&p.current>=p.max*.6&&Array.isArray(h.enemyBars)&&h.enemyBars.length===0);
+            validHealth(p)&&p.current>=p.max*.6&&Array.isArray(h.enemyBars)&&(allowBars||h.enemyBars.length===0));
     }
 
-    async function namedWaypointRelook(r,o,api,observe){
-        var target=r.waypoints[0],lastError,dx;
+    // A second component can mask a directional arrow in the normal one-arrow classifier.
+    // Keep possible warning-ring icons and near-horizontal health rails outside a travel look.
+    function gridRelookFragments(h){
+        var items=h.enemyBarDiagnostic&&h.enemyBarDiagnostic.fieldCandidates;
+        return Array.isArray(items)&&items.length===h.enemyBarObservation.candidateCount&&items.every(function(c){
+            return c&&[c.x,c.y,c.width,c.height,c.rectangularity].every(Number.isFinite)&&c.width>0&&c.height>0&&
+                !(c.width>=10&&c.width<=20&&c.height>=7&&c.height<=18&&Math.abs(c.x-960)>=390&&
+                  Math.abs(c.y-540)<=230&&Math.abs(Math.hypot(c.x-960,c.y-540)-495)<=42)&&
+                !(c.width>=16&&c.width/c.height>=3&&c.rectangularity>=.65);
+        });
+    }
+    async function waypointRelook(r,o,api,observe){
+        var grid=r.step==='explorationWaypointRelook',target=r.waypoints[0],lastError,dx;
         function checkSource(){
-            if(o.frameId!==r.expectedFrameId+1||!namedRelookField(o,r,api.now())||o.hud.interact||
-                Math.hypot(o.map.x-target.x,o.map.y-target.y)<.75)
-                throw new Error('Named waypoint relook requires the current healthy field and no selected interaction');
+            if(grid&&api.now()+180>=r.createdAt+r.deadlineMs)throw new Error('Exploration waypoint look deadline reached');
+            if(!relookField(o,r,api.now(),false)||o.hud.interact||Math.hypot(o.map.x-target.x,o.map.y-target.y)<.75)
+                throw new Error('Waypoint relook requires the current healthy field and no selected interaction');
             var scan=o.hud.enemyBarObservation;
             if(scan.state!=='ambiguous'||scan.reason!=='unanchored_bar_shaped_components'||scan.acceptedCount!==0||
-                !Number.isInteger(scan.candidateCount)||scan.candidateCount<1||scan.candidateCount>64)
-                throw new Error('Named waypoint relook requires an unanchored zero-accepted scan');
+                !Number.isInteger(scan.candidateCount)||scan.candidateCount<1||scan.candidateCount>64||
+                grid&&(!gridRelookFragments(o.hud)||o.hud.health.current<o.hud.health.max*.85||
+                    !Array.isArray(o.hud.objectives)||o.hud.objectives.some(v=>typeof v!=='string'||v.trim())))
+                throw new Error('Waypoint relook requires an unanchored zero-accepted scan');
         }
+        if(o.frameId!==r.expectedFrameId+1)throw new Error('Waypoint relook frame changed');
         checkSource();
+        if(grid){
+            // Take a second original capture while idle. Input cannot follow movement, damage, or a scene transition.
+            var start=o;o=await observe();checkSource();
+            if(o.frameId<=start.frameId||o.hud.captureStamp.capturedAt<=start.hud.captureStamp.capturedAt||
+                o.hud.health.current!==start.hud.health.current||o.hud.health.max!==start.hud.health.max||
+                Math.hypot(o.map.x-start.map.x,o.map.y-start.map.y)>1||
+                Math.abs((o.map.cameraAngle-start.map.cameraAngle+540)%360-180)>4)
+                throw new Error('Exploration waypoint relook requires a stationary pair');
+        }
         lastError=waypointHeadingError(o.map,target);
         if(Math.abs(lastError)<=8)return {status:'completed',step:r.step,talkTo:r.talkTo,waypoint:target,turnSent:false,
-            measuredClear:false,reason:'Camera already faces the named waypoint',frameId:o.frameId};
+            measuredClear:false,reason:'Camera already faces the waypoint',frameId:o.frameId};
         dx=navigationTurnPixels(lastError);
         await api.rotate(dx,checkSource);
         await api.sleep(180);
-        var after=await observe();
-        var fresh=after.frameId>o.frameId&&namedRelookField(after,r,api.now())&&
+        var after=await observe(),fresh=after.frameId>o.frameId&&relookField(after,r,api.now(),grid)&&
             after.hud.captureStamp.capturedAt>o.hud.captureStamp.capturedAt&&
             Math.hypot(after.map.x-o.map.x,after.map.y-o.map.y)<=1.5;
         var improved=fresh&&Math.abs(waypointHeadingError(after.map,target))<=Math.abs(lastError)-3;
-        return {status:'completed',step:r.step,talkTo:r.talkTo,waypoint:target,turnSent:true,dx:dx,
+        var result={status:'completed',step:r.step,talkTo:r.talkTo,waypoint:target,turnSent:true,dx:dx,
             sourceFrameId:o.frameId,frameId:after.frameId,measuredClear:!!(improved&&!groundScanStopReason(after,api.now()))};
+        if(grid){
+            result.viewChanged=!!improved&&api.now()<=r.createdAt+r.deadlineMs;
+            result.capturedAt=fresh?after.hud.captureStamp.capturedAt:null;
+            result.postScan=fresh?after.hud.enemyBarObservation.state:null;
+        }
+        return result;
     }
     function travelHoldMs(objective, distance, arrivalRadius, remaining) {
         if (!['Go to the exam point', 'Explore for Adventure Rank'].includes(objective)) return null;
@@ -889,7 +917,7 @@ var ActOneMission = (function () {
             doorClicked?'doorUnverified':doorVisible?'doorPromptUnclicked':sawLoading?'loadingUnverified':titleVisible?'titlePromptUnverified':'titleClearedUnverified');
     }
     async function runQuestStep(name, observation, api, observe, request) {
-        if(name==='namedWaypointRelook')return namedWaypointRelook(request,observation,api,observe);
+        if(name==='namedWaypointRelook'||name==='explorationWaypointRelook')return waypointRelook(request,observation,api,observe);
         if(name==='actTwoCombatPhaseReview')return api.runActTwoCombatPhaseReview(observation);
         if(name==='actTwoPartyOcrRegression')return api.runActTwoPartyOcrRegression(observation);
         if(name==='actTwoFieldInspect')return api.runActTwoNavigationWithPause(observation,observe,async function(field){return {status:'completed',step:name,fieldFrameId:field.frameId,actions:0,reason:'Fresh ground observation only; no movement requested'};});

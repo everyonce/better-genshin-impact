@@ -77,7 +77,13 @@ var ActOnePilot = (function () {
             allowed.push('entryScene', 'expectedUid');
         }
         var namedRelook = r.mission === 'questStep' && r.step === 'namedWaypointRelook';
-        if (namedRelook) {
+        var gridRelook = r.mission === 'questStep' && r.step === 'explorationWaypointRelook';
+        if (gridRelook) {
+            if (r.objective !== 'Explore for Adventure Rank' || !integer(r.deadlineMs,1000,5000) || typeof r.expectedUid !== 'string' ||
+                !/^[0-9]{9,10}$/.test(r.expectedUid)) return 'Invalid exploration waypoint relook';
+            allowed.push('objective', 'expectedUid', 'deadlineMs');
+        }
+        if (namedRelook || gridRelook) {
             var target = Array.isArray(r.waypoints) && r.waypoints.length === 1 && r.waypoints[0];
             if (!target || target.map !== 'Teyvat' || !Number.isFinite(target.x) || !Number.isFinite(target.y) ||
                 Object.keys(target).some(function(k){return ['x','y','map'].indexOf(k)<0;})) return 'Invalid named relook waypoint';

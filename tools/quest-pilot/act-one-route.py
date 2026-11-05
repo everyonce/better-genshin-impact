@@ -511,7 +511,14 @@ class GuardedPilot:
                 raise RouteError('Invalid direct field combat entry.')
             expected_fields['questStep'].update(('entryScene', 'expectedUid'))
         relook = mission == 'questStep' and fields.get('step') == 'namedWaypointRelook'
-        if relook:
+        grid_relook = mission == 'questStep' and fields.get('step') == 'explorationWaypointRelook'
+        if grid_relook:
+            if (fields.get('objective') != EXPLORATION_OBJECTIVE or type(fields.get('deadlineMs')) is not int
+                    or not 1000 <= fields['deadlineMs'] <= 5000 or not isinstance(fields.get('expectedUid'), str)
+                    or not re.fullmatch(r'[0-9]{9,10}', fields['expectedUid'])):
+                raise RouteError('A measured exploration waypoint and expected account are required.')
+            expected_fields[mission].update(('objective', 'expectedUid', 'deadlineMs'))
+        if relook or grid_relook:
             points = fields.get('waypoints')
             if (not isinstance(points, list) or len(points) != 1 or not isinstance(points[0], dict)
                     or set(points[0]) != {'map','x','y'} or points[0]['map'] != 'Teyvat'
@@ -564,6 +571,9 @@ class GuardedPilot:
             elif step in ('actTwoFaceFieldEnemy', 'actTwoFaceRemainingEnemy'):
                 if field_direction_side(source) is None:
                     raise RouteError('A measured single hostile direction arrow is required.')
+            elif grid_relook:
+                if not grid_relook_ready(source, self.session, fields['expectedUid'], fields['waypoints'][0], int(time.time()*1000)):
+                    raise RouteError('The exploration waypoint camera source is no longer eligible.')
             elif relook:
                 if not named_relook_ready(source, self.session, fields['expectedUid'], fields['waypoints'][0], int(time.time()*1000)):
                     raise RouteError('A fresh ambiguous ground scan and a different waypoint bearing are required.')
@@ -771,6 +781,27 @@ def named_relook_ready(source, session, expected_uid, target, now_ms):
     x, y = target['x'] - position['x'], target['y'] - position['y']
     bearing = math.degrees(math.atan2(-y, -x))
     return math.hypot(x,y) >= .75 and abs((angle - bearing + 180) % 360 - 180) > 8
+
+
+def grid_relook_ready(source, session, expected_uid, target, now_ms):
+    """An ordinary travel look needs the actual next bearing and no credible marker among the raw fragments."""
+    if not named_relook_ready(source, session, expected_uid, target, now_ms):
+        return False
+    hud = source['hud']
+    if hud['health']['current'] < .85 * hud['health']['max'] or any(hud['objectives']):
+        return False
+    items = (hud.get('enemyBarDiagnostic') or {}).get('fieldCandidates')
+    if not isinstance(items, list) or len(items) != hud['enemyBarObservation']['candidateCount']:
+        return False
+    for c in items:
+        if (not isinstance(c, dict) or not all(type(c.get(k)) in (int, float) and math.isfinite(c[k])
+                for k in ('x','y','width','height','rectangularity')) or min(c['width'], c['height']) <= 0):
+            return False
+        x,y,w,h=c['x'],c['y'],c['width'],c['height']
+        if (10 <= w <= 20 and 7 <= h <= 18 and abs(x-960) >= 390 and abs(y-540) <= 230
+                and abs(math.hypot(x-960,y-540)-495) <= 42) or (w >= 16 and w/h >= 3 and c['rectangularity'] >= .65):
+            return False
+    return True
 
 
 def field_direction_side(source):
@@ -1068,6 +1099,7 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
         save()
 
     inspect_after_encounter = False
+    unresolved_field_threat = False
     if allow_field_combat:
         state['fieldRotations'] = 0
 
@@ -1380,6 +1412,20 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
             phase, value = route_phase(source, expected_uid, authorized_objectives,
                 allow_dialogue=allow_dialogue, journal_resume=journal_resume, now_ms=now_ms,
                 allow_field_combat=allow_field_combat)
+            if phase == 'navigation' and value == EXPLORATION_OBJECTIVE and ground_scan_is_clear(source, now_ms):
+                unresolved_field_threat = False
+            grid_looks = state.get('explorationWaypointRelooks', [])
+            recent_look = grid_looks[-1] if grid_looks else {}
+            if recent_look.get('awaitingObservation'):
+                stamp = source['hud'].get('captureStamp') or {}
+                if (source['frameId'] <= recent_look['postFrameId'] or stamp.get('frameId') != source['frameId']
+                        or stamp.get('session') != pilot.session or stamp.get('source') != 'game-capture-start'
+                        or type(stamp.get('capturedAt')) is not int or stamp['capturedAt'] <= recent_look['postCapturedAt']
+                        or recent_look['postScan'] == 'threat' and phase != 'fieldCombat'):
+                    state.update(status='waiting', reason='Waypoint camera did not independently resolve the field')
+                    break
+                recent_look.update(awaitingObservation=False, independentFrameId=source['frameId'])
+                save()
             # One stationary retry window per controller, only at initial field
             # entry or after the existing Inventory-close transition. No keys,
             # camera changes or movement occur while the scan is ambiguous.
@@ -1504,6 +1550,36 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
                 relook.update(awaitingClear=True, postFrameId=post['frameId'], postCapturedAt=post['hud']['captureStamp']['capturedAt'])
                 save()
                 continue
+            if (phase == 'wait' and objective == EXPLORATION_OBJECTIVE and not talk_to and not reward
+                    and not unresolved_field_threat and not paused_navigation and state['nextWaypointIndex'] < len(points)
+                    and deadline-monotonic() >= 4):
+                index = state['nextWaypointIndex']
+                target = points[index]
+                if (sum(look['waypointIndex'] == index for look in grid_looks) < 2
+                        and grid_relook_ready(source, pilot.session, expected_uid, target, now_ms)
+                        and (not start_near or 'startNearVerified' in state or
+                             math.hypot(source['map']['x']-start_near['x'],source['map']['y']-start_near['y']) <= start_near['radius'])):
+                    look = dict(waypointIndex=index, waypoint=target, sourceFrameId=source['frameId'])
+                    state.setdefault('explorationWaypointRelooks', []).append(look)
+                    save()
+                    turn = dispatch('questStep', source, dict(step='explorationWaypointRelook', objective=objective,
+                                                             expectedUid=expected_uid, waypoints=[target],
+                                                             deadlineMs=min(5000,int((deadline-monotonic())*1000))))
+                    post = pilot.current()
+                    require_fresh_source(post, pilot.session, clock_ms())
+                    if (not isinstance(turn, dict) or turn.get('step') != 'explorationWaypointRelook' or turn.get('waypoint') != target
+                            or turn.get('turnSent') is not True or turn.get('viewChanged') is not True
+                            or turn.get('postScan') not in ('clear','ambiguous','threat') or type(turn.get('capturedAt')) is not int
+                            or not source['timestamp'] < turn['capturedAt'] <= post['timestamp']
+                            or type(turn.get('sourceFrameId')) is not int or type(turn.get('frameId')) is not int
+                            or not source['frameId'] < turn['sourceFrameId'] < turn['frameId'] <= post['frameId']
+                            or not positive_parking_field(post,pilot.session,expected_uid)):
+                        state.update(status='waiting', reason='Waypoint camera did not verify a new view toward the route')
+                        break
+                    look.update(awaitingObservation=True, postFrameId=post['frameId'],
+                                postScan=turn['postScan'], postCapturedAt=turn['capturedAt'])
+                    save()
+                    continue  # A new ordinary observation owns the combat or navigation decision.
             if phase == 'wait':
                 state.update(status='waiting', reason=value)
                 break
@@ -1553,6 +1629,7 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
                     evidence = field_combat_feedback(state['records'][-1], expected_uid, pilot.archived_frame)
                 if evidence:
                     state.setdefault('fieldCombatRewards', []).append(evidence)
+                unresolved_field_threat = not (evidence and evidence['measuredClear'])
                 if evidence and evidence['measuredClear']:
                     inventory_navigation = EXPLORATION_OBJECTIVE
                 else:
@@ -1650,6 +1727,8 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
                         state['groundRefreshCheckpoint'] = dict(requestId=terminal['request']['id'],
                             nextWaypointIndex=state['nextWaypointIndex'], frames=result['passiveGroundRefreshFrames'])
                         save()
+                    if result.get('reason') == 'Enemy observed during exploration':
+                        unresolved_field_threat = True
                     inspect_after_encounter = True
                     last_phase = 'navigation'
                     continue

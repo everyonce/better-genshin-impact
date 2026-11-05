@@ -1,0 +1,157 @@
+{
+  "provenance": {
+    "session": "mw3klcd9-rto4tf1jf8n",
+    "run": "r75-normal-starfell-route-04",
+    "fields": "Exact session/frame/timestamp/map/hud and original UID OCR row from native JSON.",
+    "historicalRecoveryClaimed": false,
+    "sourceSha256": {
+      "17": "f9377c93dc9f682864852f774649b672f93f2ea18423ea1a4884368aed41e270",
+      "18": "e9f81ac5767d1d3f9c2bfc2e2cda21bf65dcd4ca12c4675e0f8b7131277d00c8"
+    }
+  },
+  "ground": {
+    "session": "mw3klcd9-rto4tf1jf8n",
+    "frameId": 17,
+    "timestamp": 1793884648608,
+    "map": {
+      "x": -1322.236328125,
+      "y": 2566.1904296875,
+      "map": "Teyvat",
+      "cameraAngle": 13.499996185302734
+    },
+    "hud": {
+      "foodQuantity": null,
+      "auto": false,
+      "climbing": false,
+      "groundControls": true,
+      "enemyBars": [],
+      "aerialBossVisible": false,
+      "aerialBoss": null,
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "healthOcr": [
+        "4015/4015"
+      ],
+      "healthDiagnostic": null,
+      "healthPct": 1,
+      "lowHealth": false,
+      "world": true,
+      "interact": true,
+      "objectives": [],
+      "enemyBarDiagnostic": {
+        "level": "any",
+        "candidates": 0,
+        "localReads": [],
+        "greenMask": null,
+        "contourCount": 6,
+        "redPixels": 6,
+        "rawCandidates": [],
+        "fieldCandidates": []
+      },
+      "enemyBarObservation": {
+        "version": 1,
+        "kind": "normal-ground-enemy-observation-v1",
+        "state": "clear",
+        "session": "mw3klcd9-rto4tf1jf8n",
+        "frameId": 17,
+        "capturedAt": 1793884648219,
+        "reason": "no_bar_shaped_components",
+        "candidateCount": 0,
+        "acceptedCount": 0
+      },
+      "captureStamp": {
+        "session": "mw3klcd9-rto4tf1jf8n",
+        "frameId": 17,
+        "capturedAt": 1793884648219,
+        "source": "game-capture-start"
+      }
+    },
+    "ocr": [
+      {
+        "text": "693306810",
+        "x": 1730,
+        "y": 1048,
+        "width": 133,
+        "height": 29
+      }
+    ]
+  },
+  "climb": {
+    "session": "mw3klcd9-rto4tf1jf8n",
+    "frameId": 18,
+    "timestamp": 1793884649960,
+    "map": {
+      "x": -1322.66796875,
+      "y": 2566.0791015625,
+      "map": "Teyvat",
+      "cameraAngle": 18.5
+    },
+    "hud": {
+      "foodQuantity": null,
+      "auto": false,
+      "climbing": true,
+      "groundControls": false,
+      "enemyBars": [],
+      "aerialBossVisible": false,
+      "aerialBoss": null,
+      "slimeTarget": null,
+      "tutorialStep": null,
+      "characterAcquired": null,
+      "dialogueReady": false,
+      "choice": false,
+      "journal": false,
+      "bigMap": false,
+      "objectiveChanged": false,
+      "health": {
+        "current": 4015,
+        "max": 4015
+      },
+      "healthOcr": [
+        "4015/4015"
+      ],
+      "healthDiagnostic": null,
+      "healthPct": 1,
+      "lowHealth": false,
+      "world": true,
+      "interact": false,
+      "objectives": [],
+      "enemyBarDiagnostic": null,
+      "enemyBarObservation": {
+        "version": 1,
+        "kind": "normal-ground-enemy-observation-v1",
+        "state": "unavailable",
+        "session": "mw3klcd9-rto4tf1jf8n",
+        "frameId": 18,
+        "capturedAt": 1793884649615,
+        "reason": "not_recognized_overworld_ground",
+        "candidateCount": null,
+        "acceptedCount": null
+      },
+      "captureStamp": {
+        "session": "mw3klcd9-rto4tf1jf8n",
+        "frameId": 18,
+        "capturedAt": 1793884649615,
+        "source": "game-capture-start"
+      }
+    },
+    "ocr": [
+      {
+        "text": "UID: 693306810",
+        "x": 1684,
+        "y": 1048,
+        "width": 179,
+        "height": 29
+      }
+    ]
+  }
+}

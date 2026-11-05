@@ -8,15 +8,18 @@ function actTwoAmberFinalChoice(rows) {
 }
 var ActOneMission = (function () {
     // Autonomous exploration must see the result of a detector run on the current game capture.
+    function freshGroundScanIdentity(observation, now) {
+        var hud = observation && observation.hud, stamp = hud && hud.captureStamp, scan = hud && hud.enemyBarObservation;
+        return !!(stamp && scan && stamp.source === 'game-capture-start' &&
+            scan.kind === 'normal-ground-enemy-observation-v1' && scan.version === 1 &&
+            stamp.session === observation.session && scan.session === observation.session &&
+            Number.isInteger(observation.frameId) && stamp.frameId === observation.frameId && scan.frameId === observation.frameId &&
+            Number.isInteger(stamp.capturedAt) && scan.capturedAt === stamp.capturedAt &&
+            stamp.capturedAt <= observation.timestamp && observation.timestamp <= now && now - stamp.capturedAt <= 1000);
+    }
     function groundScanStopReason(observation, now) {
-        var hud = observation.hud, stamp = hud.captureStamp, scan = hud.enemyBarObservation;
-        if (!stamp || !scan || stamp.source !== 'game-capture-start' ||
-            scan.kind !== 'normal-ground-enemy-observation-v1' || scan.version !== 1 ||
-            stamp.session !== observation.session || scan.session !== observation.session ||
-            !Number.isInteger(observation.frameId) || stamp.frameId !== observation.frameId || scan.frameId !== observation.frameId ||
-            !Number.isInteger(stamp.capturedAt) || scan.capturedAt !== stamp.capturedAt ||
-            !(stamp.capturedAt <= observation.timestamp && observation.timestamp <= now && now - stamp.capturedAt <= 1000))
-            return 'Fresh ground enemy scan required';
+        if (!freshGroundScanIdentity(observation, now)) return 'Fresh ground enemy scan required';
+        var hud = observation.hud, scan = hud.enemyBarObservation;
         if (scan.state === 'threat') return 'Enemy observed during exploration';
         if (scan.state !== 'clear' || scan.candidateCount !== 0 || scan.acceptedCount !== 0 ||
             !Array.isArray(hud.enemyBars) || hud.enemyBars.length) return 'Ground enemy scan did not establish clear ground';
@@ -31,10 +34,22 @@ var ActOneMission = (function () {
         // Reobserve after every hold. Interaction and marker approaches retain their precise timing.
         return Math.floor(Math.min(800, remaining, Math.max(100, (distance - arrivalRadius) / 6 * 1000)));
     }
-    function reviewedClimbRelease(current,recentGround,now,remaining) {
+    function reviewedClimbRelease(current,recentGround,now,remaining,measuredGroundAt) {
         var h=current&&current.hud,m=current&&current.map,p=h&&h.health;
         if(!current||!current.session||!Number.isFinite(current.timestamp)||now<current.timestamp||now-current.timestamp>1000||remaining<4000||!m||m.map!=='Teyvat'||!h||!h.world||!h.climbing||h.auto||h.dialogueReady||h.choice||h.bigMap||h.journal||!p||p.max!==4015||p.current<p.max*.9||!Array.isArray(h.enemyBars)||h.enemyBars.length||(current.ocr||[]).filter(function(r){return r.x>1600&&r.y>1020&&/^(?:UID)?[: ]*693306810$/.test(String(r.text||'').trim());}).length!==1)return false;
         var localGround=recentGround&&recentGround.session===current.session&&recentGround.map&&recentGround.map.map==='Teyvat'&&current.timestamp>=recentGround.timestamp&&current.timestamp-recentGround.timestamp<=5000&&Math.hypot(m.x-recentGround.map.x,m.y-recentGround.map.y)<=2&&p.current===p.max;
+        // Measured exploration may release only from this run's last qualified
+        // full-HP ground witness. Historical wall locations cannot substitute.
+        if(measuredGroundAt!==undefined) {
+            var gh=recentGround&&recentGround.hud,gp=gh&&gh.health,scan=h.enemyBarObservation;
+            return !!(localGround&&Number.isFinite(measuredGroundAt)&&
+                gh.groundControls===true&&gh.climbing===false&&gp&&gp.current===4015&&gp.max===4015&&
+                Number.isInteger(recentGround.frameId)&&current.frameId>recentGround.frameId&&
+                groundScanStopReason(recentGround,measuredGroundAt)===null&&
+                h.climbing===true&&h.groundControls===false&&freshGroundScanIdentity(current,now)&&
+                scan.state==='unavailable'&&scan.reason==='not_recognized_overworld_ground'&&
+                scan.candidateCount===null&&scan.acceptedCount===null);
+        }
         var lionBase=Math.hypot(m.x+1435.70,m.y-1652.47)<=.75&&p.current===p.max;
         // Frame1681: low east-waypoint wall, broad grass directly below and beside the climber.
         var eastGrass=Math.hypot(m.x+1529.55,m.y-1972.69)<=.75&&Number.isFinite(m.cameraAngle)&&Math.abs((m.cameraAngle-15+540)%360-180)<=20;
@@ -189,22 +204,28 @@ var ActOneMission = (function () {
                 if (climbSteps >= 12 && current && current.hud && !current.hud.climbing) return stop('Navigation-wide climb hold limit reached');
                 if (!safeTransientFrame(current)&&!statueHealingApproach(request,current)) return stop('Dialogue, objective, low-health, or missing navigation evidence');
                 if(exploring&&!statueHealingApproach(request,current)&&current.hud.health&&current.hud.health.current/current.hud.health.max<0.85)return stop('Exploration health threshold reached');
+                if(exploring&&current.hud.climbing&&climbReleases===0&&typeof api.releaseClimb==='function') {
+                    var ch=current.hud,cm=current.map,cp=ch.health;
+                    var recentGround=afterForward&&afterForward.groundWitness;
+                    if(reviewedClimbRelease(current,recentGround,api.now(),request.deadlineMs-(api.now()-began),
+                        request.requireMeasuredGround?afterForward&&afterForward.groundWitnessAt:undefined)) {
+                        var entryHealth=cp.current,recoverySession=current.session;
+                        var recoveryStart=api.now();await api.releaseClimb();totalInputMs+=api.now()-recoveryStart;climbReleases++;
+                        await api.sleep(250);var landed=await observe(),landedCheckedAt=api.now();await api.sleep(700);current=await observe();
+                        var recovered=settledClimbLanding(landed,recoverySession,entryHealth,api.now())&&settledClimbLanding(current,recoverySession,entryHealth,api.now())&&current.frameId>landed.frameId&&current.timestamp-landed.timestamp>=700&&Math.hypot(current.map.x-landed.map.x,current.map.y-landed.map.y)<=.5;
+                        // Validate each landing capture when received; the first
+                        // frame may age during the required second-frame settling.
+                        if(request.requireMeasuredGround) recovered=recovered&&
+                            groundScanStopReason(landed,landedCheckedAt)===null&&groundScanStopReason(current,api.now())===null;
+                        var recoveryResult=await stop(recovered?'Incidental climb recovered; inspect alternate path':'Climb release did not prove settled ground');
+                        recoveryResult.groundRecovered=recovered;recoveryResult.recoveryFrames=[landed.frameId,current.frameId];recoveryResult.fieldFrameId=current.frameId;recoveryResult.fieldHealth=current.hud.health;return recoveryResult;
+                    }
+                }
+                // A qualified release always returns stopped; every other state keeps the original scan gate.
                 if (request.requireMeasuredGround && current.hud.world) {
                     var groundStop = groundScanStopReason(current, api.now());
                     if (groundStop) return stop(groundStop);
                     if (current.hud.climbing) return stop('Exploration left measured ground');
-                }
-                if(exploring&&current.hud.climbing&&climbReleases===0&&typeof api.releaseClimb==='function') {
-                    var ch=current.hud,cm=current.map,cp=ch.health;
-                    var recentGround=afterForward&&afterForward.groundWitness;
-                    if(reviewedClimbRelease(current,recentGround,api.now(),request.deadlineMs-(api.now()-began))) {
-                        var entryHealth=cp.current,recoverySession=current.session;
-                        var recoveryStart=api.now();await api.releaseClimb();totalInputMs+=api.now()-recoveryStart;climbReleases++;
-                        await api.sleep(250);var landed=await observe();await api.sleep(700);current=await observe();
-                        var recovered=settledClimbLanding(landed,recoverySession,entryHealth,api.now())&&settledClimbLanding(current,recoverySession,entryHealth,api.now())&&current.frameId>landed.frameId&&current.timestamp-landed.timestamp>=700&&Math.hypot(current.map.x-landed.map.x,current.map.y-landed.map.y)<=.5;
-                        var recoveryResult=await stop(recovered?'Incidental climb recovered; inspect alternate path':'Climb release did not prove settled ground');
-                        recoveryResult.groundRecovered=recovered;recoveryResult.recoveryFrames=[landed.frameId,current.frameId];recoveryResult.fieldFrameId=current.frameId;recoveryResult.fieldHealth=current.hud.health;return recoveryResult;
-                    }
                 }
                 if(guildObjective&&(current.hud.groundControls!==true||current.hud.climbing||(current.hud.enemyBars||[]).length))
                     return stop('Guild approach requires safe grounded travel');
@@ -253,7 +274,8 @@ var ActOneMission = (function () {
                 }
                 // Coordinate retries can replace the starting frame. Check the final image before any route input.
                 if (request.requireMeasuredGround) {
-                    var scanStop = groundScanStopReason(current, api.now());
+                    var scanCheckedAt = api.now();
+                    var scanStop = groundScanStopReason(current, scanCheckedAt);
                     if (scanStop) return stop(scanStop);
                 }
                 if(!plausibleMap(current,target)) {
@@ -340,7 +362,7 @@ var ActOneMission = (function () {
                 if (held <= 0) return stop('Navigation deadline reached');
                 if(exploring&&typeof api.releaseClimb==='function'&&current.hud.groundControls&&!current.hud.climbing&&request.deadlineMs-(api.now()-began)<held+6500) return stop('Navigation stopped before movement to reserve incidental-climb recovery time');
                 if(lisaUnsafe(current)) return stop(lisaUnsafeReason(current));
-                afterForward = { x: current.map.x, y: current.map.y, minProgress: travelHeld === null ? 0.5 : Math.min(0.5, held / 1000), groundWitness: current.hud.groundControls&&!current.hud.climbing?current:null };
+                afterForward = { x: current.map.x, y: current.map.y, minProgress: travelHeld === null ? 0.5 : Math.min(0.5, held / 1000), groundWitness: current.hud.groundControls&&!current.hud.climbing?current:null, groundWitnessAt: request.requireMeasuredGround?scanCheckedAt:null };
                 var inputStarted = api.now(); await api.forward(held); totalInputMs += api.now() - inputStarted; movements++;
                 await api.sleep(150); current = await observe();
             }

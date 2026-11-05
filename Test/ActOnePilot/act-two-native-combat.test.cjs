@@ -177,3 +177,46 @@ test('4015 ordinary admission does not widen legacy group probe or finishing fie
   assert.equal(native.deadlineProbe(o,1000,'test',()=>true),max!==4015);
  }
 });
+const fs=require('node:fs');
+// Replay the exact ordinary post-Escape loop with inert observations and sleeps.
+async function replayEntry(sources){
+ const text=fs.readFileSync(require.resolve('../../BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js'),'utf8');
+ const line=text.split('\n').find(x=>x.includes('else for(var poll=0;poll<3;poll++)'));
+ const body=line.slice(line.indexOf('for(var poll=0')).replaceAll('Date.now()','now()');
+ const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;
+ let calls=0,clock=1000;const waits=[];const original=o=>o.ocr.some(r=>r.text==='UID: 693306810');
+ const eligible=o=>native.encounter(o,clock,'test',original,false);
+ const current=await new AsyncFunction('native','eligible','observe','sleep','now','request','original','group','probing','let current;'+body+';return current;')
+  (native,eligible,async()=>{const o=structuredClone(sources[Math.min(calls++,sources.length-1)]);clock=o.timestamp;return o;},async ms=>waits.push(ms),()=>clock,{session:'test'},original,false,false);
+ return {current,eligible:eligible(current),calls,waits};
+}
+// Frame65 had a fading inventory HUD: exact UID and positive health, no ground glyph.
+function fadingFrame(){
+ const o=frame();o.hud.health={current:4015,max:4015};o.hud.groundControls=false;
+ o.ocr=[{text:'UID: 693306810',x:1680,y:1050,width:181,height:27}];
+ o.map={map:'Teyvat',x:-1380.650390625,y:1644.0625,cameraAngle:166.49998474121094};
+ o.hud.enemyBars=[{x:1486.5,y:439,width:67,height:4,rectangularity:0.9848484848484849}];return o;
+}
+test('ordinary fading inventory HUD may use only existing passive entry polls',async()=>{
+ const a=fadingFrame(),b=structuredClone(a);b.timestamp=1372;b.hud.groundControls=true;b.hud.enemyBars[0].x=1495;
+ assert.equal(native.encounter(a,1000,'test',()=>true,false),false);
+ const r=await replayEntry([a,b]);assert.equal(r.calls,2);assert.deepEqual(r.waits,[450,150]);assert.equal(r.eligible,true);assert.equal(r.current.hud.groundControls,true);
+});
+test('missing ground remains bounded to three observations and never grants combat',async()=>{
+ const r=await replayEntry([fadingFrame()]);assert.equal(r.calls,3);assert.deepEqual(r.waits,[450,150,150]);assert.equal(r.eligible,false);
+});
+test('fading HUD wait refuses every other failed combat guard and preserves old scopes',()=>{
+ const changes=[o=>o.session='foreign',o=>o.timestamp=0,o=>o.hud.health.current=1,
+  o=>o.hud.health.current=4016,o=>o.hud.health.current='4015',o=>o.hud.health.max=2764,
+  o=>o.hud.climbing=true,o=>o.hud.auto=true,o=>o.hud.bigMap=true,o=>o.hud.dialogueReady=true,
+  o=>o.hud.choice=true,o=>o.hud.journal=true,o=>o.hud.tutorialStep='x',o=>o.map=null,
+  o=>o.map.map='Other',o=>o.map.x=-1601,o=>o.hud.enemyBars=[],o=>o.hud.enemyBars.push({...o.hud.enemyBars[0]})];
+ for(const mutate of changes){const o=fadingFrame();mutate(o);assert.equal(native.entrySettled(o,1001,'test',()=>true,true),native.entrySettled(o));}
+ assert.equal(native.entrySettled(fadingFrame(),1000,'test',()=>false,true),true);
+ assert.equal(native.entrySettled(fadingFrame(),1000,'test',()=>true,false),true);
+ assert.equal(native.entrySettled(fadingFrame()),true);
+});
+test('unsafe field during ordinary entry stops before later good frame can mask it',async()=>{
+ const bad=fadingFrame();bad.hud.climbing=true;const good=fadingFrame();good.hud.groundControls=true;
+ const r=await replayEntry([bad,good]);assert.equal(r.calls,1);assert.equal(r.eligible,false);
+});

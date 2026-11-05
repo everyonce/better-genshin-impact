@@ -3973,7 +3973,7 @@ function createActOneAdapter(sessionId,options) {
             try{
                 await boundedKey('VK_ESCAPE',60,initial.frameId);
                 if(ambushWitness){await sleep(550);current=acquire();result.acquisition=current;}
-                else for(var poll=0;poll<3;poll++){await sleep(poll===0?450:150);current=await observe();if(eligible(current)||native.entrySettled(current))break;}
+                else for(var poll=0;poll<3;poll++){await sleep(poll===0?450:150);current=await observe();if(eligible(current)||native.entrySettled(current,Date.now(),request.session,original,!group&&!probing))break;}
                 if(!eligible(current))throw new Error('Fresh grounded Kaeya health and one close enemy bar required');
                 for(var alignmentAttempt=0;alignmentAttempt<2&&current.acquisition&&!acquisition.stationaryReady(current.hud.enemyBars);alignmentAttempt++){
                     checkStop();ready();var alignDx=acquisition.cameraDelta(current.hud.enemyBars);

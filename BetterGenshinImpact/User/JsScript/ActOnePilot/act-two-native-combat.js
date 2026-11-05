@@ -13,11 +13,14 @@
  const strategy='凯亚 e(fast), attack(1)';
  const ambushStrategy='e,attack(1)';
  const groupStrategy='凯亚 e(fast), q, attack(1)';
- function entrySettled(o){
+ function entrySettled(o,now,session,original,ordinary){
   const h=o&&o.hud,hp=h&&h.health;
-  // Retry only menu transitions. An already visible world with failed combat
-  // guards must pause immediately, not stand exposed through more OCR polls.
-  return !!(h&&h.world===true&&hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.max>0);
+  const settled=!!(h&&h.world===true&&hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&hp.max>0);
+  // Inventory fade can expose numeric health before the ground glyphs return.
+  // Only ordinary entry with every other existing guard satisfied may use the
+  // remaining passive polls. This never grants combat without ground evidence.
+  if(settled&&ordinary===true&&h.groundControls===false&&fieldContext(o,now,session,original,true)&&targets(o).length===1)return false;
+  return settled;
  }
  function pauseSeed(o,last,now,session){
   // Engine observations are serialized copies of the adapter's capture. Bind
@@ -41,8 +44,12 @@
  // Only ordinary single-target entry admits the verified 4015-HP Kaeya baseline.
  // Group, deadline-probe and receipt-bound finishing paths keep their existing profiles.
  function field(o,now,session,original,ordinary){
+  return fieldContext(o,now,session,original,ordinary)&&o.hud.groundControls===true;
+ }
+ // Shared non-ground checks distinguish a fading HUD from an unsafe field.
+ function fieldContext(o,now,session,original,ordinary){
   const h=o&&o.hud,p=o&&o.map,hp=h&&h.health;
-  return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&original(o)&&h&&h.world===true&&h.groundControls===true&&!h.climbing&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.bigMap&&!h.journal&&!h.tutorialStep&&hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&([2313,2635].includes(hp.max)||(ordinary===true&&hp.max===4015))&&hp.current>0&&hp.current>=hp.max*0.85&&hp.current<=hp.max&&p&&p.map==='Teyvat'&&p.x>=-1600&&p.x<=-700&&p.y>=1450&&p.y<=2700);
+  return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&original(o)&&h&&h.world===true&&!h.climbing&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.bigMap&&!h.journal&&!h.tutorialStep&&hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&([2313,2635].includes(hp.max)||(ordinary===true&&hp.max===4015))&&hp.current>0&&hp.current>=hp.max*0.85&&hp.current<=hp.max&&p&&p.map==='Teyvat'&&p.x>=-1600&&p.x<=-700&&p.y>=1450&&p.y<=2700);
  }
  function deadlineProbe(o,now,session,original){return field(o,now,session,original)&&o.hud.health.current===o.hud.health.max&&(o.hud.enemyBars||[]).length===0&&Math.hypot(o.map.x+1265.917,o.map.y-1928.381)<=8;}
  function targets(o){

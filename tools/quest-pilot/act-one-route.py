@@ -458,6 +458,10 @@ class GuardedPilot:
         expected_fields = {'observe': set(), 'dialogue': set(), 'keyPress': {'key'},
                            'combat': {'objective', 'deadlineMs'},
                            'navigation': {'objective', 'waypoints', 'deadlineMs'}, 'questStep': {'step'}}
+        if mission == 'questStep' and fields.get('step') == 'actTwoFieldCombat' and 'deadlineMs' in fields:
+            if type(fields['deadlineMs']) is not int or not 6000 <= fields['deadlineMs'] <= 35000:
+                raise RouteError('Invalid field combat deadline.')
+            expected_fields['questStep'].add('deadlineMs')
         if mission == 'dialogue' and 'talkTo' in fields:
             expected_fields['dialogue'] = {'talkTo', 'expectedUid', 'deadlineMs'}
             if (not isinstance(fields['talkTo'], str) or fields['talkTo'] != fields['talkTo'].strip()
@@ -715,7 +719,8 @@ def field_combat_feedback(record, expected_uid, frame_at):
     request, receipt = record['request'], record['receipt']
     result = receipt['details']['result']
     chunks, events = result.get('chunks'), receipt['details'].get('inputEvents', [])
-    if not isinstance(chunks, list) or not chunks or len(chunks) > 3:
+    timed = type(request.get('deadlineMs')) is int and 6000 <= request['deadlineMs'] <= 35000
+    if not isinstance(chunks, list) or not chunks or len(chunks) > (6 if timed else 3):
         return None
 
     def reward_rows(source):
@@ -1174,7 +1179,11 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
                 paused = pilot.current()
                 if not source_account_matches(paused, expected_uid) or not pilot.inventory_ready(paused):
                     raise RouteError('Native combat requires the expected account in inventory.')
-                rotation = dispatch('questStep', paused, dict(step='actTwoFieldCombat'))
+                # Reserve time for the final inventory return and receipt before giving the native loop its budget.
+                combat_ms = min(35000, int((deadline - monotonic()) * 1000) - 6000)
+                if combat_ms < 6000:
+                    raise RouteError('Insufficient route time for another field encounter.')
+                rotation = dispatch('questStep', paused, dict(step='actTwoFieldCombat', deadlineMs=combat_ms))
                 if not returned_rotation(rotation):
                     raise RouteError('Native field rotation and its inventory pause were not established.')
                 state['fieldRotations'] += 1

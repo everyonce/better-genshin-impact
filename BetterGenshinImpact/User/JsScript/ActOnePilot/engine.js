@@ -56,6 +56,11 @@ var ActOnePilot = (function () {
                 if (!integer(r.lookAmount,16,250)) return 'Invalid lookAmount';
             }
         }
+        // A route may spend its remaining encounter time in the field before parking.
+        if (r.mission === 'questStep' && r.step === 'actTwoFieldCombat' && r.deadlineMs !== undefined) {
+            if (!integer(r.deadlineMs, 6000, 35000)) return 'Invalid field combat deadline';
+            allowed.push('deadlineMs');
+        }
         if (r.mission === 'dialogue' && r.talkTo !== undefined) {
             allowed.push('talkTo', 'expectedUid', 'deadlineMs');
             if (typeof r.talkTo !== 'string' || !/^[A-Za-z][A-Za-z '.-]{0,47}$/.test(r.talkTo) || r.talkTo !== r.talkTo.trim() ||

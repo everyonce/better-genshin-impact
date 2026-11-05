@@ -100,14 +100,16 @@
   const prior=new Set(rows(before).map(r=>r.text));
   return rows(after).filter(r=>!prior.has(r.text)).map(r=>({...r}));
  }
- // A single in-world request owns at most three rotations and one 15-second window.
+ // Legacy callers use three rotations. Route callers may stay in combat within their original request clock.
  async function fieldSequence(initial,api){
-  const started=api.now(),deadline=started+15000,turns=[];
+  const started=api.now(),timed=Number.isFinite(api.encounterDeadline);
+  const deadline=timed?Math.min(started+35000,api.encounterDeadline):started+15000,turns=[];
+  const limit=timed?6:3;
   let current=initial,reason='rotation_limit',error=null;
   const scope={...api,pack:true,deadline,origin:initial.map,approachBudget:{turns:0,steps:0},reacquisition:{remaining:2,frames:[]},
    checkStop(){api.checkStop();if(api.now()>=deadline)throw new Error('Field sequence deadline reached');}};
   try{
-   for(let index=0;index<3;index++){
+   for(let index=0;index<limit;index++){
     scope.checkStop();current=await reacquireFieldTarget(current,scope);
     if(!api.eligible(current)){reason='encounter_or_health_guard';break;}
     if(deadline-api.now()<4500){reason='native_drain_headroom';break;}

@@ -363,3 +363,20 @@ test('centered recent damage continues to a finishing rotation without walking o
  const after=packFrame();after.hud.enemyBars=[gold];
  assert.equal(native.assessProgress(after,h.initial).evidence,null);
 });
+
+test('route encounter budget allows six freshly measured rotations without an inventory interruption',async()=>{
+ const h=sequenceHarness();
+ h.api.encounterDeadline=h.api.now()+35000;
+ const result=await native.fieldSequence(h.initial,h.api);
+ assert.equal(result.turns.length,6);assert.equal(result.reason,'rotation_limit');
+ assert.equal(result.deadline-result.startedAt,35000);
+ assert.equal(new Set(result.turns.map(turn=>turn.actionId)).size,6);
+});
+
+test('field encounter never extends a route deadline that is already close',async()=>{
+ const h=sequenceHarness();
+ h.api.encounterDeadline=h.api.now()+4499;
+ const result=await native.fieldSequence(h.initial,h.api);
+ assert.equal(result.turns.length,0);assert.equal(result.reason,'native_drain_headroom');
+ assert.equal(h.runs,0);
+});

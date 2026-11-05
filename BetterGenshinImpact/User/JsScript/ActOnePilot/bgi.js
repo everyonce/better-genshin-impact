@@ -4164,6 +4164,7 @@ function createActOneAdapter(sessionId,options) {
                 if(pack){
                     result.approach=[];
                     var fieldBatch=await native.fieldSequence(current,{
+                        encounterDeadline:Number.isInteger(request.deadlineMs)?request.createdAt+request.deadlineMs:undefined,
                         now:Date.now,checkStop:checkStop,eligible:eligible,sleep:sleep,observe:observe,run:runChunk,
                         actionId:function(index){return request.id+':rotation:'+index;},
                         fieldReady:function(o){return native.field(o,Date.now(),request.session,original,true);},

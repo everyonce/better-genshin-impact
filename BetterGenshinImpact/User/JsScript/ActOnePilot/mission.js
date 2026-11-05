@@ -568,7 +568,8 @@ var ActOneMission = (function () {
             function safe(o){var h=o&&o.hud,m=o&&o.map;return !!(m&&m.map==='Teyvat'&&Math.hypot(m.x+1323.474,m.y-2566.115)<15&&h&&h.world&&h.groundControls&&!h.climbing&&!h.auto&&!h.dialogueReady&&!h.choice&&h.health&&((h.health.max===1733&&h.health.current>=h.health.max*.7)||(h.health.max===4015&&Number.isInteger(h.health.current)&&h.health.current>0&&h.health.current<=h.health.max))&&Array.isArray(h.enemyBars)&&!h.enemyBars.length&&!(h.objectives||[]).length);}
             while(safe(field)&&moves<4&&turns<8){
                 api.checkStop();var m=field.map,dx=-1323.474-m.x,dy=2566.115-m.y,dist=Math.hypot(dx,dy);
-                if(selection.selection(field.ocr||[],'Statue of The Seven')==='selected')break;
+                // The prompt can appear before the character reaches the statue's interaction radius.
+                if(dist<=3&&selection.selection(field.ocr||[],'Statue of The Seven')==='selected')break;
                 if(dist<=2.5)break;
                 var target=(Math.atan2(-dy,-dx)*180/Math.PI+360)%360,diff=(m.cameraAngle-target+540)%360-180;
                 if(!Number.isFinite(m.cameraAngle))break;

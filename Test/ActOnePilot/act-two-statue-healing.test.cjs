@@ -32,10 +32,12 @@ function starfellOpenerField(current=2211,max=4015) {
 }
 
 // Keep the original inventory wrapper seam explicit; this is not a live wrapper/UID qualification.
-async function runStarfellOpener(field,{repeat=false,refuseWrapper=false}={}) {
+async function runStarfellOpener(field,{repeat=false,refuseWrapper=false,observations=[]}={}) {
  const mission=starfellOpenerMission(),calls=[],initial={session:field.session,frameId:3,hud:{inventory:true}};
  const observe=async()=>{
-  calls.push(['observe']);return repeat?field:{...field,frameId:5,hud:{...field.hud,dialogueReady:true}};
+  calls.push(['observe']);
+  if(observations.length)return observations.shift();
+  return repeat?field:{...field,frameId:5,hud:{...field.hud,dialogueReady:true}};
  };
  const api={
   runActTwoNavigationWithPause:async(source,reader,callback)=>{
@@ -90,7 +92,20 @@ test('Starfell low-health entry retains every existing non-health approach and s
  const missing=await runStarfellOpener(unselected,{repeat:true});
  assert.deepEqual(missing.calls.filter(row=>['key','forward','rotate'].includes(row[0])),[]);
  const tooFar={...base,map:{...base.map,x:-1323.474-3.01}};
- assert.deepEqual((await runStarfellOpener(tooFar)).calls,[['wrapper']]);
+ assert.deepEqual((await runStarfellOpener(tooFar,{repeat:true})).calls.filter(row=>row[0]==='key'),[]);
+});
+
+test('Starfell keeps approaching a selected statue until a fresh frame is within three meters',async()=>{
+ const source=starfellOpenerField(2806);
+ const target={map:'Teyvat',x:-1323.474,y:2566.115};
+ // The prompt was already selected at these coordinates in the live post-combat return.
+ const map={map:'Teyvat',x:-1326.6875,y:2564.7783203125};
+ map.cameraAngle=m.bearing(map,target);
+ const inside={...source,frameId:12,map:{...map,x:-1325.1,y:2565.5}};
+ const {calls,result}=await runStarfellOpener({...source,map},{observations:[inside]});
+ assert.deepEqual(calls.filter(row=>['forward','key','rotate'].includes(row[0])),
+  [['forward',500],['key','VK_F']]);
+ assert.equal(result.moves,1);
 });
 
 test('Starfell low-health approach still has four W500 moves or eight bounded turns and no fallback input',async()=>{

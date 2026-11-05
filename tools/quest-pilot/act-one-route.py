@@ -713,9 +713,10 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
                 and result.get('pauseVerified') is True)
 
     def threat_checkpoint(result):
-        """Keep the completed waypoint prefix when a measured threat interrupts walking."""
+        """Keep completed waypoints while a protected field-scan interruption is reinspected."""
         return (allow_field_combat and objective == EXPLORATION_OBJECTIVE and protected_inventory(result)
-                and result.get('status') == 'stopped' and result.get('reason') == 'Enemy observed during exploration'
+                and result.get('status') == 'stopped' and result.get('reason') in (
+                    'Enemy observed during exploration', 'Ground enemy scan did not establish clear ground')
                 and type(result.get('nextWaypointIndex')) is int)
 
     def returned_rotation(result):

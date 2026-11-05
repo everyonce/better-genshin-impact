@@ -599,15 +599,17 @@ class SupervisedRouteControllerTests(unittest.TestCase):
         self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
         inv, clear = controller_scene('inventory'), controller_scene(objective='')
         pause = dict(mission='questStep', source=inv, result=dict(pausedInventory=True))
-        interruption = dict(mission='navigation', status='failed', source=inv, result=dict(
-            status='stopped', reason='Enemy observed during exploration', nextWaypointIndex=1, pauseVerified=True,
-            pauseProof=dict(verified=True, kind='inventory', session='route-session')))
-        pilot = ReplayPilot(self.clock, [pause, interruption, dict(mission='questStep', source=clear,
-            result=dict(worldVisible=True)), pause, self.arrival(2, inv)], source=clear)
-        report = self.run_controller(pilot, allow_field_combat=True)
-        self.assertEqual((report['status'],report['fieldRotations']), ('arrived',0))
-        self.assertEqual([r['waypoints'] for r in pilot.calls if r['mission'] == 'navigation'],
-                         [self.points,self.points[1:]])
+        for index, reason in enumerate(('Enemy observed during exploration', 'Ground enemy scan did not establish clear ground')):
+            self.progress = Path(self.temp.name) / ('field-interrupt-%d.json' % index)
+            interruption = dict(mission='navigation', status='failed', source=inv, result=dict(
+                status='stopped', reason=reason, nextWaypointIndex=1, pauseVerified=True,
+                pauseProof=dict(verified=True, kind='inventory', session='route-session')))
+            pilot = ReplayPilot(self.clock, [pause, interruption, dict(mission='questStep', source=clear,
+                result=dict(worldVisible=True)), pause, self.arrival(2, inv)], source=clear)
+            report = self.run_controller(pilot, allow_field_combat=True)
+            self.assertEqual((report['status'],report['fieldRotations']), ('arrived',0))
+            self.assertEqual([r['waypoints'] for r in pilot.calls if r['mission'] == 'navigation'],
+                             [self.points,self.points[1:]])
 
     def test_exploration_pack_requires_matching_counts_and_field_combat_opt_in(self):
         now = self.clock.milliseconds()

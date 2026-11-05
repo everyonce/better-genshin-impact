@@ -482,9 +482,19 @@ class GuardedPilot:
                     or not isinstance(fields.get('expectedUid'), str) or not re.fullmatch(r'[0-9]{9,10}', fields['expectedUid'])):
                 raise RouteError('Invalid direct field combat entry.')
             expected_fields['questStep'].update(('entryScene', 'expectedUid'))
-        if mission in ('dialogue', 'navigation') and 'talkTo' in fields:
-            expected_fields[mission].update(('talkTo', 'expectedUid', 'deadlineMs'))
-            if (not isinstance(fields['talkTo'], str) or fields['talkTo'] != fields['talkTo'].strip()
+        relook = mission == 'questStep' and fields.get('step') == 'namedWaypointRelook'
+        if relook:
+            points = fields.get('waypoints')
+            if (not isinstance(points, list) or len(points) != 1 or not isinstance(points[0], dict)
+                    or set(points[0]) != {'map','x','y'} or points[0]['map'] != 'Teyvat'
+                    or any(type(points[0][k]) not in (int, float) or not math.isfinite(points[0][k]) for k in ('x','y'))):
+                raise RouteError('One exact named relook waypoint is required.')
+            expected_fields[mission].add('waypoints')
+        if relook or mission in ('dialogue', 'navigation') and 'talkTo' in fields:
+            expected_fields[mission].update(('talkTo', 'expectedUid'))
+            if not relook:
+                expected_fields[mission].add('deadlineMs')
+            if (not isinstance(fields.get('talkTo'), str) or fields['talkTo'] != fields['talkTo'].strip()
                     or re.fullmatch(r"[A-Za-z][A-Za-z '.-]{0,47}", fields['talkTo']) is None
                     or not isinstance(fields.get('expectedUid'), str)
                     or re.fullmatch(r'[0-9]{9,10}', fields['expectedUid']) is None
@@ -516,6 +526,9 @@ class GuardedPilot:
             elif step == 'actTwoFaceRemainingEnemy':
                 if field_direction_side(source) is None:
                     raise RouteError('A measured single hostile direction arrow is required.')
+            elif relook:
+                if not named_relook_ready(source, self.session, fields['expectedUid'], fields['waypoints'][0], int(time.time()*1000)):
+                    raise RouteError('A fresh ambiguous ground scan and a different waypoint bearing are required.')
             elif step == 'cityStairRelease':
                 if not city_stair_climb(source, self.session, '693306810'):
                     raise RouteError('The original account and the witnessed city stair climb are required.')
@@ -688,6 +701,20 @@ def unanchored_ground_scan(source, expected_uid, now_ms):
     return (type(count) is int and 1 <= count <= 64
             and scan.get('reason') == 'unanchored_bar_shaped_components'
             and ground_scan_matches(source, now_ms, 'ambiguous', 0, candidate_count=count))
+
+
+def named_relook_ready(source, session, expected_uid, target, now_ms):
+    """The live route may turn only when unanchored fragments are the sole unresolved field evidence."""
+    if (not positive_parking_field(source, session, expected_uid) or not unanchored_ground_scan(source, expected_uid, now_ms)
+            or any(source['hud'].get(k) for k in ('interact', 'aerialBossVisible', 'hostileDirectionArrow'))):
+        return False
+    position = source['map']
+    angle = position.get('cameraAngle')
+    if type(angle) not in (float, int) or not math.isfinite(angle):
+        return False
+    x, y = target['x'] - position['x'], target['y'] - position['y']
+    bearing = math.degrees(math.atan2(-y, -x))
+    return math.hypot(x,y) >= .75 and abs((angle - bearing + 180) % 360 - 180) > 8
 
 
 def field_direction_side(source):
@@ -1268,6 +1295,16 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
                         break
                 state['groundReacquisition']['elapsedMilliseconds'] = round((monotonic() - began) * 1000, 3)
                 state['groundReacquisition']['measuredClear'] = phase == 'navigation' and value == EXPLORATION_OBJECTIVE
+            # The native receipt describes a turn. Only a separate, later passive capture may release this route.
+            relook = state.get('namedWaypointRelook')
+            if relook and relook.get('awaitingClear'):
+                if (source['frameId'] <= relook['postFrameId'] or not ground_scan_is_clear(source, now_ms)
+                        or source['hud']['captureStamp']['capturedAt'] <= relook['postCapturedAt']
+                        or phase != 'navigation' or value != EXPLORATION_OBJECTIVE):
+                    state.update(status='waiting', reason='Named waypoint relook did not settle on independently measured clear ground')
+                    break
+                relook.update(awaitingClear=False, verifiedFrameId=source['frameId'])
+                save()
             paused_navigation = inventory_navigation is not None
             if paused_navigation:
                 if not source_account_matches(source, expected_uid) or not pilot.inventory_ready(source):
@@ -1285,6 +1322,30 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
                 search['turnSent'] = result['turnSent']
                 save()
                 continue  # A new ordinary ground scan must establish combat or clear travel.
+            if (phase == 'wait' and talk_to and objective == EXPLORATION_OBJECTIVE and not reward
+                    and not relook and state['nextWaypointIndex'] == len(points)-1 and deadline-monotonic() >= 3
+                    and named_relook_ready(source, pilot.session, expected_uid, points[-1], now_ms)
+                    and (not start_near or 'startNearVerified' in state or
+                         math.hypot(source['map']['x']-start_near['x'],source['map']['y']-start_near['y']) <= start_near['radius'])):
+                target = points[state['nextWaypointIndex']]
+                relook = dict(npc=talk_to, waypoint=target, sourceFrameId=source['frameId'], awaitingClear=False)
+                state['namedWaypointRelook'] = relook
+                save()
+                turn = dispatch('questStep', source, dict(step='namedWaypointRelook', talkTo=talk_to,
+                                                         expectedUid=expected_uid, waypoints=[target]))
+                post = pilot.current()
+                require_fresh_source(post, pilot.session, clock_ms())
+                if (not isinstance(turn, dict) or turn.get('step') != 'namedWaypointRelook' or
+                        turn.get('talkTo') != talk_to or turn.get('waypoint') != target or turn.get('turnSent') is not True or
+                        type(turn.get('sourceFrameId')) is not int or type(turn.get('frameId')) is not int or
+                        not source['frameId'] < turn['sourceFrameId'] < turn['frameId'] <= post['frameId'] or
+                        turn.get('measuredClear') is not True or not positive_parking_field(post,pilot.session,expected_uid) or
+                        not ground_scan_is_clear(post, clock_ms())):
+                    state.update(status='waiting', reason='Named waypoint camera turn did not verify a changed view and clear ground')
+                    break
+                relook.update(awaitingClear=True, postFrameId=post['frameId'], postCapturedAt=post['hud']['captureStamp']['capturedAt'])
+                save()
+                continue
             if phase == 'wait':
                 state.update(status='waiting', reason=value)
                 break

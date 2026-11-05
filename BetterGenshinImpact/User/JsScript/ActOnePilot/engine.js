@@ -72,7 +72,14 @@ var ActOnePilot = (function () {
                 return 'Invalid direct field combat entry';
             allowed.push('entryScene', 'expectedUid');
         }
-        if ((r.mission === 'dialogue' || r.mission === 'navigation') && r.talkTo !== undefined) {
+        var namedRelook = r.mission === 'questStep' && r.step === 'namedWaypointRelook';
+        if (namedRelook) {
+            var target = Array.isArray(r.waypoints) && r.waypoints.length === 1 && r.waypoints[0];
+            if (!target || target.map !== 'Teyvat' || !Number.isFinite(target.x) || !Number.isFinite(target.y) ||
+                Object.keys(target).some(function(k){return ['x','y','map'].indexOf(k)<0;})) return 'Invalid named relook waypoint';
+            allowed.push('waypoints');
+        }
+        if (namedRelook || (r.mission === 'dialogue' || r.mission === 'navigation') && r.talkTo !== undefined) {
             allowed.push('talkTo', 'expectedUid');
             if (r.mission === 'dialogue') allowed.push('deadlineMs');
             if (typeof r.talkTo !== 'string' || !/^[A-Za-z][A-Za-z '.-]{0,47}$/.test(r.talkTo) || r.talkTo !== r.talkTo.trim() ||
@@ -266,7 +273,7 @@ var ActOnePilot = (function () {
                     api.requireInputReady();
                     var questPolicy=missionFactory();
                     routeResult=typeof questPolicy.runQuestStep==='function'?
-                        await questPolicy.runQuestStep(req.step,questFresh,api,observe):
+                        await questPolicy.runQuestStep(req.step,questFresh,api,observe,req):
                         {status:'stopped',reason:'Unsupported quest step: '+req.step};
                 } else if (req.mission === 'navigation') {
                     if (!enabled) throw new Error('Input is disabled');

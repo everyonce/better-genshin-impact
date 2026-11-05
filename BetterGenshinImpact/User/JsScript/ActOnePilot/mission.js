@@ -27,6 +27,46 @@ var ActOneMission = (function () {
     }
     function normalize(degrees) { return (degrees % 360 + 360) % 360; }
     function bearing(from, to) { return normalize(Math.atan2(-(to.y - from.y), -(to.x - from.x)) * 180 / Math.PI); }
+    // Use the same heading convention and mouse sensitivity for navigation and a camera-only observation.
+    function waypointHeadingError(from,to){return (from.cameraAngle-bearing(from,to)+540)%360-180;}
+    function navigationTurnPixels(error){return Math.max(-750,Math.min(750,Math.round(-8*error)));}
+
+    function namedRelookField(o,r,now){
+        var h=o&&o.hud,m=o&&o.map,p=h&&h.health;
+        return !!(o&&o.session===r.session&&!o.fastSample&&!o.mapPositionInherited&&freshGroundScanIdentity(o,now)&&
+            namedDialogueAccount(o,r.expectedUid)&&m&&m.map==='Teyvat'&&Number.isFinite(m.x)&&Number.isFinite(m.y)&&
+            Number.isFinite(m.cameraAngle)&&h.world===true&&h.groundControls===true&&
+            !h.auto&&!h.climbing&&!h.swimming&&!h.bigMap&&!h.journal&&!h.choice&&!h.dialogueReady&&!h.tutorialStep&&
+            !h.lowHealth&&!h.loading&&!h.unknownHud&&!h.aerialBossVisible&&!h.hostileDirectionArrow&&
+            validHealth(p)&&p.current>=p.max*.6&&Array.isArray(h.enemyBars)&&h.enemyBars.length===0);
+    }
+
+    async function namedWaypointRelook(r,o,api,observe){
+        var target=r.waypoints[0],lastError,dx;
+        function checkSource(){
+            if(o.frameId!==r.expectedFrameId+1||!namedRelookField(o,r,api.now())||o.hud.interact||
+                Math.hypot(o.map.x-target.x,o.map.y-target.y)<.75)
+                throw new Error('Named waypoint relook requires the current healthy field and no selected interaction');
+            var scan=o.hud.enemyBarObservation;
+            if(scan.state!=='ambiguous'||scan.reason!=='unanchored_bar_shaped_components'||scan.acceptedCount!==0||
+                !Number.isInteger(scan.candidateCount)||scan.candidateCount<1||scan.candidateCount>64)
+                throw new Error('Named waypoint relook requires an unanchored zero-accepted scan');
+        }
+        checkSource();
+        lastError=waypointHeadingError(o.map,target);
+        if(Math.abs(lastError)<=8)return {status:'completed',step:r.step,talkTo:r.talkTo,waypoint:target,turnSent:false,
+            measuredClear:false,reason:'Camera already faces the named waypoint',frameId:o.frameId};
+        dx=navigationTurnPixels(lastError);
+        await api.rotate(dx,checkSource);
+        await api.sleep(180);
+        var after=await observe();
+        var fresh=after.frameId>o.frameId&&namedRelookField(after,r,api.now())&&
+            after.hud.captureStamp.capturedAt>o.hud.captureStamp.capturedAt&&
+            Math.hypot(after.map.x-o.map.x,after.map.y-o.map.y)<=1.5;
+        var improved=fresh&&Math.abs(waypointHeadingError(after.map,target))<=Math.abs(lastError)-3;
+        return {status:'completed',step:r.step,talkTo:r.talkTo,waypoint:target,turnSent:true,dx:dx,
+            sourceFrameId:o.frameId,frameId:after.frameId,measuredClear:!!(improved&&!groundScanStopReason(after,api.now()))};
+    }
     function travelHoldMs(objective, distance, arrivalRadius, remaining) {
         if (!['Go to the exam point', 'Explore for Adventure Rank'].includes(objective)) return null;
         if (![distance, arrivalRadius, remaining].every(Number.isFinite) || distance <= arrivalRadius || remaining <= 0) return 0;
@@ -403,12 +443,12 @@ var ActOneMission = (function () {
                 var markerApproach = investigating && distance < 15;
                 if (markerApproach && !current.hud.worldMarker) return stop('Unique crystal marker unavailable');
                 var markerError = markerApproach ? current.hud.worldMarker.x - 960 : 0;
-                var diff = markerApproach ? -markerError * 0.08 : (angle - bearing(current.map, target) + 540) % 360 - 180;
-                var magnitude = Math.abs(diff), ratio = 8;
+                var diff = markerApproach ? -markerError * 0.08 : waypointHeadingError(current.map,target);
+                var magnitude = Math.abs(diff);
                 if (magnitude > (/^Talk to Kaeya/.test(request.objective)?3:8)) {
                     if (++turnAttempts > 16) return stop('Camera did not converge');
                     if(lisaUnsafe(current)) return stop(lisaUnsafeReason(current));
-                    var rotateStart = api.now(); await api.rotate(Math.max(-750, Math.min(750, Math.round(-ratio * diff))));
+                    var rotateStart = api.now(); await api.rotate(navigationTurnPixels(diff));
                     totalInputMs += api.now() - rotateStart; turns++;
                     await api.sleep(180); current = await observe(); continue;
                 }
@@ -659,7 +699,8 @@ var ActOneMission = (function () {
         return result('stopped','World HUD not observed before bounded post-click deadline; no retry sent',
             doorClicked?'doorUnverified':doorVisible?'doorPromptUnclicked':sawLoading?'loadingUnverified':titleVisible?'titlePromptUnverified':'titleClearedUnverified');
     }
-    async function runQuestStep(name, observation, api, observe) {
+    async function runQuestStep(name, observation, api, observe, request) {
+        if(name==='namedWaypointRelook')return namedWaypointRelook(request,observation,api,observe);
         if(name==='actTwoCombatPhaseReview')return api.runActTwoCombatPhaseReview(observation);
         if(name==='actTwoPartyOcrRegression')return api.runActTwoPartyOcrRegression(observation);
         if(name==='actTwoFieldInspect')return api.runActTwoNavigationWithPause(observation,observe,async function(field){return {status:'completed',step:name,fieldFrameId:field.frameId,actions:0,reason:'Fresh ground observation only; no movement requested'};});

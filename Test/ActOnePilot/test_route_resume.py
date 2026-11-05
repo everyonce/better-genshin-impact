@@ -274,7 +274,7 @@ class ReplayPilot:
         frame = self.source['frameId'] + item.get('frames', 1)
         self.source = copy.deepcopy(item.get('source', self.source))
         self.source.update(session=self.session, frameId=frame, timestamp=self.clock.milliseconds())
-        if mission == 'observe' and self.source['hud'].get('groundControls'):
+        if (mission == 'observe' or fields.get('step') == 'namedWaypointRelook') and self.source['hud'].get('groundControls'):
             record_ground_scan(self.source)
         receipt = dict(id=request['id'], session=self.session, mission=mission,
                        status=item.get('status', 'completed'), frameId=frame,
@@ -586,6 +586,31 @@ class SupervisedRouteControllerTests(unittest.TestCase):
 
         pilot.execute = execute
         return pilot
+
+    def test_named_relook_needs_an_independent_clear_capture_before_travel(self):
+        target = dict(map='Teyvat', x=-913.51, y=2232.67)
+        self.route = dict(objective=route_tool.EXPLORATION_OBJECTIVE,talkTo='Katheryne',waypoints=[target])
+        for follow, should_walk in [('clear',True), ('ambiguous',False), ('threat',False)]:
+            with self.subTest(follow=follow):
+                self.progress = Path(self.temp.name) / (follow + '.json')
+                field = controller_scene(objective='')
+                field['map'].update(x=-908.1582,y=2242.0254,cameraAngle=59)
+                result=dict(status='completed',step='namedWaypointRelook',talkTo='Katheryne',waypoint=target,turnSent=True,
+                            measuredClear=True,sourceFrameId=6,frameId=7)
+                script=[dict(mission='questStep',source=field,frames=3,result=result)]
+                if should_walk:
+                    script.extend([dict(mission='questStep',source=controller_scene('inventory'),result=dict(pausedInventory=True)),
+                                   dict(mission='navigation',pending=True)])
+                pilot=self.reacquisition_pilot(['ambiguous']*4+[follow],script)
+                pilot.source['map'].update(x=-908.1582,y=2242.0254,cameraAngle=27)
+                report=self.run_controller(pilot,allow_dialogue=True)
+                turns=[q for q in pilot.calls if q.get('step')=='namedWaypointRelook']
+                self.assertEqual(len(turns),1)
+                self.assertEqual(turns[0]['waypoints'],[target])
+                self.assertEqual(turns[0]['talkTo'],'Katheryne')
+                self.assertEqual(any(q['mission']=='navigation' for q in pilot.calls),should_walk,
+                                 (report.get('reason'), [(q['mission'],q.get('step')) for q in pilot.calls]))
+                self.assertEqual('verifiedFrameId' in report['namedWaypointRelook'], should_walk)
 
     def test_stationary_fragments_then_clear_allows_only_existing_navigation_entry(self):
         self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE

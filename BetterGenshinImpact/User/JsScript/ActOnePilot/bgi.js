@@ -272,7 +272,7 @@ function actOneEnemyBarSize(w,h) { return w>=2 && w<=300 && h>=3 && h<=12 && w/h
 // Keep field combat's attack detector until the final protector captures the pre-pause world.
 function actOneRequestsGroundObservation(request,inventoryUiOnly,protecting,frame) {
     return !!request&&!inventoryUiOnly&&(request.mission==='observe'||
-        request.mission==='questStep'&&request.step==='actTwoFaceRemainingEnemy'||
+        request.mission==='questStep'&&(request.step==='actTwoFaceRemainingEnemy'||request.step==='namedWaypointRelook')||
         request.mission==='dialogue'&&typeof request.talkTo==='string'||
         request.mission==='navigation'&&(typeof request.talkTo==='string'||request.objective==='Explore for Adventure Rank'&&request.requireMeasuredGround===true)||
         request.mission==='questStep'&&request.step==='actTwoFieldCombat'&&
@@ -9336,12 +9336,13 @@ function createActOneAdapter(sessionId,options) {
             var row = matches[0]; events.push({ type: 'dialogueChoice', label: label, frameId: lastObservation.frameId, startedAt: Date.now() });
             click(Math.round(row.x + row.width / 2), Math.round(row.y + row.height / 2));
         },
-        rotate: function (dx) {
+        rotate: function (dx,sourceGuard) {
             checkStop(); if (!Number.isInteger(dx) || Math.abs(dx) > 750) throw new Error('Invalid rotation');
             if(lisaNavigationRequest()){
                 if(!lisaNavigationInputReady(lastObservation))throw new Error('Fresh protected Lisa navigation field required before rotation');
                 lisaNavigationState.lastInputFrame=lastObservation.frameId;
             }
+            if(sourceGuard)sourceGuard();
             events.push({ type: 'rotate', dx: dx, frameId:lastObservation&&lastObservation.frameId, startedAt: Date.now() }); moveMouseBy(dx, 0);
         },
         forward: async function (ms) {

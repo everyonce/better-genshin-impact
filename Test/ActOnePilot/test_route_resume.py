@@ -648,6 +648,94 @@ class SupervisedRouteControllerTests(unittest.TestCase):
                          ['worldInventory','actTwoFieldCombat','worldInventoryClose','worldInventory','navigation'])
         self.assertFalse(returned['result']['defeatConfirmed'])
 
+    def combat_reward_frames(self):
+        # Same sequence as Temple public09: attack, disappearing bar, reappearance, then the parking frame.
+        frames = {}
+        for frame in range(19, 25):
+            o = controller_scene(objective='', enemies=frame in (19, 21))
+            o.update(frameId=frame, timestamp=frame * 100)
+            record_ground_scan(o)
+            frames[frame] = o
+        request = dict(mission='questStep', step='actTwoFieldCombat', expectedFrameId=11,
+                       id='battle', session='route-session')
+        key = dict(type='pauseProtectionKey', key='VK_B', frameId=24, startedAt=2401)
+        event = dict(type='actTwoNativeCombat', actionId='battle:rotation:0', frameId=19,
+                     startedAt=1901, finishedAt=1990)
+        proof = dict(verified=True, kind='inventory', session='route-session', sourceFrameId=24, pauseFrameId=26)
+        chunk = dict(nativeReturned=True, actionId=event['actionId'], beforeFrameId=19, afterFrameId=20)
+        result = dict(nativeReturned=True, pauseVerified=True, pauseProof=proof, chunks=[chunk])
+        receipt = dict(id='battle', status='stopped', session='route-session', frameId=27,
+                       details=dict(inputEvents=[event, key], result=result))
+        return dict(request=request, receipt=receipt), frames
+
+    def test_late_combat_exp_is_joined_to_attack_and_clear_parking_frame(self):
+        record, frames = self.combat_reward_frames()
+        frames[23]['ocr'].append(dict(text='Character EXP × 15', x=160, y=465))
+        def feedback():
+            return route_tool.field_combat_feedback(record, '693306810', frames.__getitem__)
+        self.assertEqual(feedback(), dict(requestId='battle', attackFrameId=19, rewardFrameId=23,
+            rewardText='Character EXP × 15', minimumDefeated=1, pauseSourceFrameId=24, measuredClear=True))
+        # A single reward neither establishes an empty pack nor overrides a missing/stale scan.
+        for state in ('threat', 'ambiguous', 'unavailable'):
+            frames[24]['hud']['enemyBarObservation']['state'] = state
+            self.assertFalse(feedback()['measuredClear'])
+        del frames[24]['hud']['enemyBarObservation']
+        self.assertFalse(feedback()['measuredClear'])
+
+    def test_combat_defeat_excludes_disappearance_currency_old_exp_and_foreign_sources(self):
+        cases = ('missing', 'currency', 'rank', 'no quantity', 'outside', 'preexisting', 'foreign', 'foreign action',
+                 'early capture', 'missing target', 'wrong original frame')
+        for case in cases:
+            with self.subTest(case=case):
+                record, frames = self.combat_reward_frames()
+                row = dict(text='Character EXP +16', x=155, y=478)
+                if case != 'missing':
+                    frames[22]['ocr'].append(row)
+                if case == 'currency':
+                    row['text'] = 'Mora × 28'
+                if case == 'rank':
+                    row['text'] = 'Adventure EXP +10'
+                if case == 'no quantity':
+                    row['text'] = 'Character EXP'
+                if case == 'outside':
+                    row['y'] = 180
+                if case == 'preexisting':
+                    frames[19]['ocr'].append(dict(text='Character EXP +12', x=180, y=470))
+                if case == 'foreign':
+                    frames[22]['session'] = 'different-session'
+                if case == 'foreign action':
+                    record['receipt']['details']['inputEvents'][0]['actionId'] = 'other:rotation:0'
+                if case == 'early capture':
+                    frames[20]['hud']['captureStamp']['capturedAt'] = 1900
+                if case == 'missing target':
+                    frames[19]['hud']['enemyBars'] = []
+                if case == 'wrong original frame':
+                    frames[22]['frameId'] = 23
+                self.assertIsNone(route_tool.field_combat_feedback(record, '693306810', frames.__getitem__))
+
+    def test_verified_combat_reward_resumes_suffix_in_the_existing_inventory(self):
+        self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
+        clear, enemy, inv = controller_scene(objective=''), controller_scene(objective='', enemies=True), controller_scene('inventory')
+        pause = dict(mission='questStep', source=inv, result=dict(pausedInventory=True))
+        proof = dict(verified=True, kind='inventory', session='route-session')
+        interruption = dict(mission='navigation', status='failed', source=inv, result=dict(status='stopped',
+            reason='Enemy observed during exploration', nextWaypointIndex=1, pauseVerified=True, pauseProof=proof))
+        action = dict(mission='questStep', status='stopped', source=inv, result=dict(nativeGroup=False,
+            nativeAttempted=True, nativeReturned=True, beforeFrameId=19, afterFrameId=23,
+            pauseVerified=True, pauseProof=proof, chunks=[{}]))
+        pilot = ReplayPilot(self.clock, [pause, interruption, dict(mission='questStep', source=enemy,
+            result=dict(worldVisible=True)), pause, action, self.arrival(2, inv)], source=clear)
+        pilot.archived_frame = mock.Mock()
+        witness = dict(minimumDefeated=1, measuredClear=True, rewardFrameId=23)
+        with mock.patch.object(route_tool, 'field_combat_feedback', return_value=witness):
+            report = self.run_controller(pilot, allow_field_combat=True)
+        self.assertEqual(report['status'], 'arrived')
+        self.assertEqual(report['fieldCombatRewards'], [witness])
+        self.assertEqual([r['waypoints'] for r in pilot.calls if r['mission']=='navigation'],
+                         [self.points, self.points[1:]])
+        combat_index = next(i for i,r in enumerate(pilot.calls) if r.get('step') == 'actTwoFieldCombat')
+        self.assertEqual([r['mission'] for r in pilot.calls[combat_index + 1:]], ['observe', 'navigation'])
+
     def test_threat_interrupt_preserves_completed_waypoints_before_reinspection(self):
         self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
         inv, clear = controller_scene('inventory'), controller_scene(objective='')

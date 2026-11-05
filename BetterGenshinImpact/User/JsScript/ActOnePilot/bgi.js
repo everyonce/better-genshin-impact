@@ -269,6 +269,12 @@ function actOneWagnerChoiceTutorial(rows) {
         one("I've got the Iron Chunks.",1290,1360,700,750)&&one('F',1180,1250,700,750)&&one('Wagner',860,920,830,880);
 }
 function actOneEnemyBarSize(w,h) { return w>=2 && w<=300 && h>=3 && h<=12 && w/h>=0.15; }
+// Keep field combat's attack detector until the final protector captures the pre-pause world.
+function actOneRequestsGroundObservation(request,inventoryUiOnly,protecting) {
+    return !!request&&!inventoryUiOnly&&(request.mission==='observe'||
+        request.mission==='navigation'&&request.objective==='Explore for Adventure Rank'&&request.requireMeasuredGround===true||
+        protecting&&request.mission==='questStep'&&request.step==='actTwoFieldCombat');
+}
 // An enemy arriving during the inventory transition is a route interruption at waypoint zero.
 function actOneExplorationEntryThreat(request,current) {
     if(request.mission!=='navigation'||request.objective!=='Explore for Adventure Rank'||
@@ -4195,7 +4201,8 @@ function createActOneAdapter(sessionId,options) {
             finally{release();if(Number.isFinite(result.nativeInvocationMs))result.nativeMs=result.nativeInvocationMs;}
             try{
                 var pausedResult=await finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,error,
-                    !error&&result.nativeReturned?native.pauseSeed(current,lastObservation,Date.now(),request.session):null);
+                    // Field combat takes a fresh full-width ground scan immediately before parking.
+                    !pack&&!error&&result.nativeReturned?native.pauseSeed(current,lastObservation,Date.now(),request.session):null);
                 if(acquisitionImage&&pausedResult.pauseVerified){
                     var acquisitionPath='observations/acq-'+request.id.slice(-12)+'/frame-0001.png';
                     pausedResult.exactImage={path:acquisitionPath,capturedAt:acquisitionImageAt,saved:file.writeImageSync(acquisitionPath,acquisitionImage.srcMat)};
@@ -9181,9 +9188,7 @@ function createActOneAdapter(sessionId,options) {
                 if (readyError) throw readyError;
             } else ready();
             enemyBarDiagnostic=null;ocrPrimitiveMs=0;ocrReadCount=0;
-            // Only explicit normal observations and opted-in free exploration request this evidence.
-            var groundEnemyRequested=!inventoryUiOnly&&request&&(request.mission==='observe'||
-                request.mission==='navigation'&&request.objective==='Explore for Adventure Rank'&&request.requireMeasuredGround===true);
+            var groundEnemyRequested=actOneRequestsGroundObservation(request,inventoryUiOnly,pauseProtectionActive);
             var t0 = Date.now(), img = captureGameRegion(), captureMs = Date.now() - t0;
             var pngPending=null,pngScheduleMs=0,pngWaitMs=0,pngMs=0,pngWriteMode='synchronous';
             try {

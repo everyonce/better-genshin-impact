@@ -244,6 +244,10 @@ class GuardedPilot:
         path = self.root / 'stop.json'
         return path.exists() and read(path).get('session') == self.session
 
+    def archived_frame(self, frame):
+        """Read the native capture at its original session and frame path."""
+        return read(self.command.observation_path(self.root, self.session, frame))
+
     def current(self):
         """Read the latest source and join its immutable session/frame document."""
         value = current_observation(self.root, self.session)
@@ -669,6 +673,78 @@ def route_phase(source, expected_uid, objectives, *, allow_dialogue, journal_res
     return 'navigation', objective
 
 
+def field_combat_feedback(record, expected_uid, frame_at):
+    """Join a new character EXP award to a returned attack, then independently check the routing field."""
+    request, receipt = record['request'], record['receipt']
+    result = receipt['details']['result']
+    chunks, events = result.get('chunks'), receipt['details'].get('inputEvents', [])
+    if not isinstance(chunks, list) or not chunks or len(chunks) > 3:
+        return None
+
+    def reward_rows(source):
+        """Ignore currency, unrelated experience, and HUD text outside the reward list."""
+        return [r for r in source['ocr'] if 0 <= r.get('x', -1) < 650 and 300 < r.get('y', -1) < 850
+                and 'character exp' in r['text'].lower()]
+
+    def world(frame):
+        """Require the original capture, account and open-world scene for reward attribution."""
+        o = frame_at(frame)
+        h = o['hud']
+        if (o['session'] != request['session'] or o['frameId'] != frame or not source_account_matches(o, expected_uid)
+                or o['map']['map'] != 'Teyvat' or h.get('world') is not True or h.get('health') is None
+                or any(h.get(k) for k in ('loading', 'unknownHud', 'journal', 'bigMap', 'auto', 'choice', 'dialogueReady'))
+                or not isinstance(h.get('objectives'), list) or any(str(v).strip() for v in h['objectives'])
+                or o.get('fastSample') or o.get('mapPositionInherited')):
+            raise ValueError('Combat reward capture does not match the field.')
+        return o
+
+    try:
+        session, first = request['session'], chunks[0]
+        proof = result['pauseProof']
+        if (request['mission'] != 'questStep' or request['step'] != 'actTwoFieldCombat' or receipt['status'] != 'stopped'
+                or request['id'] != receipt['id'] or receipt['session'] != session or proof['session'] != session
+                or proof.get('kind') != 'inventory' or proof.get('verified') is not True
+                or result.get('nativeReturned') is not True or result.get('pauseVerified') is not True):
+            return None
+        before, after, end = first['beforeFrameId'], first['afterFrameId'], proof['sourceFrameId']
+        if (not request['expectedFrameId'] < before < after <= end < proof['pauseFrameId'] <= receipt['frameId']
+                or end - before > 64 or first.get('nativeReturned') is not True):
+            return None
+        actions = [e for e in events if e['type'] == 'actTwoNativeCombat' and e.get('frameId') == before
+                   and e.get('actionId') == first['actionId'] == request['id'] + ':rotation:0']
+        keys = [e for e in events if e['type'] == 'pauseProtectionKey' and e.get('key') == 'VK_B'
+                and e.get('frameId') == end]
+        if len(actions) != 1 or len(keys) != 1:
+            return None
+        initial = world(before)
+        if (not initial['hud'].get('enemyBars') or reward_rows(initial)
+                or not initial['timestamp'] <= actions[0]['startedAt'] < actions[0]['finishedAt'] <= keys[0]['startedAt']):
+            return None
+        evidence = None
+        for frame in range(after, end + 1):
+            source = world(frame)
+            stamp = source['hud']['captureStamp']
+            if (stamp['session'] != session or stamp['frameId'] != frame or stamp['source'] != 'game-capture-start'
+                    or not actions[0]['finishedAt'] <= stamp['capturedAt'] <= source['timestamp'] <= keys[0]['startedAt']):
+                return None
+            for row in reward_rows(source):
+                if re.fullmatch(r'(?:Obtained\s+)?Character EXP\s*(?:[×x+·]\s*)?[1-9][0-9]{0,4}',
+                                row['text'].strip(), re.IGNORECASE):
+                    if evidence is None:
+                        evidence = dict(requestId=request['id'], attackFrameId=before, rewardFrameId=frame,
+                                        rewardText=row['text'], minimumDefeated=1)
+                    break
+        if evidence is not None:
+            # An individual defeat can leave other enemies. Only the independent full-width
+            # pre-pause scan can skip the field bootstrap; native navigation rechecks on entry.
+            phase, _ = route_phase(source, expected_uid, [EXPLORATION_OBJECTIVE], allow_dialogue=False,
+                                   journal_resume=False, now_ms=keys[0]['startedAt'])
+            evidence.update(pauseSourceFrameId=end, measuredClear=phase == 'navigation')
+        return evidence
+    except (OSError, ValueError, KeyError, IndexError, TypeError):
+        return None
+
+
 def require_start_near(source, session, expected_uid, start, now_ms):
     """Bind an optional route start to the first eligible fresh world, never old progress."""
     require_fresh_source(source, session, now_ms)
@@ -1020,7 +1096,15 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
                 if not returned_rotation(rotation):
                     raise RouteError('Native field rotation and its inventory pause were not established.')
                 state['fieldRotations'] += 1
-                inspect_after_encounter = True
+                evidence = None
+                if rotation.get('chunks'):
+                    evidence = field_combat_feedback(state['records'][-1], expected_uid, pilot.archived_frame)
+                if evidence:
+                    state.setdefault('fieldCombatRewards', []).append(evidence)
+                if evidence and evidence['measuredClear']:
+                    inventory_navigation = EXPLORATION_OBJECTIVE
+                else:
+                    inspect_after_encounter = True
                 save()
                 continue
             if phase == 'closeJournal':

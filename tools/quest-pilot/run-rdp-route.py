@@ -138,13 +138,23 @@ def route_argv(config, session, route, progress, previous_progress=None):
     return argv
 
 
-def execute_route(argv, output, timeout):
+def execute_route(argv, output, timeout, *, on_progress=None):
     """Retain canonical stdout/stderr and wait for this exact CLI process, without replay."""
     with (output / 'stdout.log').open('xb') as stdout, (output / 'stderr.log').open('xb') as stderr:
         child = subprocess.Popen(argv, cwd=REPO, stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr,
                                  creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         try:
-            return child.wait(timeout=timeout)
+            if on_progress is None:
+                return child.wait(timeout=timeout)
+            deadline = time.monotonic() + timeout
+            while True:
+                remaining = max(0, deadline - time.monotonic())
+                try:
+                    return child.wait(timeout=min(remaining, 1))
+                except subprocess.TimeoutExpired:
+                    if time.monotonic() >= deadline:
+                        raise
+                    on_progress()
         except subprocess.TimeoutExpired:
             child.terminate()
             child.wait(timeout=5)
@@ -188,6 +198,7 @@ def run_worker(config, *, control, rdp, execute=execute_route, game_probe=foregr
     group_path = app / 'User/ScriptGroup/ActOneRun.json'
     group_owned = False
     lease_owned = False
+    archive = None
     start_attempted = False
     chain_owned = False
     session = None
@@ -302,6 +313,14 @@ def run_worker(config, *, control, rdp, execute=execute_route, game_probe=foregr
                 break
             sleep(.2)
         require(session is not None, 'Pilot start did not establish a new owned idle session; do not retry.')
+        if config.get('saveEncounterFrames'):
+            try:
+                evidence = load('_rdp_encounter_evidence', Path(__file__).with_name('encounter_evidence.py'))
+                command = load('_rdp_encounter_command', Path(__file__).with_name('act-one-command.py'))
+                archive = evidence.EncounterArchive(pilot, output, command, save)
+                state['encounterEvidence'] = archive.summary
+            except Exception as exc:
+                state['encounterEvidence'] = dict(error=str(exc))
         previous_progress = None
         for index, route in enumerate(config['routes']):
             not_stopped()
@@ -321,7 +340,14 @@ def run_worker(config, *, control, rdp, execute=execute_route, game_probe=foregr
             record()
             argv = route_argv(config, session, str(route_path), str(leg_progress), previous_progress)
             leg['command'] = argv
-            leg['exitCode'] = execute(argv, leg_dir, config['deadlineMs'] / 1000 + 20)
+            # Read only this leg's published progress and receipt-selected captures during the wait.
+            poll = (lambda: archive.poll(leg_progress, session, index + 1)) if archive else None
+            try:
+                options = {'on_progress': poll} if poll else {}
+                leg['exitCode'] = execute(argv, leg_dir, config['deadlineMs'] / 1000 + 20, **options)
+            finally:
+                if poll:
+                    poll()
             result = read(leg_progress)
             leg['status'] = result.get('status')
             require(leg['exitCode'] == 0 and result.get('status') == 'arrived'
@@ -385,6 +411,8 @@ def parse_args(argv=None):
     parser.add_argument('--progress', type=Path, required=True)
     parser.add_argument('--expected-uid', required=True)
     parser.add_argument('--allow-field-combat', action='store_true')
+    parser.add_argument('--save-encounter-frames', action='store_true',
+                        help='Retain a bounded set of native combat and named NPC capture pairs for replay.')
     parser.add_argument('--allow-dialogue', action='store_true')
     parser.add_argument('--continue-objective', action='append', default=[])
     parser.add_argument('--stop-file', action='append', type=Path, default=[])
@@ -494,6 +522,7 @@ def run(args, *, expected_owner=None, dependencies=None):
     config = dict(version=1, launchId=uuid.uuid4().hex, owner=owner, output=str(output), progress=str(progress),
                   routes=routes, splitRoutes=originals, expectedUid=args.expected_uid, node=str(Path(node).resolve()),
                   allowFieldCombat=args.allow_field_combat, allowDialogue=args.allow_dialogue,
+                  saveEncounterFrames=args.save_encounter_frames,
                   deadlineMs=args.deadline_ms, maxSegments=args.max_segments, continueObjectives=args.continue_objective,
                   stopFiles=[str(p.resolve()) for p in [progress.parent / 'STOP', progress.with_suffix('.STOP'),
                              output / 'STOP', app / 'User/JsScript/ActOnePilot/STOP', *args.stop_file]])

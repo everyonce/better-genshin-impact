@@ -12,3 +12,15 @@ test('known Lion waypoint can establish the exact Galesong map guard for Springv
  }
  assert.equal(calls.length,2);
 });
+
+test('actual Gate map OCR can establish Starfell from three distinct map labels and the region footer',()=>{
+ const c={};vm.createContext(c);vm.runInContext(source,c);
+ const row=(text,x,y)=>({text,x,y,width:130,height:30});
+ const rows=[row('Mondstadt',578,292),row('Windrise',1063,738),row('Starfell Lake',1130,93),
+  row('StarFelVauleyas',1588,979),row('Exploration Progress: 16%',1504,1020)];
+ const o={session:'s',frameId:8,timestamp:1000,map:null,hud:{bigMap:true,world:false},ocr:rows};
+ assert.equal(c.actOneStarfellMapFooter(rows).text,'StarFelVauleyas');
+ assert.equal(c.actOneLocalPauseProof(o,1000,'s').kind,'map');
+ for(const subset of [rows.slice(1),rows.slice(0,3),[...rows,rows[0]]])assert.equal(c.actOneStarfellMapFooter(subset),null);
+ assert.equal(c.actOneLocalPauseProof(o,3000,'s'),null);
+});

@@ -464,6 +464,19 @@ function actOneLisaUnlockedTemplePanel(o,now,session){
         one('Deep Within the Temple of',1400,1550,535,580)&&one('the Lion',1400,1550,570,620)&&
         one('Teleport',1550,1750,970,1035)&&!o.ocr.some(function(r){return /to activate waypoint|^Navigate$/.test(String(r.text||'').trim());});
 }
+// Three distinct Mondstadt map labels corroborate a partially obscured Starfell Valley footer.
+function actOneStarfellMapFooter(rows) {
+    var footer=rows.filter(function(r){
+        return r.x>=1450&&r.x<=1810&&r.y>=950&&r.y<=1010&&
+            /^starf[a-z]{0,7}va[a-z]{2,10}$/.test(String(r.text||'').toLowerCase().replace(/\s/g,''));
+    });
+    if(footer.length!==1)return null;
+    var names=['Mondstadt','Windrise','Starfell Lake'];
+    var verified=names.every(function(name){return rows.filter(function(r){
+        return String(r.text||'').trim()===name&&r.x>=100&&r.x<=1800&&r.y>=0&&r.y<=900;
+    }).length===1;});
+    return verified?footer[0]:null;
+}
 function actOneLocalPauseProof(o,now,session) {
     if(!o||o.session!==session||!Number.isInteger(o.frameId)||!Number.isFinite(o.timestamp)||!Number.isFinite(now)||
        now<o.timestamp||now-o.timestamp>1000||!o.hud||!Array.isArray(o.ocr))return null;
@@ -502,6 +515,7 @@ function actOneLocalPauseProof(o,now,session) {
         if(party.length===1&&deploy.length===1)return {kind:'party',evidence:[party[0],deploy[0]]};
         var region=rows.filter(function(r){return /^(Starfell Valley|Starfell Valleyale|Cape OStarfell Valley|C?Galesong\s*Hill|Windwail Highland|Brightcrown Mountains)$/.test(String(r.text||'').trim())&&r.x>=1450&&r.x<=1810&&r.y>=950&&r.y<=1030;});
         var exploration=rows.filter(function(r){return /^T?Exploration Progress:\s*\d+(?:\.\d+)?%$/.test(String(r.text||'').trim())&&r.x>=1450&&r.x<=1810&&r.y>=995&&r.y<=1050;});
+        if(!region.length&&h.bigMap===true){var corroborated=actOneStarfellMapFooter(rows);if(corroborated)region.push(corroborated);}
         if(h.bigMap===true&&region.length===1&&exploration.length===1)return {kind:'map',evidence:[region[0],exploration[0]]};
         if(h.bigMap===true&&actOneFullMapState(rows))return {kind:'map',evidence:rows.filter(function(r){
             return /^(Windrise|Falcon Coast|Mondstadt|Teyvat|200\s*\/\s*200|Touch Statues of The Seven to reveal areas on your Map)$/.test(String(r.text||'').trim());})};
@@ -6084,7 +6098,7 @@ function createActOneAdapter(sessionId,options) {
             if(inventoryTeleport&&!inventoryReady())return inventoryRefusal;
             if(!inventoryTeleport&&(!request||request.mission!=='questStep'||(!actTwoTeleport&&request.step!=='lisaWindriseTeleport')||actTwoTeleport&&!actTwoOriginalAccount(rows)||
                !proof||proof.kind!=='map'||
-               !rows.some(function(r){return /^(Starfell Valley|Starfell Valleyale|Galesong\s*Hill)$/.test(r.text.trim())||actTwoTeleport&&r.text.trim()==='Windwail Highland';})||
+               !(actTwoTeleport&&actOneStarfellMapFooter(rows))&&!rows.some(function(r){return /^(Starfell Valley|Starfell Valleyale|Galesong\s*Hill)$/.test(r.text.trim())||actTwoTeleport&&r.text.trim()==='Windwail Highland';})||
                request.step==='actTwoSpringvaleTeleport'&&!rows.some(function(r){return r.text.trim()==='Galesong Hill'&&r.x>=1500&&r.y>=950;})))
                 return {status:'stopped',step:'lisaWindriseTeleport',reason:'Fresh Windrise regional map required',teleportAttempted:false,questComplete:false};
             var lastInputFrame=initial.frameId,event=null;

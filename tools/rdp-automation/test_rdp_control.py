@@ -2,6 +2,7 @@
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import struct
 import sys
@@ -339,6 +340,95 @@ class ReplacementTests(unittest.TestCase):
         with self.assertRaisesRegex(control.ControlError, 'different'):
             control.stage_configuration(str(self.current), str(self.target))
         self.assertEqual(json.loads((self.target / 'User/config.json').read_text())['value'], 2)
+
+    def published_config(self):
+        """Create the same semantic seed, build provenance and binary hashes as publish-english.ps1."""
+        seed = self.target / 'User/config.json'
+        seed.write_text('{"otherConfig":{"gameCultureInfoName":"en","uiCultureInfoName":"en"}}', encoding='utf-8-sig')
+        hashes = [{'File': name, 'Algorithm': 'SHA256', 'Hash': control._sha256(self.target / name).upper()}
+                  for name in ('BetterGI.exe', 'BetterGI.dll')]
+        (self.target / 'Build-SHA256.json').write_text(json.dumps(hashes))
+        stamp = self.target / 'Build-Source.json'
+        stamp.write_text(json.dumps({'sourceCommit': 'a' * 40, 'sdk': '10.0.402',
+                                     'runtime': 'win-x64', 'selfContained': True}))
+        return seed, stamp
+
+    def test_publisher_seed_import_is_byte_exact_and_retryable(self):
+        seed, _ = self.published_config()
+        current = self.current / 'User/config.json'
+        current.write_bytes(b'\xef\xbb\xbf{ "custom": true }\r\n')
+        report = control.stage_configuration(str(self.current), str(self.target))
+        self.assertEqual(seed.read_bytes(), current.read_bytes())
+        self.assertIn('User/config.json', report['copied'])
+        again = control.stage_configuration(str(self.current), str(self.target))
+        self.assertIn('User/config.json', again['retainedFromTarget'])
+
+    def test_seed_exception_requires_publisher_evidence_and_exact_untouched_settings(self):
+        (self.current / 'User/config.json').write_text('{"custom":1}')
+        for kind in ('missing', 'bad-runtime', 'tampered-binary', 'user-field', 'duplicate-key',
+                     'user-resaved', 'prior-staging', 'marker-conflict'):
+            with self.subTest(kind=kind):
+                (self.target / 'configuration-staging.json').unlink(missing_ok=True)
+                seed, stamp = self.published_config()
+                if kind == 'missing':
+                    stamp.unlink()
+                elif kind == 'bad-runtime':
+                    stamp.write_text('{"runtime":"linux-x64"}')
+                elif kind == 'tampered-binary':
+                    (self.target / 'BetterGI.dll').write_bytes(b'changed after publication')
+                elif kind == 'user-field':
+                    seed.write_text('{"otherConfig":{"uiCultureInfoName":"en","gameCultureInfoName":"en","custom":true}}')
+                elif kind == 'duplicate-key':
+                    seed.write_text('{"otherConfig":{"gameCultureInfoName":"en","uiCultureInfoName":"de","uiCultureInfoName":"en"}}')
+                elif kind == 'user-resaved':
+                    saved = stamp.stat().st_mtime_ns + 1000000000
+                    os.utime(seed, ns=(saved, saved))
+                elif kind == 'prior-staging':
+                    (self.target / 'configuration-staging.json').write_text('{}')
+                elif kind == 'marker-conflict':
+                    (self.target / 'User/ExternalControl/enable-quest-control.json').write_text('{"enabled":false}')
+                before = seed.read_bytes()
+                with self.assertRaisesRegex(control.ControlError, 'different'):
+                    control.stage_configuration(str(self.current), str(self.target))
+                self.assertEqual(seed.read_bytes(), before)
+                if kind == 'marker-conflict':
+                    self.assertEqual((self.target / 'User/ExternalControl/enable-quest-control.json').read_text(),
+                                     '{"enabled":false}')
+
+    def test_partial_config_and_marker_copies_remain_retryable(self):
+        seed, _ = self.published_config()
+        original_seed = seed.read_bytes()
+        current = self.current / 'User/config.json'
+        current.write_text('{"source":true}')
+        marker = self.target / 'User/ExternalControl/enable-quest-control.json'
+        marker.unlink()
+        copy_file = control._pulonia_file
+        for interrupted_name in ('config.json', marker.name):
+            def interrupted(path, expected, destination=None):
+                if path.name == interrupted_name and destination is not None:
+                    destination.write(b'incomplete')
+                    raise OSError('interrupted')
+                return copy_file(path, expected, destination)
+            with patch.object(control, '_pulonia_file', side_effect=interrupted), self.assertRaisesRegex(OSError,'interrupted'):
+                control.stage_configuration(str(self.current), str(self.target))
+            self.assertEqual(seed.read_bytes(), original_seed if interrupted_name=='config.json' else current.read_bytes())
+            self.assertFalse(marker.exists())
+            self.assertFalse((self.target / 'configuration-staging.json').exists())
+        control.stage_configuration(str(self.current), str(self.target))
+        self.assertEqual(marker.read_bytes(), (self.current / 'User/ExternalControl/enable-quest-control.json').read_bytes())
+        self.assertEqual(list((self.target / 'User').rglob('.bgi-config-*')), [])
+
+    def test_default_edited_during_copy_is_preserved(self):
+        seed, _ = self.published_config()
+        (self.current / 'User/config.json').write_text('{"source":true}')
+        copy_file = control._pulonia_file
+        def change_after_preflight(path, expected, destination=None):
+            result = copy_file(path, expected, destination)
+            seed.write_bytes(b'{"concurrent":true}')
+            return result
+        with patch.object(control,'_pulonia_file',side_effect=change_after_preflight), self.assertRaisesRegex(control.ControlError,'changed'):
+            control.stage_configuration(str(self.current),str(self.target))
+        self.assertEqual(seed.read_bytes(), b'{"concurrent":true}')
 
     def test_hot_replace_optin_preserves_unrelated_settings(self):
         path = self.current / 'User/ExternalControl/enable-quest-control.json'

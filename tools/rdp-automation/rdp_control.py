@@ -8,7 +8,6 @@ import math
 import os
 from pathlib import Path
 import re
-import shutil
 import stat
 import struct
 import sys
@@ -1699,6 +1698,82 @@ def _stage_pulonia(source, target, inventory, observed):
             'activeWriterSnapshotProven': False, **inventory}
 
 
+def _publisher_default_config(target, destination):
+    """Recognize the en/en seed only in an unstaged release with matching publisher binary receipts."""
+    if os.path.lexists(target / 'configuration-staging.json'):
+        return False
+
+    def unique_object(pairs):
+        result = dict(pairs)
+        if len(result) != len(pairs):
+            raise ValueError('Duplicate publisher JSON member')
+        return result
+
+    def small_json(path):
+        _no_links(path)
+        if not path.is_file():
+            raise ValueError('Publisher metadata must be a regular file')
+        with path.open('rb') as stream:
+            data = stream.read(4097)
+        if len(data) > 4096:
+            raise ValueError('Oversize publisher receipt or config seed')
+        return json.loads(data.decode('utf-8-sig'), object_pairs_hook=unique_object)
+
+    try:
+        seed = small_json(destination)
+        if seed != {'otherConfig': {'uiCultureInfoName': 'en', 'gameCultureInfoName': 'en'}}:
+            return False
+        source_receipt = target / 'Build-Source.json'
+        build = small_json(source_receipt)
+        if (not isinstance(build, dict) or build.get('runtime') != 'win-x64' or build.get('selfContained') is not True
+                or not re.fullmatch(r'[0-9a-f]{40}', str(build.get('sourceCommit', '')))
+                or not re.fullmatch(r'\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.+-]+)?', str(build.get('sdk', '')))
+                or destination.stat().st_mtime_ns > source_receipt.stat().st_mtime_ns):
+            return False
+        hashes = small_json(target / 'Build-SHA256.json')
+        if not isinstance(hashes, list) or len(hashes) != 2:
+            return False
+        declared = {}
+        for row in hashes:
+            if (not isinstance(row, dict) or row.get('Algorithm') != 'SHA256'
+                    or row.get('File') not in ('BetterGI.exe', 'BetterGI.dll')
+                    or not re.fullmatch(r'[a-fA-F0-9]{64}', str(row.get('Hash', '')))):
+                return False
+            declared[row['File']] = row['Hash'].lower()
+        if set(declared) != {'BetterGI.exe', 'BetterGI.dll'}:
+            return False
+        for name, digest in declared.items():
+            path = target / name
+            _no_links(path)
+            if not path.is_file() or not path.stat().st_size or _sha256(path) != digest:
+                return False
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def _copy_configuration(path, destination, source_stat, seed_digest):
+    """Install a complete bounded source file. An interrupted copy never publishes a partial marker or setting."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    _no_links(destination.parent)
+    with tempfile.TemporaryDirectory(dir=destination.parent, prefix='.bgi-config-') as scratch:
+        pending = Path(scratch) / 'config'
+        with pending.open('xb') as stream:
+            _pulonia_file(path, source_stat, stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+        _no_links(destination.parent)
+        if seed_digest is None:
+            # Windows rename publishes atomically and refuses a concurrently created target.
+            pending.rename(destination)
+        else:
+            _no_links(destination)
+            if (not _publisher_default_config(destination.parent.parent, destination)
+                    or _sha256(destination) != seed_digest):
+                raise ControlError('The published default changed while staging; the target was preserved.')
+            os.replace(pending, destination)
+
+
 def stage_configuration(source, target, *, preserve_pulonia=False, source_quiescent=False):
     """Copy settings/profiles; explicitly selected root upgrades preserve an already-quiescent opaque Pulonia store."""
     if type(preserve_pulonia) is not bool or type(source_quiescent) is not bool:
@@ -1740,24 +1815,27 @@ def stage_configuration(source, target, *, preserve_pulonia=False, source_quiesc
         _no_links(path)
         relative = path.relative_to(source)
         destination = target / relative
-        if path.stat().st_size > 16 * 1024 * 1024:
+        source_stat = path.stat()
+        if source_stat.st_size > 16 * 1024 * 1024:
             raise ControlError('A configuration/profile file exceeds the 16 MiB limit.')
         # Validate every existing target ancestor before creating any directory.
         ancestor = destination
-        while not ancestor.exists():
+        while not os.path.lexists(ancestor):
             ancestor = ancestor.parent
         _no_links(ancestor)
-        if destination.exists():
+        if os.path.lexists(destination):
             if relative.as_posix() in ('User/config.json', 'User/ExternalControl/enable-quest-control.json'):
-                if _sha256(path) != _sha256(destination):
+                digest = _sha256(destination)
+                if _sha256(path) != digest:
+                    if relative.as_posix() == 'User/config.json' and _publisher_default_config(target, destination):
+                        planned.append((path, destination, relative, source_stat, digest))
+                        continue
                     raise ControlError(f'Target already has different {relative}; select a fresh published release.')
             retained.append(relative.as_posix())
         else:
-            planned.append((path, destination, relative))
-    for path, destination, relative in planned:
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        with path.open('rb') as original, destination.open('xb') as replacement:
-            shutil.copyfileobj(original, replacement)
+            planned.append((path, destination, relative, source_stat, None))
+    for path, destination, relative, source_stat, seed_digest in planned:
+        _copy_configuration(path, destination, source_stat, seed_digest)
         copied.append(relative.as_posix())
     report = {'version': 1, 'sourceDirectory': str(source), 'targetDirectory': str(target),
               'copied': copied, 'retainedFromTarget': retained}

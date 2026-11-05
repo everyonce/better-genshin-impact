@@ -3319,6 +3319,54 @@ function createActOneAdapter(sessionId,options) {
         } finally {dispose(mask);dispose(hsv);dispose(crop);}
     }
     function readEnemyBars(img, rows, level, nativeAcquisition, groundObservation) {
+        // Measure a solid horizontal interior without assigning quality to its anti-aliased outer edge.
+        // The caller limits this work to eight wide field components from the same image.
+        function solidCore(bar) {
+            var x=bar.x-bar.width/2,y=bar.y-bar.height/2,w=bar.width,h=bar.height;
+            if(![x,y,w,h].every(Number.isInteger)||x<350||x+w>1600||y<100||y+h>900||
+               w<30||w>300||h<3||h>12||w/h<6||!Number.isFinite(bar.rectangularity)||bar.rectangularity<0||bar.rectangularity>=.8)return null;
+            // Count actual thresholded pixels in both the whole row and its central 90 percent.
+            function pixels(px,py,pw,ph) {
+                var region=null,color=null;
+                try {region=img.deriveCrop(px,py,pw,ph);color=region.srcMat.inRange(
+                    new OpenCvSharp.OpenCvSharp.Scalar(75,75,230),new OpenCvSharp.OpenCvSharp.Scalar(110,110,255));
+                    var n=Number(OpenCvSharp.OpenCvSharp.Cv2.countNonZero(color));
+                    if(!Number.isInteger(n)||n<0||n>pw*ph)throw new Error('Enemy solid-core pixel count malformed');
+                    return n;
+                } finally {dispose(color);dispose(region);}
+            }
+            var inset=Math.floor(w*.05),centerWidth=w-2*inset,counts=[],centers=[],start=-1,bestStart=-1,bestLength=0;
+            for(var row=0;row<h;row++) {
+                counts.push(pixels(x,y+row,w,1));centers.push(pixels(x+inset,y+row,centerWidth,1));
+                if(counts[row]>=Math.ceil(w*.9)&&centers[row]===centerWidth){if(start<0)start=row;}
+                else start=-1;
+                if(start>=0&&row-start+1>bestLength){bestStart=start;bestLength=row-start+1;}
+            }
+            if(bestLength<3)return null;
+            var region=null,color=null;
+            try {
+                region=img.deriveCrop(x,y+bestStart,w,bestLength);color=region.srcMat.inRange(
+                    new OpenCvSharp.OpenCvSharp.Scalar(75,75,230),new OpenCvSharp.OpenCvSharp.Scalar(110,110,255));
+                var inner=color.findContoursAsArray(OpenCvSharp.OpenCvSharp.RetrievalModes.External,OpenCvSharp.OpenCvSharp.ContourApproximationModes.ApproxSimple);
+                var count=inner&&(inner.length===undefined?inner.Length:inner.length);
+                if(!Number.isInteger(count)||count<0||count>64)throw new Error('Enemy solid-core contours malformed');
+                var matches=[];
+                for(var c=0;c<count;c++) {
+                    var b=OpenCvSharp.OpenCvSharp.Cv2.boundingRect(inner[c]);
+                    var bx=Number(b.x===undefined?b.X:b.x),by=Number(b.y===undefined?b.Y:b.y);
+                    var bw=Number(b.width===undefined?b.Width:b.width),bh=Number(b.height===undefined?b.Height:b.height);
+                    var area=Number(OpenCvSharp.OpenCvSharp.Cv2.contourArea(inner[c],false));
+                    if(![bx,by,bw,bh].every(Number.isInteger)||bx<0||by<0||bw<1||bh<1||bx+bw>w||by+bh>bestLength||!Number.isFinite(area)||area<0)
+                        throw new Error('Enemy solid-core contour geometry malformed');
+                    var rectangularity=area/Math.max(1,(bw-1)*(bh-1));
+                    if(bw>=Math.ceil(w*.9)&&bh===bestLength&&rectangularity>=.8&&rectangularity<=1.05)
+                        matches.push({bar:{x:x+bx+bw/2,y:y+bestStart+by+bh/2,width:bw,height:bh,rectangularity:rectangularity},area:area});
+                }
+                if(matches.length!==1)return null;
+                return {raw:bar,core:matches[0].bar,rowCounts:counts,centralCounts:centers,
+                    coreStartRow:bestStart,coreRows:bestLength,contourArea:matches[0].area};
+            } finally {dispose(color);dispose(region);}
+        }
         // Count the orange body immediately above or below a possible flame tip.
         function flamePixels(x,y) {
             var patch=null,color=null;
@@ -3396,6 +3444,20 @@ function createActOneAdapter(sessionId,options) {
                     }
                     return bar.x>=350&&bar.x<=1600||bar.width/bar.height>=3.5;
                 });
+            }
+            // Only measured ground scans and the explicit pack mission use solid-core recovery.
+            // Preserve every original component in diagnostics; accepted geometry comes from a new inner contour.
+            if(level==='any'&&(groundObservation===true||request&&request.mission==='questStep'&&request.step==='actTwoFieldCombat')) {
+                if(!enemyBarDiagnostic.rawCandidates)enemyBarDiagnostic.rawCandidates=candidates.slice(0,64);
+                enemyBarDiagnostic.solidCores=[];
+                var coreReads=0;
+                for(var k=0;k<candidates.length&&coreReads<8;k++) {
+                    var raw=candidates[k];
+                    if(raw.width<30||raw.height<3||raw.height>12||raw.width/raw.height<6||!Number.isFinite(raw.rectangularity)||raw.rectangularity>=.8)continue;
+                    coreReads++;
+                    var measured=solidCore(raw);
+                    if(measured){enemyBarDiagnostic.solidCores.push(measured);candidates[k]=measured.core;}
+                }
             }
             // Uncharted outdoor walking must stop for a visible red bar even when
             // OCR misses the enemy level. These candidates never authorize combat.

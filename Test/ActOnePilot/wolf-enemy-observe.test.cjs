@@ -30,7 +30,7 @@ async function observeStep(step, missionName='questStep', options={}) {
       Scalar:class{constructor(a,b,c){this.values=[a,b,c];}},
       RetrievalModes:{External:0},ContourApproximationModes:{ApproxSimple:0},
       Cv2:{boundingRect:c=>c,contourArea:c=>options.area===undefined?c.area===undefined?Math.max(0,((c.width||c.Width)-1)*((c.height||c.Height)-1)):c.area:options.area,
-        countNonZero:mask=>mask.flameCount===undefined?(options.redPixels??100):mask.flameCount}
+        countNonZero:mask=>mask.pixelCount!==undefined?mask.pixelCount:mask.flameCount===undefined?(options.redPixels??100):mask.flameCount}
     }},
     captureGameRegion:()=>({width:1920,height:1080,srcMat:{},
       findMulti:roi=>{const rows=fullRows.filter(r=>!roi||r.x>=roi.x&&r.y>=roi.y&&r.x<roi.x+roi.w&&r.y<roi.y+roi.h).map(r=>({...r}));rows.count=rows.length;return rows;},
@@ -40,10 +40,19 @@ async function observeStep(step, missionName='questStep', options={}) {
           const bgr=[90,90,255];
           const pixelPass=bgr.every((v,i)=>v>=low.values[i]&&v<=high.values[i]);
           if(x===0&&y===30)groundScans++;
-          return {flameCount:w===25&&h===10?(options.flameCounts?.[y]??0):undefined,findContoursAsArray:()=>{
+          // Replay retained threshold pixels for the solid-core boundary; OCR and inputs stay inert.
+          const sample=options.solidPixels;
+          let pixelCount;
+          if(sample&&x>=sample.x&&y>=sample.y&&x+w<=sample.x+sample.width&&y+h<=sample.y+sample.height){
+            pixelCount=0;
+            for(let py=y;py<y+h;py++)for(let px=x;px<x+w;px++)pixelCount+=sample.rows[py-sample.y][px-sample.x]==='1'?1:0;
+          }
+          return {pixelCount,flameCount:w===25&&h===10?(options.flameCounts?.[y]??0):undefined,findContoursAsArray:()=>{
+            if(sample&&x===sample.x&&y===sample.y+sample.coreStartRow&&w===sample.width&&h===sample.coreRows)
+              return options.coreContours??[{x:0,y:0,width:w,height:h,area:sample.coreArea}];
             if(x===0&&y===30){if(options.detectorError)throw Error('inert detector failure');
               return Object.hasOwn(options,'contours')?options.contours:[];}
-            return x===350&&y===100&&pixelPass?[bar]:[];
+            return x===350&&y===100&&pixelPass?(sample?[{x:sample.x-x,y:sample.y-y,width:sample.width,height:sample.height,area:sample.outerArea}]:[bar]):[];
           },dispose(){}};
         },
         resize:()=>({healthCrop:x===900&&y===990})
@@ -112,7 +121,7 @@ test('edge and depleted bar-shaped candidates rejected by level OCR remain ambig
 });
 
 test('sparse camp torch outline is diagnostic only; dense or anchored fragments still stop exploration',async()=>{
-  // Gate-to-camp frame 76: a flame at (1375.5,180.5) produced 4.5 pixels of contour area in an 11×9 box.
+  // Gate-to-camp frame 76: a flame at (1375.5,180.5) produced 4.5 pixels of contour area in an 11Ã—9 box.
   const torch={x:1370,y:146,width:11,height:9,area:4.5};
   const clear=await measure({contours:[torch],redPixels:38,flameCounts:{185:144,166:0}});
   assert.equal(clear.observation.hud.enemyBarObservation.state,'clear');
@@ -223,4 +232,41 @@ test('travel03 actual native contour geometry preserves all three close hostile 
   assert.equal(x.observation.hud.enemyBarObservation.acceptedCount,3);
   assert.equal(x.observation.hud.enemyBarDiagnostic.rawCandidates.length,6);
   assert.equal(x.observation.hud.enemyBarDiagnostic.localReads.length,0);
+});
+
+const solidFixture=require('./enemy-bar-solid-core.fixture.json');
+// Public06 frame13: the 67x5 outer component has area176.5; its three solid rows have area128.
+const solidOptions=(extra={})=>({solidPixels:structuredClone(solidFixture),contours:[{x:solidFixture.x,y:solidFixture.y-30,width:67,height:5,area:176.5}],...extra});
+test('actual anti-aliased Lv6 bar reconstructs measured solid core and preserves original diagnostics',async()=>{
+ const x=await measure(solidOptions());const d=x.observation.hud.enemyBarDiagnostic;
+ assert.equal(x.observation.hud.enemyBarObservation.state,'threat');assert.equal(x.bars.length,1);
+ assert.deepEqual(x.bars[0],{x:1419.5,y:457.5,width:67,height:3,rectangularity:128/132});
+ assert.equal(d.rawCandidates[0].height,5);assert.equal(d.rawCandidates[0].rectangularity,176.5/264);
+ assert.deepEqual(d.solidCores[0].rowCounts,[19,64,67,64,30]);assert.deepEqual(d.solidCores[0].centralCounts,[19,61,61,61,29]);
+ assert.equal(d.solidCores[0].contourArea,128);assert.equal(d.localReads.length,0);
+});
+test('explicit pack receives measured core while old ordinary combat retains its original result',async()=>{
+ const opts={...groundOptions(),...solidOptions()};
+ const pack=await observeStep('actTwoFieldCombat','questStep',opts);
+ assert.equal(pack.bars[0].rectangularity,128/132);assert.equal(pack.observation.hud.enemyBarDiagnostic.solidCores.length,1);
+ const old=await observeStep('actTwoNativeCombat','questStep',opts);
+ assert.deepEqual(old.bars,[]);assert.equal(old.observation.hud.enemyBarDiagnostic.solidCores,undefined);
+});
+test('two solid rows, central holes and separated red rows cannot reconstruct a bar',async()=>{
+ for(const mutate of [s=>{s.rows[3]='0'.repeat(67);},s=>{s.rows[2]=s.rows[2].slice(0,30)+'0'+s.rows[2].slice(31);},
+  s=>{s.rows=[s.rows[1],'0'.repeat(67),s.rows[1],'0'.repeat(67),s.rows[1]];}]){
+  const opts=solidOptions();mutate(opts.solidPixels);const x=await measure(opts);
+  assert.equal(x.observation.hud.enemyBarObservation.state,'ambiguous');assert.deepEqual(x.bars,[]);
+  assert.deepEqual(x.observation.hud.enemyBarDiagnostic.solidCores,[]);
+ }
+});
+test('short flames, invalid inner contour quality and foreign geometry gain no reconstructed authority',async()=>{
+ const short=await measure({contours:[{x:1000,y:300,width:25,height:5,area:30}],solidPixels:solidFixture});
+ assert.deepEqual(short.bars,[]);assert.deepEqual(short.observation.hud.enemyBarDiagnostic.solidCores,[]);
+ for(const coreContours of [[{x:0,y:0,width:67,height:3,area:20}],[{x:0,y:0,width:20,height:3,area:38}],
+  [{x:0,y:0,width:67,height:3,area:128},{x:0,y:0,width:67,height:3,area:128}]]){
+  const x=await measure(solidOptions({coreContours}));assert.deepEqual(x.bars,[]);assert.equal(x.observation.hud.enemyBarObservation.state,'ambiguous');
+ }
+ const malformed=await measure(solidOptions({coreContours:[{x:1,y:0,width:67,height:3,area:128}]}));
+ assert.equal(malformed.observation.hud.enemyBarObservation.state,'unavailable');
 });

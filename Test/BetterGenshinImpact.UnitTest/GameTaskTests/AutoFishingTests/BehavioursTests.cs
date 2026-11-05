@@ -1,7 +1,6 @@
 using BetterGenshinImpact.Core.Recognition.OCR;
 using BetterGenshinImpact.Core.Recognition.ONNX;
 using BetterGenshinImpact.GameTask.AutoFishing;
-using BetterGenshinImpact.GameTask.Common.Job;
 using BetterGenshinImpact.UnitTest.CoreTests.RecognitionTests.OCRTests;
 using BetterGenshinImpact.UnitTest.GameTaskTests.GetGridIconsTests;
 using Microsoft.Extensions.Localization;
@@ -17,8 +16,6 @@ namespace BetterGenshinImpact.UnitTest.GameTaskTests.AutoFishingTests
 
         private readonly PaddleFixture paddle;
         private readonly IStringLocalizer<AutoFishingTask> stringLocalizer;
-        private static readonly Lazy<ItemRecognizer> itemRecognizerLazy = new(() => new ItemRecognizer());
-        private static ItemRecognizer itemRecognizer => itemRecognizerLazy.Value;
 
 
         public BehavioursTests(PaddleFixture paddle, LocalizationFixture localization, GridIconModelFixture iconModel)

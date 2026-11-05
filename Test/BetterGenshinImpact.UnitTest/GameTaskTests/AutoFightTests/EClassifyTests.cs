@@ -46,7 +46,7 @@ public class EClassifyTests(ITestOutputHelper output)
             return;
         }
 
-        var mat = new Mat(path);
+        using var mat = Cv2.ImDecode(File.ReadAllBytes(path), ImreadModes.Color);
         Assert.True(mat.Width == 1920 && mat.Height == 1080,
             $"截图必须是 1920x1080，实际：{mat.Width}x{mat.Height}");
 

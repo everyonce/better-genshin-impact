@@ -45,7 +45,8 @@ public class PartyAvatarInitTests
     public void RecognisePartyAvatar_New_AvatarShouldBeRight(string screenshot1080P, string[]? expectedNames = null)
     {
         //
-        Mat mat = new Mat(@$"..\..\..\Assets\{screenshot1080P}");
+        var path = Path.Combine("..", "..", "..", "Assets", screenshot1080P);
+        using var mat = Cv2.ImDecode(File.ReadAllBytes(path), ImreadModes.Color);
         FakeSystemInfo systemInfo = new FakeSystemInfo(new Vanara.PInvoke.RECT(0, 0, mat.Width, mat.Height), 1);
         // 桌面 -> 游戏捕获区域 -> 1080P区域
         var gameCaptureRegion = systemInfo.DesktopRectArea.Derive(mat, systemInfo.CaptureAreaRect.X, systemInfo.CaptureAreaRect.Y);

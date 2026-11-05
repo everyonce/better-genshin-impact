@@ -7,8 +7,23 @@ namespace BetterGenshinImpact.UnitTest.GameTaskTests.AutoFishingTests
     /// <summary>
     /// 不产生任何实际输入的通道，所有操作直接返回自身
     /// </summary>
-    internal class FakeInputChannel : IInputChannel, IKeyboardInput, IMouseInput
+    internal class FakeInputChannel : IInputBackend, IInputChannel, IKeyboardInput, IMouseInput
     {
+        /// <summary>Report the expected channel kind without constructing a Win32 dispatcher.</summary>
+        public InputBackendKind Kind => InputBackendKind.Win32;
+
+        /// <summary>DesktopRegion obtains its foreground mouse here during screenshot tests.</summary>
+        public IInputChannel Foreground => this;
+
+        /// <summary>Background commands also stay inside the test double.</summary>
+        public IInputChannel Background => this;
+
+        /// <summary>Counts simulated region clicks without sending input.</summary>
+        public int LeftButtonDownCount { get; private set; }
+
+        /// <summary>The fake backend owns no device resources.</summary>
+        public void Dispose() { }
+
         public IKeyboardInput Keyboard => this;
 
         public IMouseInput Mouse => this;
@@ -35,7 +50,11 @@ namespace BetterGenshinImpact.UnitTest.GameTaskTests.AutoFishingTests
 
         public IMouseInput MoveMouseTo(double absX, double absY) => this;
 
-        public IMouseInput LeftButtonDown() => this;
+        public IMouseInput LeftButtonDown()
+        {
+            LeftButtonDownCount++;
+            return this;
+        }
 
         public IMouseInput LeftButtonUp() => this;
 

@@ -119,7 +119,7 @@ public class CombatScriptBagTests
 
         var exception = Assert.Throws<Exception>(() => bag.SelectCombatScript(["A"]));
 
-        Assert.Equal("未匹配到任何战斗脚本", exception.Message);
+        Assert.Equal("No combat script matched", exception.Message);
     }
 
     [Fact]
@@ -129,7 +129,7 @@ public class CombatScriptBagTests
 
         var exception = Assert.Throws<Exception>(() => bag.SelectCombatScript(["A", "B"]));
 
-        Assert.Equal("未匹配到任何战斗脚本", exception.Message);
+        Assert.Equal("No combat script matched", exception.Message);
     }
 
     [Fact]
@@ -139,7 +139,7 @@ public class CombatScriptBagTests
 
         var exception = Assert.Throws<Exception>(() => bag.SelectCombatScript([]));
 
-        Assert.Equal("未匹配到任何战斗脚本", exception.Message);
+        Assert.Equal("No combat script matched", exception.Message);
     }
 
     private static CombatScript CreateScript(string name, params string[] avatarNames)

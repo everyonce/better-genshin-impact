@@ -1,3 +1,6 @@
+using BetterGenshinImpact.Core.Input;
+using BetterGenshinImpact.Core.Input.Backends.Win32;
+using BetterGenshinImpact.GameTask.Common.Job;
 using BetterGenshinImpact.GameTask.AutoFishing;
 using BetterGenshinImpact.GameTask.AutoFishing.Model;
 using BetterGenshinImpact.GameTask.Model.Area;
@@ -15,8 +18,33 @@ using System.Threading.Tasks;
 
 namespace BetterGenshinImpact.UnitTest.GameTaskTests.AutoFishingTests
 {
-    public partial class BehavioursTests
+    /// <summary>Serialize these cases while their screenshot regions use a process-wide fake mouse.</summary>
+    [CollectionDefinition("Offline bait selection", DisableParallelization = true)]
+    public sealed class OfflineBaitSelectionCollection { }
+
+    /// <summary>Exercise recognition, selection and coordinate clicks against real captured bait menus.</summary>
+    [Collection("Offline bait selection")]
+    public sealed class ChooseBaitTests : IDisposable
     {
+        /// <summary>Reuse the actual icon recognizer across the image fixtures.</summary>
+        private static readonly Lazy<ItemRecognizer> ItemIcons = new(() => new ItemRecognizer());
+
+        /// <summary>Both behavior input and region clicks must go to this test's fake channel.</summary>
+        private readonly FakeInputChannel _input = new();
+
+        /// <summary>The default test-host backend has a no-op Dispose and can be restored after Attach.</summary>
+        private readonly Win32InputBackend _previousBackend;
+
+        /// <summary>Bind the desktop-region path before any behavior or image region can send input.</summary>
+        public ChooseBaitTests()
+        {
+            _previousBackend = Assert.IsType<Win32InputBackend>(InputHub.Backend);
+            InputHub.Attach(_input);
+        }
+
+        /// <summary>Restore the original backend even if recognition or an assertion failed.</summary>
+        public void Dispose() => InputHub.Attach(_previousBackend);
+
         [Fact]
         /// <summary>
         /// 测试识别数量不足的鱼饵，由于图标变灰，识别应失败
@@ -30,7 +58,7 @@ namespace BetterGenshinImpact.UnitTest.GameTaskTests.AutoFishingTests
             FakeSystemInfo systemInfo = new FakeSystemInfo(new Vanara.PInvoke.RECT(0, 0, mat.Width, mat.Height), 1);
 
             //
-            ChooseBait sut = new ChooseBait("-", new FakeLogger(), systemInfo, new FakeInputChannel(), itemRecognizer, new Blackboard());
+            ChooseBait sut = new ChooseBait("-", new FakeLogger(), systemInfo, _input, ItemIcons.Value, new Blackboard());
             var result = sut.FindBait(imageRegion).OrderBy(r => r.Item1.X).ToArray();
 
             //
@@ -67,7 +95,7 @@ namespace BetterGenshinImpact.UnitTest.GameTaskTests.AutoFishingTests
                     .Sequence("用例", false)
                         .SetSleep("设置sleep方法", _ => { })
                         .LeafWithBlackboard(bb => new ScreenshotQueue("用例", [imageRegion, imageRegion], bb!))
-                        .ChooseBait("-", new FakeLogger(), systemInfo, new FakeInputChannel(), itemRecognizer)
+                        .ChooseBait("-", new FakeLogger(), systemInfo, _input, ItemIcons.Value)
                     .End()
                 .End()
                 .Build();
@@ -82,6 +110,7 @@ namespace BetterGenshinImpact.UnitTest.GameTaskTests.AutoFishingTests
 
             //
             Assert.Equal(Status.Success, actual);
+            Assert.True(_input.LeftButtonDownCount >= 2, "Bait selection and menu clicks must reach the fake mouse.");
         }
 
         [Theory]
@@ -113,7 +142,7 @@ namespace BetterGenshinImpact.UnitTest.GameTaskTests.AutoFishingTests
                     .Sequence("用例", false)
                         .SetSleep("设置sleep方法", _ => { })
                         .LeafWithBlackboard(bb => new ScreenshotQueue("用例", [imageRegion, imageRegion, imageRegion], bb!))
-                        .ChooseBait("-", new FakeLogger(), systemInfo, new FakeInputChannel(), itemRecognizer, fakeTimeProvider)
+                        .ChooseBait("-", new FakeLogger(), systemInfo, _input, ItemIcons.Value, fakeTimeProvider)
                     .End()
                 .End()
                 .Build();
@@ -179,7 +208,7 @@ namespace BetterGenshinImpact.UnitTest.GameTaskTests.AutoFishingTests
                     .Sequence("用例", false)
                         .SetSleep("设置sleep方法", _ => { })
                         .LeafWithBlackboard(bb => new ScreenshotQueue("用例", Enumerable.Repeat(imageRegion, 10), bb!))
-                        .ChooseBait("-", new FakeLogger(), systemInfo, new FakeInputChannel(), itemRecognizer, fakeTimeProvider)
+                        .ChooseBait("-", new FakeLogger(), systemInfo, _input, ItemIcons.Value, fakeTimeProvider)
                     .End()
                 .End()
                 .Build();
@@ -299,7 +328,7 @@ namespace BetterGenshinImpact.UnitTest.GameTaskTests.AutoFishingTests
                     .Sequence("用例", false)
                         .SetSleep("设置sleep方法", _ => { })
                         .LeafWithBlackboard(bb => new ScreenshotQueue("用例", Enumerable.Repeat(imageRegion, 8), bb!))
-                        .ChooseBait("-", new FakeLogger(), systemInfo, new FakeInputChannel(), itemRecognizer, fakeTimeProvider)
+                        .ChooseBait("-", new FakeLogger(), systemInfo, _input, ItemIcons.Value, fakeTimeProvider)
                     .End()
                 .End()
                 .Build();

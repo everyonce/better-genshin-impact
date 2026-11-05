@@ -426,6 +426,34 @@ class SupervisedRouteControllerTests(unittest.TestCase):
         self.assertEqual([r.get('step', r['mission']) for r in pilot.calls],
                          ['observe', 'worldInventoryClose', 'observe'])
 
+    def test_invalid_progress_falls_back_to_existing_inventory_bootstrap(self):
+        self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
+        inv, ground = controller_scene('inventory'), controller_scene(objective='')
+        pilot = ReplayPilot(self.clock, [
+            dict(mission='questStep', source=ground, result=dict(worldVisible=True)),
+            dict(mission='questStep', source=inv, result=dict(pausedInventory=True)),
+            self.arrival(3, inv)], source=inv)
+        pilot.exploration_continuation = mock.Mock(return_value=None)
+        result = self.run_controller(pilot, continue_from_progress=Path(self.temp.name) / 'missing.json')
+        self.assertEqual(result['status'], 'arrived')
+        self.assertEqual([r.get('step', r['mission']) for r in pilot.calls],
+                         ['observe', 'worldInventoryClose', 'observe', 'worldInventory', 'observe', 'navigation'])
+        self.assertNotIn('continuedFromProgress', result)
+
+    def test_new_start_near_never_borrows_previous_route_position(self):
+        self.route.update(objective=route_tool.EXPLORATION_OBJECTIVE,
+                          startNear=dict(map='Teyvat', x=-1178, y=2208, radius=3))
+        inv, ground = controller_scene('inventory'), controller_scene(objective='')
+        pilot = ReplayPilot(self.clock, [
+            dict(mission='questStep', source=ground, result=dict(worldVisible=True)),
+            dict(mission='questStep', source=inv, result=dict(pausedInventory=True)),
+            self.arrival(3, inv)], source=inv)
+        pilot.exploration_continuation = mock.Mock(side_effect=AssertionError('startNear cannot reuse old world'))
+        result = self.run_controller(pilot, continue_from_progress=Path(self.temp.name) / 'prior.json')
+        self.assertEqual(result['status'], 'arrived')
+        pilot.exploration_continuation.assert_not_called()
+        self.assertEqual(pilot.calls[1]['step'], 'worldInventoryClose')
+
     def test_lone_field_encounter_can_return_to_measured_navigation(self):
         self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
         enemy = controller_scene(objective='', enemies=True)
@@ -732,6 +760,130 @@ class GuardedPilotProtocolTests(unittest.TestCase):
         self.assertIsNone(self.pilot.pending)
         self.assertEqual(saved, [outcome['request']])
         self.pilot.close(); self.assertFalse(self.pilot.lock.exists())
+
+    def completed_exploration(self):
+        """Retain a native-shaped arrived route with field, B, pause and terminal frames."""
+        native = SCRIPT.parents[2] / 'BetterGenshinImpact/User/JsScript/ActOnePilot'
+        for name in ('world-inventory.js', 'navigation-safety.js'):
+            (self.root / name).write_bytes((native / name).read_bytes())
+        now = self.clock.milliseconds()
+        field = controller_scene(objective='')
+        field.update(frameId=2, timestamp=now - 400)
+        record_ground_scan(field)
+        self.save_frame(field)
+        pause = controller_scene('inventory'); pause.update(frameId=3, timestamp=now - 150)
+        self.save_frame(pause)
+        terminal = copy.deepcopy(pause); terminal.update(frameId=4, timestamp=now - 50)
+        self.save_frame(terminal); self.write_heartbeat('idle', 4)
+        request = dict(id='mission-' + 'e' * 32, session=self.pilot.session, expectedFrameId=1,
+            createdAt=now - 1000, mission='navigation', objective=route_tool.EXPLORATION_OBJECTIVE,
+            waypoints=[dict(map='Teyvat', x=-1178, y=2208)], deadlineMs=10000, requireMeasuredGround=True)
+        proof = dict(verified=True, kind='inventory', session=self.pilot.session, sourceFrameId=2,
+            pauseFrameId=3, timestamp=pause['timestamp'], evidence=[pause['ocr'][1]])
+        key = dict(type='pauseProtectionKey', key='VK_B', durationMs=60, frameId=2,
+            startedAt=now - 350, finishedAt=now - 290)
+        receipt = dict(id=request['id'], session=self.pilot.session, mission='navigation',
+            status='completed', frameId=4, timestamp=now,
+            details=dict(result=dict(status='arrived', nextWaypointIndex=1, pauseVerified=True, pauseProof=proof),
+                inputEvents=[key, dict(key, type='key'),
+                    dict(type='pauseProtectionVerified', kind='inventory', frameId=3, startedAt=now - 100)]))
+        path = self.command.request_receipt_path(self.root, self.pilot.session, request['id'])
+        path.parent.mkdir(parents=True, exist_ok=True); path.write_text(json.dumps(receipt), encoding='utf-8')
+        (self.root / 'request.json').write_text(json.dumps(request), encoding='utf-8')
+        progress = dict(version=1, kind='supervised-route-controller-v1', status='arrived', pending=None,
+            session=self.pilot.session, expectedUid='693306810', nextWaypointIndex=1,
+            route=dict(objective=request['objective'], waypoints=request['waypoints']),
+            records=[dict(request=request, receipt=receipt, observation=terminal)])
+        output = Path(self.temp.name) / 'prior.json'; output.write_text(json.dumps(progress), encoding='utf-8')
+        return output, progress, field, pause, terminal
+
+    def test_completed_progress_joins_original_pause_and_unchanged_evidence(self):
+        path, _, field, _, _ = self.completed_exploration()
+        witness = self.pilot.exploration_continuation(path, '693306810', self.clock.milliseconds())
+        self.assertEqual((witness['sourceFrameId'], witness['pauseFrameId'], witness['terminalFrameId']), (2, 3, 4))
+        self.assertTrue(self.pilot.continuation_unchanged(witness))
+        field['hud']['health']['current'] = 899
+        self.command.observation_path(self.root, self.pilot.session, 2).write_text(json.dumps(field), encoding='utf-8')
+        self.assertFalse(self.pilot.continuation_unchanged(witness))
+
+    def test_progress_mutations_and_foreign_current_state_cannot_supply_reuse(self):
+        mutations = [
+            lambda p: p.update(status='stopped'),
+            lambda p: p.update(pending=p['records'][0]['request']),
+            lambda p: p.update(session='foreign-session'),
+            lambda p: p.update(expectedUid='111111111'),
+            lambda p: p.update(nextWaypointIndex=0),
+            lambda p: p['records'][0]['request'].update(requireMeasuredGround=False),
+            lambda p: p['records'][0]['receipt']['details']['result'].update(pauseVerified=False),
+            lambda p: p['records'][0]['receipt']['details']['result']['pauseProof'].update(sourceFrameId=3),
+        ]
+        for mutation in mutations:
+            with self.subTest(mutation=mutation):
+                path, progress, *_ = self.completed_exploration()
+                mutation(progress); path.write_text(json.dumps(progress), encoding='utf-8')
+                self.assertIsNone(self.pilot.exploration_continuation(path, '693306810', self.clock.milliseconds()))
+        for target in ('slot', 'current', 'receipt', 'source'):
+            with self.subTest(target=target):
+                path, progress, field, _, terminal = self.completed_exploration()
+                if target == 'slot':
+                    changed = dict(progress['records'][0]['request'], id='mission-' + 'f' * 32)
+                    (self.root / 'request.json').write_text(json.dumps(changed), encoding='utf-8')
+                elif target == 'current':
+                    terminal['frameId'] = 5; self.save_frame(terminal)
+                elif target == 'receipt':
+                    receipt = progress['records'][0]['receipt']; receipt['status'] = 'failed'
+                    self.command.request_receipt_path(self.root, self.pilot.session, receipt['id']).write_text(json.dumps(receipt), encoding='utf-8')
+                else:
+                    field['hud']['enemyBarObservation']['state'] = 'unavailable'
+                    self.command.observation_path(self.root, self.pilot.session, 2).write_text(json.dumps(field), encoding='utf-8')
+                self.assertIsNone(self.pilot.exploration_continuation(path, '693306810', self.clock.milliseconds()))
+
+    def test_historical_source_requires_real_clear_healthy_capture_at_original_pause(self):
+        mutations = [
+            lambda f: f['hud']['health'].update(current=849),
+            lambda f: f.update(mapPositionInherited=True),
+            lambda f: f['ocr'].append(dict(text='UID: 111111111', x=1720, y=1050)),
+            lambda f: f['hud']['captureStamp'].update(capturedAt=f['timestamp'] - 1001),
+            lambda f: f['hud']['enemyBarObservation'].update(candidateCount=1),
+        ]
+        for mutation in mutations:
+            with self.subTest(mutation=mutation):
+                path, _, field, *_ = self.completed_exploration(); mutation(field)
+                self.command.observation_path(self.root, self.pilot.session, 2).write_text(json.dumps(field), encoding='utf-8')
+                self.assertIsNone(self.pilot.exploration_continuation(path, '693306810', self.clock.milliseconds()))
+        path, *_ = self.completed_exploration()
+        self.assertIsNone(self.pilot.exploration_continuation(path, '693306810', self.clock.milliseconds() + 600001))
+
+    def test_opt_in_performs_only_passive_observe_then_guarded_navigation(self):
+        path, *_ = self.completed_exploration()
+        original = self.terminal
+
+        def terminal(request, status='completed'):
+            """Use real publication/retirement while substituting only native execution."""
+            original(request, status)
+            if request['mission'] == 'navigation':
+                receipt_path = self.command.request_receipt_path(self.root, self.pilot.session, request['id'])
+                receipt = read_json(receipt_path)
+                receipt['details']['result'] = dict(status='arrived', nextWaypointIndex=1)
+                receipt_path.write_text(json.dumps(receipt), encoding='utf-8')
+
+        self.terminal = terminal
+        route = dict(objective=route_tool.EXPLORATION_OBJECTIVE,
+            waypoints=[dict(map='Teyvat', x=-1170, y=2208)])
+        report = route_tool.run_controller(self.pilot, route, Path(self.temp.name) / 'next.json', '693306810',
+            continue_from_progress=path, deadline_ms=10000, monotonic=self.clock.monotonic,
+            clock_ms=self.clock.milliseconds, emit=lambda _: None)
+        self.assertEqual(report['status'], 'arrived', report.get('reason'))
+        self.assertEqual([r['request']['mission'] for r in report['records']], ['observe', 'navigation'])
+        self.assertEqual(report['continuedFromProgress']['sourceFrameId'], 2)
+        self.assertIs(report['records'][-1]['request']['requireMeasuredGround'], True)
+
+    def test_passive_refresh_reports_changed_predecessor_without_granting_shortcut(self):
+        path, *_ = self.completed_exploration()
+        witness = self.pilot.exploration_continuation(path, '693306810', self.clock.milliseconds())
+        outcome = self.pilot.execute('observe', self.source, {}, self.clock.monotonic() + 5,
+            lambda _: None, expected_previous=witness['requestBytes'] + b' ')
+        self.assertIs(outcome['predecessorMatched'], False)
 
     def test_owner_nonce_changes_before_rename_without_request_publication(self):
         first = self.owner(); changed = dict(first, instanceNonce='b' * 32)

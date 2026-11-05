@@ -262,13 +262,122 @@ class GuardedPilot:
         self.command.atomic(self.root / 'stop.json', dict(session=self.session, createdAt=int(time.time() * 1000)))
         self.cancelled = True
 
-    def inventory_ready(self, source):
+    def inventory_ready(self, source, *, at_ms=None):
         """Reuse the installed, input-free inventory predicate before native navigation."""
         check = self.command.subprocess.run(['node', '-e',
             "const g=require(process.argv[1]),o=JSON.parse(process.argv[2]);process.exit(g.worldInventoryClosePermission(o,Number(process.argv[3]),process.argv[4])?0:2);",
-            str(self.root / 'world-inventory.js'), json.dumps(source), str(int(time.time() * 1000)), self.session],
+            str(self.root / 'world-inventory.js'), json.dumps(source),
+            str(int(time.time() * 1000) if at_ms is None else at_ms), self.session],
             capture_output=True, text=True, encoding='utf-8', timeout=5)
         return check.returncode == 0
+
+    def exploration_continuation(self, progress_path, expected_uid, now_ms):
+        """Join one completed route to its still-current slot and original pause evidence.
+
+        The old field is historical evidence evaluated at its actual B event,
+        not a fresh observation. Native navigation still measures after opening.
+        Missing or inconsistent evidence merely selects the ordinary bootstrap.
+        """
+        try:
+            retained = []
+
+            def saved(path):
+                """Retain exact bytes through the one passive observation."""
+                raw = path.read_bytes()
+                retained.append((path, raw))
+                return json.loads(raw.decode('utf-8-sig'))
+
+            progress = saved(Path(progress_path))
+            route = progress['route']
+            objective, points = validate_route(route)
+            if (progress.get('kind') != 'supervised-route-controller-v1' or progress.get('version') != 1
+                    or progress.get('status') != 'arrived' or progress.get('pending') is not None
+                    or progress.get('session') != self.session or progress.get('expectedUid') != expected_uid
+                    or objective != EXPLORATION_OBJECTIVE or type(progress.get('nextWaypointIndex')) is not int
+                    or progress['nextWaypointIndex'] != len(points)):
+                return None
+            record = progress['records'][-1]
+            request, receipt, terminal = record['request'], record['receipt'], record['observation']
+            slot = (self.root / 'request.json').read_bytes()
+            if json.loads(slot.decode('utf-8-sig')) != request:
+                return None
+            if (request.get('session') != self.session or request.get('mission') != 'navigation'
+                    or request.get('objective') != objective or request.get('requireMeasuredGround') is not True
+                    or not isinstance(request.get('waypoints'), list) or not request['waypoints']
+                    or request['waypoints'] != points[-len(request['waypoints']):]
+                    or receipt.get('status') != 'completed'):
+                return None
+            if saved(self.command.request_receipt_path(self.root, self.session, request['id'])) != receipt:
+                return None
+            if saved(self.command.observation_path(self.root, self.session, receipt['frameId'])) != terminal:
+                return None
+            self.command.validate_terminal_receipt(request, receipt, terminal)
+            result = receipt['details']['result']
+            proof = result['pauseProof']
+            if (result.get('status') != 'arrived' or result.get('localHandoff') is True
+                    or type(result.get('nextWaypointIndex')) is not int
+                    or result['nextWaypointIndex'] != len(request['waypoints'])
+                    or result.get('pauseVerified') is not True or proof.get('verified') is not True
+                    or proof.get('kind') != 'inventory' or proof.get('session') != self.session
+                    or any(type(proof.get(k)) is not int for k in ('sourceFrameId', 'pauseFrameId', 'timestamp'))
+                    or not request['expectedFrameId'] < proof['sourceFrameId'] < proof['pauseFrameId'] <= terminal['frameId']):
+                return None
+            field = saved(self.command.observation_path(self.root, self.session, proof['sourceFrameId']))
+            paused = saved(self.command.observation_path(self.root, self.session, proof['pauseFrameId']))
+            if (field.get('frameId') != proof['sourceFrameId'] or paused.get('frameId') != proof['pauseFrameId']
+                    or field.get('session') != self.session or paused.get('session') != self.session):
+                return None
+            events = receipt['details']['inputEvents']
+            keys = [e for e in events if e.get('type') == 'pauseProtectionKey']
+            if len(keys) != 1:
+                return None
+            key = keys[0]
+            input_keys = [e for e in events if e.get('type') in ('key', 'rotate', 'click', 'mouse')]
+            if (not input_keys or input_keys[-1].get('type') != 'key'
+                    or input_keys[-1].get('key') != 'VK_B' or input_keys[-1].get('durationMs') != 60
+                    or input_keys[-1].get('frameId') != field['frameId']
+                    or input_keys[-1].get('finishedAt') != key.get('finishedAt')
+                    or type(input_keys[-1].get('startedAt')) is not int
+                    or not key['startedAt'] <= input_keys[-1]['startedAt'] <= key['finishedAt']
+                    or not any(e.get('type') == 'pauseProtectionVerified' and e.get('kind') == 'inventory'
+                               and e.get('frameId') == proof['pauseFrameId'] for e in events)):
+                return None
+            if (key.get('key') != 'VK_B' or key.get('durationMs') != 60
+                    or key.get('frameId') != field['frameId']
+                    or any(type(key.get(k)) is not int for k in ('startedAt', 'finishedAt'))
+                    or not field['timestamp'] <= key['startedAt'] <= key['finishedAt'] <= paused['timestamp']
+                    or proof['timestamp'] != paused['timestamp']
+                    or not paused['timestamp'] <= terminal['timestamp'] <= receipt['timestamp']
+                    or not 0 <= now_ms - field['timestamp'] <= 600000
+                    or field.get('fastSample') or field.get('mapPositionInherited')):
+                return None
+            require_fresh_source(field, self.session, key['startedAt'])
+            if route_phase(field, expected_uid, [EXPLORATION_OBJECTIVE], allow_dialogue=False,
+                           journal_resume=False, now_ms=key['startedAt']) != ('navigation', EXPLORATION_OBJECTIVE):
+                return None
+            # Recheck the original protected frames at their recorded times; only
+            # the subsequent passive observation may authorize a new request.
+            for observation in (paused, terminal):
+                if (not source_account_matches(observation, expected_uid)
+                        or not self.inventory_ready(observation, at_ms=observation['timestamp'])):
+                    return None
+            if (not isinstance(proof.get('evidence'), list) or not proof['evidence']
+                    or any(row not in paused['ocr'] for row in proof['evidence'])
+                    or self.current() != terminal or (self.root / 'request.json').read_bytes() != slot):
+                return None
+            self._owner(terminal['frameId'], idle=True)
+            return dict(requestId=request['id'], sourceFrameId=field['frameId'],
+                        pauseFrameId=paused['frameId'], terminalFrameId=terminal['frameId'],
+                        requestBytes=slot, retained=retained)
+        except (OSError, ValueError, RuntimeError, KeyError, IndexError, TypeError, AttributeError):
+            return None
+
+    def continuation_unchanged(self, witness):
+        """Refuse reuse if any predecessor evidence changed during the passive refresh."""
+        try:
+            return all(path.read_bytes() == raw for path, raw in witness['retained'])
+        except OSError:
+            return False
 
     def validate_route(self, route, deadline_ms):
         """Keep the existing command's finite route admission before any pause or request."""
@@ -304,7 +413,7 @@ class GuardedPilot:
                         routeHash=self.command.navigation_route_hash(route))
         return self.command.resume_navigation_route(route, progress, receipt, request, self.session)
 
-    def execute(self, mission, source, fields, deadline, save_pending):
+    def execute(self, mission, source, fields, deadline, save_pending, *, expected_previous=None):
         """Publish once, retain the original ID, and wait for its exact terminal receipt."""
         if self.pending is not None:
             raise RouteError('A prior request is unresolved; it cannot be replayed.')
@@ -391,7 +500,10 @@ class GuardedPilot:
                         raise RouteError('Published request changed before retirement.')
                     self.command.validate_latest_observation(self.current(), self.session, frame)
                     self.pending = None
-                    return dict(request=request, receipt=receipt, observation=observed, cancelled=self.cancelled)
+                    outcome = dict(request=request, receipt=receipt, observation=observed, cancelled=self.cancelled)
+                    if expected_previous is not None:
+                        outcome['predecessorMatched'] = previous == expected_previous
+                    return outcome
             time.sleep(min(.1, max(0, deadline - time.monotonic())))
         self._cancel_owned()
         raise RouteError('Original deadline expired; terminal outcome is unresolved, do not replay.')
@@ -506,6 +618,7 @@ def route_phase(source, expected_uid, objectives, *, allow_dialogue, journal_res
 
 def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=False, allow_field_combat=False,
                    continuation_objectives=(), max_segments=MAX_SEGMENTS, deadline_ms=MAX_DEADLINE_MS,
+                   continue_from_progress=None,
                    monotonic=time.monotonic, clock_ms=lambda: int(time.time() * 1000), emit=print):
     """Continue only settled missions; retain exact route progress through combat and dialogue.
 
@@ -566,9 +679,12 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
                 and type(result.get('beforeFrameId')) is int and type(result.get('afterFrameId')) is int
                 and result['beforeFrameId'] < result['afterFrameId'])
 
-    def dispatch(mission, source, fields, *, allow_deadline_checkpoint=False):
+    def dispatch(mission, source, fields, *, allow_deadline_checkpoint=False, expected_previous=None):
         """Keep the original request/receipt result, including a failed native handoff."""
-        outcome = pilot.execute(mission, source, fields, deadline, pending)
+        options = {} if expected_previous is None else dict(expected_previous=expected_previous)
+        outcome = pilot.execute(mission, source, fields, deadline, pending, **options)
+        if expected_previous is not None:
+            state['continuationSlotMatched'] = outcome.get('predecessorMatched') is True
         request, receipt, observed = outcome['request'], outcome['receipt'], outcome['observation']
         if (request.get('session') != pilot.session or request.get('mission') != mission
                 or request.get('expectedFrameId') != source['frameId']
@@ -613,13 +729,26 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
             if pilot.stopped():
                 raise RouteError('Operator STOP prevents further route input.')
             source = pilot.current()
-            dispatch('observe', source, {})
+            continuation = None
+            # A new startNear requires a new world measurement. It cannot borrow
+            # a prior route's position, even when the preceding pause is exact.
+            if (not state['records'] and continue_from_progress is not None
+                    and objective == EXPLORATION_OBJECTIVE and 'startNear' not in route):
+                continuation = pilot.exploration_continuation(continue_from_progress, expected_uid, clock_ms())
+            dispatch('observe', source, {}, expected_previous=continuation['requestBytes'] if continuation else None)
             source = pilot.current()
             now_ms = clock_ms()
             require_fresh_source(source, pilot.session, now_ms)
+            if (continuation is not None and state.get('continuationSlotMatched') is True
+                    and pilot.continuation_unchanged(continuation)
+                    and source_account_matches(source, expected_uid) and pilot.inventory_ready(source)):
+                inventory_navigation = EXPLORATION_OBJECTIVE
+                state['continuedFromProgress'] = dict(path=str(continue_from_progress),
+                    **{key: continuation[key] for key in ('requestId', 'sourceFrameId', 'pauseFrameId', 'terminalFrameId')})
             # Native travel ends in inventory. Open it once for a fresh field measurement before
             # navigation; a delayed transition must never turn into a second Escape.
-            if (objective == EXPLORATION_OBJECTIVE and (len(state['records']) == 1 or inspect_after_encounter)
+            if (inventory_navigation is None and objective == EXPLORATION_OBJECTIVE
+                    and (len(state['records']) == 1 or inspect_after_encounter)
                     and source['hud'].get('world') is False and source.get('map') is None
                     and source_account_matches(source, expected_uid) and pilot.inventory_ready(source)):
                 dispatch('questStep', source, dict(step='worldInventoryClose'))
@@ -781,6 +910,8 @@ def main():
     parser.add_argument('--expected-windows-session-id', type=int)
     parser.add_argument('--expected-uid', help='Exact 9- or 10-digit game UID to retain across phases')
     parser.add_argument('--progress', type=Path, help='New progress JSON; an existing or pending run is never replayed')
+    parser.add_argument('--continue-from-progress', type=Path,
+                        help='Reuse an exact completed exploration pause on the same pilot; otherwise refresh the field normally')
     parser.add_argument('--allow-field-combat', action='store_true',
                         help='Engage a single measured enemy during exploration and resume from fresh field evidence')
     parser.add_argument('--allow-dialogue', action='store_true', help='Permit the existing bounded recognized-dialogue mission')
@@ -803,6 +934,7 @@ def main():
                 report = run_controller(pilot, read(args.route), args.progress, args.expected_uid,
                     allow_dialogue=args.allow_dialogue, allow_field_combat=args.allow_field_combat,
                     continuation_objectives=args.continue_objective,
+                    continue_from_progress=args.continue_from_progress,
                     max_segments=args.max_segments, deadline_ms=args.deadline_ms)
             finally:
                 pilot.close()
@@ -811,6 +943,8 @@ def main():
             if report['status'] != 'arrived':
                 raise SystemExit(2)
             return
+        if args.continue_from_progress is not None:
+            raise RouteError('--continue-from-progress requires controller mode.')
         outcome = run_route(args.root, read(args.route), args.session,
                             max_segments=args.max_segments, deadline_ms=args.deadline_ms)
     except (OSError, json.JSONDecodeError, RouteError) as exc:

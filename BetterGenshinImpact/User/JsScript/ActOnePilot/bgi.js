@@ -5882,15 +5882,26 @@ function createActOneAdapter(sessionId,options) {
                 if (direct) {
                     checkStop();
                     attempted=true;  // The owned world is already live. Use the usual protector on any unsuccessful exit.
-                    if (!continuousGround(initial,Date.now())) {
-                        var initialContact=initial && initial.hud && initial.session===request.session &&
-                            actTwoOriginalAccount(initial.ocr) && actOneExplorationEntryThreat(request,initial);
-                        if (initialContact) {
-                            result=initialContact;
-                            result.navigationStatus=result.status;
-                            return finishWithLocalPause(protector,this,initial,observe,initial.frameId,result,null);
+                    for(var sample=0;!continuousGround(current,Date.now());sample++){
+                        var initialContact=current && current.hud && current.session===request.session &&
+                            actTwoOriginalAccount(current.ocr) && actOneExplorationEntryThreat(request,current);
+                        if(initialContact){
+                            result=initialContact;result.navigationStatus=result.status;
+                            return finishWithLocalPause(protector,this,current,observe,current.frameId,result,null);
                         }
-                        throw Error('Fresh measured ground required for continuous entry');
+                        // A single unclassified red fragment can sit between two clear captures.
+                        // Only observe while stationary; navigation still requires a fresh measured clear frame.
+                        var h=current.hud,p=current.map,scan=h&&h.enemyBarObservation;
+                        if(sample>=3||Date.now()+750>=request.createdAt+request.deadlineMs||!h||!p||!initial.map||
+                           current.session!==request.session||!actTwoOriginalAccount(current.ocr)||!h.world||!h.groundControls||
+                           !h.health||h.climbing||h.loading||h.journal||h.bigMap||h.dialogueReady||h.choice||h.lowHealth||
+                           !scan||scan.state!=='ambiguous'||(h.enemyBars||[]).length||Math.hypot(p.x-initial.map.x,p.y-initial.map.y)>1.25)
+                            throw Error('Fresh measured ground required for continuous entry');
+                        checkStop();await sleep(140);var next=await observe();
+                        if(!next.map||next.frameId<=current.frameId||next.session!==current.session||
+                           Math.hypot(next.map.x-initial.map.x,next.map.y-initial.map.y)>1.25)
+                            throw Error('Ground changed during stationary entry observation');
+                        current=next;
                     }
                 }
                 var guildTalk=request.mission==='questStep'&&['actTwoFieldInspect','actTwoFinalTrial','actTwoLionInspect','actTwoStatueSelectKaeya','actTwoChallengeStart','actTwoAmberTalk','actTwoWindriseOculus','actTwoSaraOpen','actTwoStatueOpen','actTwoStatueInteractionProbe','actTwoStarfellStatueOpen','actTwoStarfellSelectAmber','actTwoMushroom','actTwoCookOpen','actTwoLynnTalk','actTwoVileTalk','actTwoKaeyaReport','actTwoJackTalk','actTwoMarjorieTalk','actTwoCyrusTalk','actTwoGuildTalk','actTwoWagnerTalk','actTwoKaeyaTalk','actTwoWaypoint','actTwoHqEnter'].indexOf(request.step)>=0;

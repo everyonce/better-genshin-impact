@@ -45,7 +45,7 @@ test('continuous ground entry skips Escape; only an independently confirmed inte
     const start=disk.indexOf('runActTwoNavigationWithPause: async function')+'runActTwoNavigationWithPause: '.length;
     const end=disk.indexOf(',\n        actTwoSouvenirReady:',start);
     assert.ok(start>0&&end>start);
-    for(const situation of ['world','park','changed-arrival','contact-on-entry','foreign-entry','wrong-sidecar']) {
+    for(const situation of ['world','park','changed-arrival','contact-on-entry','foreign-entry','wrong-sidecar','ambiguous-then-clear']) {
         let now=8000,id=2;
         const r={...request,groundHandoff:situation==='park'?'park':'world',expectedUid:'693306810'};
         assert.equal(engine.validate(r,r.session,1,{},now),null);
@@ -56,12 +56,12 @@ test('continuous ground entry skips Escape; only an independently confirmed inte
             o.ocr=[{text:'UID: 693306810',x:1720,y:1050}];
             return o;
         }
-        const events=[], witness=field(1,2560), first=field(2,2560,situation==='contact-on-entry'?'threat':'clear');
+        const events=[], witness=field(1,2560), first=field(2,2560,situation==='contact-on-entry'?'threat':situation==='ambiguous-then-clear'?'ambiguous':'clear');
         if(situation==='foreign-entry')first.ocr[0].text='UID: 123456789';
         const plan={reviewed:true,requestId:r.id,session:r.session,frameId:1,witnessFrameId:1,createdAt:now,
             route:{objective:r.objective,waypoints:r.waypoints}};
         if(situation==='wrong-sidecar') { plan.witnessFrameId=0;witness.frameId=0; }
-        const ctx={Date:{now:()=>now},request:r,lastObservation:first,loadLocalPause:()=>({}),checkStop(){},
+        const ctx={Date:{now:()=>now},sleep:async ms=>{now+=ms;},request:r,lastObservation:first,loadLocalPause:()=>({}),checkStop(){},
             file:{readTextSync(n){
                 if(n==='navigation-safety-request.json') return JSON.stringify(plan);
                 if(n.endsWith('frame-0001.json')||n.endsWith('frame-0000.json'))return JSON.stringify(witness);
@@ -75,11 +75,11 @@ test('continuous ground entry skips Escape; only an independently confirmed inte
         const wrapper=vm.runInContext('('+disk.slice(start,end)+')',ctx);
         const api={now:()=>now,checkStop(){},runActTwoNavigationWithPause:wrapper,
             sleep:async ms=>{now+=ms;},rotate:()=>assert.fail('unexpected turn'),forward:async ms=>{events.push('W');now+=ms;}};
-        const see=async()=>{now+=95;const o=field(++id,2552,situation==='changed-arrival'&&id>=4?'threat':'clear');ctx.lastObservation=o;return o;};
+        const see=async()=>{now+=95;const o=field(++id,situation==='ambiguous-then-clear'&&id===3?2560:2552,situation==='changed-arrival'&&id>=4?'threat':'clear');ctx.lastObservation=o;return o;};
         const out=await mission.runNavigation(r,first,api,see);
-        if(situation==='world') {
-            assert.deepEqual(events,['W']);assert.equal(out.worldArrival.arrivalFrameId,3);
-            assert.equal(out.worldArrival.confirmedFrameId,4);assert.equal(out.nextWaypointIndex,1);
+        if(situation==='world'||situation==='ambiguous-then-clear') {
+            assert.deepEqual(events,['W']);assert.equal(out.worldArrival.arrivalFrameId,situation==='ambiguous-then-clear'?4:3);
+            assert.equal(out.worldArrival.confirmedFrameId,situation==='ambiguous-then-clear'?5:4);assert.equal(out.nextWaypointIndex,1);
         } else if(['contact-on-entry','foreign-entry','wrong-sidecar'].includes(situation)) {
             assert.deepEqual(events,['protected inventory']);assert.equal(out.status,'stopped');
             if(situation==='contact-on-entry')assert.equal(out.reason,'Enemy observed during exploration');

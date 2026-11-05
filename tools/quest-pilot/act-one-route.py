@@ -275,6 +275,13 @@ class GuardedPilot:
         if not passive:
             require_fresh_source(source, self.session, int(time.time() * 1000))
 
+    def supports_field_combat_world_entry(self, source):
+        """Check the capability on the live, idle pilot that owns this exact frame."""
+        heartbeat = self.command.require_live_controller(self.root, self.session, source['frameId'], self.wts)
+        if heartbeat['processId'] != self.pid:
+            raise RouteError('Field-combat capability belongs to another process.')
+        return heartbeat.get('fieldCombatWorldEntry') is True
+
     def _cancel_owned(self):
         """Cancel only this exact published request; an unknown/foreign request is never stopped."""
         if self.cancelled or self.pending is None:
@@ -469,6 +476,11 @@ class GuardedPilot:
                     or not 0 < fields['rewardFrameId'] < source['frameId']):
                 raise RouteError('Invalid combat reward identity.')
             expected_fields['questStep'].update(('combatRequestId', 'rewardFrameId'))
+        if mission == 'questStep' and fields.get('step') == 'actTwoFieldCombat' and 'entryScene' in fields:
+            if (fields['entryScene'] != 'world' or 'deadlineMs' not in fields
+                    or not isinstance(fields.get('expectedUid'), str) or not re.fullmatch(r'[0-9]{9,10}', fields['expectedUid'])):
+                raise RouteError('Invalid direct field combat entry.')
+            expected_fields['questStep'].update(('entryScene', 'expectedUid'))
         if mission == 'dialogue' and 'talkTo' in fields:
             expected_fields['dialogue'] = {'talkTo', 'expectedUid', 'deadlineMs'}
             if (not isinstance(fields['talkTo'], str) or fields['talkTo'] != fields['talkTo'].strip()
@@ -491,6 +503,11 @@ class GuardedPilot:
             if step in ROUTE_TELEPORT_STEPS.values():
                 if not regional_map_ready(source):
                     raise RouteError('Native map teleport requires an open regional map.')
+            elif step == 'actTwoFieldCombat' and fields.get('entryScene') == 'world':
+                phase, _ = route_phase(source, fields['expectedUid'], [EXPLORATION_OBJECTIVE], allow_dialogue=False,
+                                       journal_resume=False, allow_field_combat=True)
+                if phase != 'fieldCombat':
+                    raise RouteError('Direct field combat requires a fresh measured world encounter.')
             elif step in ('worldInventoryClose', 'actTwoNativeCombat', 'actTwoFieldCombat', 'actTwoWorldMap',
                           'actTwoStarfellInventoryTeleport'):
                 if not self.inventory_ready(source):
@@ -744,8 +761,7 @@ def route_phase(source, expected_uid, objectives, *, allow_dialogue, journal_res
         return 'wait', 'Objective evidence is malformed'
     if objectives == [EXPLORATION_OBJECTIVE]:
         now_ms = int(time.time() * 1000) if now_ms is None else now_ms
-        # A positive field scan only requests an inventory pause. The native combat action
-        # measures the target, health, and controls again after reopening the world.
+        # This scan authorizes a handoff. Native combat independently rechecks its own fresh world frame.
         if (allow_field_combat and not any(text.strip() for text in visible_objectives)
                 and hp['current'] >= hp['max'] * .85 and ground_scan_has_combat_pack(source, now_ms)):
             return 'fieldCombat', None
@@ -1240,21 +1256,29 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
                 raise RouteError('Maximum encounter/dialogue handoffs reached.')
             remaining = int((deadline - monotonic()) * 1000)
             if phase == 'fieldCombat':
-                pause = dispatch('questStep', source, dict(step='worldInventory'))
-                if not isinstance(pause, dict) or pause.get('pausedInventory') is not True:
-                    raise RouteError('Could not verify the inventory handoff to native combat.')
                 if state['fieldRotations'] >= max_segments * 2:
                     state.update(status='waiting', reason='Field combat rotation limit reached')
                     break
-                dispatch('observe', pilot.current(), {})
-                paused = pilot.current()
-                if not source_account_matches(paused, expected_uid) or not pilot.inventory_ready(paused):
-                    raise RouteError('Native combat requires the expected account in inventory.')
-                # Reserve time for the final inventory return and receipt before giving the native loop its budget.
-                combat_ms = min(35000, int((deadline - monotonic()) * 1000) - 6000)
-                if combat_ms < 6000:
+                if remaining < 12000:
                     raise RouteError('Insufficient route time for another field encounter.')
-                rotation = dispatch('questStep', paused, dict(step='actTwoFieldCombat', deadlineMs=combat_ms))
+                fields = dict(step='actTwoFieldCombat')
+                combat_source = source
+                supports_world = getattr(pilot, 'supports_field_combat_world_entry', None)
+                if supports_world and supports_world(source):
+                    fields.update(entryScene='world', expectedUid=expected_uid)
+                else:
+                    pause = dispatch('questStep', source, dict(step='worldInventory'))
+                    if not isinstance(pause, dict) or pause.get('pausedInventory') is not True:
+                        raise RouteError('Could not verify the inventory handoff to native combat.')
+                    dispatch('observe', pilot.current(), {})
+                    combat_source = pilot.current()
+                    if not source_account_matches(combat_source, expected_uid) or not pilot.inventory_ready(combat_source):
+                        raise RouteError('Native combat requires the expected account in inventory.')
+                # Reserve six seconds for final protection and receipt on the original route clock.
+                fields['deadlineMs'] = min(35000, int((deadline - monotonic()) * 1000) - 6000)
+                if fields['deadlineMs'] < 6000:
+                    raise RouteError('Insufficient route time for another field encounter.')
+                rotation = dispatch('questStep', combat_source, fields)
                 if not returned_rotation(rotation):
                     raise RouteError('Native field rotation and its inventory pause were not established.')
                 state['fieldRotations'] += 1

@@ -65,6 +65,13 @@ var ActOnePilot = (function () {
             if (!integer(r.deadlineMs, 6000, 35000)) return 'Invalid field combat deadline';
             allowed.push('deadlineMs');
         }
+        // Only a timed field encounter can request a handoff from an observed world scene.
+        if (r.entryScene !== undefined) {
+            if (r.mission !== 'questStep' || r.step !== 'actTwoFieldCombat' || r.entryScene !== 'world' ||
+                !integer(r.deadlineMs, 6000, 35000) || typeof r.expectedUid !== 'string' || !/^[0-9]{9,10}$/.test(r.expectedUid))
+                return 'Invalid direct field combat entry';
+            allowed.push('entryScene', 'expectedUid');
+        }
         if (r.mission === 'dialogue' && r.talkTo !== undefined) {
             allowed.push('talkTo', 'expectedUid', 'deadlineMs');
             if (typeof r.talkTo !== 'string' || !/^[A-Za-z][A-Za-z '.-]{0,47}$/.test(r.talkTo) || r.talkTo !== r.talkTo.trim() ||

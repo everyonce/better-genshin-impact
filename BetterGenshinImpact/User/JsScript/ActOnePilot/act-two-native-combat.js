@@ -63,6 +63,20 @@
   const h=o&&o.hud,bars=h&&h.enemyBars,n=targets(o).length;
   return !!(Array.isArray(bars)&&n>=1&&n<=3&&bars.length===n&&Array.isArray(h.objectives)&&h.objectives.every(t=>typeof t==='string'&&!t.trim()));
  }
+ // The route's threat observation can only request a new independently measured engine capture.
+ function worldEntry(o,request,now,original){
+  if(request.step!=='actTwoFieldCombat'||request.entryScene!=='world'||!Number.isInteger(request.expectedFrameId)||
+     !o||o.frameId!==request.expectedFrameId+1||!encounter(o,now,request.session,original,false,true))return false;
+  const h=o.hud,stamp=h.captureStamp,scan=h.enemyBarObservation,d=h.enemyBarDiagnostic||{},bars=h.enemyBars;
+  const candidates=d.fieldCandidates===undefined?bars:d.fieldCandidates;
+  if(h.loading||h.unknownHud||h.lowHealth||d.overloaded||!Array.isArray(candidates)||candidates.length<bars.length||candidates.length>64||
+     !stamp||!scan||stamp.source!=='game-capture-start'||stamp.session!==o.session||stamp.frameId!==o.frameId||
+     !Number.isInteger(stamp.capturedAt)||stamp.capturedAt<request.createdAt||stamp.capturedAt>o.timestamp||now-stamp.capturedAt>2000||
+     scan.version!==1||scan.kind!=='normal-ground-enemy-observation-v1'||scan.state!=='threat'||scan.session!==o.session||
+     scan.frameId!==o.frameId||scan.capturedAt!==stamp.capturedAt||scan.candidateCount!==candidates.length||scan.acceptedCount!==bars.length)return false;
+  const ids=(o.ocr||[]).filter(r=>r.x>1600&&r.y>1020).map(r=>String(r.text||'').match(/[0-9]{9,10}/)).filter(Boolean);
+  return ids.length===1&&ids[0][0]===request.expectedUid;
+ }
  // Taller rendered bars are the existing proximity cue; center breaks ties.
  // Red segment width is health, so it never decides approach priority.
  function fieldTarget(o,pack){
@@ -288,6 +302,6 @@
   if(p.shieldProbe===true){if(p.shieldReviewed!==true||p.nativeAvatar!=='Kaeya'||p.enemyLevel!==13)throw new Error('Reviewed Kaeya shield probe required');return {strategy:'English Whopperflower Shield Probe',seconds:2,deadlineMs:3000,sampleAfterMs:750,minimumHealth:.85};}
   return {strategy:p.nativeAvatar==='Lumina'?'English Ley Line Anemo':'English Ley Line Defense',seconds:6,deadlineMs:8000,sampleAfterMs:2500,minimumHealth:.5};
  }
- root.ActTwoNativeCombat={localLevel,leyLineProfile,strategy,groupStrategy,ambushStrategy,entrySettled,pauseSeed,targetingParam,deadlineProbe,field,targets,fieldTarget,sameFieldPose,emptyField,reacquireFieldTarget,fieldSequence,approachFieldTarget,encounter,finish,chunk,assessProgress,progress,sequence};
+ root.ActTwoNativeCombat={localLevel,leyLineProfile,strategy,groupStrategy,ambushStrategy,entrySettled,worldEntry,pauseSeed,targetingParam,deadlineProbe,field,targets,fieldTarget,sameFieldPose,emptyField,reacquireFieldTarget,fieldSequence,approachFieldTarget,encounter,finish,chunk,assessProgress,progress,sequence};
  if(typeof module!=='undefined'&&module.exports)module.exports=root.ActTwoNativeCombat;
 })(typeof globalThis!=='undefined'?globalThis:this);

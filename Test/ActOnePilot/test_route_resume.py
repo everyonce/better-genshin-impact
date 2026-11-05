@@ -724,6 +724,26 @@ class SupervisedRouteControllerTests(unittest.TestCase):
                          ['worldInventory','actTwoFieldCombat','worldInventoryClose','worldInventory','navigation'])
         self.assertFalse(returned['result']['defeatConfirmed'])
 
+    def test_capable_pilot_enters_measured_world_pack_without_inventory_round_trip(self):
+        self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
+        enemy = controller_scene(objective='', enemies=True)
+        inv, clear = controller_scene('inventory'), controller_scene(objective='')
+        proof = dict(verified=True, kind='inventory', session='route-session')
+        returned = dict(mission='questStep', status='stopped', source=inv, result=dict(
+            nativeGroup=False, nativeAttempted=True, nativeReturned=True, beforeFrameId=3,
+            afterFrameId=4, pauseVerified=True, pauseProof=proof, defeatConfirmed=False))
+        pilot = ReplayPilot(self.clock, [returned, dict(mission='questStep', source=clear,
+            result=dict(worldVisible=True)), dict(mission='questStep', source=inv, result=dict(pausedInventory=True)),
+            self.arrival(3, inv)], source=enemy)
+        pilot.supports_field_combat_world_entry = mock.Mock(return_value=True)
+        report = self.run_controller(pilot, allow_field_combat=True)
+        self.assertEqual(report['status'], 'arrived', report.get('reason'))
+        active = [r for r in pilot.calls if r['mission'] != 'observe']
+        self.assertEqual([r.get('step', r['mission']) for r in active],
+                         ['actTwoFieldCombat','worldInventoryClose','worldInventory','navigation'])
+        self.assertEqual((active[0]['entryScene'], active[0]['expectedUid']), ('world', '693306810'))
+        pilot.supports_field_combat_world_entry.assert_called_once()
+
     def combat_reward_frames(self):
         # Same sequence as Temple public09: attack, disappearing bar, reappearance, then the parking frame.
         frames = {}
@@ -1167,6 +1187,20 @@ class GuardedPilotProtocolTests(unittest.TestCase):
         path.write_text(json.dumps(source), encoding='utf-8')
         (self.root / 'observation.json').write_text(json.dumps(source), encoding='utf-8')
         self.source = source
+
+    def test_world_entry_capability_belongs_to_this_idle_session_and_frame(self):
+        path = self.root / 'controller-status.json'
+        self.assertFalse(self.pilot.supports_field_combat_world_entry(self.source))
+        heartbeat = read_json(path)
+        heartbeat['fieldCombatWorldEntry'] = True
+        path.write_text(json.dumps(heartbeat))
+        self.assertTrue(self.pilot.supports_field_combat_world_entry(self.source))
+        for change in (dict(session='changed-session'), dict(frameId=2), dict(heartbeatAt=heartbeat['heartbeatAt'] - 10000),
+                       dict(processId=111), dict(state='running')):
+            path.write_text(json.dumps(dict(heartbeat, **change)))
+            with self.assertRaises(RuntimeError):
+                self.pilot.supports_field_combat_world_entry(self.source)
+        self.assertEqual(self.writes, [])
 
     def write_heartbeat(self, state, frame, active=None):
         value = dict(version=1, processId=42, windowsSessionId=3, remoteDesktop=True,

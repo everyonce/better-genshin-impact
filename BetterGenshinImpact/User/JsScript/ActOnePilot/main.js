@@ -7,7 +7,7 @@ eval(file.readTextSync('bgi.js'));
     function heartbeat(force,override) {
         var now=Date.now();if(!force&&now-lastHeartbeat<1000)return;
         var state=runner?runner.getState():{state:'starting',frameId:0,activeRequestId:null};
-        var value={version:1,processId:Number(genshin.betterGiProcessId),windowsSessionId:Number(genshin.windowsSessionId),remoteDesktop:genshin.isRemoteDesktopSession===true,session:session,
+        var value={version:1,fieldCombatWorldEntry:true,processId:Number(genshin.betterGiProcessId),windowsSessionId:Number(genshin.windowsSessionId),remoteDesktop:genshin.isRemoteDesktopSession===true,session:session,
             state:override||(safetyFault?'faulted':state.state),heartbeatAt:now,frameId:state.frameId,activeRequestId:state.activeRequestId,error:failure||safetyFault};
         if(!Number.isInteger(value.processId)||value.processId<=0)throw new Error('Updated BetterGI host with controller identity is required');
         if(!file.writeTextSync('controller-status.json',JSON.stringify(value)))throw new Error('Cannot publish controller heartbeat');

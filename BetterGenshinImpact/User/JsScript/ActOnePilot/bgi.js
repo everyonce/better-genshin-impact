@@ -270,12 +270,13 @@ function actOneWagnerChoiceTutorial(rows) {
 }
 function actOneEnemyBarSize(w,h) { return w>=2 && w<=300 && h>=3 && h<=12 && w/h>=0.15; }
 // Keep field combat's attack detector until the final protector captures the pre-pause world.
-function actOneRequestsGroundObservation(request,inventoryUiOnly,protecting) {
+function actOneRequestsGroundObservation(request,inventoryUiOnly,protecting,frame) {
     return !!request&&!inventoryUiOnly&&(request.mission==='observe'||
         request.mission==='questStep'&&request.step==='actTwoFaceRemainingEnemy'||
         request.mission==='dialogue'&&typeof request.talkTo==='string'||
         request.mission==='navigation'&&request.objective==='Explore for Adventure Rank'&&request.requireMeasuredGround===true||
-        protecting&&request.mission==='questStep'&&request.step==='actTwoFieldCombat');
+        request.mission==='questStep'&&request.step==='actTwoFieldCombat'&&
+            (protecting||request.entryScene==='world'&&Number.isInteger(request.expectedFrameId)&&frame===request.expectedFrameId+1));
 }
 // A warning arrow has an outer pink chevron and a separate diamond on the screen's warning ring.
 function actOneWarningArrow(candidate,shapes){
@@ -4233,7 +4234,9 @@ function createActOneAdapter(sessionId,options) {
         runActTwoNativeCombat: async function(initial,observe){
             var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;');
             var native=eval(file.readTextSync('act-two-native-combat.js')+'\nActTwoNativeCombat;');
-            if(['actTwoNativeCombat','actTwoFieldCombat','actTwoNativeGroup','actTwoNativeFinish','actTwoNativeDeadlineProbe'].indexOf(request.step)<0||!gate(initial,Date.now(),request.session)||!actTwoOriginalAccount(initial.ocr||[]))throw new Error('Fresh original-account inventory required');
+            var worldEntry=request.step==='actTwoFieldCombat'&&request.entryScene==='world';
+            if(['actTwoNativeCombat','actTwoFieldCombat','actTwoNativeGroup','actTwoNativeFinish','actTwoNativeDeadlineProbe'].indexOf(request.step)<0||
+               !worldEntry&&(!gate(initial,Date.now(),request.session)||!actTwoOriginalAccount(initial.ocr||[])))throw new Error('Fresh original-account inventory required');
             var finishing=request.step==='actTwoNativeFinish',permit=null,prior=null,witness=null;
             if(finishing){permit=JSON.parse(file.readTextSync('act-two-native-finish-request.json'));if(!/^mission-[a-f0-9]{32}$/.test(permit.priorId))throw new Error('Invalid prior combat receipt');prior=JSON.parse(file.readTextSync('receipts/'+request.session+'/'+permit.priorId+'.json'));var wf=prior.details&&prior.details.result&&prior.details.result.afterFrameId;if(!Number.isInteger(wf))throw new Error('Missing prior combat frame');witness=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(wf).padStart(4,'0')+'.json'));}
             var pack=request.step==='actTwoFieldCombat',probing=request.step==='actTwoNativeDeadlineProbe',group=!probing&&!pack&&request.step!=='actTwoNativeCombat',current=initial,result={status:'stopped',nativeGroup:group,nativeAttempted:false,damageConfirmed:false,defeatConfirmed:false},error=null;
@@ -4263,9 +4266,15 @@ function createActOneAdapter(sessionId,options) {
                 }finally{dispose(acquisitionImage);acquisitionImage=img;acquisitionImageAt=capturedAt;}
             }
             try{
-                await boundedKey('VK_ESCAPE',60,initial.frameId);
-                if(ambushWitness){await sleep(550);current=acquire();result.acquisition=current;}
-                else for(var poll=0;poll<3;poll++){await sleep(poll===0?450:150);current=await observe();if(eligible(current)||native.entrySettled(current,Date.now(),request.session,original,!group&&!probing,pack))break;}
+                if(worldEntry){
+                    // The engine took this request's first new frame. Revalidate it before any input.
+                    result.entryScene='world';result.entryFrameId=initial.frameId;
+                    if(!native.worldEntry(initial,request,Date.now(),original))throw new Error('Direct field entry requires a fresh measured original-account pack');
+                }else{
+                    await boundedKey('VK_ESCAPE',60,initial.frameId);
+                    if(ambushWitness){await sleep(550);current=acquire();result.acquisition=current;}
+                    else for(var poll=0;poll<3;poll++){await sleep(poll===0?450:150);current=await observe();if(eligible(current)||native.entrySettled(current,Date.now(),request.session,original,!group&&!probing,pack))break;}
+                }
                 if(!eligible(current))throw new Error(pack?'Fresh grounded Kaeya health and one to three measured field targets required':'Fresh grounded Kaeya health and one close enemy bar required');
                 for(var alignmentAttempt=0;alignmentAttempt<2&&current.acquisition&&!acquisition.stationaryReady(current.hud.enemyBars);alignmentAttempt++){
                     checkStop();ready();var alignDx=acquisition.cameraDelta(current.hud.enemyBars);
@@ -9354,7 +9363,7 @@ function createActOneAdapter(sessionId,options) {
                 if (readyError) throw readyError;
             } else ready();
             enemyBarDiagnostic=null;ocrPrimitiveMs=0;ocrReadCount=0;
-            var groundEnemyRequested=actOneRequestsGroundObservation(request,inventoryUiOnly,pauseProtectionActive);
+            var groundEnemyRequested=actOneRequestsGroundObservation(request,inventoryUiOnly,pauseProtectionActive,frame);
             var t0 = Date.now(), img = captureGameRegion(), captureMs = Date.now() - t0;
             var pngPending=null,pngScheduleMs=0,pngWaitMs=0,pngMs=0,pngWriteMode='synchronous';
             try {

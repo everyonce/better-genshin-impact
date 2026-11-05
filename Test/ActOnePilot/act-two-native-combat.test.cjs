@@ -272,9 +272,18 @@ async function packAdapter(step,count,options={}){
  const path=require('node:path'),vm=require('node:vm'),dir=path.resolve(__dirname,'../../BetterGenshinImpact/User/JsScript/ActOnePilot');
  const bgi=fs.readFileSync(path.join(dir,'bgi.js'),'utf8');const start=bgi.indexOf('runActTwoNativeCombat: async function('),end=bgi.indexOf('\n        runActTwoPauseProbe:',start);
  const member=bgi.slice(start,end).trim().replace(/,$/,'');let time=1000,id=1;const calls=[];
- const initial={session:'test',frameId:1,timestamp:1000,map:null,hud:{world:false,dialogueReady:false,choice:false,journal:false,bigMap:false,climbing:false,auto:false},ocr:[
+ let initial={session:'test',frameId:1,timestamp:1000,map:null,hud:{world:false,dialogueReady:false,choice:false,journal:false,bigMap:false,climbing:false,auto:false},ocr:[
   {text:'Weapons',x:136,y:28,width:122,height:40},{text:'Weapons 13/2000',x:1602,y:34,width:199,height:27},{text:"Traveler's Handy Sword",x:1331,y:125,width:417,height:45},{text:'UID: 693306810',x:1680,y:1050,width:181,height:27}]};
- const box={request:{id:'pack-test',step,session:'test'},Date:{now:()=>time},file:{readTextSync:n=>fs.readFileSync(path.join(dir,n),'utf8')},events:[],lastObservation:initial,
+ const directRequest = options.direct ? {entryScene:'world',expectedUid:'693306810',expectedFrameId:0,createdAt:1000,deadlineMs:35000} : {};
+ if(options.direct){
+  const uid=initial.ocr.slice(-1);
+  initial=packFrame(count);initial.frameId=1;initial.ocr=uid;
+  initial.hud.captureStamp={session:'test',frameId:1,source:'game-capture-start',capturedAt:1000};
+  initial.hud.enemyBarObservation={version:1,kind:'normal-ground-enemy-observation-v1',state:'threat',session:'test',
+      frameId:1,capturedAt:1000,acceptedCount:count,candidateCount:count};
+  if(options.change)options.change(initial,directRequest);
+ }
+ const box={request:{id:'pack-test',step,session:'test',...directRequest},Date:{now:()=>time},file:{readTextSync:n=>fs.readFileSync(path.join(dir,n),'utf8')},events:[],lastObservation:initial,
   actTwoOriginalAccount:rows=>rows.some(r=>r.text==='UID: 693306810'),checkStop(){},ready(){},release(){calls.push('release');},dispose(){},
   boundedKey:async k=>calls.push(k),sleep:async ms=>{time+=ms;},keyUp(){},leftButtonUp(){},rightButtonUp(){},moveMouseBy(){calls.push('turn');},
   dispatcher:{GetLinkedCancellationTokenSource:()=>({Token:{},CancelAfter(){},Cancel(){},Dispose(){}}),RunCombatScript:async()=>{calls.push('native');if(options.failAt===calls.filter(x=>x==='native').length)throw Error('native rejected');}},
@@ -282,6 +291,30 @@ async function packAdapter(step,count,options={}){
  const adapter=vm.runInNewContext('({'+member+'})',box);const observe=async()=>{const o=packFrame(count);o.timestamp=time;o.frameId=++id;o.ocr=initial.ocr.slice(-1);box.lastObservation=o;return o;};
  return {result:await adapter.runActTwoNativeCombat(initial,observe),calls};
 }
+test('direct field entry attacks the newly captured pack without Escape and retains final protection',async()=>{
+ const {result,calls}=await packAdapter('actTwoFieldCombat',2,{direct:true});
+ assert.equal(result.entryFrameId,1);assert.equal(result.beforeFrameId,1);assert.equal(result.entryScene,'world');
+ assert.equal(result.nativeReturned,true);assert.equal(result.pauseVerified,true);
+ assert.ok(calls.includes('native'));assert.equal(calls.includes('VK_ESCAPE'),false);assert.equal(calls.at(-1),'protect');
+});
+test('direct field entry refuses a replaced frame, stale stamp, changed pack, UID, HP, ground or location',async()=>{
+ for(const change of [o=>o.frameId=8,o=>o.hud.captureStamp.capturedAt=100,o=>o.hud.enemyBarObservation.frameId=5,
+     o=>o.hud.enemyBarObservation.candidateCount=0,o=>o.hud.enemyBars=[],o=>o.hud.health.current=1,
+     o=>o.hud.groundControls=false,o=>o.map.x=0,(_o,r)=>r.expectedUid='123456789',o=>o.ocr=[]]){
+  const {result,calls}=await packAdapter('actTwoFieldCombat',1,{direct:true,change});
+  assert.equal(result.nativeAttempted,false);assert.deepEqual(calls.filter(c=>['VK_ESCAPE','VK_W','turn','native'].includes(c)),[]);
+  assert.equal(calls.at(-1),'protect');
+ }
+});
+test('direct entry fields are valid only on timed field combat with an explicit UID',()=>{
+ const engine=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/engine.js');
+ const r={id:'direct',session:'test',mission:'questStep',step:'actTwoFieldCombat',expectedFrameId:1,createdAt:1000,
+     entryScene:'world',expectedUid:'693306810',deadlineMs:15000};
+ const validate=value=>engine.validate(value,'test',1,{},1000);
+ assert.ok(!validate(r));for(const overrides of [{step:'actTwoNativeCombat'},{entryScene:'inventory'},{expectedUid:'x'},
+     {deadlineMs:5000},{mission:'observe'},{expectedFrameId:2}])assert.ok(validate({...r,...overrides}));
+ assert.ok(!validate({id:'legacy',session:'test',mission:'questStep',step:'actTwoFieldCombat',expectedFrameId:1,createdAt:1000}));
+});
 test('actual adapter new step runs a bounded sequence and protects while old step refuses two bars',async()=>{
  const pack=await packAdapter('actTwoFieldCombat',2);assert.equal(pack.result.nativeGroup,false);assert.equal(pack.result.nativeAttempted,true);assert.equal(pack.result.nativeReturned,true);assert.equal(pack.result.damageConfirmed,false);assert.equal(pack.result.defeatConfirmed,false);assert.equal(pack.calls.filter(x=>x==='native').length,3);assert.equal(pack.result.completedRotations,3);assert.deepEqual(Array.from(pack.result.chunks,t=>t.actionId),['pack-test:rotation:0','pack-test:rotation:1','pack-test:rotation:2']);assert.equal(pack.calls.filter(x=>x==='protect').length,1);assert.equal(pack.calls.at(-1),'protect');
  const legacy=await packAdapter('actTwoNativeCombat',2);assert.equal(legacy.result.nativeAttempted,false);assert.equal(legacy.calls.includes('native'),false);assert.equal(legacy.calls.at(-1),'protect');

@@ -3597,6 +3597,24 @@ function createActOneAdapter(sessionId,options) {
             return matches.length===1?matches[0]:null;
         } finally {dispose(mask);dispose(hsv);dispose(crop);}
     }
+    // Read the bow's screen-space target during a stationary tower encounter, including
+    // the sky above the ordinary ground-combat crop and the center of the aiming view.
+    function bowAimBars(img){
+        var cv=OpenCvSharp.OpenCvSharp,crop=img.deriveCrop(180,8,1560,850),mask=null;
+        try{
+            mask=crop.srcMat.inRange(new cv.Scalar(75,75,230),new cv.Scalar(110,110,255));
+            var cs=mask.findContoursAsArray(cv.RetrievalModes.External,cv.ContourApproximationModes.ApproxSimple);
+            var count=Number(cs.length===undefined?cs.Length:cs.length),bars=[];
+            if(!Number.isInteger(count)||count>4096)return bars;
+            for(var i=0;i<count;i++){
+                var rect=cv.Cv2.boundingRect(cs[i]),w=Number(rect.width),h=Number(rect.height);
+                if(w<3||w>165||h<3||h>11||w/h<1.2)continue;
+                if(Number(cv.Cv2.contourArea(cs[i]))<.78*(w-1)*(h-1))continue;
+                bars.push({left:180+Number(rect.x),y:8+Number(rect.y)+h/2,width:w,height:h});
+            }
+            return bars;
+        }finally{dispose(mask);dispose(crop);}
+    }
     function readEnemyBars(img, rows, level, nativeAcquisition, groundObservation) {
         // Measure a solid horizontal interior without assigning quality to its anti-aliased outer edge.
         // The caller limits this work to eight wide field components from the same image.
@@ -4599,7 +4617,7 @@ function createActOneAdapter(sessionId,options) {
             if(finishing){permit=JSON.parse(file.readTextSync('act-two-native-finish-request.json'));if(!/^mission-[a-f0-9]{32}$/.test(permit.priorId))throw new Error('Invalid prior combat receipt');prior=JSON.parse(file.readTextSync('receipts/'+request.session+'/'+permit.priorId+'.json'));var wf=prior.details&&prior.details.result&&prior.details.result.afterFrameId;if(!Number.isInteger(wf))throw new Error('Missing prior combat frame');witness=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(wf).padStart(4,'0')+'.json'));}
             var pack=request.step==='actTwoFieldCombat',probing=request.step==='actTwoNativeDeadlineProbe',group=!probing&&!pack&&request.step!=='actTwoNativeCombat',current=initial,result={status:'stopped',nativeGroup:group,nativeAttempted:false,damageConfirmed:false,defeatConfirmed:false},error=null;
             var tower=pack?eval(file.readTextSync('gate-tower-combat.js')+'\nGateTowerCombat;'):null;
-            var towerContext={now:Date.now,session:request.session,original:original};
+            var towerContext={now:Date.now,session:request.session,original:original,aimed:true};
             function towerCandidate(o){return !!tower&&tower.candidate(o,towerContext);}
             function towerBars(o){var b=tower&&tower.bar(o);return b?[b]:[];}
             async function observeTower(){towerGroundRequested=true;try{return await observe();}finally{towerGroundRequested=false;}}
@@ -4692,7 +4710,7 @@ function createActOneAdapter(sessionId,options) {
                         now:Date.now,checkStop:checkStop,eligible:eligible,sleep:sleep,observe:observe,run:runChunk,
                         actionId:function(index){return request.id+':rotation:'+index;},
                         towerCandidate:towerCandidate,
-                        runTower:function(o,index,deadline){return tower.run(o,index,{now:Date.now,session:request.session,original:original,
+                        runTower:function(o,index,deadline){return tower.run(o,index,{now:Date.now,session:request.session,original:original,aimed:true,
                             checkStop:function(){checkStop();ready();if(Date.now()>=deadline)throw Error('Tower encounter deadline reached');},
                             deadline:deadline,sleep:sleep,observe:observeTower,rewards:native.rewardFeedback,
                             actionId:function(i){return request.id+':rotation:'+i;},
@@ -4704,7 +4722,23 @@ function createActOneAdapter(sessionId,options) {
                                 events.push({type:'gateTowerCameraAlignment',frameId:frame.frameId,dx:dx,dy:0,startedAt:Date.now()});
                                 moveMouseBy(dx,0);return dx;
                             },
-                            fire:function(frame,i){checkStop();ready();return runChunk(frame,i,true);}
+                            fire:async function(frame,i){
+                                checkStop();ready();
+                                var actionId=request.id+':rotation:'+i;
+                                var event={type:'actTwoNativeCombat',engine:'BetterGI aimed bow',strategy:'charged aimed shot',
+                                    avatar:'Amber',chunkIndex:i,actionId:actionId,frameId:frame.frameId,startedAt:Date.now()};
+                                events.push(event);result.nativeAttempted=true;
+                                if(result.beforeFrameId===undefined){result.beforeFrameId=frame.frameId;result.beforeHealth=frame.hud.health;result.beforeBars=towerBars(frame);}
+                                try{
+                                    var volley=await tower.aimedVolley(frame,{now:Date.now,deadline:deadline,session:request.session,
+                                        original:original,checkStop:checkStop,sleep:sleep,observe:observeTower,
+                                        key:function(k,f){checkStop();ready();return boundedKey(k,60,f.frameId);},
+                                        look:function(x,y,f){checkStop();ready();events.push({type:'towerBowAim',dx:x,dy:y,frameId:f.frameId,startedAt:Date.now()});moveMouseBy(x,y);},
+                                        shoot:async function(f){checkStop();ready();await boundedKey('VK_LBUTTON',60,f.frameId);event.finishedAt=Date.now();}
+                                    });
+                                    event.nativeReturned=volley.nativeReturned;return volley;
+                                }finally{if(!event.finishedAt)event.finishedAt=Date.now();}
+                            }
                         });},
                         fieldReady:function(o){return native.field(o,Date.now(),request.session,original,true);},
                         emptyField:function(o){return native.emptyField(o,Date.now(),request.session,original);},
@@ -10372,6 +10406,7 @@ function createActOneAdapter(sessionId,options) {
                 }
                 // Preserve this invocation's capture start through engine HUD serialization.
                 // This is neither compositor acquisition time nor evidence of physical input delivery.
+                if(towerGroundRequested)hud.bowAimBars=bowAimBars(img);
                 hud.captureStamp = { session: session, frameId: frame, capturedAt: t0, source: 'game-capture-start' };
                 lastObservation = { session: session, frameId: frame, timestamp: Date.now(), capturedAt: t0, screenshotPath: png, ocr: rows, map: trackQuest ? null : pos, mapDiagnostic:mapDiagnostic, hud: hud,
                     // ocrMs is a legacy cumulative window and can overlap later PNG/map work on fallback paths.

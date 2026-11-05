@@ -1,9 +1,16 @@
 (function(root){
  'use strict';
  // Only the surveyed Mondstadt platform has a verified elevated target and clear firing lane.
+ // Both ends of the firing lane were measured in live captures of the same elevated platform.
+ function firingLane(p){
+  if(!p||p.map!=='Teyvat')return false;
+  const dx=-1186.1875+1181.3418,dy=2206.2676-2194.7031;
+  const t=Math.max(0,Math.min(1,((p.x+1181.3418)*dx+(p.y-2194.7031)*dy)/(dx*dx+dy*dy)));
+  return Math.hypot(p.x+1181.3418-t*dx,p.y-2194.7031-t*dy)<=3.5;
+ }
  function pose(o){
   const p=o&&o.map;
-  return !!(p&&p.map==='Teyvat'&&Math.hypot(p.x+1186.1875,p.y-2206.267578125)<=5.5&&
+  return !!(p&&p.map==='Teyvat'&&(firingLane(p)||Math.hypot(p.x+1186.1875,p.y-2206.267578125)<=5.5)&&
    Number.isFinite(p.cameraAngle));
  }
  function base(o,api){
@@ -52,6 +59,7 @@
  function candidate(o,api){
   if(!base(o,api)||!party(o,'Kaeya')&&!party(o,'Amber'))return false;
   const b=bar(o),yaw=(o.map.cameraAngle-292.5+540)%360-180;
+  if(api.aimed&&b&&firingLane(o.map)&&Math.abs(yaw)<=38&&b.y<=265)return true;
   if(!b||Math.hypot(o.map.x+1186.1875,o.map.y-2206.267578125)>3||yaw< -19||yaw>12)return false;
   // The post-hit 278-degree view still presents the same high platform to the right.
   return yaw>=-12&&b.x<=1150||Math.abs(b.x-(1036-7*yaw))<=90;
@@ -99,15 +107,96 @@
  }
  // Different character models can shift the camera slightly on a switch. Impact uses the same Amber pose.
  function feedback(before,after,api,id){
-  if(!base(after,api)||!party(after,'Amber')||!recoilPose(before,after)||before.hud.health.max!==after.hud.health.max)return 'unconfirmed';
+  if(!base(after,api)||!party(after,'Amber')||Math.hypot(before.map.x-after.map.x,before.map.y-after.map.y)>1.25||before.hud.health.max!==after.hud.health.max)return 'unconfirmed';
   if(scan(after,'clear',0)&&api.rewards(before,after).some(r=>/^(?:Obtained\s+)?Character EXP\s*(?:[×x+·]\s*)?[1-9][0-9]{0,4}$/i.test(r.text.trim())))return 'defeat';
+  if(!recoilPose(before,after))return 'unconfirmed';
   if(scan(after,'threat',1)&&recoilDamage(before,after,id))return 'damage';
   if(!samePose(before,after))return 'unconfirmed';
   const a=bar(before),b=bar(after);
   if(scan(after,'threat',1)&&associated(a,b,12)&&a.height===b.height&&a.width-b.width>=Math.max(8,a.width*.12))return 'damage';
   return 'unconfirmed';
  }
- // One normal arrow per request. Only fresh measured impact can permit a later request to fire again.
+ // Bow aiming uses the center reticle. Follow the level label or the left edge of the full rail,
+ // since the center of the remaining red fill moves sideways as the archer takes damage.
+ function aimTarget(frame, priorWidth){
+  const regions=frame.hud.bowAimBars||[], labels=(frame.ocr||[]).filter(r=>/^Lv[.,]?\s*1$/i.test(r.text.trim()));
+  const choices=regions.map(b=>{
+   const nearby=labels.filter(r=>Math.abs(r.x+r.width/2-b.left-32)<48&&b.y-r.y-r.height/2>4&&b.y-r.y-r.height/2<55);
+   const full=Math.max(priorWidth||66,b.width);
+   return {x:nearby.length===1?nearby[0].x+nearby[0].width/2:b.left+full/2,
+    y:b.y+55,barY:b.y,width:b.width,full:full,label:nearby.length===1};
+  });
+  const named=choices.filter(c=>c.label);
+  return named.length===1?named[0]:choices.length===1?choices[0]:null;
+ }
+ function aimMode(frame){
+  const h=frame.hud,rows=frame.ocr||[];
+  return !h.bigMap&&!h.journal&&!h.choice&&!h.auto&&!h.groundControls&&
+   rows.some(r=>r.text.trim()==='R'&&r.x>1640&&r.x<1810&&r.y>975&&r.y<1060);
+ }
+ // Toggle the bow sight, correct both screen axes and release only when the target is under the reticle.
+ // Keep the returned observations and real control timings together for the combat receipt.
+ async function aimedVolley(initial,api){
+  let frame=initial,entered=false,attempted=false,lastMove=null,since=0,full=Math.max(66,bar(initial).width);
+  const trace={samples:[],shots:[]},gain={x:1.6,y:.6};
+  const start=api.now(),end=api.deadline-3200;
+  async function sample(delay){
+   api.checkStop();await api.sleep(delay);const next=await api.observe(),s=next.hud.captureStamp;
+   if(next.session!==initial.session||next.frameId<=frame.frameId||!s||s.capturedAt<=frame.hud.captureStamp.capturedAt||
+      !api.original(next)||api.now()-next.timestamp>1200)throw Error('Lost current bow capture');
+   frame=next;return frame;
+  }
+  try{
+   await api.key('VK_R',frame);entered=true;since=api.now();await sample(350);
+   let missing=0,groundRetries=0,emptyAfterShot=0;
+   while(api.now()<end&&trace.samples.length<22){
+    const hp=frame.hud.health;
+    if(!hp||hp.max!==initial.hud.health.max||hp.current<hp.max*.65)throw Error('Amber health unavailable in bow sight');
+    const sight=aimMode(frame),target=aimTarget(frame,full);
+    const entry={frameId:frame.frameId,sight:sight,hp:hp.current,target:target};trace.samples.push(entry);
+    if(!sight){
+     if(base(frame,api)&&party(frame,'Amber')&&target&&groundRetries++<2){
+      // Enemy attacks can knock Amber out of aiming. Re-enter only from her actual ground HUD.
+      await api.key('VK_R',frame);since=api.now();lastMove=null;await sample(300);continue;
+     }
+     if(trace.shots.length)break;
+     throw Error('Amber bow sight not confirmed');
+    }
+    if(!target){
+     if(trace.shots.length){if(++emptyAfterShot>=2)break;await sample(160);continue;}
+     if(++missing>3)throw Error('Elevated target unavailable in bow sight');
+     api.look(0,-110,frame);entry.searchDy=-110;await sample(150);continue;
+    }
+    emptyAfterShot=0;missing=0;full=Math.max(full,target.width);
+    const error={x:target.x-960,y:target.y-540};
+    if(lastMove){
+     for(const axis of ['x','y']){
+      const observed=(lastMove.error[axis]-error[axis])/lastMove.delta[axis];
+      if(Math.abs(lastMove.delta[axis])>=12&&observed>.15&&observed<5)gain[axis]=observed;
+     }
+    }
+    lastMove=null;
+    if(Math.abs(error.x)>12||Math.abs(error.y)>14){
+     const clip=(value,limit)=>Math.max(-limit,Math.min(limit,Math.round(value)));
+     const delta={x:clip(error.x/gain.x,175),y:clip(error.y/gain.y,155)};
+     api.look(delta.x,delta.y,frame);entry.delta=delta;lastMove={error,delta};await sample(145);continue;
+    }
+    if(api.now()-since<1500){await sample(Math.min(450,1500-(api.now()-since)));continue;}
+    if(trace.shots.length===3)break;
+    const shot={frameId:frame.frameId,width:target.width,startedAt:api.now()};
+    await api.shoot(frame);shot.finishedAt=api.now();attempted=true;trace.shots.push(shot);since=shot.finishedAt;
+    await sample(300);
+   }
+  }catch(e){trace.error=String(e&&e.message||e);}
+  finally{
+   if(entered){
+    // R is a toggle. An enemy stagger may already have closed the sight.
+    if(aimMode(frame)){await api.key('VK_R',frame);await api.sleep(200);}
+   }
+  }
+  return {nativeReturned:attempted,nativeMs:api.now()-start,aim:trace};
+ }
+ // Select Amber and bind the shot to the same stationary hostile; the live adapter uses the bow sight.
  async function run(initial,index,api){
   const result={assessment:'unconfirmed',restored:false,switched:false},turns=[];
   let current=initial,restoreActiveAmber=false;
@@ -142,7 +231,7 @@
    budget(5200);
    if(!base(current,api)||!party(current,'Amber')||!samePose(anchor,current)||!scan(current,'threat',1)||!associated(bar(anchor),bar(current),60))
     throw Error('Healthy active Amber and the same elevated hostile required');
-   if(!aligned(current)){
+   if(!api.aimed&&!aligned(current)){
     result.alignment=[];
     for(let attempt=0;attempt<2&&!aligned(current);attempt++){
      budget(6200);
@@ -171,7 +260,7 @@
    const before=current,turn={actionId:api.actionId(index),beforeFrameId:before.frameId,beforeHealth:before.hud.health,
     beforeBars:[bar(before)],nativeAttempted:true,nativeReturned:false,startedAt:api.now()};turns.push(turn);
    try{Object.assign(turn,await api.fire(before,index));}finally{turn.finishedAt=api.now();}
-   if(turn.nativeReturned!==true)throw Error('Native Amber shot did not return');
+   if(turn.nativeReturned!==true)throw Error(turn.aim&&turn.aim.error||'Native Amber shot did not return');
    for(let probe=0;probe<3;probe++){
     await fresh(probe?180:350);result.assessment=feedback(before,current,api,turn.actionId);
     if(result.assessment!=='unconfirmed'||!base(current,api)||!recoilPose(before,current)||before.hud.health.max!==current.hud.health.max)break;
@@ -199,6 +288,6 @@
   }
   return {current,turns,result};
  }
- root.GateTowerCombat={candidate,base,party,bar,scan,samePose,aligned,feedback,run};
+ root.GateTowerCombat={candidate,base,party,bar,scan,samePose,aligned,aimMode,aimTarget,aimedVolley,feedback,run};
  if(typeof module!=='undefined'&&module.exports)module.exports=root.GateTowerCombat;
 })(typeof globalThis!=='undefined'?globalThis:this);

@@ -212,3 +212,29 @@ test('unhelpful turn, changed target, conflicting identity or a lost second sigh
   assert.ok(r.result.error);
  }
 });
+
+test('aimed bow tracks the head below a wounded HP rail independent of the remaining fill',()=>{
+ const frame=structuredClone(missBefore);
+ frame.hud.bowAimBars=[{left:927,y:485,width:13,height:4}];
+ frame.ocr=[{text:'Lv. 1',x:938,y:455,width:44,height:25}];
+ const target=tower.aimTarget(frame,66);
+ assert.equal(target.x,960);assert.equal(target.y,540);assert.equal(target.width,13);
+ frame.ocr=[];assert.equal(tower.aimTarget(frame,66).x,960);
+ frame.hud.bowAimBars.push({left:992,y:487,width:20,height:4});
+ assert.equal(tower.aimTarget(frame,66),null);
+});
+
+test('the aimed volley corrects pitch and yaw before firing, then releases aim on a verified empty sight',async()=>{
+ const source=structuredClone(missBefore),ground=source.hud.captureStamp.capturedAt;
+ let now=source.timestamp,frameId=source.frameId,shots=0,dx=110,dy=-150;const keys=[],looks=[];
+ const out=await tower.aimedVolley(source,{now:()=>now,deadline:now+20000,session:source.session,original:()=>true,
+  checkStop(){},sleep:async(ms)=>{now+=ms;},key:async(k)=>keys.push(k),
+  look:(x,y)=>{looks.push([x,y]);dx-=x*1.6;dy-=y*.6;},shoot:async()=>{assert.ok(Math.abs(dx)<=12&&Math.abs(dy)<=14);shots++;},
+  observe:async()=>{
+   const f=structuredClone(source);f.frameId=++frameId;f.timestamp=++now;f.hud.groundControls=false;
+   f.hud.captureStamp={...f.hud.captureStamp,frameId,capturedAt:ground+now-source.timestamp};
+   f.ocr=[{text:'R',x:1720,y:1020,width:18,height:20}];
+   f.hud.bowAimBars=shots?[]:[{left:927+dx,y:485+dy,width:41,height:4}];return f;
+  }});
+ assert.equal(out.nativeReturned,true);assert.equal(shots,1);assert.ok(looks.some(([x,y])=>x>0&&y<0));assert.deepEqual(keys,['VK_R','VK_R']);
+});

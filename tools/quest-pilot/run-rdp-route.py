@@ -14,6 +14,7 @@ import uuid
 
 REPO = Path(__file__).resolve().parents[2]
 IDENTITY = ('processId', 'windowsSessionId', 'instanceNonce')
+GPU_SETUP_SECONDS = 120
 
 
 def require(value, message):
@@ -189,8 +190,133 @@ def foreground_game(app, windows_session_id):
     return dict(game, hwnd=int(hwnd))
 
 
+class GpuRouteAdviser:
+    """Own one optional image-only adviser and its exact session-scoped native config."""
+
+    def __init__(self, output, pilot, identity):
+        self.output = output / 'gpu-adviser'
+        self.pilot = pilot
+        self.identity = identity
+        self.config_path = pilot / 'gpu-adviser-config.json'
+        self.config_bytes = None
+        self.process = None
+        self.job = None
+        self.created_output = False
+        self.summary = dict(status='starting', output=str(self.output))
+
+    def start(self, runtime):
+        """Publish a complete config without replacing another launch, then resume this exact process in a job."""
+        from child_runner import CommandJob
+        python = REPO / 'artifacts/agent/envs/gamescaling/Scripts/python.exe'
+        script = Path(__file__).with_name('gpu_adviser.py')
+        require(python.is_file() and script.is_file(), 'Installed GPU environment or adviser script is unavailable.')
+        self.output.mkdir()
+        self.created_output = True
+        data = json.dumps(dict(version=1, **self.identity), separators=(',', ':')).encode()
+        pending = self.config_path.with_name('gpu-adviser-' + uuid.uuid4().hex + '.tmp')
+        with pending.open('xb') as stream:
+            stream.write(data)
+        try:
+            if os.name == 'nt':
+                os.rename(pending, self.config_path)  # Windows rename is atomic and refuses an existing destination.
+            else:
+                os.link(pending, self.config_path)
+            self.config_bytes = data
+        finally:
+            pending.unlink(missing_ok=True)
+        ident = self.identity
+        argv = [str(python), '-B', str(script), '--pilot-dir', str(self.pilot), '--session', ident['session'],
+                '--process-id', str(ident['processId']), '--windows-session-id', str(ident['windowsSessionId']),
+                '--game-process-id', str(ident['gameProcessId']), '--output', str(self.output),
+                '--launcher-pid', str(os.getpid()), '--max-runtime-seconds', str(runtime)]
+        self.job = CommandJob()
+        with (self.output / 'stdout.log').open('xb') as stdout, (self.output / 'stderr.log').open('xb') as stderr:
+            self.process = subprocess.Popen(argv, cwd=REPO, stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr,
+                                           creationflags=subprocess.CREATE_NO_WINDOW | 0x4)
+        try:
+            self.job.assign_and_resume(self.process)
+        except BaseException:
+            self.process.terminate()  # The suspended child has not been allowed to spawn descendants.
+            raise
+        self.summary['processId'] = self.process.pid
+
+    def matches(self, doc):
+        """The supervisor and native pilot have two independent sequences; pin their actual owners."""
+        return isinstance(doc, dict) and all(doc.get(k) == self.identity[k]
+            for k in ('session', 'processId', 'windowsSessionId', 'gameProcessId'))
+
+    def ready(self):
+        """Require GPU weights and the same native pilot's published fresh frame-stream capability."""
+        self.check_alive()
+        native_path, ready_path = self.pilot / 'controller-status.json', self.output / 'ready.json'
+        try:
+            native = read(native_path)
+        except (ValueError, OSError):
+            return False  # Legacy file protocol can be between truncate and write.
+        if not isinstance(native, dict) or any(native.get(k) != self.identity[k] for k in ('session', 'processId', 'windowsSessionId')):
+            return False
+        require(not native.get('gpuAdviserError'), 'Native frame stream failed: ' + str(native.get('gpuAdviserError')))
+        stamp = native.get('heartbeatAt')
+        if (native.get('gpuAdviserFrameStream') is not True or type(stamp) is not int
+                or not 0 <= int(time.time()*1000)-stamp <= 5000 or not ready_path.is_file()):
+            return False
+        ready = read(ready_path)
+        require(self.matches(ready) and ready.get('ready') is True and ready.get('modelLoaded') is True
+                and ready.get('model') == 'open-p2p-150M', 'GPU readiness does not match the pinned model and native owner.')
+        self.summary.update(status='running', ready=ready)
+        return True
+
+    def check_alive(self):
+        """Poll the original process handle without blocking on inference."""
+        code = self.process.poll()
+        if code is not None:
+            self.summary['earlyExit'] = code
+            raise RuntimeError('GPU adviser exited before the route ended (code ' + str(code) + ').')
+
+    def finish(self):
+        """Retire this job and report native-validated images independently from route arrival."""
+        try:
+            if self.created_output:
+                try:
+                    (self.output / 'STOP').touch(exist_ok=True)
+                except OSError as exc:
+                    self.summary['stopSignalError'] = str(exc)  # The job still owns all its children.
+            if self.process is not None:
+                try:
+                    self.process.wait(timeout=12)
+                except subprocess.TimeoutExpired:
+                    self.summary['forcedRetirement'] = True
+                finally:
+                    if self.job is not None:
+                        self.job.close()
+                        self.job = None
+                self.summary['exitCode'] = self.process.wait(timeout=5)
+            terminal_path = self.output / 'terminal.json'
+            try:
+                terminal = read(terminal_path) if self.created_output and terminal_path.is_file() else None
+            except (OSError, ValueError) as exc:
+                terminal = None
+                self.summary['terminalError'] = str(exc)
+            self.summary['terminal'] = terminal
+            counts = terminal.get('counts') if isinstance(terminal, dict) else None
+            accepted = counts.get('accepted') if isinstance(counts, dict) else None
+            verified = ('ready' in self.summary and self.matches(terminal) and terminal.get('status') == 'stopped'
+                        and terminal.get('modelLoaded') is True and terminal.get('validNativeFrameSeen') is True
+                        and type(accepted) is int and accepted > 0
+                        and self.summary.get('exitCode') == 0 and 'earlyExit' not in self.summary
+                        and not self.summary.get('forcedRetirement') and 'stopSignalError' not in self.summary)
+            self.summary['status'] = 'verified' if verified else 'unverified'
+            return verified
+        finally:
+            if self.job is not None:
+                self.job.close()
+            if self.config_bytes is not None:
+                require(self.config_path.read_bytes() == self.config_bytes, 'GPU config changed during cleanup; it was retained.')
+                self.config_path.unlink()
+
+
 def run_worker(config, *, control, rdp, execute=execute_route, game_probe=foreground_game,
-               monotonic=time.monotonic, sleep=time.sleep):
+               monotonic=time.monotonic, sleep=time.sleep, adviser_factory=GpuRouteAdviser):
     """Own one pilot lifetime and run serial route legs; failures retain their original evidence."""
     output, progress = Path(config['output']), Path(config['progress'])
     expected = config['owner']['child']
@@ -202,6 +328,7 @@ def run_worker(config, *, control, rdp, execute=execute_route, game_probe=foregr
     group_owned = False
     lease_owned = False
     archive = None
+    adviser = None
     start_attempted = False
     chain_owned = False
     session = None
@@ -316,6 +443,22 @@ def run_worker(config, *, control, rdp, execute=execute_route, game_probe=foregr
                 break
             sleep(.2)
         require(session is not None, 'Pilot start did not establish a new owned idle session; do not retry.')
+        if config.get('gpuAdviser'):
+            check_game()
+            not_stopped()
+            identity = dict(session=session, processId=expected['processId'], windowsSessionId=expected['windowsSessionId'],
+                            gameProcessId=game['processId'], expectedUid=config['expectedUid'])
+            adviser = adviser_factory(output, pilot, identity)
+            state['gpuAdviser'] = adviser.summary
+            adviser.start(GPU_SETUP_SECONDS + 20 + len(config['routes']) * ((config['deadlineMs'] + 999)//1000 + 20))
+            deadline = monotonic() + GPU_SETUP_SECONDS
+            while True:
+                not_stopped()
+                if adviser.ready():
+                    break
+                require(monotonic() < deadline, 'GPU model and native frame stream did not both become ready.')
+                sleep(.2)
+            record()
         if config.get('saveEncounterFrames'):
             try:
                 evidence = load('_rdp_encounter_evidence', Path(__file__).with_name('encounter_evidence.py'))
@@ -342,8 +485,19 @@ def run_worker(config, *, control, rdp, execute=execute_route, game_probe=foregr
             record()
             argv = route_argv(config, session, str(route_path), str(leg_progress), previous_progress)
             leg['command'] = argv
+            if adviser:
+                adviser.check_alive()
             # Read only this leg's published progress and receipt-selected captures during the wait.
-            poll = (lambda: archive.poll(leg_progress, session, index + 1)) if archive else None
+            def poll_progress():
+                if archive:
+                    archive.poll(leg_progress, session, index + 1)
+                # Retain the canonical terminal receipt if the model dies mid-leg. Never start another leg.
+                if adviser and 'earlyExit' not in adviser.summary:
+                    try:
+                        adviser.check_alive()
+                    except RuntimeError:
+                        pass
+            poll = poll_progress if archive or adviser else None
             try:
                 options = {'on_progress': poll} if poll else {}
                 leg['exitCode'] = execute(argv, leg_dir, config['deadlineMs'] / 1000 + 20, **options)
@@ -357,10 +511,19 @@ def run_worker(config, *, control, rdp, execute=execute_route, game_probe=foregr
                     and result.get('nextWaypointIndex') == len(read(route_path)['waypoints']),
                     'Canonical route did not verify arrival; no following leg was started.')
             previous_progress = leg_progress
+            if adviser:
+                adviser.check_alive()
         state.update(status='arrived', exitCode=0)
     except Exception as error:
         state['error'] = str(error)
     finally:
+        if adviser:
+            try:
+                if not adviser.finish() and state['status'] == 'arrived':
+                    state.update(status='gpu_unverified', canonicalStatus='arrived', exitCode=2,
+                                 error='GPU run has no verified successful adviser terminal; canonical route arrived.')
+            except Exception as exc:
+                state['cleanupErrors'].append('GPU adviser: ' + str(exc))
         # Never stop a task on the strength of PID alone or an uncertain start acknowledgement.
         try:
             current = status()
@@ -413,6 +576,7 @@ def parse_args(argv=None):
     parser.add_argument('--progress', type=Path, required=True)
     parser.add_argument('--expected-uid', required=True)
     parser.add_argument('--allow-field-combat', action='store_true')
+    parser.add_argument('--gpu-adviser', action='store_true', help='Run one local Open P2P GPU adviser during the owned route.')
     parser.add_argument('--save-encounter-frames', action='store_true',
                         help='Retain a bounded set of native combat and named NPC capture pairs for replay.')
     parser.add_argument('--allow-dialogue', action='store_true')
@@ -524,13 +688,14 @@ def run(args, *, expected_owner=None, dependencies=None):
     output = progress.parent / (progress.stem + '.rdp')
     # Round up for the broker's integral timeout and retain the worker's existing cleanup allowances.
     leg_seconds = (args.deadline_ms + 999) // 1000 + 20
-    setup_and_cleanup_seconds = 80
+    use_gpu = getattr(args, 'gpu_adviser', False)
+    setup_and_cleanup_seconds = 80 + (GPU_SETUP_SECONDS + 17 if use_gpu else 0)
     broker_leg_limit = (3600 - setup_and_cleanup_seconds) // leg_seconds
     routes, originals = snapshot_routes(args.route, output, route_cli, broker_leg_limit=broker_leg_limit)
     config = dict(version=1, launchId=uuid.uuid4().hex, owner=owner, output=str(output), progress=str(progress),
                   routes=routes, splitRoutes=originals, expectedUid=args.expected_uid, node=str(Path(node).resolve()),
                   allowFieldCombat=args.allow_field_combat, allowDialogue=args.allow_dialogue,
-                  saveEncounterFrames=args.save_encounter_frames,
+                  saveEncounterFrames=args.save_encounter_frames, gpuAdviser=use_gpu,
                   deadlineMs=args.deadline_ms, maxSegments=args.max_segments, continueObjectives=args.continue_objective,
                   stopFiles=[str(p.resolve()) for p in [progress.parent / 'STOP', progress.with_suffix('.STOP'),
                              output / 'STOP', app / 'User/JsScript/ActOnePilot/STOP', *args.stop_file]])
@@ -546,9 +711,13 @@ def run(args, *, expected_owner=None, dependencies=None):
         save(output / 'broker-result.json', broker)
         worker = read(output / 'worker-result.json')
         report['pilotRetired'] = worker.get('pilotRetired') is True
+        if use_gpu:
+            report['gpuAdviser'] = worker.get('gpuAdviser')
+            if worker.get('status') == 'gpu_unverified':
+                report.update(status='gpu_unverified', canonicalStatus=worker.get('canonicalStatus'))
         require(broker.get('returnCode') == 0 and broker.get('timedOut') is False
                 and worker.get('exitCode') == 0 and worker.get('status') == 'arrived' and report['pilotRetired'],
-                'Route or retirement failed; inspect the unchanged canonical progress and worker result.')
+                worker.get('error') or 'Route or retirement failed; inspect the unchanged canonical progress and worker result.')
         report.update(status='arrived', exitCode=0)
     except Exception as error:
         report['error'] = str(error)

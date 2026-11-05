@@ -80,7 +80,7 @@ class Fixture:
                               scriptState='stopped', pilotState='stopped')
         return copy.deepcopy(self.child)
 
-    def execute(self, argv, output, timeout):
+    def execute(self, argv, output, timeout, *, on_progress=None):
         """Retain native-shaped canonical progress for the real worker to join."""
         self.calls.append(argv)
         session = argv[argv.index('--session') + 1]
@@ -97,17 +97,19 @@ class Fixture:
             (self.pilot / '.route-controller.lock').write_text('canonical unresolved lease')
         if self.on_route:
             self.on_route()
+        if on_progress:
+            on_progress()
         return 0 if self.route_status == 'arrived' else 2
 
     def sleep(self, seconds):
         """Advance only the fake cleanup clock."""
         self.clock += seconds
 
-    def worker(self):
+    def worker(self, **options):
         """Execute production lifecycle code with all live boundaries replaced."""
         return launcher.run_worker(self.config, control=self, rdp=self, execute=self.execute,
                                    game_probe=lambda *unused: copy.deepcopy(self.game),
-                                   monotonic=lambda: self.clock, sleep=self.sleep)
+                                   monotonic=lambda: self.clock, sleep=self.sleep, **options)
 
 
 class LauncherTests(unittest.TestCase):
@@ -118,6 +120,140 @@ class LauncherTests(unittest.TestCase):
 
     def tearDown(self):
         self.temporary.cleanup()
+
+    @contextlib.contextmanager
+    def gpu_fixture(self, fixture, *, accepted=3, model='open-p2p-150M', native_ready=True):
+        """Exercise real publication, readiness and retirement with a pinned inert Windows process."""
+        fixture.config['gpuAdviser'] = True
+        repo = self.root / 'synthetic GPU install'
+        python = repo / 'artifacts/agent/envs/gamescaling/Scripts/python.exe'
+        script = repo / 'tools/quest-pilot/gpu_adviser.py'
+        for path in (python,script):
+            path.parent.mkdir(parents=True,exist_ok=True)
+            path.touch()
+        process, job = mock.Mock(pid=451), mock.Mock()
+        process.poll.return_value = None
+        identity = dict(session='new-owned',processId=20,windowsSessionId=3,gameProcessId=30)
+        output = fixture.output / 'gpu-adviser'
+        def spawn(argv, **kwargs):
+            self.assertEqual(argv[:3],[str(python),'-B',str(script)])
+            self.assertEqual(argv[argv.index('--launcher-pid')+1],str(os.getpid()))
+            self.assertEqual(argv[argv.index('--pilot-dir')+1],str(fixture.pilot))
+            self.assertEqual(launcher.read(fixture.pilot/'gpu-adviser-config.json'),
+                             dict(version=1,expectedUid=fixture.config['expectedUid'],**identity))
+            launcher.save(output/'ready.json', dict(ready=True,modelLoaded=True,model=model,**identity))
+            launcher.save(fixture.pilot/'controller-status.json',dict(gpuAdviserFrameStream=native_ready,
+                          heartbeatAt=int(launcher.time.time()*1000),**identity))
+            return process
+        def stop(*,timeout):
+            self.assertTrue((output/'STOP').exists())
+            launcher.save(output/'terminal.json',dict(status='stopped',modelLoaded=True,validNativeFrameSeen=accepted>0,
+                          counts=dict(accepted=accepted),**identity))
+            return 0
+        process.wait.side_effect = stop
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(mock.patch.object(launcher,'REPO',repo))
+            stack.enter_context(mock.patch.object(launcher,'__file__',str(script.with_name('run-rdp-route.py'))))
+            stack.enter_context(mock.patch.dict('sys.modules',child_runner=SimpleNamespace(CommandJob=lambda:job)))
+            stack.enter_context(mock.patch.object(launcher.subprocess,'CREATE_NO_WINDOW',0x08000000,create=True))
+            spawned = stack.enter_context(mock.patch.object(launcher.subprocess,'Popen',side_effect=spawn))
+            yield spawned,process,job
+
+    def test_opt_in_reuses_one_adviser_across_legs_and_retires_it(self):
+        f = Fixture(self.root,2)
+        group = f.app/'User/ScriptGroup/ActOneRun.json'
+        group.parent.mkdir(parents=True)
+        group.write_text(json.dumps(launcher.group_template('already-existing')))
+        original = group.read_bytes()
+        with self.gpu_fixture(f) as (spawn,process,job):
+            result = f.worker()
+        self.assertEqual(result['status'],'arrived',result)
+        self.assertEqual(result['gpuAdviser']['status'],'verified')
+        self.assertEqual(result['gpuAdviser']['terminal']['counts']['accepted'],3)
+        spawn.assert_called_once();job.assign_and_resume.assert_called_once_with(process);job.close.assert_called_once()
+        self.assertEqual(len(f.calls),2)
+        self.assertEqual(group.read_bytes(),original)
+        self.assertFalse((f.pilot/'gpu-adviser-config.json').exists())
+        self.assertTrue(result['leaseRemoved'])
+
+    def test_arrival_without_real_native_gpu_frames_remains_unverified(self):
+        f = Fixture(self.root)
+        with self.gpu_fixture(f,accepted=0):
+            result = f.worker()
+        self.assertEqual(result['status'],'gpu_unverified',result)
+        self.assertEqual(result['canonicalStatus'],'arrived')
+        self.assertEqual(launcher.read(f.config['progress'])['status'],'arrived')
+        self.assertTrue(result['pilotRetired'])
+        self.assertEqual(result['exitCode'],2)
+
+    def test_opt_out_has_no_adviser_side_effects(self):
+        f = Fixture(self.root)
+        marker = f.pilot/'gpu-adviser-config.json'
+        marker.write_bytes(b'older-session')
+        adviser = mock.Mock(side_effect=AssertionError('disabled adviser opened'))
+        self.assertEqual(f.worker(adviser_factory=adviser)['status'],'arrived')
+        adviser.assert_not_called()
+        self.assertEqual(marker.read_bytes(),b'older-session')
+        self.assertFalse((f.output/'gpu-adviser').exists())
+
+    def test_forced_adviser_retirement_closes_its_job_and_cannot_certify_arrival(self):
+        f = Fixture(self.root)
+        with self.gpu_fixture(f) as (_,process,job):
+            process.wait.side_effect = [launcher.subprocess.TimeoutExpired('adviser',12),0]
+            result = f.worker()
+        self.assertTrue(result['gpuAdviser']['forcedRetirement'])
+        self.assertEqual(result['status'],'gpu_unverified')
+        self.assertTrue((f.output/'gpu-adviser/STOP').is_file())
+        self.assertEqual(process.wait.call_count,2)
+        job.close.assert_called_once()
+        self.assertTrue(result['pilotRetired'])
+
+    def test_unready_gpu_never_submits_gameplay_and_retires_owned_work(self):
+        f = Fixture(self.root)
+        with self.gpu_fixture(f,model='wrong model'):
+            result = f.worker()
+        self.assertEqual(result['status'],'failed')
+        self.assertEqual(f.calls,[])
+        self.assertEqual(f.commands,['startPilot','stopPilot'])
+        self.assertFalse((f.pilot/'gpu-adviser-config.json').exists())
+
+    def test_adviser_exit_during_first_leg_keeps_its_receipt_and_prevents_the_next(self):
+        f = Fixture(self.root,2)
+        with self.gpu_fixture(f) as (_,process,_):
+            f.on_route = lambda: setattr(process.poll,'return_value',3)
+            result = f.worker()
+        self.assertEqual(result['status'],'failed')
+        self.assertEqual(result['gpuAdviser']['earlyExit'],3)
+        self.assertEqual(result['legs'][0]['status'],'arrived')
+        self.assertEqual(len(f.calls),1)
+        self.assertTrue(result['pilotRetired'])
+
+    def test_explicit_gpu_setup_never_overwrites_existing_config(self):
+        f = Fixture(self.root)
+        config = f.pilot/'gpu-adviser-config.json'
+        config.write_bytes(b'existing')
+        with self.gpu_fixture(f) as (spawn,_,_):
+            result = f.worker()
+        self.assertEqual(result['status'],'failed')
+        self.assertEqual(f.calls,[])
+        spawn.assert_not_called()
+        self.assertEqual(config.read_bytes(),b'existing')
+
+    def test_stop_while_waiting_for_native_readiness_retires_adviser_before_any_route(self):
+        f = Fixture(self.root)
+        original_sleep = f.sleep
+        stop = self.root/'STOP'
+        f.config['stopFiles'].append(str(stop))
+        def stop_while_warming(seconds):
+            stop.touch()
+            original_sleep(seconds)
+        f.sleep = stop_while_warming
+        with self.gpu_fixture(f,native_ready=False) as (_,_,job):
+            result = f.worker()
+        self.assertEqual(f.calls,[])
+        self.assertIn('STOP',result['error'])
+        self.assertTrue(result['pilotRetired'])
+        job.close.assert_called_once()
 
     def test_progress_writers_retry_same_bytes_while_reader_holds_destination(self):
         """A transient Windows reader must not abort a completed gameplay action."""

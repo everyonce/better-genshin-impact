@@ -150,6 +150,41 @@ test('the native Auto-off text click uses the exact last frame and never clicks 
     adapter.chooseChoice('Goodbye.',frame);assert.deepEqual(clicks,[[1389,802]]);
 });
 
+const pointerMenu=require('./katheryne-pointer-menu-4.fixture.json');
+test('recorded Auto-on pointer menu resumes using two matching frames without a selection marker',async()=>{
+    assert.equal(pointerMenu.hud.choice,true);
+    assert.equal(pointerMenu.ocr.some(r=>r.text.trim()==='F'),false);
+    const {result,keys}=await replay([pointerMenu,pointerMenu,prompt],'Katheryne',8000,{resumeMenuOnly:true});
+    assert.deepEqual(keys,[['choice','Goodbye.']]);assert.equal(result.status,'completed');
+    assert.deepEqual([result.interactionFrameId,result.greetingFrameId,result.farewell.frameId,result.worldFrameId],[null,1,2,3]);
+});
+test('resumed pointer menu rejects changed account, speaker, options and ordinary unrelated screens',async()=>{
+    for(const mutate of [
+        f=>f.ocr.find(r=>r.text.includes('693306810')).text='UID:123456789',
+        f=>f.ocr.find(r=>r.text==='Katheryne').text='Cyrus',
+        f=>f.ocr.find(r=>r.text==='Goodbye.').text='Claim Reward',
+        f=>f.ocr.find(r=>r.text==='Who are you?').text='Expeditions',
+        f=>{f.hud.auto=false;f.hud.choice=false;},
+        f=>f.ocr.push({...f.ocr.find(r=>r.text==='Goodbye.'),y:701})
+    ]){
+        const other=structuredClone(pointerMenu);mutate(other);
+        const {result,keys}=await replay([pointerMenu,other],'Katheryne',6000,{resumeMenuOnly:true});
+        assert.equal(result.status,'stopped');assert.deepEqual(keys,[]);
+    }
+});
+test('only an actual single F glyph from the enlarged same-image crop can recover the prompt highlight',()=>{
+    const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path'),context={};
+    vm.runInNewContext(fs.readFileSync(path.resolve(__dirname,'../../BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js'),'utf8'),context);
+    const req={mission:'dialogue',talkTo:'Katheryne',expectedUid:uid,session:pointerMenu.session};
+    const rows=pointerMenu.ocr, glyph={text:'F',x:(1214-1175)*3,y:(639-600)*3,width:31*3,height:29*3};
+    assert.equal(mission.keyboardFarewell(pointerMenu,req),null);
+    const merged=context.actOneNamedMenuMarker(rows,req,()=>[glyph]);
+    const proof=mission.keyboardFarewell({...pointerMenu,ocr:merged},req);
+    assert.equal(proof.labels[proof.active],'Claim Adventure Rank Rewards');assert.equal(proof.labels[proof.exit],'Goodbye.');
+    assert.equal(context.actOneNamedMenuMarker(rows,req,()=>[glyph,glyph]),rows);
+    assert.equal(context.actOneNamedMenuMarker(rows,{mission:'observe'},()=>assert.fail('unrelated crop')),rows);
+});
+
 test('a tutorial reached during a named conversation does not start the tutorial or claim a world return',async()=>{
     const tutorial = structuredClone(greeting);
     tutorial.hud.tutorialStep = 'glideOpen';

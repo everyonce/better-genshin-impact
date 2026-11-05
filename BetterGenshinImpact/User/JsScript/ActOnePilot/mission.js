@@ -488,6 +488,18 @@ var ActOneMission = (function () {
         return options[0].text.trim();
     }
     // Only a uniquely labeled farewell is authorized by a named waypoint conversation.
+    function namedMenuOptions(current) {
+        return (current.ocr || []).filter(r=>r.x>1000 && r.x<1800 && r.y>430 && r.y<820 && /[A-Za-z]/.test(r.text));
+    }
+    function pointerFarewell(frame,request,now) {
+        if(!frame||!frame.hud||frame.hud.world!==false||frame.hud.health||frame.hud.journal||frame.hud.bigMap||
+           frame.hud.tutorialStep||frame.session!==request.session||!Number.isInteger(frame.frameId)||
+           !Number.isFinite(frame.timestamp)||now<frame.timestamp||now-frame.timestamp>1000||
+           !namedDialogueAccount(frame,request.expectedUid))return null;
+        var rows=namedMenuOptions(frame).sort((a,b)=>a.y-b.y);
+        var label=namedFarewell(frame,request.talkTo,rows);
+        return label?{label:label,signature:JSON.stringify(rows.map(r=>r.text.trim()))}:null;
+    }
     function namedFarewell(current, name, options) {
         if (current.hud.choice !== true || current.hud.auto !== true || current.map !== null ||
             !namedSpeakerVisible(current, name)) return null;
@@ -501,7 +513,7 @@ var ActOneMission = (function () {
         if(!h||frame.session!==request.session||frame.map!==null||h.world!==false||h.health||h.journal||h.bigMap||
             h.tutorialStep||!Array.isArray(rows)||!namedDialogueAccount(frame,request.expectedUid)||!namedSpeakerVisible(frame,request.talkTo))return null;
         function one(text,x1,x2,y1,y2){
-            return rows.filter(r=>r.text.trim()===text&&r.x>=x1&&r.x<=x2&&r.y>=y1&&r.y<=y2).length===1;
+            return rows.filter(r=>r.text.trim().replace(/\bW\s+S\b/g,'WS')===text&&r.x>=x1&&r.x<=x2&&r.y>=y1&&r.y<=y2).length===1;
         }
         if(!one('Use the scroll wheel or WS keys to',600,1050,120,240)||!one('switch options',750,1150,180,280)||
             !one('W',580,800,150,270)||!one('S',680,860,150,270))return null;
@@ -582,7 +594,7 @@ var ActOneMission = (function () {
         var end = api.now() + request.deadlineMs, current = await observe(), openingFrame = null;
         function samePlayer(frame) { return frame.session === request.session && namedDialogueAccount(frame, request.expectedUid); }
         if (!samePlayer(current)) return {status:'stopped', reason:'Named dialogue account changed'};
-        if (request.resumeMenuOnly && !keyboardFarewell(current,request))
+        if (request.resumeMenuOnly && !keyboardFarewell(current,request) && !pointerFarewell(current,request,api.now()))
             return {status:'stopped',reason:'Verified named farewell menu is no longer open'};
         if (current.hud.world) {
             for (var attempt = 0; ; attempt++) {
@@ -711,9 +723,7 @@ var ActOneMission = (function () {
                     return {status:'stopped',reason:'dialogue_did_not_advance',presses:presses,inputMs:inputMs};
             }
             // A short option can be readable even when the general HUD detector misses the menu.
-            var namedOptions = options.namedRequest ? (current.ocr || []).filter(function(r) {
-                return r.x > 1000 && r.x < 1800 && r.y > 430 && r.y < 820 && /[A-Za-z]/.test(r.text);
-            }) : [];
+            var namedOptions = options.namedRequest ? namedMenuOptions(current) : [];
             if (current.hud.choice || namedOptions.length) {
                 var choice;
                 if (options.namedRequest) {
@@ -730,6 +740,16 @@ var ActOneMission = (function () {
                     choice = namedFarewell(current, options.namedRequest.talkTo, namedOptions);
                     if (!choice) return {status:'stopped', reason:'named_dialogue_no_farewell', menuFrameId:current.frameId,
                         presses:presses, inputMs:inputMs};
+                    if(options.namedRequest.resumeMenuOnly){
+                        // A pointer menu can be verified without a keyboard marker. Inspect it twice, then click its text once.
+                        var prior=current, first=pointerFarewell(prior,options.namedRequest,api.now());
+                        if(!first||api.now()+180>=began+deadlineMs)return {status:'stopped',reason:'named_pointer_menu_unverified',menuFrameId:prior.frameId};
+                        await api.sleep(180);api.checkStop();current=await observe();
+                        var second=pointerFarewell(current,options.namedRequest,api.now());
+                        if(!second||current.frameId<=prior.frameId||second.label!==first.label||second.signature!==first.signature||
+                            api.now()>=began+deadlineMs)return {status:'stopped',reason:'named_pointer_menu_changed',menuFrameId:current.frameId};
+                        choice=second.label;
+                    }
                     farewell = {label:choice, frameId:current.frameId};
                 } else {
                     choice = selectDialogueChoice(current);

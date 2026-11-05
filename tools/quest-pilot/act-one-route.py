@@ -1088,7 +1088,7 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
         if not source_account_matches(source, expected_uid):
             raise RouteError('Named conversation arrival belongs to another account.')
         if menu_only:
-            # Native input still requires two independently captured, matching keyboard-menu frames.
+            # Native input still requires two independently captured, matching menu frames.
             rows = source['ocr']
             seen_speaker = any(r.get('text', '').strip() == talk_to and 600 <= r.get('x', -1) <= 1200
                                and 820 <= r.get('y', -1) < 900 for r in rows)

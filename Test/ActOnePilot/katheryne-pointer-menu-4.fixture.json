@@ -1,0 +1,149 @@
+{
+  "session": "mw3syqe0-yycoa8mrpw7",
+  "frameId": 4,
+  "timestamp": 1793898697465,
+  "screenshotPath": "observations/mw3syqe0-yycoa8mrpw7/frame-0004.png",
+  "ocr": [
+    {
+      "text": "Auto",
+      "x": 98,
+      "y": 34,
+      "width": 69,
+      "height": 29
+    },
+    {
+      "text": "Use the scroll wheel or W S keys to",
+      "x": 801,
+      "y": 181,
+      "width": 449,
+      "height": 36
+    },
+    {
+      "text": "W",
+      "x": 698,
+      "y": 199,
+      "width": 47,
+      "height": 32
+    },
+    {
+      "text": "S",
+      "x": 744,
+      "y": 197,
+      "width": 43,
+      "height": 36
+    },
+    {
+      "text": "switch options",
+      "x": 930,
+      "y": 214,
+      "width": 191,
+      "height": 29
+    },
+    {
+      "text": "Claim Adventure Rank Rewards",
+      "x": 1323,
+      "y": 638,
+      "width": 456,
+      "height": 30
+    },
+    {
+      "text": "Who are you?",
+      "x": 1320,
+      "y": 709,
+      "width": 211,
+      "height": 40
+    },
+    {
+      "text": "Goodbye.",
+      "x": 1315,
+      "y": 778,
+      "width": 149,
+      "height": 48
+    },
+    {
+      "text": "Katheryne",
+      "x": 864,
+      "y": 848,
+      "width": 188,
+      "height": 50
+    },
+    {
+      "text": "Receptionist, Adventurers' Guild",
+      "x": 778,
+      "y": 895,
+      "width": 359,
+      "height": 29
+    },
+    {
+      "text": "Ad astra abyssosque!",
+      "x": 785,
+      "y": 925,
+      "width": 345,
+      "height": 39
+    },
+    {
+      "text": "Welcome to the Adventurers' Guild.",
+      "x": 671,
+      "y": 961,
+      "width": 573,
+      "height": 44
+    },
+    {
+      "text": "UID:693306810",
+      "x": 1680,
+      "y": 1048,
+      "width": 183,
+      "height": 29
+    }
+  ],
+  "map": null,
+  "hud": {
+    "foodQuantity": null,
+    "auto": true,
+    "climbing": false,
+    "groundControls": false,
+    "enemyBars": [],
+    "aerialBossVisible": false,
+    "aerialBoss": null,
+    "slimeTarget": null,
+    "tutorialStep": null,
+    "characterAcquired": null,
+    "dialogueReady": false,
+    "choice": true,
+    "journal": false,
+    "bigMap": false,
+    "objectiveChanged": false,
+    "health": null,
+    "healthOcr": [],
+    "healthDiagnostic": {
+      "fullRow": [],
+      "primary": [],
+      "left": [],
+      "right": [],
+      "decision": "health-unresolved"
+    },
+    "healthPct": null,
+    "lowHealth": true,
+    "world": false,
+    "interact": false,
+    "objectives": [],
+    "enemyBarDiagnostic": null,
+    "enemyBarObservation": {
+      "version": 1,
+      "kind": "normal-ground-enemy-observation-v1",
+      "state": "unavailable",
+      "session": "mw3syqe0-yycoa8mrpw7",
+      "frameId": 4,
+      "capturedAt": 1793898697009,
+      "reason": "not_recognized_overworld_ground",
+      "candidateCount": null,
+      "acceptedCount": null
+    },
+    "captureStamp": {
+      "session": "mw3syqe0-yycoa8mrpw7",
+      "frameId": 4,
+      "capturedAt": 1793898697009,
+      "source": "game-capture-start"
+    }
+  }
+}

@@ -750,6 +750,16 @@ function actOneObserveRegionalMapRows(request,rows,bigMap,position,readCrop) {
     if(hasUid)return rows;
     return actOneMergeControlCropRows(rows,readCrop(1680,1040,190,40),1680,1040);
 }
+// The keyboard tutorial's F can disappear from full-frame OCR against the daylight UI.
+function actOneNamedMenuMarker(rows,request,readCrop) {
+    if(!request||request.mission!=='dialogue'||!request.talkTo||
+       !rows.some(r=>r.text.trim()===request.talkTo&&r.x>=600&&r.x<=1200&&r.y>=820&&r.y<900)||
+       !rows.some(r=>r.text.trim()==='switch options'&&r.x>=750&&r.x<=1150&&r.y>=180&&r.y<=280)||
+       !rows.some(r=>/^(Goodbye|Farewell|See you|Bye)[.!]?$/i.test(r.text.trim())&&r.x>=1260&&r.x<=1780&&r.y>=430&&r.y<820)||
+       rows.some(r=>r.text.trim()==='F'&&r.x>=1150&&r.x<=1260&&r.y>=430&&r.y<820))return rows;
+    var markers=readCrop().filter(r=>r.text.trim()==='F');
+    return markers.length===1?actOneMergeControlCropRows(rows,markers,1175,600):rows;
+}
 function actOneMergeControlCropRows(fullRows, cropRows, x, y) {
     var mapped=(cropRows||[]).map(function(r){return {text:String(r.text||''),x:x+Number(r.x)/3,y:y+Number(r.y)/3,width:Number(r.width)/3,height:Number(r.height)/3};});
     var merged=(fullRows||[]).slice();
@@ -9423,6 +9433,7 @@ function createActOneAdapter(sessionId,options) {
                     pngScheduleMs=Date.now()-schedule0;pngWriteMode='overlapped';
                 }
                 var o0 = Date.now(), rows = actOneJoinStatueGuide(readRows(img, 0, 0, 1920, 1080));
+                rows=actOneNamedMenuMarker(rows,request,()=>scaledRows(img,1175,600,85,240));
                 if(request&&request.step==='actTwoCooking'){
                     rows=actOneMergeControlCropRows(rows,scaledRows(img,1310,120,490,110),1310,120);
                     rows=actOneMergeControlCropRows(rows,scaledRows(img,1330,680,220,35),1330,680);

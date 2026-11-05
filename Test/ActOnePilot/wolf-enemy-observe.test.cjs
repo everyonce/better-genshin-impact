@@ -45,6 +45,15 @@ async function observeStep(step, missionName='questStep', options={}) {
       findMulti:roi=>{const rows=fullRows.filter(r=>!roi||r.x>=roi.x&&r.y>=roi.y&&r.x<roi.x+roi.w&&r.y<roi.y+roi.h).map(r=>({...r}));rows.count=rows.length;return rows;},
       deriveCrop:(x,y,w,h)=>({srcMat:{
         inRange:(low,high)=>{
+          const tile=(options.terrainTiles||[]).find(t=>x>=t.x&&y>=t.y&&x+w<=t.x+t.w&&y+h<=t.y+t.h);
+          if(tile){
+            let pixelCount=0;
+            for(let j=y;j<y+h;j++)for(let i=x;i<x+w;i++){
+              const k=3*((j-tile.y)*tile.w+i-tile.x);
+              if([tile.rgb[k+2],tile.rgb[k+1],tile.rgb[k]].every((v,c)=>v>=low.values[c]&&v<=high.values[c]))pixelCount++;
+            }
+            return {pixelCount,dispose(){}};
+          }
           if(x===350&&y===100) enemyScans++;
           const bgr=[90,90,255];
           const pixelPass=bgr.every((v,i)=>v>=low.values[i]&&v<=high.values[i]);
@@ -344,4 +353,38 @@ test('depleted rail needs three contrast rows and an exact same-image centered l
   const x=await measure({railSample:sample});assert.equal(x.bars.length,0);
   assert.equal(x.observation.hud.enemyBarObservation.state,'ambiguous');
  }
+});
+
+// Return a small crop including the two-pixel rim; no account or screenshot is needed.
+function warmStreetCase(x=900){
+  const contour={x,y:368,width:5,height:7,area:6},w=9,h=11,rgb=[];
+  for(let j=0;j<h;j++)for(let i=0;i<w;i++){
+    const inner=i>=2&&i<7&&j>=2&&j<9;
+    rgb.push(...(inner&&(i+j)%3===0?[233,108,77]:[222,109,76]));
+  }
+  return {contour,tile:{x:x-2,y:396,w,h,rgb}};
+}
+test('sparse warm street texture requires all fringe pixels and a warm surrounding rim',async()=>{
+  async function sample(change,rows=groundRows()){
+    const {contour,tile}=warmStreetCase();if(change)change(contour,tile);
+    return (await measure({contours:[contour],terrainTiles:[tile],rows})).observation.hud;
+  }
+  const hud=await sample();assert.equal(hud.enemyBarObservation.state,'clear');
+  assert.equal(hud.enemyBarDiagnostic.rawCandidates.length,1);assert.equal(hud.enemyBarDiagnostic.candidates,1);
+  assert.equal(hud.enemyBarDiagnostic.fieldCandidates.length,0);
+  assert.equal(hud.enemyBarDiagnostic.warmTerrain[0].redPixels,hud.enemyBarDiagnostic.warmTerrain[0].warmRedPixels);
+  for(const change of [
+    (c,t)=>t.rgb.splice(3*(2*t.w+2),3,255,90,90), // A single enemy-health core pixel.
+    (c,t)=>{for(let x=0;x<t.w;x++)for(const y of [0,1,t.h-2,t.h-1])t.rgb.splice(3*(y*t.w+x),3,80,80,80);},
+    (c,t)=>{c.area=22;}, // Near-solid compact contours remain ambiguous even in a warm environment.
+    (c,t)=>{c.width=9;}
+  ])assert.equal((await sample(change)).enemyBarObservation.state,'ambiguous');
+  const anchored=await sample(null,[...groundRows(),row('Lv. 5',881,359,40,18)]);
+  assert.equal(anchored.enemyBarObservation.state,'threat');assert.equal(anchored.enemyBars.length,1);
+});
+test('extra tiny components stay unresolved when their pixel-probe budget is exhausted',async()=>{
+  const cases=Array.from({length:9},(_,i)=>warmStreetCase(900+i*16));
+  const hud=(await measure({contours:cases.map(c=>c.contour),terrainTiles:cases.map(c=>c.tile)})).observation.hud;
+  assert.equal(hud.enemyBarDiagnostic.rawCandidates.length,9);assert.equal(hud.enemyBarDiagnostic.warmTerrain.length,8);
+  assert.equal(hud.enemyBarObservation.state,'ambiguous');assert.equal(hud.enemyBarObservation.candidateCount,1);
 });

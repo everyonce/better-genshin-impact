@@ -3611,6 +3611,29 @@ function createActOneAdapter(sessionId,options) {
                 return rail;
             } finally {for(var ai=allocated.length-1;ai>=0;ai--)dispose(allocated[ai]);}
         }
+        // A few warm roof or sign pixels can enter the fringe of the red health threshold.
+        // Require every red-threshold pixel in the tiny box to be dim orange and the surrounding
+        // two-pixel rim to be predominantly warm material. A single UI-red pixel keeps it unresolved.
+        function warmTerrainEvidence(bar){
+            var w=bar.width,h=bar.height,x=bar.x-w/2,y=bar.y-h/2,cv=OpenCvSharp.OpenCvSharp;
+            var inner=null,outer=null;
+            function count(crop,lo,hi){
+                var mask=crop.srcMat.inRange(new cv.Scalar(lo[0],lo[1],lo[2]),new cv.Scalar(hi[0],hi[1],hi[2]));
+                try{return Number(cv.Cv2.countNonZero(mask));}finally{dispose(mask);}
+            }
+            try{
+                inner=img.deriveCrop(x,y,w,h);
+                var red=count(inner,[75,75,230],[110,110,255]);
+                if(!Number.isInteger(red)||red<1||red>20||red>w*h)return null;
+                var warm=count(inner,[75,102,230],[90,110,240]);
+                if(warm!==red)return null;
+                outer=img.deriveCrop(x-2,y-2,w+4,h+4);
+                var total=(w+4)*(h+4),rim=total-w*h,material=count(outer,[40,80,180],[105,145,245]);
+                // Subtract the entire inner box, giving a lower bound on warm pixels outside the red fragment.
+                if(!Number.isInteger(material)||material>total||material-w*h<rim*.8)return null;
+                return {x:bar.x,y:bar.y,redPixels:red,warmRedPixels:warm,warmRimMinimum:material-w*h,rimPixels:rim};
+            }finally{dispose(outer);dispose(inner);}
+        }
         // Count the orange body immediately above or below a possible flame tip.
         function flamePixels(x,y) {
             var patch=null,color=null;
@@ -3672,6 +3695,7 @@ function createActOneAdapter(sessionId,options) {
                 // Small near-square fragments in the side HUD are not field bars. Wide edge bars
                 // and same-image level-anchored depleted bars remain candidates, never silently clear.
                 enemyBarDiagnostic.flameTips=[];
+                var terrainReads=0;
                 enemyBarDiagnostic.fieldCandidates=candidates.filter(function(bar){
                     if(actOneOutdoorEnemyBarCandidate(bar,rows))return true;
                     // In a camp flame, a short red tip sits above a bright orange plume.
@@ -3683,6 +3707,16 @@ function createActOneAdapter(sessionId,options) {
                         var above=flamePixels(Math.round(bar.x)-12,Math.round(bar.y)-15);
                         if(Number.isInteger(below)&&Number.isInteger(above)&&below>=100&&below<=250&&above>=0&&above<=25){
                             enemyBarDiagnostic.flameTips.push({x:bar.x,y:bar.y,orangePixelsBelow:below,orangePixelsAbove:above});
+                            return false;
+                        }
+                    }
+                    if(terrainReads<8&&bar.width<=8&&bar.height<=9&&bar.rectangularity<=.65&&
+                       bar.x>=350&&bar.x<=1600){
+                        terrainReads++;
+                        var terrain=warmTerrainEvidence(bar);
+                        if(terrain){
+                            if(!enemyBarDiagnostic.warmTerrain)enemyBarDiagnostic.warmTerrain=[];
+                            enemyBarDiagnostic.warmTerrain.push(terrain);
                             return false;
                         }
                     }

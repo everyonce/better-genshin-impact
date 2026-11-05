@@ -432,6 +432,11 @@ def run_worker(config, *, control, rdp, execute=execute_route, game_probe=foregr
         root = rdp.exchange('status', root_expected['processId'], root_expected['windowsSessionId'])
         select_owner(dict(instances=[root, status()], unavailable=[]), expected_owner=config['owner'])
         game = state['game'] = game_probe(app, expected['windowsSessionId'])
+        if config.get('resumedDefeat'):
+            prior_game = config['resumedDefeat']['game']
+            require(all(game.get(k) == prior_game[k] for k in ('processId','windowsSessionId','startedFileTime','executable','hwnd')),
+                    'The game lifetime changed since the confirmed defeat.')
+            state['resumedDefeat'] = config['resumedDefeat']['evidence']
         not_stopped()
         with lease.open('xb') as stream:
             stream.write(lease_bytes)
@@ -617,7 +622,10 @@ def run_worker(config, *, control, rdp, execute=execute_route, game_probe=foregr
 def parse_args(argv=None):
     """One public command; repeated routes remain separate canonical controller legs."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--route', action='append', type=Path, required=True)
+    plan = parser.add_mutually_exclusive_group(required=True)
+    plan.add_argument('--route', action='append', type=Path)
+    plan.add_argument('--resume-after-defeat', type=Path, metavar='RUN.rdp',
+                      help='Continue remaining waypoints from a retired run with verified combat EXP and clear ground.')
     parser.add_argument('--progress', type=Path, required=True)
     parser.add_argument('--expected-uid', required=True)
     parser.add_argument('--allow-field-combat', action='store_true')
@@ -719,9 +727,62 @@ def verify_split_routes(config):
             'A derived exploration leg has no corresponding original.')
 
 
+def resume_defeated_route(directory, expected_uid, route_cli):
+    """Recover only pending waypoints after an independently witnessed defeat in the same game."""
+    directory = Path(directory).resolve()
+    pin = load('_retired_route_owner', Path(__file__).with_name('update-idle-pilot.py')).terminal_run(directory)
+    launch, worker = read(directory / 'launch.json'), read(directory / 'worker-result.json')
+    require(launch['expectedUid'] == expected_uid and worker['status'] == 'failed' and worker['legs'],
+            'Continuation requires the retired incomplete route for this account.')
+    index = len(worker['legs']) - 1
+    require(0 <= index < len(launch['routes']) <= 20, 'Invalid interrupted route ordinal.')
+    leg = read(directory / ('leg-%03d' % (index + 1)) / 'progress.json')
+    require(leg.get('pending') is None and leg['records'] and leg['session'] == pin['session']
+            and leg['status'] in ('waiting', 'stopped'), 'The previous leg has no settled interruption.')
+    row = leg['records'][-1]
+    req, receipt = row['request'], row['receipt']
+    require(req.get('step') == 'actTwoFieldCombat' and req.get('session') == pin['session']
+            and re.fullmatch(r'mission-[0-9a-f]{32}', req['id']), 'Last operation was not a bounded field encounter.')
+    pilot = Path(pin['owner']['child']['appDirectory']) / 'User/JsScript/ActOnePilot'
+    require(receipt == read(pilot / 'receipts' / pin['session'] / (req['id'] + '.json')),
+            'Saved combat receipt differs from the native receipt.')
+    def frame(number):
+        return read(pilot / 'observations' / pin['session'] / ('frame-%04d.json' % number))
+    witness = route_cli.field_combat_feedback(row, expected_uid, frame)
+    require(witness and witness['measuredClear'] and witness['minimumDefeated'] >= 1,
+            'Combat has no independently verified experience award and clear field.')
+    position = frame(witness['pauseSourceFrameId'])['map']
+    paths = []
+    for ordinal, source in enumerate(launch['routes'][index:], index + 1):
+        path = directory / ('route-%03d.json' % ordinal)
+        require(path == Path(source['path']).resolve() and hashlib.sha256(path.read_bytes()).hexdigest() == source['sha256'],
+                'Archived route snapshot changed.')
+        paths.append(path)
+    first = read(paths[0])
+    points, cursor = first['waypoints'], leg['nextWaypointIndex']
+    require(first.get('objective') == route_cli.EXPLORATION_OBJECTIVE and points == leg['route']['waypoints']
+            and type(cursor) is int and 0 <= cursor < len(points), 'No pending exploration waypoint in the interrupted leg.')
+    first = dict(first, waypoints=points[cursor:], startNear=dict(map=position['map'], x=position['x'], y=position['y'], radius=4))
+    first.pop('teleportTo', None)
+    route_cli.validate_route(first)
+    proof = dict(sourceRun=str(directory), sourceLeg=index+1, nextWaypointIndex=cursor, **witness)
+    return first, paths[1:], proof, pin
+
+
 def run(args, *, expected_owner=None, dependencies=None):
     """Console API also used by an opt-in caller retaining its original authenticated owner pair."""
     rdp, _, route_cli = helpers() if dependencies is None else dependencies
+    recovered = None
+    if getattr(args, 'resume_after_defeat', None):
+        first, following, proof, pin = resume_defeated_route(args.resume_after_defeat, args.expected_uid, route_cli)
+        remaining = args.progress.resolve().with_suffix('.remaining-route.json')
+        require(not args.progress.exists() and not remaining.exists(), 'Provide a new output path for the continuation.')
+        remaining.parent.mkdir(parents=True, exist_ok=True)
+        with remaining.open('xb') as stream:
+            stream.write(leg_bytes(first))
+        args.route = [remaining, *following]
+        expected_owner = pin['owner']
+        recovered = dict(evidence=proof, game=pin['game'])
     require(1 <= len(args.route) <= 20 and 1000 <= args.deadline_ms <= route_cli.MAX_CONTROLLER_DEADLINE_MS
             and 1 <= args.max_segments <= route_cli.MAX_SEGMENTS and re.fullmatch(r'[0-9]{9,10}', args.expected_uid),
             'Use one to twenty routes, the canonical finite limits, and an explicit numeric account.')
@@ -761,6 +822,8 @@ def run(args, *, expected_owner=None, dependencies=None):
                   deadlineMs=args.deadline_ms, maxSegments=args.max_segments, continueObjectives=args.continue_objective,
                   stopFiles=[str(p.resolve()) for p in [progress.parent / 'STOP', progress.with_suffix('.STOP'),
                              output / 'STOP', app / 'User/JsScript/ActOnePilot/STOP', *args.stop_file]])
+    if recovered is not None:
+        config['resumedDefeat'] = recovered
     if goal is not None:
         # Capture the selected bytes once so moving or editing the original cannot change this run.
         (output/'gpu-goal-embedding.json').write_bytes(goal_bytes)

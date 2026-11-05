@@ -65,6 +65,8 @@ For model comparisons, pass `--save-encounter-frames` to the public launcher. Du
 
 Open `encounter-evidence.json` beside `worker-result.json` to find frame paths, roles, session and frame IDs, request IDs, and SHA-256 digests of both files and their immutable native receipt. A sample can support several roles. The worker verifies the receipt, capture stamp, screenshot path and PNG integrity before publishing each pair. Expired, mismatched and over-budget frames are listed under `issues` (up to 16 diagnostic entries). The canonical progress and exit code continue to describe the gameplay result, including failed legs. Run `python -B tools/quest-pilot/test_encounter_evidence.py -v` for the capture regressions.
 
+If a retired run stopped immediately after a verified defeat, use `--resume-after-defeat PATH_TO_RUN.rdp` in place of the route arguments and choose a new `--progress` path. The launcher checks the native receipt, experience award, clear field, original game lifetime, and remaining waypoints. It starts from the measured post-fight position and preserves the original run's evidence.
+
 ## Update idle pilot scripts
 
 After a public route has retired, replace named scripts in its existing RDP child. Pass the completed run’s `.rdp` directory, the Git commit matching the installed files, the desired commit and the top-level JavaScript filenames, for example:

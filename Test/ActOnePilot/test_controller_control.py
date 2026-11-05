@@ -133,7 +133,11 @@ class ControllerControlTests(unittest.TestCase):
              'remoteDesktop': True, 'instanceNonce': 'restart-nonce',
              'pilotState': 'restarting', 'serviceOwnsPilot': False},
         ])
-        status = control.run('restartApp', 1234, 5, api=api)
+        with patch.object(control, 'preflight_restart') as preflight:
+            status = control.run('restartApp', 1234, 5, api=api)
+        preflight.assert_called_once()
+        self.assertEqual(preflight.call_args.args, (1234, 5))
+        self.assertEqual(preflight.call_args.kwargs['status']['instanceNonce'], 'restart-nonce')
         self.assertEqual([request['command'] for request in api.requests], ['status', 'restartApp'])
         self.assertEqual(api.requests[1]['targetProcessId'], 1234)
         self.assertEqual(api.requests[1]['targetWindowsSessionId'], 5)
@@ -157,8 +161,10 @@ class ControllerControlTests(unittest.TestCase):
                     raise control.ControlError('simulated transport timeout')
 
         api = RestartTimesOut()
-        with self.assertRaisesRegex(control.ControlError, 'simulated transport timeout'):
-            control.run('restartApp', 1234, 5, api=api)
+        with patch.object(control, 'preflight_restart') as preflight:
+            with self.assertRaisesRegex(control.ControlError, 'simulated transport timeout'):
+                control.run('restartApp', 1234, 5, api=api)
+        preflight.assert_called_once()
         self.assertEqual([request['command'] for request in api.requests], ['status', 'restartApp'])
 
     def test_restart_app_rejects_path_and_argument_fields(self):

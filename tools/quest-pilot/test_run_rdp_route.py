@@ -632,6 +632,41 @@ class LauncherTests(unittest.TestCase):
         boundary.assert_not_called()
         self.assertFalse((args.progress.parent/(args.progress.stem+'.rdp')).exists())
 
+    def test_two_leases_require_the_retired_session_and_its_actual_terminal(self):
+        with tempfile.TemporaryDirectory() as temp:
+            f = Fixture(Path(temp))
+            old = f.root/'old.rdp';old.mkdir()
+            sid, rid = 'dead-route','mission-'+'a'*32
+            req = dict(session=sid,id=rid,mission='questStep',step='worldInventory')
+            lease = f.pilot/'.rdp-route-launcher.lock'
+            canonical = f.pilot/'.route-controller.lock'
+            launcher.save(lease,dict(launchId='old',output=str(old)))
+            launcher.save(canonical,dict(session=sid,controllerId='0'*32,processId=20,windowsSessionId=3))
+            launcher.save(old/'launch.json',dict(launchId='old',output=str(old),owner=f.owner))
+            launcher.save(old/'worker-result.json',dict(status='failed',pilotRetired=True,cleanupErrors=[],
+                ownerAfter=f.child,game=f.game,session=sid,legs=[{}]))
+            launcher.save(old/'launcher-result.json',dict(status='failed',pilotRetired=True))
+            (old/'leg-001').mkdir();launcher.save(old/'leg-001/progress.json',dict(session=sid,pending=req))
+            launcher.save(f.pilot/'request.json',req)
+            rp=launcher.FILE_PROTOCOL.request_receipt_path(f.pilot,sid,rid);rp.parent.mkdir(parents=True)
+            ob=launcher.FILE_PROTOCOL.observation_path(f.pilot,sid,6);ob.parent.mkdir(parents=True)
+            launcher.save(ob,dict(session=sid,frameId=6))
+            launcher.save(f.pilot/'controller-status.json',dict(session=sid,frameId=6,state='faulted',activeRequestId=None))
+            current=dict(f.child,scriptSession=sid)
+            receipt=dict(id=rid,session=sid,mission='questStep',status='running',frameId=6)
+            launcher.save(rp,receipt)
+            with self.assertRaises(RuntimeError):
+                launcher.settle_retired_route(f.pilot,f.owner,f.game,current,f.output)
+            self.assertTrue(lease.exists() and canonical.exists())
+            launcher.save(rp,dict(receipt,status='failed'))
+            with self.assertRaises(RuntimeError):
+                launcher.settle_retired_route(f.pilot,f.owner,f.game,dict(current,taskRunning=True),f.output)
+            proof=launcher.settle_retired_route(f.pilot,f.owner,f.game,current,f.output)
+            self.assertEqual(proof['terminalStatus'],'failed')
+            self.assertEqual((old/'retired-controller.lease').read_bytes()[:1],b'{')
+            self.assertTrue((old/'retired-launcher.lease').exists())
+            self.assertFalse(lease.exists() or canonical.exists())
+
     def test_recovered_defeat_uses_only_original_pending_points_and_verified_game(self):
         with tempfile.TemporaryDirectory() as temporary:
             f = Fixture(Path(temporary), count=1)

@@ -346,6 +346,58 @@ class GpuRouteAdviser:
                 self.config_path.unlink()
 
 
+def settle_retired_route(pilot, owner, game, current, new_output):
+    """Retire the exact prior leases when its child stopped and its outstanding request has a terminal receipt."""
+    launcher_lock, route_lock = pilot/'.rdp-route-launcher.lock', pilot/'.route-controller.lock'
+    if not launcher_lock.is_file():
+        return None
+    launcher_bytes = launcher_lock.read_bytes()
+    marker = json.loads(launcher_bytes)
+    previous = Path(marker['output']).resolve()
+    require(previous.suffix == '.rdp' and previous != new_output and not previous.is_relative_to(pilot),
+            'Previous launcher lease location is invalid.')
+    launch, worker, console = (read(previous/name) for name in ('launch.json','worker-result.json','launcher-result.json'))
+    require(launch['launchId'] == marker['launchId'] and Path(launch['output']).resolve() == previous
+            and worker.get('pilotRetired') is True and console.get('pilotRetired') is True
+            and worker.get('status') == console.get('status') == 'failed' and worker.get('cleanupErrors') == []
+            and all(same_owner(launch['owner'][role], owner[role]) for role in ('root','child'))
+            and same_owner(worker['ownerAfter'], owner['child']) and same_owner(current, owner['child']),
+            'Previous route has no matching retired owner.')
+    require(all(game[k] == worker['game'][k] for k in ('processId','windowsSessionId','startedFileTime','executable','hwnd'))
+            and current.get('taskRunning') is False and current.get('serviceOwnsPilot') is False
+            and current.get('activeRequestId') in (None,'') and current.get('scriptSession') == worker['session'],
+            'Previous game or retired native session changed.')
+    leg = read(previous/('leg-%03d' % len(worker['legs']))/'progress.json')
+    req = leg.get('pending')
+    require(isinstance(req,dict) and leg.get('session') == req.get('session') == worker['session']
+            and read(pilot/'request.json') == req, 'The retained route does not own the current request.')
+    receipt = read(FILE_PROTOCOL.request_receipt_path(pilot,req['session'],req['id']))
+    observed = read(FILE_PROTOCOL.observation_path(pilot,req['session'],receipt['frameId']))
+    frame = FILE_PROTOCOL.validate_terminal_receipt(req,receipt,observed)
+    heartbeat = read(pilot/'controller-status.json')
+    require(heartbeat.get('session') == req['session'] and heartbeat.get('activeRequestId') in (None,'')
+            and heartbeat.get('frameId',0) >= frame and heartbeat.get('state') in ('faulted','stopped','idle'),
+            'The original native request remains active or uncertain.')
+    # Preserve both markers beside their original job, under its still-owned launcher lease.
+    # If an interruption occurred between renames, verify the already-archived first marker.
+    retired_route, retired_launcher = previous/'retired-controller.lease', previous/'retired-launcher.lease'
+    lock_source = retired_route if retired_route.exists() else route_lock
+    route_bytes = lock_source.read_bytes()
+    lock = json.loads(route_bytes)
+    require(lock.get('session') == req['session'] and lock.get('processId') == current['processId']
+            and lock.get('windowsSessionId') == current['windowsSessionId']
+            and re.fullmatch('[0-9a-f]{32}',lock.get('controllerId','')) and not retired_launcher.exists(),
+            'Previous canonical lease differs from the retired session.')
+    require(launcher_lock.read_bytes() == launcher_bytes, 'The launcher lease changed during reconciliation.')
+    if lock_source == route_lock:
+        require(route_lock.read_bytes() == route_bytes, 'Canonical lease changed during reconciliation.')
+        route_lock.rename(retired_route)
+    require(not route_lock.exists() and launcher_lock.read_bytes() == launcher_bytes,
+            'A new owner appeared during reconciliation.')
+    launcher_lock.rename(retired_launcher)
+    return dict(sourceRun=str(previous), requestId=req['id'], frameId=frame, terminalStatus=receipt['status'])
+
+
 def run_worker(config, *, control, rdp, execute=execute_route, game_probe=foreground_game,
                monotonic=time.monotonic, sleep=time.sleep, adviser_factory=GpuRouteAdviser):
     """Own one pilot lifetime and run serial route legs; failures retain their original evidence."""
@@ -427,6 +479,11 @@ def run_worker(config, *, control, rdp, execute=execute_route, game_probe=foregr
             with progress.open('x', encoding='utf-8') as stream:
                 json.dump(dict(kind='rdp-route-chain-v1', **state), stream)
             chain_owned = True
+        if lease.exists():
+            retired = settle_retired_route(pilot, config['owner'], game_probe(app, expected['windowsSessionId']), status(), output)
+            if retired:
+                state['settledPriorRequest'] = retired
+                record()
         require(not (pilot / '.route-controller.lock').exists(), 'An unresolved canonical route lease already exists.')
         root_expected = config['owner']['root']
         root = rdp.exchange('status', root_expected['processId'], root_expected['windowsSessionId'])

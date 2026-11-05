@@ -22,6 +22,9 @@ ROUTE_TELEPORT_STEPS = {'temple-of-the-lion': 'actTwoLionTeleport',
                         'starfell-lake': 'actTwoStarfellTeleport'}
 # Leave capture time before another stationary observation; retirement alone cannot grant input.
 STATIONARY_OBSERVATION_RESERVE_SECONDS = 1.0
+STATIONARY_OBSERVATION_LIMIT_SECONDS = 2.0
+# Three passive recaptures can each take about 1.5s through the locked RDP launcher.
+STATIONARY_SCAN_WINDOW_SECONDS = 4.5
 PASSIVE_TERMINAL_SETTLEMENT_SECONDS = 1.0
 
 
@@ -1448,23 +1451,24 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
             if (not reward and not can_face_first_enemy() and objective == EXPLORATION_OBJECTIVE and new_world and 'groundReacquisition' not in state
                     and unanchored_ground_scan(source, expected_uid, now_ms)):
                 began = monotonic()
-                scan_deadline = min(deadline, began + 2.0)
+                scan_deadline = min(deadline, began + STATIONARY_SCAN_WINDOW_SECONDS)
                 scan = source['hud']['enemyBarObservation']
                 samples = [dict(frameId=source['frameId'], capturedAt=scan['capturedAt'],
                                 state=scan['state'], reason=scan['reason'])]
                 state['groundReacquisition'] = dict(startedAt=int(now_ms), maximumFrames=4,
-                    maximumMilliseconds=2000, frames=samples)
+                    maximumMilliseconds=round((scan_deadline - began) * 1000), frames=samples)
                 while (len(samples) < 4
                        and scan_deadline - monotonic() >= STATIONARY_OBSERVATION_RESERVE_SECONDS):
                     if pilot.stopped():
                         raise RouteError('Operator STOP prevents stationary ground reacquisition.')
-                    dispatch('observe', source, {}, observation_deadline=scan_deadline)
+                    sample_deadline = min(scan_deadline, monotonic() + STATIONARY_OBSERVATION_LIMIT_SECONDS)
+                    dispatch('observe', source, {}, observation_deadline=sample_deadline)
                     source = pilot.current()
                     now_ms = clock_ms()
                     require_fresh_source(source, pilot.session, now_ms)
                     scan = source['hud'].get('enemyBarObservation')
                     stamp = scan.get('capturedAt') if isinstance(scan, dict) else None
-                    if (monotonic() >= scan_deadline or type(stamp) is not int
+                    if (monotonic() >= sample_deadline or type(stamp) is not int
                             or source['frameId'] <= samples[-1]['frameId'] or stamp <= samples[-1]['capturedAt']):
                         phase, value = 'wait', 'Stationary reacquisition expired or did not produce a distinct capture'
                         break

@@ -745,7 +745,48 @@ class SupervisedRouteControllerTests(unittest.TestCase):
         self.assertEqual([r['state'] for r in proof['frames']], ['ambiguous', 'ambiguous', 'clear'])
         self.assertTrue(proof['measuredClear'])
         self.assertLessEqual(proof['elapsedMilliseconds'], 2000)
-        self.assertEqual(pilot.observation_deadlines[1], pilot.observation_deadlines[2])
+        self.assertLess(pilot.observation_deadlines[1], pilot.observation_deadlines[2])
+        self.assertLessEqual(pilot.observation_deadlines[2] - pilot.observation_deadlines[1], .021)
+
+    def test_fountain_rdp_rounds_reacquire_clear_only_inside_the_original_leg(self):
+        self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
+        for budget, admitted in ((150000, True), (3000, False)):
+            with self.subTest(budget=budget):
+                self.progress = Path(self.temp.name) / f'fountain-{budget}.json'
+                inv = controller_scene('inventory')
+                pilot = self.reacquisition_pilot(['ambiguous','ambiguous','clear'], [
+                    dict(mission='questStep',source=inv,result=dict(pausedInventory=True)), self.arrival(3, inv)])
+                original = pilot.execute
+                started = self.clock.monotonic()
+                # First three passively observed city frames. The launcher round includes capture and acknowledgement.
+                durations = (1.458,1.375,1.307)
+                ages = (788,672,622)
+                def measured(mission, source, fields, deadline, save_pending, **kwargs):
+                    index = len(pilot.calls)
+                    if mission != 'observe' or index >= len(durations):
+                        return original(mission, source, fields, deadline, save_pending, **kwargs)
+                    if index:
+                        self.assertLessEqual(deadline-self.clock.monotonic(), 2.0001)
+                    self.assertLessEqual(deadline, started+budget/1000+.0001)
+                    self.clock.advance(durations[index]-.02)
+                    outcome = original(mission,source,fields,deadline,save_pending,**kwargs)
+                    for name in ('captureStamp','enemyBarObservation'):
+                        pilot.source['hud'][name]['capturedAt'] -= ages[index]
+                    outcome['observation'] = copy.deepcopy(pilot.source)
+                    return outcome
+                pilot.execute = measured
+                report = self.run_controller(pilot,deadline_ms=budget)
+                proof = report['groundReacquisition']
+                self.assertEqual(proof['measuredClear'],admitted)
+                self.assertEqual([f['state'] for f in proof['frames']],
+                                 ['ambiguous','ambiguous','clear'] if admitted else ['ambiguous','ambiguous'])
+                if admitted:
+                    self.assertEqual(report['status'],'arrived',report.get('reason'))
+                    self.assertEqual(proof['maximumMilliseconds'],4500)
+                    self.assertGreater(proof['elapsedMilliseconds'],2000)
+                else:
+                    self.assertTrue(all(request['mission']=='observe' for request in pilot.calls))
+                    self.assertLessEqual(proof['maximumMilliseconds'],budget)
 
     def test_stationary_observe_reserves_one_second_before_the_next_request(self):
         """A completed slow refresh cannot trigger another capture with under one second left."""
@@ -768,7 +809,7 @@ class SupervisedRouteControllerTests(unittest.TestCase):
                     return outcome
 
                 pilot.execute = delayed
-                report = self.run_controller(pilot)
+                report = self.run_controller(pilot, deadline_ms=2000)
                 self.assertEqual(report['status'], 'waiting')
                 self.assertEqual([r['mission'] for r in pilot.calls], ['observe'] * expected_count)
                 self.assertIsNone(report['pending'])

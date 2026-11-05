@@ -322,9 +322,9 @@ class GuardedPilot:
             raise RouteError('Unexpected route-controller mission fields.')
         if mission == 'keyPress' and fields != {'key': 'VK_ESCAPE'}:
             raise RouteError('Only the fixed Journal-close operation is available.')
-        if mission == 'questStep' and fields['step'] not in ('worldInventory', 'worldInventoryClose'):
+        if mission == 'questStep' and fields['step'] not in ('worldInventory', 'worldInventoryClose', 'actTwoNativeCombat'):
             raise RouteError('Unsupported exploration inventory operation.')
-        if mission == 'questStep' and fields['step'] == 'worldInventoryClose' and not self.inventory_ready(source):
+        if mission == 'questStep' and fields['step'] != 'worldInventory' and not self.inventory_ready(source):
             raise RouteError('A recognized inventory is required before returning to the field.')
         if mission == 'navigation':
             self.command.validate_navigation_plan(fields, fields['deadlineMs'])
@@ -425,8 +425,8 @@ def source_account_matches(source, expected_uid):
     return matches == [expected_uid]
 
 
-def ground_scan_is_clear(source, now_ms):
-    """Accept a measured empty scan only from this capture and within its input freshness window."""
+def ground_scan_matches(source, now_ms, state, count):
+    """Match the requested count to native evidence from this exact, still-fresh ground frame."""
     hud = source['hud']
     scan = hud.get('enemyBarObservation')
     stamp = hud.get('captureStamp')
@@ -440,13 +440,19 @@ def ground_scan_is_clear(source, now_ms):
             and stamp['frameId'] == scan['frameId'] == source['frameId']
             and type(scan.get('capturedAt')) is int and scan['capturedAt'] == captured_at
             and type(scan.get('version')) is int and scan['version'] == 1
-            and scan.get('kind') == 'normal-ground-enemy-observation-v1' and scan.get('state') == 'clear'
-            and type(scan.get('candidateCount')) is int and scan['candidateCount'] == 0
-            and type(scan.get('acceptedCount')) is int and scan['acceptedCount'] == 0
-            and hud.get('enemyBars') == [])
+            and scan.get('kind') == 'normal-ground-enemy-observation-v1' and scan.get('state') == state
+            and type(scan.get('candidateCount')) is int and scan['candidateCount'] == count
+            and type(scan.get('acceptedCount')) is int and scan['acceptedCount'] == count
+            and isinstance(hud.get('enemyBars'), list) and len(hud['enemyBars']) == count)
 
 
-def route_phase(source, expected_uid, objectives, *, allow_dialogue, journal_resume, now_ms=None):
+def ground_scan_is_clear(source, now_ms):
+    """Keep ordinary exploration restricted to a measured empty field."""
+    return ground_scan_matches(source, now_ms, 'clear', 0)
+
+
+def route_phase(source, expected_uid, objectives, *, allow_dialogue, journal_resume, now_ms=None,
+                allow_field_combat=False):
     """Select a named existing operation; raw input proposals and unknown objectives are never accepted."""
     hud, rows = source['hud'], source['ocr']
     if any(not isinstance(row, dict) or not isinstance(row.get('text'), str) for row in rows):
@@ -476,11 +482,15 @@ def route_phase(source, expected_uid, objectives, *, allow_dialogue, journal_res
     if not isinstance(visible_objectives, list) or any(not isinstance(x, str) for x in visible_objectives):
         return 'wait', 'Objective evidence is malformed'
     if objectives == [EXPLORATION_OBJECTIVE]:
+        now_ms = int(time.time() * 1000) if now_ms is None else now_ms
+        if (allow_field_combat and not any(text.strip() for text in visible_objectives)
+                and hp['current'] >= hp['max'] * .85 and ground_scan_matches(source, now_ms, 'threat', 1)):
+            return 'fieldCombat', None
         if bars or any(re.fullmatch(r'Defeatallopponents[0-9]+/[0-9]+', re.sub(r'\s', '', x)) for x in visible_objectives):
             return 'wait', 'Exploration requires zero visible threat'
         if hp['current'] < hp['max'] * .85:
             return 'wait', 'Existing generic exploration requires at least 85% health'
-        if not ground_scan_is_clear(source, int(time.time() * 1000) if now_ms is None else now_ms):
+        if not ground_scan_is_clear(source, now_ms):
             return 'wait', 'Exploration requires a fresh enemy scan showing clear ground'
         return 'navigation', EXPLORATION_OBJECTIVE
     matches = [name for name in objectives if name in visible_objectives]
@@ -494,7 +504,7 @@ def route_phase(source, expected_uid, objectives, *, allow_dialogue, journal_res
     return 'navigation', objective
 
 
-def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=False,
+def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=False, allow_field_combat=False,
                    continuation_objectives=(), max_segments=MAX_SEGMENTS, deadline_ms=MAX_DEADLINE_MS,
                    monotonic=time.monotonic, clock_ms=lambda: int(time.time() * 1000), emit=print):
     """Continue only settled missions; retain exact route progress through combat and dialogue.
@@ -532,6 +542,30 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
         state['pending'] = request
         save()
 
+    inspect_after_encounter = False
+    if allow_field_combat:
+        state['fieldRotations'] = 0
+
+    def protected_inventory(result):
+        """Native pauses must identify this session's inventory before another action."""
+        proof = result.get('pauseProof') if isinstance(result, dict) else None
+        return (isinstance(proof, dict) and proof.get('kind') == 'inventory'
+                and proof.get('session') == pilot.session and proof.get('verified') is True
+                and result.get('pauseVerified') is True)
+
+    def threat_checkpoint(result):
+        """Keep the completed waypoint prefix when a measured threat interrupts walking."""
+        return (allow_field_combat and objective == EXPLORATION_OBJECTIVE and protected_inventory(result)
+                and result.get('status') == 'stopped' and result.get('reason') == 'Enemy observed during exploration'
+                and type(result.get('nextWaypointIndex')) is int)
+
+    def returned_rotation(result):
+        """A completed software rotation permits fresh field inspection, never a kill claim."""
+        return (protected_inventory(result) and result.get('nativeGroup') is False
+                and result.get('nativeAttempted') is True and result.get('nativeReturned') is True
+                and type(result.get('beforeFrameId')) is int and type(result.get('afterFrameId')) is int
+                and result['beforeFrameId'] < result['afterFrameId'])
+
     def dispatch(mission, source, fields, *, allow_deadline_checkpoint=False):
         """Keep the original request/receipt result, including a failed native handoff."""
         outcome = pilot.execute(mission, source, fields, deadline, pending)
@@ -563,7 +597,12 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
             and str(result.get('reason', '')).startswith('Navigation deadline reached')
             and type(result.get('nextWaypointIndex')) is int
             and 0 < result['nextWaypointIndex'] < len(fields['waypoints']))
-        if (outcome.get('cancelled') or receipt.get('status') != 'completed') and not deadline_checkpoint:
+        status = receipt.get('status')
+        measured_threat = (mission == 'navigation' and status in ('stopped', 'failed') and threat_checkpoint(result)
+                           and 0 <= result['nextWaypointIndex'] < len(fields['waypoints']))
+        rotation = (mission == 'questStep' and fields['step'] == 'actTwoNativeCombat' and status == 'stopped'
+                    and returned_rotation(result))
+        if outcome.get('cancelled') or not (status == 'completed' or deadline_checkpoint or measured_threat or rotation):
             raise RouteError('Mission did not complete; original result retained without retry.')
         return result
 
@@ -578,13 +617,17 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
             require_fresh_source(source, pilot.session, now_ms)
             # Native travel ends in inventory. Open it once for a fresh field measurement before
             # navigation; a delayed transition must never turn into a second Escape.
-            if (objective == EXPLORATION_OBJECTIVE and len(state['records']) == 1
+            if (objective == EXPLORATION_OBJECTIVE and (len(state['records']) == 1 or inspect_after_encounter)
                     and source['hud'].get('world') is False and source.get('map') is None
                     and source_account_matches(source, expected_uid) and pilot.inventory_ready(source)):
                 dispatch('questStep', source, dict(step='worldInventoryClose'))
+                inspect_after_encounter = False
                 continue
+            if inspect_after_encounter:
+                raise RouteError('Encounter handoff did not settle in the expected inventory.')
             phase, value = route_phase(source, expected_uid, authorized_objectives,
-                allow_dialogue=allow_dialogue, journal_resume=journal_resume, now_ms=now_ms)
+                allow_dialogue=allow_dialogue, journal_resume=journal_resume, now_ms=now_ms,
+                allow_field_combat=allow_field_combat)
             paused_navigation = inventory_navigation is not None
             if paused_navigation:
                 if not source_account_matches(source, expected_uid) or not pilot.inventory_ready(source):
@@ -599,6 +642,24 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
             if phase in ('combat', 'dialogue') and state['handoffs'] >= max_segments * 2:
                 raise RouteError('Maximum encounter/dialogue handoffs reached.')
             remaining = int((deadline - monotonic()) * 1000)
+            if phase == 'fieldCombat':
+                pause = dispatch('questStep', source, dict(step='worldInventory'))
+                if not isinstance(pause, dict) or pause.get('pausedInventory') is not True:
+                    raise RouteError('Could not verify the inventory handoff to native combat.')
+                if state['fieldRotations'] >= max_segments * 2:
+                    state.update(status='waiting', reason='Field combat rotation limit reached')
+                    break
+                dispatch('observe', pilot.current(), {})
+                paused = pilot.current()
+                if not source_account_matches(paused, expected_uid) or not pilot.inventory_ready(paused):
+                    raise RouteError('Native combat requires the expected account in inventory.')
+                rotation = dispatch('questStep', paused, dict(step='actTwoNativeCombat'))
+                if not returned_rotation(rotation):
+                    raise RouteError('Native field rotation and its inventory pause were not established.')
+                state['fieldRotations'] += 1
+                inspect_after_encounter = True
+                save()
+                continue
             if phase == 'closeJournal':
                 # Existing native combat protects with J. This exact guarded
                 # Escape is a semantic continuation, never a user-supplied key.
@@ -658,6 +719,11 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
             result = dispatch('navigation', source, fields, allow_deadline_checkpoint=True)
             terminal = state['records'][-1]
             if terminal['receipt']['status'] != 'completed':
+                if threat_checkpoint(result):
+                    # Inspect the actual encounter. Dispatch already preserved its native route cursor.
+                    inspect_after_encounter = True
+                    last_phase = 'navigation'
+                    continue
                 if value == EXPLORATION_OBJECTIVE:
                     pilot.deadline_resume(dict(objective=value, waypoints=points), start,
                         terminal['receipt'], terminal['request'])
@@ -713,6 +779,8 @@ def main():
     parser.add_argument('--expected-windows-session-id', type=int)
     parser.add_argument('--expected-uid', help='Exact 9- or 10-digit game UID to retain across phases')
     parser.add_argument('--progress', type=Path, help='New progress JSON; an existing or pending run is never replayed')
+    parser.add_argument('--allow-field-combat', action='store_true',
+                        help='Engage a single measured enemy during exploration and resume from fresh field evidence')
     parser.add_argument('--allow-dialogue', action='store_true', help='Permit the existing bounded recognized-dialogue mission')
     parser.add_argument('--continue-objective', action='append', default=[], help='Explicit objective allowed after a completed encounter/dialogue')
     parser.add_argument('--stop-file', action='append', type=Path, default=[], help='Additional caller STOP file')
@@ -731,7 +799,8 @@ def main():
             pilot = GuardedPilot(args.app_dir, args.session, args.process_id, args.expected_windows_session_id, stops)
             try:
                 report = run_controller(pilot, read(args.route), args.progress, args.expected_uid,
-                    allow_dialogue=args.allow_dialogue, continuation_objectives=args.continue_objective,
+                    allow_dialogue=args.allow_dialogue, allow_field_combat=args.allow_field_combat,
+                    continuation_objectives=args.continue_objective,
                     max_segments=args.max_segments, deadline_ms=args.deadline_ms)
             finally:
                 pilot.close()

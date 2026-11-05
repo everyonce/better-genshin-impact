@@ -1,0 +1,26 @@
+{
+  "objective": "Explore for Adventure Rank",
+  "provenance": "Return from the rock face on the inland gap to the previously traversed slope. Then follow the three measured ground segments from warm-scout-tree-detour-04 around the rock toward the forest.",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -1134,
+      "y": 2266
+    },
+    {
+      "map": "Teyvat",
+      "x": -1124,
+      "y": 2266
+    },
+    {
+      "map": "Teyvat",
+      "x": -1127,
+      "y": 2286
+    },
+    {
+      "map": "Teyvat",
+      "x": -1130,
+      "y": 2301
+    }
+  ]
+}

@@ -426,6 +426,58 @@ class SupervisedRouteControllerTests(unittest.TestCase):
         self.assertEqual([r.get('step', r['mission']) for r in pilot.calls],
                          ['observe', 'worldInventoryClose', 'observe'])
 
+    def test_lone_field_encounter_can_return_to_measured_navigation(self):
+        self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
+        enemy = controller_scene(objective='', enemies=True)
+        inv = controller_scene('inventory')
+        clear = controller_scene(objective='')
+        pause = dict(mission='questStep', source=inv, result=dict(pausedInventory=True))
+        proof = dict(verified=True, kind='inventory', session='route-session')
+        returned = dict(mission='questStep', status='stopped', source=inv, result=dict(
+            nativeGroup=False, nativeAttempted=True, nativeReturned=True, beforeFrameId=4,
+            afterFrameId=5, pauseVerified=True, pauseProof=proof, defeatConfirmed=False))
+        pilot = ReplayPilot(self.clock, [pause, returned, dict(mission='questStep', source=clear,
+            result=dict(worldVisible=True)), pause, self.arrival(3, inv)], source=enemy)
+        report = self.run_controller(pilot, allow_field_combat=True)
+        self.assertEqual((report['status'], report['fieldRotations'], report['nextWaypointIndex']), ('arrived', 1, 3))
+        self.assertEqual([r.get('step', r['mission']) for r in pilot.calls if r['mission'] != 'observe'],
+                         ['worldInventory','actTwoNativeCombat','worldInventoryClose','worldInventory','navigation'])
+        self.assertFalse(returned['result']['defeatConfirmed'])
+
+    def test_threat_interrupt_preserves_completed_waypoints_before_reinspection(self):
+        self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
+        inv, clear = controller_scene('inventory'), controller_scene(objective='')
+        pause = dict(mission='questStep', source=inv, result=dict(pausedInventory=True))
+        interruption = dict(mission='navigation', status='failed', source=inv, result=dict(
+            status='stopped', reason='Enemy observed during exploration', nextWaypointIndex=1, pauseVerified=True,
+            pauseProof=dict(verified=True, kind='inventory', session='route-session')))
+        pilot = ReplayPilot(self.clock, [pause, interruption, dict(mission='questStep', source=clear,
+            result=dict(worldVisible=True)), pause, self.arrival(2, inv)], source=clear)
+        report = self.run_controller(pilot, allow_field_combat=True)
+        self.assertEqual((report['status'],report['fieldRotations']), ('arrived',0))
+        self.assertEqual([r['waypoints'] for r in pilot.calls if r['mission'] == 'navigation'],
+                         [self.points,self.points[1:]])
+
+    def test_field_encounter_rejects_ambiguous_scan_or_failed_rotation(self):
+        self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
+        now = self.clock.milliseconds()
+        enemy = controller_scene(objective='', enemies=True)
+        enemy['timestamp'] = now
+        record_ground_scan(enemy)
+        for key, value in [('candidateCount',2), ('capturedAt',now-1), ('state','clear')]:
+            sample = copy.deepcopy(enemy)
+            sample['hud']['enemyBarObservation'][key] = value
+            phase, _ = route_tool.route_phase(sample, '693306810', [self.route['objective']],
+                allow_dialogue=False, journal_resume=False, now_ms=now, allow_field_combat=True)
+            self.assertEqual(phase, 'wait')
+        inv = controller_scene('inventory')
+        pilot = ReplayPilot(self.clock, [dict(mission='questStep', source=inv, result=dict(pausedInventory=True)),
+            dict(mission='questStep', status='stopped', source=inv, result=dict(nativeAttempted=False,
+                nativeReturned=False, pauseVerified=True))], source=enemy)
+        report = self.run_controller(pilot, allow_field_combat=True)
+        self.assertEqual((report['status'],report['fieldRotations']), ('stopped',0))
+        self.assertEqual(pilot.calls[-1]['step'], 'actTwoNativeCombat')
+
     def test_exploration_threat_low_health_and_oversized_route_refuse(self):
         self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
         for index, mutation in enumerate([

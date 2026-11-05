@@ -348,3 +348,18 @@ test('pack sequence shares movement budget and origin across all rotation approa
 test('actual adapter preserves first success and a later failed rotation then protects once',async()=>{
  const r=await packAdapter('actTwoFieldCombat',2,{failAt:2});assert.equal(r.result.completedRotations,1);assert.equal(r.result.nativeReturned,false);assert.equal(r.result.chunks.length,2);assert.equal(r.result.chunks[0].nativeReturned,true);assert.equal(r.result.chunks[1].nativeReturned,false);assert.equal(r.result.chunks[1].afterFrameId,undefined);assert.match(r.result.reason,/native rejected/);assert.equal(r.calls.filter(x=>x==='protect').length,1);assert.equal(r.calls.filter(x=>x==='VK_ESCAPE').length,1);
 });
+
+test('centered recent damage continues to a finishing rotation without walking or comparing gold as remaining HP',async()=>{
+ const gold={x:1025,y:568.5,width:62,height:5,rectangularity:1,damageTrail:{actionId:'request:rotation:1',
+  remainingRed:{x:991,y:569,width:4,height:8,rectangularity:8/21}}};
+ const h=sequenceHarness({observation(o,runs){
+  if(runs===2){o.hud.enemyBars=[gold];o.map.cameraAngle=125.5;}
+ }});
+ const result=await native.fieldSequence(h.initial,h.api);
+ assert.equal(result.turns.length,3);assert.equal(result.reason,'rotation_limit');
+ assert.deepEqual(h.actions,['rotation','rotation','rotation']);
+ assert.equal(result.turns[1].assessment.evidence,'post_hit_damage_trail');
+ assert.equal(result.turns[2].beforeBars[0].damageTrail.remainingRed.width,4);
+ const after=packFrame();after.hud.enemyBars=[gold];
+ assert.equal(native.assessProgress(after,h.initial).evidence,null);
+});

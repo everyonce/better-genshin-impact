@@ -141,7 +141,8 @@
    if(!api.eligible(current))throw new Error('Field target or grounded health changed during approach');
    if(Math.hypot(current.map.x-origin.x,current.map.y-origin.y)>12)throw new Error('Field combat approach exceeded its travel budget');
    const bar=fieldTarget(current,api.pack),dx=api.cameraDelta([bar]);
-   if(dx===0&&(bar.height>=8||bar.y>=620||steps>=4))return current;
+   // A measured post-hit trail already places a centered foe in reach of the preceding rotation.
+   if(dx===0&&(api.pack&&bar.damageTrail||bar.height>=8||bar.y>=620||steps>=4))return current;
    if(api.now()-started>=8500)throw new Error('Field combat approach time expired');
    if(api.pack&&api.now()+600>=api.deadline)throw new Error('Field combat approach lacks input headroom');
    if(dx!==0){
@@ -208,6 +209,8 @@
   if(rewards(after)&&rewards(after)!==rewards(before))return {status:'reward_progress',evidence:'new_reward'};
   const a=targets(before),b=targets(after);
   const unknown=reason=>({status:'target_association_unknown',reason,evidence:null});
+  if(b.some(bar=>bar.damageTrail))return {status:'visible_enemy_damage',evidence:'post_hit_damage_trail'};
+  if(a.some(bar=>bar.damageTrail))return unknown('A gold damage trail cannot establish prior red health width');
   if(a.length!==1||b.length!==1)return unknown('Target count changed or is ambiguous');
   const am=before.map,bm=after.map;
   if(!am||!bm||am.map!==bm.map||![am.x,am.y,am.cameraAngle,bm.x,bm.y,bm.cameraAngle].every(Number.isFinite)||Math.hypot(am.x-bm.x,am.y-bm.y)>1||Math.abs((am.cameraAngle-bm.cameraAngle+540)%360-180)>3)return unknown('Camera or player position changed');

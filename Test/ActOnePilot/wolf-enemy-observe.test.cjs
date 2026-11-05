@@ -50,6 +50,14 @@ async function observeStep(step, missionName='questStep', options={}) {
           return {pixelCount,flameCount:w===25&&h===10?(options.flameCounts?.[y]??0):undefined,findContoursAsArray:()=>{
             if(sample&&x===sample.x&&y===sample.y+sample.coreStartRow&&w===sample.width&&h===sample.coreRows)
               return options.coreContours??[{x:0,y:0,width:w,height:h,area:sample.coreArea}];
+            if(options.trailSample){
+              const {red,gold}=options.trailSample;
+              if(pixelPass&&(x===350&&y===100||x===0&&y===30))return [{...red,x:red.x-x,y:red.y-y}];
+              const rgb=[255,209,126],bgr=[rgb[2],rgb[1],rgb[0]];
+              if(bgr.every((v,i)=>v>=low.values[i]&&v<=high.values[i])&&gold&&
+                 gold.x>=x&&gold.y>=y&&gold.x+gold.width<=x+w&&gold.y+gold.height<=y+h)
+                return [{...gold,x:gold.x-x,y:gold.y-y}];
+            }
             if(x===0&&y===30){if(options.detectorError)throw Error('inert detector failure');
               return Object.hasOwn(options,'contours')?options.contours:[];}
             return x===350&&y===100&&pixelPass?(sample?[{x:sample.x-x,y:sample.y-y,width:sample.width,height:sample.height,area:sample.outerArea}]:[bar]):[];
@@ -63,6 +71,7 @@ async function observeStep(step, missionName='questStep', options={}) {
   vm.runInNewContext(source,context);
   const adapter=context.createActOneAdapter(7,options.inventoryUiOnly?{inventoryUiOnlyV1:true}:undefined);
   if(!options.idle)adapter.beginMission({mission:missionName,step,session:'test',createdAt:2000000,...options.request});
+  if(options.rotationEvent)adapter.events().push(options.rotationEvent);
   const observation=await adapter.observe('test',66);
   return {bars:JSON.parse(JSON.stringify(observation.hud.enemyBars)),enemyScans,groundScans,
     observation:JSON.parse(JSON.stringify(observation))};
@@ -269,4 +278,36 @@ test('short flames, invalid inner contour quality and foreign geometry gain no r
  }
  const malformed=await measure(solidOptions({coreContours:[{x:1,y:0,width:67,height:3,area:128}]}));
  assert.equal(malformed.observation.hud.enemyBarObservation.state,'unavailable');
+});
+
+// Same-image OpenCV red contours and gold RGB(255,209,126) spans from Temple public09.
+const hitFrames=[
+ {frame:22,red:{x:989,y:565,width:4,height:8,area:8},gold:{x:994,y:566,width:62,height:5}},
+ {frame:23,red:{x:980,y:577,width:4,height:7,area:10},gold:{x:986,y:577,width:50,height:7}},
+ {frame:24,red:{x:968,y:438,width:3,height:6,area:6},gold:{x:972,y:437,width:44,height:7}}
+];
+const returnedHit={type:'actTwoNativeCombat',chunkIndex:1,actionId:'field-test:rotation:1',finishedAt:1999900,nativeReturned:true};
+function damageRead(trailSample,rotationEvent=returnedHit,step='actTwoFieldCombat'){
+ return observeStep(step,'questStep',{...groundOptions(),trailSample,rotationEvent,request:{id:'field-test'}});
+}
+test('post-hit Temple frames retain the depleted target using its adjoining gold contour',async()=>{
+ for(const sample of hitFrames){
+  const {bars}=await damageRead(sample);
+  assert.equal(bars.length,1);const bar=bars[0];
+  assert.equal(bar.damageTrail.actionId,returnedHit.actionId);
+  assert.equal(bar.damageTrail.remainingRed.width,sample.red.width);
+  assert.deepEqual([bar.x,bar.y,bar.width,bar.height],[sample.gold.x+sample.gold.width/2,sample.gold.y+sample.gold.height/2,sample.gold.width,sample.gold.height]);
+ }
+});
+test('a distant or missing trail and a stale, failed, foreign or absent rotation grant no field target',async()=>{
+ const sample=hitFrames[0];
+ for(const update of [{gold:null},{gold:{...sample.gold,x:1005}},{gold:{...sample.gold,width:8}},
+                       {gold:{...sample.gold,area:40}},{gold:{...sample.gold,y:572}}]){
+  assert.deepEqual((await damageRead({...sample,...update})).bars,[]);
+ }
+ for(const event of [null,{...returnedHit,actionId:'other:rotation:1'},{...returnedHit,nativeReturned:false},
+                     {...returnedHit,finishedAt:1997400},{...returnedHit,finishedAt:2000001}]){
+  assert.deepEqual((await damageRead(sample,event)).bars,[]);
+ }
+ assert.deepEqual((await damageRead(sample,returnedHit,'actTwoNativeCombat')).bars,[]);
 });

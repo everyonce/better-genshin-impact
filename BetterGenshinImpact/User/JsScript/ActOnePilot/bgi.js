@@ -3376,6 +3376,36 @@ function createActOneAdapter(sessionId,options) {
                     coreStartRow:bestStart,coreRows:bestLength,contourArea:matches[0].area};
             } finally {dispose(color);dispose(region);}
         }
+        // A nearly empty red segment can adjoin the gold damage animation. Measure the
+        // gold contour on the same image; the short red fragment alone is ambiguous.
+        function readDamageTrail(red,actionId) {
+            var x=red.x+red.width/2,y=red.y-red.height/2-2,w=160,h=red.height+4;
+            var region=null,mask=null;
+            try {
+                region=img.deriveCrop(x,y,w,h);
+                mask=region.srcMat.inRange(new OpenCvSharp.OpenCvSharp.Scalar(120,204,249),
+                    new OpenCvSharp.OpenCvSharp.Scalar(132,214,255));
+                var shapes=mask.findContoursAsArray(OpenCvSharp.OpenCvSharp.RetrievalModes.External,OpenCvSharp.OpenCvSharp.ContourApproximationModes.ApproxSimple);
+                var count=shapes&&(shapes.length===undefined?shapes.Length:shapes.length);
+                if(!Number.isInteger(count)||count<0||count>64)return null;
+                var found=null;
+                for(var i=0;i<count;i++){
+                    var box=OpenCvSharp.OpenCvSharp.Cv2.boundingRect(shapes[i]);
+                    var bx=Number(box.x===undefined?box.X:box.x),by=Number(box.y===undefined?box.Y:box.y);
+                    var bw=Number(box.width===undefined?box.Width:box.width),bh=Number(box.height===undefined?box.Height:box.height);
+                    if(![bx,by,bw,bh].every(Number.isInteger)||bx<0||bx>3||by<0||bw<16||bx+bw>=w||
+                       bh<3||bh>12||by+bh>h||bw/bh<3.5||Math.abs(y+by+bh/2-red.y)>2||
+                       Math.min(y+by+bh,red.y+red.height/2)-Math.max(y+by,red.y-red.height/2)<3)continue;
+                    var area=Number(OpenCvSharp.OpenCvSharp.Cv2.contourArea(shapes[i],false));
+                    var rectangularity=area/((bw-1)*(bh-1));
+                    if(!Number.isFinite(rectangularity)||rectangularity<.85||rectangularity>1.05)continue;
+                    if(found)return null;
+                    found={x:x+bx+bw/2,y:y+by+bh/2,width:bw,height:bh,rectangularity:rectangularity,
+                        damageTrail:{actionId:actionId,remainingRed:red}};
+                }
+                return found;
+            } finally {dispose(mask);dispose(region);}
+        }
         // Count the orange body immediately above or below a possible flame tip.
         function flamePixels(x,y) {
             var patch=null,color=null;
@@ -3490,6 +3520,24 @@ function createActOneAdapter(sessionId,options) {
                         var anchor=ar.filter(function(r){return actOneEnemyBarAnchored(cb,[r],5);});
                         enemyBarDiagnostic.localReads.push({bar:cb,rows:ar,anchored:anchor.length===1,depleted:small,edge:edge,close:close});
                         if(anchor.length===1){cb.levelAnchor=anchor[0];outdoor.push(cb);}
+                    }
+                }
+                // Only our recent, returned field rotation can continue from a two-color hit.
+                // New encounters, walking, other missions and old rotations use their ordinary scan.
+                if(request&&request.mission==='questStep'&&request.step==='actTwoFieldCombat'&&typeof request.id==='string'){
+                    var rotations=events.filter(function(e){return e.type==='actTwoNativeCombat';});
+                    var last=rotations[rotations.length-1],age=last?Date.now()-last.finishedAt:NaN;
+                    if(last&&last.nativeReturned===true&&last.actionId===request.id+':rotation:'+last.chunkIndex&&age>=0&&age<=2500){
+                        var fragments=candidates.filter(function(red){return red.x>=350&&red.x<=1600&&red.y>=200&&red.y<=850&&
+                            red.width>=2&&red.width<16&&red.height>=3&&red.height<=12&&Number.isFinite(red.rectangularity)&&red.rectangularity>=.25;});
+                        if(fragments.length<=8)for(var fi=0;fi<fragments.length;fi++){
+                            var red=fragments[fi],trail=readDamageTrail(red,last.actionId);
+                            if(trail){
+                                // A level-anchored red sliver and its gold animation represent one target.
+                                var old=outdoor.indexOf(red);
+                                if(old>=0)outdoor[old]=trail;else outdoor.push(trail);
+                            }
+                        }
                     }
                 }
                 return outdoor;
@@ -4090,7 +4138,7 @@ function createActOneAdapter(sessionId,options) {
                     if(defensive&&!acquisition.stationaryReady(o.acquisition?o.hud.enemyBars:native.targets(o)))throw new Error('Centered or close verified enemy required for stationary combat');
                     var event={type:'actTwoNativeCombat',engine:defensive?'AutoFightTask':'RunCombatScript',strategy:defensive?'English Cyrus Defense':rotation,chunkIndex:index,frameId:o.frameId,startedAt:Date.now()};events.push(event);
                     if(pack){event.actionId=request.id+':rotation:'+index;result.nativeAttempted=true;if(result.beforeFrameId===undefined){result.beforeFrameId=o.frameId;result.beforeHealth=o.hud.health;result.beforeBars=native.targets(o);}}
-                    try{return await native.chunk({
+                    try{var completed=await native.chunk({
                         createCancellation:function(){return dispatcher.GetLinkedCancellationTokenSource();},
                         armDeadline:function(cts,ms){cts.CancelAfter(ms);},
                         run:function(script,token){if(defensive)return dispatcher.RunAutoFightTask(defenseParam||native.targetingParam(new AutoFightParam('English Cyrus Defense'),true),token);return dispatcher.RunCombatScript(script,script===native.ambushStrategy?null:'凯亚',token);},
@@ -4100,7 +4148,10 @@ function createActOneAdapter(sessionId,options) {
                         if(!result.midFightObservations)result.midFightObservations=[];
                         result.midFightObservations.push({frameId:sampled.frameId,health:hp,map:sampled.map});
                         if(sampled.session!==request.session||!original(sampled)||Date.now()-sampled.timestamp>1000||!hp||hp.max!==2635||hp.current<hp.max*.9||hp.current>hp.max)throw new Error('Native sampled health or session guard failed');
-                    }:null});}
+                    }:null});
+                        if(pack)event.nativeReturned=completed.nativeReturned===true;
+                        return completed;
+                    }
                     finally{event.finishedAt=Date.now();result.nativeInvocationMs=(result.nativeInvocationMs||0)+event.finishedAt-event.startedAt;}
                 }
                 if(pack){

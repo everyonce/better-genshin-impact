@@ -18,21 +18,21 @@ function swimming(frameId=15,timestamp=10000){
 
 // Pure tests fail if this inspection ever requests a movement or horizontal camera API.
 function harness(initial=swimming(),change=()=>{}){
- let now=initial.timestamp,releases=0,observations=0;const pitches=[],sleeps=[];
- const api={session:initial.session,now:()=>now,release:()=>{releases++;},pitch:async(dy,o)=>{pitches.push({dy,frameId:o.frameId});},
-  sleep:async ms=>{sleeps.push(ms);now+=ms;},observe:async()=>{observations++;const next=clone(initial);next.frameId++;next.timestamp=now;change(next);return next;},
+ let now=initial.timestamp,releases=0,observations=0;const pitches=[],resets=[],sleeps=[];
+ const api={session:initial.session,now:()=>now,release:()=>{releases++;},resetCamera:async o=>{resets.push(o.frameId);},pitch:async(dy,o)=>{pitches.push({dy,frameId:o.frameId});},
+  sleep:async ms=>{sleeps.push(ms);now+=ms;},observe:async()=>{observations++;const next=clone(initial);next.frameId+=observations;next.timestamp=now;change(next,observations);return next;},
   key:async()=>assert.fail('No movement key may be requested'),look:async()=>assert.fail('No yaw may be requested')};
- return {api,pitches,sleeps,releases:()=>releases,observations:()=>observations};
+ return {api,pitches,resets,sleeps,releases:()=>releases,observations:()=>observations};
 }
 
-test('recorded unknown stamina permits one stationary inspection but still forbids continuation',async()=>{
+test('recorded unknown stamina permits one reset and at most one upward inspection but still forbids continuation',async()=>{
  const initial=swimming(),f=harness(initial);assert.equal(shore.start(initial,10000,initial.session,true),false);
  const result=await shore.inspectCamera(initial,f.api);
  assert.equal(result.status,'stopped');assert.equal(result.stationaryVerified,true);assert.equal(result.actions,0);assert.equal(result.inputMs,0);
- assert.equal(result.cameraAdjustments,1);assert.equal(result.cameraDy,500);assert.equal(result.sourceFrameId,15);assert.equal(result.fieldFrameId,16);
+ assert.equal(result.cameraAdjustments,1);assert.equal(result.cameraDy,-350);assert.equal(result.sourceFrameId,15);assert.equal(result.fieldFrameId,17);
  assert.equal(result.positionDelta,0);assert.deepEqual(result.health,{current:4015,max:4015});assert.equal(result.swimStamina.height,null);
- assert.equal(result.reason,'One stationary shore camera inspection; inspect stamina before continuation');
- assert.deepEqual(f.pitches,[{dy:500,frameId:15}]);assert.deepEqual(f.sleeps,[350]);assert.equal(f.observations(),1);assert.equal(f.releases(),1);
+ assert.equal(result.reason,'Bounded stationary camera recovery; inspect stamina before continuation');
+ assert.deepEqual(f.resets,[15]);assert.equal(result.cameraResets,1);assert.deepEqual(f.pitches,[{dy:-350,frameId:16}]);assert.deepEqual(f.sleeps,[350,350]);assert.equal(f.observations(),2);assert.equal(f.releases(),1);
 });
 
 test('camera admission refuses stale, foreign, damaged, threatened and out-of-lane evidence without camera input',async()=>{
@@ -49,8 +49,8 @@ test('post-camera drift, health loss, repeated source, changed session and loss 
  const mutations=[o=>o.map.x+=0.501,o=>o.hud.health.current=4014,o=>o.frameId=15,o=>o.timestamp=10000,
   o=>o.session='foreign',o=>o.hud.starfellSwim.confirmed=false,o=>o.hud.groundControls=true,o=>o.hud.enemyBars.push({x:1})];
  for(const mutate of mutations){const initial=swimming(),f=harness(initial,mutate),result=await shore.inspectCamera(initial,f.api);
-  assert.equal(result.cameraAdjustments,1);assert.equal(result.stationaryVerified,false);assert.equal(result.status,'stopped');
-  assert.equal(f.pitches.length,1);assert.equal(f.releases(),1);}
+  assert.equal(result.cameraResets,1);assert.equal(result.cameraAdjustments,0);assert.equal(result.stationaryVerified,false);assert.equal(result.status,'stopped');
+  assert.equal(f.pitches.length,0);assert.equal(f.releases(),1);}
 });
 
 test('half-unit drift is admitted and measured stamina is retained without movement',async()=>{
@@ -60,8 +60,8 @@ test('half-unit drift is admitted and measured stamina is retained without movem
 
 test('capture failure retains the returned camera call and always releases',async()=>{
  const initial=swimming(),f=harness(initial);f.api.observe=async()=>{throw Error('capture failed');};
- await assert.rejects(shore.inspectCamera(initial,f.api),error=>{assert.equal(error.message,'capture failed');assert.equal(error.fieldResult.cameraAdjustments,1);assert.equal(error.fieldResult.stationaryVerified,false);return true;});
- assert.equal(f.pitches.length,1);assert.equal(f.releases(),1);
+ await assert.rejects(shore.inspectCamera(initial,f.api),error=>{assert.equal(error.message,'capture failed');assert.equal(error.fieldResult.cameraResets,1);assert.equal(error.fieldResult.cameraAdjustments,0);assert.equal(error.fieldResult.stationaryVerified,false);return true;});
+ assert.equal(f.pitches.length,0);assert.equal(f.releases(),1);
 });
 
 // Reuse the inert real-adapter harness without registering its unrelated combat tests.
@@ -74,25 +74,27 @@ function adapterFixture(options={}){
  const f=fixture({step:'actTwoStarfellShoreCamera',noEnemy:true,mapPosition:{map:'Teyvat',x:-1324.044921875,y:2558.1630859375},fieldRowsSequence:[rows],...options});
  const position=f.context.genshin.getPositionFromMap;
  f.context.genshin.getPositionFromMap=(...args)=>{if(f.getScreen()!=='field')throw Error('Inventory has no minimap');return position(...args);};
- const capture=f.context.captureGameRegion,moves=[];
+ const capture=f.context.captureGameRegion,moves=[],resets=[];
  f.context.captureGameRegion=function(){const image=capture(),derive=image.deriveCrop;image.deriveCrop=function(x,y,w,h){const crop=derive(x,y,w,h);
   if(x===1819&&y===1028||x===1060&&y===560){crop.srcMat.cvtColor=function(){return {inRange(){return {samplePixels:x===1819?40:0,findContoursAsArray(){return [];},dispose(){}};},dispose(){}};};}
   return crop;};return image;};
  f.context.OpenCvSharp.OpenCvSharp.Cv2.countNonZero=mask=>mask.samplePixels||0;
+ f.context.middleButtonClick=()=>{resets.push('middle');if(options.throwReset)throw Error('camera reset failed');if(options.stopAfterReset)f.context.file.writeTextSync('stop.json',JSON.stringify({session:'lion-adapter-test',createdAt:9000}));};
  f.context.moveMouseBy=(dx,dy)=>{moves.push([dx,dy]);if(options.throwCamera)throw Error('camera call failed');};
- return {...f,moves,async runCamera(){const initial=await f.adapter.observe('lion-adapter-test',1);if(options.changeInitial)options.changeInitial(initial);return f.adapter.runActTwoStarfellShore(initial,f.observe);}};
+ return {...f,moves,resets,async runCamera(){const initial=await f.adapter.observe('lion-adapter-test',1);if(options.changeInitial)options.changeInitial(initial);return f.adapter.runActTwoStarfellShore(initial,f.observe);}};
 }
 
-test('actual adapter captures swim and threat sensors, sends one vertical camera call and verifies inventory pause',async()=>{
+test('actual adapter captures swim and threat sensors, resets once then sends one upward camera call and verifies inventory pause',async()=>{
  const f=adapterFixture(),result=await f.runCamera();
  assert.equal(result.status,'stopped');assert.equal(result.stationaryVerified,true);assert.equal(result.cameraAdjustments,1);assert.equal(result.pauseVerified,true,JSON.stringify(result));
- assert.equal(result.pauseProof.kind,'inventory');assert.equal(f.getScreen(),'inventory');assert.deepEqual(f.moves,[[0,500]]);
+ assert.equal(result.pauseProof.kind,'inventory');assert.equal(f.getScreen(),'inventory');assert.deepEqual(f.moves,[[0,-350]]);
  assert.deepEqual(clone(f.inputs.filter(x=>x.kind==='down').map(x=>x.key)),['VK_ESCAPE','VK_B']);assert.equal(f.nativeCalls.length,0);
  assert.ok(f.observations.some(o=>o.hud.starfellSwim&&o.hud.starfellSwim.confirmed&&o.hud.enemyBarDiagnostic&&o.hud.swimStamina.height===null));
  const events=f.adapter.events(),camera=events.filter(e=>e.type==='starfellShoreCamera');assert.equal(camera.length,1);
- assert.equal(camera[0].dx,0);assert.equal(camera[0].dy,500);assert.equal(camera[0].frameId,result.sourceFrameId);
+ assert.equal(camera[0].dx,0);assert.equal(camera[0].dy,-350);assert.ok(camera[0].frameId>result.sourceFrameId);
+ const reset=events.filter(e=>e.type==='starfellShoreCameraReset');assert.equal(reset.length,1);assert.equal(reset[0].button,'middle');assert.equal(reset[0].completed,true);assert.equal(reset[0].frameId,result.sourceFrameId);assert.ok(reset[0].finishedAt>=reset[0].startedAt);assert.deepEqual(f.resets,['middle']);
  assert.ok(Number.isFinite(camera[0].startedAt)&&camera[0].finishedAt>=camera[0].startedAt);
- assert.ok(events.every(e=>['controllerRevision','key','starfellShoreCamera','pauseProtectionKey','pauseProtectionStarted','pauseProtectionVerified','pauseHostLatency'].includes(e.type)));
+ assert.ok(events.every(e=>['controllerRevision','key','starfellShoreCameraReset','starfellShoreCamera','pauseProtectionKey','pauseProtectionStarted','pauseProtectionVerified','pauseHostLatency'].includes(e.type)));
 });
 
 test('actual adapter rejects fresh damaged swimming before camera and still verifies inventory pause',async()=>{
@@ -105,7 +107,7 @@ test('actual adapter rejects fresh damaged swimming before camera and still veri
 test('actual adapter retains camera failure, releases and returns to verified inventory without retry',async()=>{
  const f=adapterFixture({throwCamera:true}),result=await f.runCamera();
  assert.equal(result.status,'stopped');assert.equal(result.stationaryVerified,false);assert.match(result.reason,/camera call failed/);assert.equal(result.pauseVerified,true);
- assert.deepEqual(f.moves,[[0,500]]);assert.deepEqual(clone(f.inputs.filter(x=>x.kind==='down').map(x=>x.key)),['VK_ESCAPE','VK_B']);
+ assert.deepEqual(f.moves,[[0,-350]]);assert.deepEqual(clone(f.inputs.filter(x=>x.kind==='down').map(x=>x.key)),['VK_ESCAPE','VK_B']);
 });
 
 test('actual adapter STOP after inventory close prevents camera input',async()=>{
@@ -124,8 +126,8 @@ test('actual adapter post-camera capture failure retains one attempt and still p
  const initial=await f.adapter.observe('lion-adapter-test',1),result=await f.adapter.runActTwoStarfellShore(initial,async()=>{
   if(++observed===2)throw Error('post-camera capture failed');return f.observe();
  });
- assert.equal(result.status,'stopped');assert.equal(result.cameraAdjustments,1);assert.equal(result.stationaryVerified,false);assert.match(result.reason,/post-camera capture failed/);
- assert.equal(result.pauseVerified,true);assert.deepEqual(f.moves,[[0,500]]);assert.deepEqual(clone(f.inputs.filter(x=>x.kind==='down').map(x=>x.key)),['VK_ESCAPE','VK_B']);
+ assert.equal(result.status,'stopped');assert.equal(result.cameraResets,1);assert.equal(result.cameraAdjustments,0);assert.equal(result.stationaryVerified,false);assert.match(result.reason,/post-camera capture failed/);
+ assert.equal(result.pauseVerified,true);assert.deepEqual(f.moves,[]);assert.deepEqual(f.resets,['middle']);assert.deepEqual(clone(f.inputs.filter(x=>x.kind==='down').map(x=>x.key)),['VK_ESCAPE','VK_B']);
 });
 
 test('mission routes only the explicit camera step through the existing inventory wrapper',async()=>{
@@ -135,4 +137,24 @@ test('mission routes only the explicit camera step through the existing inventor
   calls++;assert.equal(o,initial);assert.equal(reader,observe);return expected;
  }},observe);
  assert.equal(calls,1);assert.equal(result,expected);
+});
+
+test('measured stamina after reset skips pitch; already measured input performs neither action',async()=>{
+ const initial=swimming(),f=harness(initial,o=>{o.hud.swimStamina.height=50;});
+ const result=await shore.inspectCamera(initial,f.api);assert.equal(result.cameraResets,1);assert.equal(result.cameraAdjustments,0);assert.equal(result.stationaryVerified,true);assert.equal(f.pitches.length,0);
+ initial.hud.swimStamina.height=50;const known=harness(initial),noop=await shore.inspectCamera(initial,known.api);
+ assert.equal(noop.resetAttempted,false);assert.equal(known.resets.length,0);assert.equal(known.pitches.length,0);
+});
+
+test('actual middle-click exception is recorded and preserves independent inventory cleanup',async()=>{
+ const f=adapterFixture({throwReset:true}),result=await f.runCamera();
+ assert.equal(result.resetAttempted,true);assert.equal(result.cameraResets,0);assert.equal(result.pitchAttempted,false);assert.match(result.reason,/camera reset failed/);
+ assert.equal(result.pauseVerified,true);assert.deepEqual(f.resets,['middle']);assert.deepEqual(f.moves,[]);
+ const event=f.adapter.events().find(e=>e.type==='starfellShoreCameraReset');assert.equal(event.completed,false);assert.ok(event.finishedAt>=event.startedAt);
+});
+
+test('STOP after middle-click prevents pitch and retains the successful reset and inventory protection',async()=>{
+ const f=adapterFixture({stopAfterReset:true}),result=await f.runCamera();
+ assert.equal(result.cameraResets,1);assert.equal(result.pitchAttempted,true);assert.equal(result.cameraAdjustments,0);assert.match(result.reason,/stop/i);
+ assert.equal(result.pauseVerified,true);assert.deepEqual(f.resets,['middle']);assert.deepEqual(f.moves,[]);
 });

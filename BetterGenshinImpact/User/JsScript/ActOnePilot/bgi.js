@@ -4471,14 +4471,18 @@ function createActOneAdapter(sessionId,options) {
         },
         runActTwoStarfellShore: async function(initial,observe){
             var gate=eval(file.readTextSync('world-inventory.js')+'\nactOneWorldInventoryClosePermission;'),g=eval(file.readTextSync('act-two-starfell-shore.js')+'\nActTwoStarfellShore;');
-            var cameraOnly=request.step==='actTwoStarfellShoreCamera',cameraAttempted=false,nearShore=request.step==='actTwoStarfellShoreExit',exitActions=0,exitTurns=0;
+            var cameraOnly=request.step==='actTwoStarfellShoreCamera',cameraAttempted=false,cameraResetAttempted=false,cameraResetSource=null,nearShore=request.step==='actTwoStarfellShoreExit',exitActions=0,exitTurns=0;
             if(['actTwoStarfellShore','actTwoStarfellShoreContinue','actTwoStarfellNorthShore','actTwoStarfellShoreCamera','actTwoStarfellShoreExit'].indexOf(request.step)<0||(cameraOnly||nearShore)&&request.mission!=='questStep'||!gate(initial,Date.now(),request.session))throw Error('Fresh Inventory required for bounded Starfell crossing');
             var current=initial,result={status:'stopped'},error=null;
             function safe(o){checkStop();ready();if(!g.base(o,Date.now(),request.session,request.step==='actTwoStarfellNorthShore')||nearShore&&!g.exitReady(o,Date.now(),request.session,true))throw Error('Fresh scoped shore state required');}
             try{await boundedKey('VK_ESCAPE',60,initial.frameId);await sleep(800);current=await observe();
                 result=await (cameraOnly?g.inspectCamera:nearShore?g.runExit:g.run)(current,{now:Date.now,session:request.session,north:request.step==='actTwoStarfellNorthShore',continuation:request.step!=='actTwoStarfellShore',sleep:sleep,observe:observe,release:release,
                     key:async function(k,ms,o){safe(o);if(cameraOnly||k!=='VK_W'||ms!==600||nearShore&&exitActions>=6)throw Error('Only bounded shore walking/swimming permitted');if(nearShore)exitActions++;await boundedKey(k,ms,o.frameId);},
-                    pitch:async function(dy,o){safe(o);if(nearShore||dy!==500||(cameraOnly?cameraAttempted||!g.cameraReady(o,Date.now(),request.session):!g.start(o,Date.now(),request.session,false)))throw Error(cameraOnly?'Fresh scoped one-shot shore camera state required':'Camera preparation requires fresh dry Starfell spawn');
+                    // Camera reset uses the existing game middle-click binding and records the actual source and outcome.
+                    resetCamera:async function(o){safe(o);if(!cameraOnly||cameraResetAttempted||cameraAttempted||!g.cameraReady(o,Date.now(),request.session)||!g.unknownStamina(o))throw Error('Fresh scoped unknown-stamina swimming required for one camera reset');
+                        cameraResetAttempted=true;var event={type:'starfellShoreCameraReset',button:'middle',frameId:o.frameId,startedAt:Date.now(),completed:false};events.push(event);
+                        try{middleButtonClick();event.completed=true;cameraResetSource={frameId:o.frameId,timestamp:o.timestamp};}finally{event.finishedAt=Date.now();}},
+                    pitch:async function(dy,o){safe(o);if(nearShore||(cameraOnly?dy!==-350||cameraAttempted||!cameraResetSource||o.frameId<=cameraResetSource.frameId||o.timestamp<=cameraResetSource.timestamp||!g.cameraReady(o,Date.now(),request.session)||!g.unknownStamina(o):dy!==500||!g.start(o,Date.now(),request.session,false)))throw Error(cameraOnly?'Fresh post-reset unknown-stamina swimming required for one upward camera correction':'Camera preparation requires fresh dry Starfell spawn');
                         if(cameraOnly)cameraAttempted=true;
                         var event={type:cameraOnly?'starfellShoreCamera':'starfellShorePitch',dy:dy,frameId:o.frameId,startedAt:Date.now()};if(cameraOnly)event.dx=0;events.push(event);
                         try{moveMouseBy(0,dy);}finally{if(cameraOnly)event.finishedAt=Date.now();}},

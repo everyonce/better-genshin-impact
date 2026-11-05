@@ -19,20 +19,31 @@
  function start(o,now,session,continuation,north){if(north)return base(o,now,session,true)&&o.hud.starfellSwim&&o.hud.starfellSwim.confirmed===true&&o.hud.swimStamina&&o.hud.swimStamina.height>=40&&northLane(o.map);return base(o,now,session)&&(continuation===true?o.hud.starfellSwim.confirmed&&o.hud.swimStamina&&o.hud.swimStamina.source==='same-frame-swim-stamina'&&o.hud.swimStamina.height>=40&&continuationPosition(o.map):o.hud.groundControls&&!o.hud.starfellSwim.confirmed&&Math.hypot(o.map.x+1329.832,o.map.y-2564.187)<=3);}
  // Camera inspection has no movement authority; crossing still requires measured stamina.
  function cameraReady(o,now,session){return base(o,now,session)&&Number.isInteger(o.frameId)&&o.frameId>0&&o.hud.groundControls===false&&o.hud.starfellSwim&&o.hud.starfellSwim.source==='same-frame-swim-control'&&o.hud.starfellSwim.confirmed===true&&continuationPosition(o.map);}
- // A single camera call must be followed by a newer healthy stationary swimming frame.
+ // Reset an occluded swimming view once, then inspect a newer stationary source before any pitch.
  async function inspectCamera(o,api){
-  const result={status:'stopped',actions:0,inputMs:0,cameraAdjustments:0,cameraDy:500,sourceFrameId:o&&o.frameId,fieldFrameId:o&&o.frameId,stationaryVerified:false};
+  const result={status:'stopped',actions:0,inputMs:0,resetAttempted:false,cameraResets:0,pitchAttempted:false,cameraAdjustments:0,cameraDy:0,sourceFrameId:o&&o.frameId,fieldFrameId:o&&o.frameId,stationaryVerified:false};
   let current=o;
+  // Every camera action requires a newer full-health swimming frame with at most half a unit of drift.
+  async function next(){
+   const previous=current;current=await api.observe();
+   result.fieldFrameId=current&&current.frameId;result.health=current&&current.hud&&current.hud.health;result.swimStamina=current&&current.hud&&current.hud.swimStamina;
+   if(!cameraReady(current,api.now(),api.session)||current.frameId<=previous.frameId||current.timestamp<=previous.timestamp){result.reason='Post-camera fresh scoped swimming or full health was not verified';return false;}
+   result.positionDelta=Math.hypot(current.map.x-o.map.x,current.map.y-o.map.y);
+   if(result.positionDelta>0.5){result.reason='Position changed beyond stationary camera inspection bound';return false;}
+   return true;
+  }
   try{
    if(!cameraReady(current,api.now(),api.session)){result.reason='Fresh full-health southern-lane swimming required for camera inspection';return result;}
    result.health=current.hud.health;result.swimStamina=current.hud.swimStamina;
-   await api.pitch(500,current);result.cameraAdjustments=1;
-   await api.sleep(350);current=await api.observe();
-   result.fieldFrameId=current&&current.frameId;result.health=current&&current.hud&&current.hud.health;result.swimStamina=current&&current.hud&&current.hud.swimStamina;
-   if(!cameraReady(current,api.now(),api.session)||current.frameId<=o.frameId||current.timestamp<=o.timestamp){result.reason='Post-camera fresh scoped swimming or full health was not verified';return result;}
-   result.positionDelta=Math.hypot(current.map.x-o.map.x,current.map.y-o.map.y);
-   if(result.positionDelta>0.5){result.reason='Position changed beyond stationary camera inspection bound';return result;}
-   result.stationaryVerified=true;result.reason='One stationary shore camera inspection; inspect stamina before continuation';return result;
+   if(!unknownStamina(current)){result.reason='Stamina is already measured; no camera recovery needed';return result;}
+   result.resetAttempted=true;await api.resetCamera(current);result.cameraResets=1;
+   await api.sleep(350);if(!await next())return result;
+   // One upward correction is allowed only when reset left the fresh swimming stamina unreadable.
+   if(unknownStamina(current)){
+    result.pitchAttempted=true;result.cameraDy=-350;await api.pitch(-350,current);result.cameraAdjustments=1;
+    await api.sleep(350);if(!await next())return result;
+   }
+   result.stationaryVerified=true;result.reason='Bounded stationary camera recovery; inspect stamina before continuation';return result;
   }catch(error){const failure=error instanceof Error?error:new Error(String(error&&error.message||error));failure.fieldResult=result;throw failure;}finally{api.release();}
  }
  function distance(o,t){return Math.hypot(o.map.x-t.x,o.map.y-t.y);}
@@ -101,5 +112,5 @@
   }
   result.fieldFrameId=current.frameId;result.swimmingObserved=swam;if(!result.reason)result.reason='Bounded crossing ended; inspect ground before continuing';return result;
  }finally{api.release();}}
- const api={region,read,stamina,staminaHeight,base,start,cameraReady,inspectCamera,exitReady,runExit,run};root.ActTwoStarfellShore=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
+ const api={region,read,stamina,staminaHeight,base,start,cameraReady,unknownStamina,inspectCamera,exitReady,runExit,run};root.ActTwoStarfellShore=api;if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

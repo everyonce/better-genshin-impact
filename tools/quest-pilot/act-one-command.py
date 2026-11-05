@@ -93,7 +93,8 @@ def resume_navigation_route(route, progress, receipt, previous_request, session)
     result = (receipt.get('details') or {}).get('result') or {}
     reason = result.get('reason') or ''
     proof = result.get('pauseProof') or {}
-    if (not reason.startswith('Navigation deadline reached') or result.get('pauseVerified') is not True
+    reserved_climb_time = reason == 'Navigation stopped before movement to reserve incidental-climb recovery time'
+    if (not (reason.startswith('Navigation deadline reached') or reserved_climb_time) or result.get('pauseVerified') is not True
             or proof.get('verified') is not True or proof.get('kind') != 'inventory'
             or proof.get('session') != session):
         raise ValueError('Only an inventory-paused deadline stop can resume; inspect other failures first.')

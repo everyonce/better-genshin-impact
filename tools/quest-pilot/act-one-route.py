@@ -594,7 +594,9 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
         deadline_checkpoint = (allow_deadline_checkpoint and not outcome.get('cancelled')
             and receipt.get('status') in ('failed', 'stopped') and isinstance(result, dict)
             and result.get('status') == 'stopped' and result.get('localHandoff') is not True
-            and str(result.get('reason', '')).startswith('Navigation deadline reached')
+            and (str(result.get('reason', '')).startswith('Navigation deadline reached') or
+                 fields.get('requireMeasuredGround') is True and result.get('reason') ==
+                 'Navigation stopped before movement to reserve incidental-climb recovery time')
             and type(result.get('nextWaypointIndex')) is int
             and 0 < result['nextWaypointIndex'] < len(fields['waypoints']))
         status = receipt.get('status')

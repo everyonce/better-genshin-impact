@@ -518,6 +518,19 @@ class SupervisedRouteControllerTests(unittest.TestCase):
                 changed['hud']['enemyBarObservation'].update(fields)
                 self.assertEqual(phase(changed), 'wait')
 
+    def test_climb_time_reserve_resumes_only_unreached_waypoints(self):
+        self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
+        inv, clear = controller_scene('inventory'), controller_scene(objective='')
+        stopped = dict(status='stopped', reason='Navigation stopped before movement to reserve incidental-climb recovery time',
+                       nextWaypointIndex=2, pauseVerified=True,
+                       pauseProof=dict(verified=True, kind='inventory', session='route-session'))
+        pilot = ReplayPilot(self.clock, [dict(mission='questStep', source=inv, result=dict(pausedInventory=True)),
+            dict(mission='navigation', status='failed', source=inv, result=stopped),
+            self.arrival(1, inv)], source=clear)
+        self.assertEqual(self.run_controller(pilot)['status'], 'arrived')
+        self.assertEqual([r['waypoints'] for r in pilot.calls if r['mission'] == 'navigation'],
+                         [self.points,self.points[2:]])
+
     def test_exploration_deadline_uses_exact_inventory_pause_proof(self):
         self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
         source = controller_scene(); source['hud']['objectives'] = []

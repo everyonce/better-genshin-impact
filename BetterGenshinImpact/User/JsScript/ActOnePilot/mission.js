@@ -37,23 +37,31 @@ var ActOneMission = (function () {
     function reviewedClimbRelease(current,recentGround,now,remaining,measuredGroundAt) {
         var h=current&&current.hud,m=current&&current.map,p=h&&h.health;
         if(!current||!current.session||!Number.isFinite(current.timestamp)||now<current.timestamp||now-current.timestamp>1000||remaining<4000||!m||m.map!=='Teyvat'||!h||!h.world||!h.climbing||h.auto||h.dialogueReady||h.choice||h.bigMap||h.journal||!p||p.max!==4015||p.current<p.max*.9||!Array.isArray(h.enemyBars)||h.enemyBars.length||(current.ocr||[]).filter(function(r){return r.x>1600&&r.y>1020&&/^(?:UID)?[: ]*693306810$/.test(String(r.text||'').trim());}).length!==1)return false;
-        var localGround=recentGround&&recentGround.session===current.session&&recentGround.map&&recentGround.map.map==='Teyvat'&&current.timestamp>=recentGround.timestamp&&current.timestamp-recentGround.timestamp<=5000&&Math.hypot(m.x-recentGround.map.x,m.y-recentGround.map.y)<=2&&p.current===p.max;
-        // Measured exploration may release only from this run's last qualified
-        // full-HP ground witness. Historical wall locations cannot substitute.
+        var localGround=recentGround&&recentGround.session===current.session&&recentGround.map&&recentGround.map.map==='Teyvat'&&current.timestamp>=recentGround.timestamp&&current.timestamp-recentGround.timestamp<=5000&&Math.hypot(m.x-recentGround.map.x,m.y-recentGround.map.y)<=2;
+        // Measured routes use their own last qualified ground capture; a known wall location cannot replace it.
         if(measuredGroundAt!==undefined) {
             var gh=recentGround&&recentGround.hud,gp=gh&&gh.health,scan=h.enemyBarObservation;
-            return !!(localGround&&Number.isFinite(measuredGroundAt)&&
-                gh&&gh.groundControls===true&&gh.climbing===false&&gp&&gp.current===4015&&gp.max===4015&&
+            if(!(localGround&&Number.isFinite(measuredGroundAt)&&gh&&gh.groundControls===true&&gh.climbing===false&&
+                gp&&gp.max===4015&&Number.isInteger(p.current)&&p.current<=p.max&&gp.current===p.current&&
                 Number.isInteger(recentGround.frameId)&&current.frameId>recentGround.frameId&&
                 groundScanStopReason(recentGround,measuredGroundAt)===null&&
                 h.climbing===true&&h.groundControls===false&&freshGroundScanIdentity(current,now)&&
                 scan.state==='unavailable'&&scan.reason==='not_recognized_overworld_ground'&&
-                scan.candidateCount===null&&scan.acceptedCount===null);
+                scan.candidateCount===null&&scan.acceptedCount===null))return false;
+            if(p.current===p.max)return true;
+            // At partial HP require the immediately preceding ground frame and the actual detach/jump controls.
+            var direct=function(o){return !o.fastSample&&!o.mapPositionInherited&&!o.hud.lowHealth&&!o.hud.loading&&!o.hud.unknownHud;};
+            var controls=current.ocr||[];
+            return direct(current)&&direct(recentGround)&&gh.world===true&&!gh.auto&&!gh.dialogueReady&&!gh.choice&&!gh.bigMap&&!gh.journal&&
+                current.frameId===recentGround.frameId+1&&scan.capturedAt>=measuredGroundAt&&
+                scan.capturedAt-gh.captureStamp.capturedAt<=2000&&Math.hypot(m.x-recentGround.map.x,m.y-recentGround.map.y)<=.75&&
+                controls.some(function(r){return r.text==='X'&&r.x>=1530&&r.x<=1650&&r.y>=975&&r.y<=1050;})&&
+                controls.some(function(r){return r.text==='Space'&&r.x>=1630&&r.x<=1740&&r.y>=975&&r.y<=1050;});
         }
         var lionBase=Math.hypot(m.x+1435.70,m.y-1652.47)<=.75&&p.current===p.max;
         // Frame1681: low east-waypoint wall, broad grass directly below and beside the climber.
         var eastGrass=Math.hypot(m.x+1529.55,m.y-1972.69)<=.75&&Number.isFinite(m.cameraAngle)&&Math.abs((m.cameraAngle-15+540)%360-180)<=20;
-        return !!(localGround||lionBase||eastGrass);
+        return !!(localGround&&p.current===p.max||lionBase||eastGrass);
     }
     function settledClimbLanding(o,session,entryHealth,now) {
         var h=o&&o.hud,p=h&&h.health;
@@ -209,18 +217,28 @@ var ActOneMission = (function () {
                 if (!safeTransientFrame(current)&&!statueHealingApproach(request,current)) return stop('Dialogue, objective, low-health, or missing navigation evidence');
                 if(exploring&&!statueHealingApproach(request,current)&&current.hud.health&&current.hud.health.current/current.hud.health.max<0.85)return stop('Exploration health threshold reached');
                 if(exploring&&current.hud.climbing&&climbReleases===0&&typeof api.releaseClimb==='function') {
-                    var ch=current.hud,cm=current.map,cp=ch.health;
+                    var ch=current.hud,cp=ch.health;
                     var recentGround=afterForward&&afterForward.groundWitness;
                     if(reviewedClimbRelease(current,recentGround,api.now(),request.deadlineMs-(api.now()-began),
                         request.requireMeasuredGround?afterForward&&afterForward.groundWitnessAt:undefined)) {
-                        var entryHealth=cp.current,recoverySession=current.session;
-                        var recoveryStart=api.now();await api.releaseClimb();totalInputMs+=api.now()-recoveryStart;climbReleases++;
+                        var entryHealth=cp.current,recoverySession=current.session,mount=current;
+                        var recoveryStart=api.now();await api.releaseClimb();var releasedAt=api.now();totalInputMs+=releasedAt-recoveryStart;climbReleases++;
                         await api.sleep(250);var landed=await observe(),landedCheckedAt=api.now();await api.sleep(700);current=await observe();
                         var recovered=settledClimbLanding(landed,recoverySession,entryHealth,api.now())&&settledClimbLanding(current,recoverySession,entryHealth,api.now())&&current.frameId>landed.frameId&&current.timestamp-landed.timestamp>=700&&Math.hypot(current.map.x-landed.map.x,current.map.y-landed.map.y)<=.5;
                         // Validate each landing capture when received; the first
                         // frame may age during the required second-frame settling.
                         if(request.requireMeasuredGround) recovered=recovered&&
                             groundScanStopReason(landed,landedCheckedAt)===null&&groundScanStopReason(current,api.now())===null;
+                        // Both post-detach captures must be new. On a partial-HP low mount they must
+                        // independently show unchanged health and a landing beside the original wall.
+                        if(request.requireMeasuredGround&&recovered){
+                            recovered=landed.frameId>mount.frameId&&landed.hud.captureStamp.capturedAt>=releasedAt&&
+                                current.hud.captureStamp.capturedAt-landed.hud.captureStamp.capturedAt>=700;
+                            if(entryHealth<cp.max)recovered=recovered&&[landed,current].every(function(o){
+                                return !o.fastSample&&!o.mapPositionInherited&&!o.hud.loading&&!o.hud.unknownHud&&
+                                    o.hud.health.current===entryHealth&&Math.hypot(o.map.x-mount.map.x,o.map.y-mount.map.y)<=2;
+                            });
+                        }
                         var recoveryResult=await stop(recovered?'Incidental climb recovered; inspect alternate path':'Climb release did not prove settled ground');
                         recoveryResult.groundRecovered=recovered;recoveryResult.recoveryFrames=[landed.frameId,current.frameId];recoveryResult.fieldFrameId=current.frameId;recoveryResult.fieldHealth=current.hud.health;return recoveryResult;
                     }

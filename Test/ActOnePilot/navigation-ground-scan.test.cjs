@@ -70,12 +70,13 @@ const climbEvidence = require('./navigation-ground-climb.fixture.json');
 // Run the real route body with the two unchanged recorded sources. Only the
 // input boundary and later landing captures are synthetic; no live recovery is claimed.
 async function runRecordedClimb({ground = climbEvidence.ground, climb = climbEvidence.climb,
+    waypoint = {map: 'Teyvat', x: -1329.832, y: 2564.187},
     landingStates = ['clear', 'clear'], landingChange = () => {}} = {}) {
     ground = structuredClone(ground); climb = structuredClone(climb);
     let now = ground.timestamp, observations = 0;
     const inputs = [];
     const route = {...request, session: ground.session, expectedFrameId: ground.frameId,
-        createdAt: now, waypoints: [{map: 'Teyvat', x: -1329.832, y: 2564.187}]};
+        createdAt: now, waypoints: [waypoint]};
     const api = {now: () => now, checkStop() {}, sleep: async ms => {now += ms;},
         runActTwoNavigationWithPause: (_source, _observe, runField) => runField(ground),
         forward: async ms => {inputs.push(['forward', ms]); now += ms;},
@@ -134,6 +135,45 @@ test('measured release rejects foreign, stale, damaged, unmeasured or threatenin
         o => {o.hud.climbing = true;}, o => {o.hud.enemyBarObservation.state = 'ambiguous';},
         o => {o.map.x += 3;}]) {
         const bad = structuredClone(ground); change(bad); assert.equal(eligible(climb, bad), false);
+    }
+});
+
+const cityMount = require('./city-low-mount.fixture.json');
+const cityWaypoint = {map: 'Teyvat', x: -834, y: 2188};
+
+test('city frames 154–156 allow one in-run low-mount detach after stable 3649/4015 HP', async () => {
+    const {ground,climb,parked}=cityMount;
+    const eligible=(c,g=ground,at=g.timestamp)=>mission.reviewedClimbRelease(c,g,c.timestamp,6000,at);
+    assert(eligible(climb));
+    assert(!eligible(parked)); // the same ground frame cannot justify a second detach.
+    assert(!mission.reviewedClimbRelease(climb,ground,climb.timestamp,6000)); // legacy path
+    const {inputs,result}=await runRecordedClimb({ground,climb,waypoint:cityWaypoint});
+    assert.deepEqual(inputs.map(i=>i[0]),['forward','release']);
+    assert.equal(result.status,'stopped');assert.equal(result.groundRecovered,true);
+    assert.deepEqual(result.recoveryFrames,[156,157]);assert.equal(result.nextWaypointIndex,0);
+    for(const change of [g=>{g.hud.health.current--;},g=>{g.hud.health.current++;},
+        g=>{g.map.x+=1;},g=>{g.mapPositionInherited=true;},g=>{g.hud.world=false;},
+        g=>{g.hud.groundControls=false;},g=>{g.hud.enemyBarObservation.state='ambiguous';},
+        g=>{g.session='elsewhere';},g=>{g.frameId--;},g=>{g.timestamp-=2010;
+            g.hud.captureStamp.capturedAt-=2010;g.hud.enemyBarObservation.capturedAt-=2010;}]){
+        const bad=structuredClone(ground);change(bad);assert(!eligible(climb,bad),String(change));
+    }
+    for(const change of [o=>{o.hud.health.current--;},o=>{o.ocr=o.ocr.filter(r=>r.text!=='Space');},
+        o=>{o.ocr.find(r=>r.text==='X').y=800;},o=>{o.fastSample=true;},o=>{o.hud.enemyBars=[{}];}]){
+        const bad=structuredClone(climb);change(bad);assert(!eligible(bad),String(change));
+    }
+    const lower=structuredClone(climb),earlier=structuredClone(ground);
+    lower.hud.health.current=earlier.hud.health.current=3600;assert(!eligible(lower,earlier));
+});
+
+test('partial-HP city landing requires two new clear unchanged nearby ground captures', async () => {
+    for (const change of [(o,i)=>{if(!i)o.hud.health.current++;},(o,i)=>{if(i)o.hud.health.current--;},
+        o=>{o.map.x+=3;},(o,i)=>{if(i)o.mapPositionInherited=true;},
+        (o,i)=>{if(i===0){o.frameId=cityMount.climb.frameId;
+            o.hud.captureStamp.frameId=o.hud.enemyBarObservation.frameId=o.frameId;}}]){
+        const {result,inputs}=await runRecordedClimb({...cityMount,waypoint:cityWaypoint,landingChange:change});
+        assert.deepEqual(inputs.map(i=>i[0]),['forward','release']);
+        assert.equal(result.groundRecovered,false);assert.equal(result.status,'stopped');
     }
 });
 

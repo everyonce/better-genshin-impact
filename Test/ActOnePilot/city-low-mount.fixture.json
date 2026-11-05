@@ -1,0 +1,217 @@
+{
+  "source": "city-cyrus-01, R75 session mw3rd6c0-33eyc0lflkn; original map, OCR controls and measured HUD fields",
+  "ground": {
+    "session": "mw3rd6c0-33eyc0lflkn",
+    "frameId": 154,
+    "timestamp": 1793896167605,
+    "screenshotPath": "observations/mw3rd6c0-33eyc0lflkn/frame-0154.png",
+    "ocr": [
+      {
+        "text": "E",
+        "x": 1682,
+        "y": 1026,
+        "width": 31,
+        "height": 27
+      },
+      {
+        "text": "Q",
+        "x": 1802,
+        "y": 1024,
+        "width": 33,
+        "height": 29
+      },
+      {
+        "text": "UID:",
+        "x": 1684,
+        "y": 1050,
+        "width": 49,
+        "height": 23
+      },
+      {
+        "text": "693306810",
+        "x": 1730,
+        "y": 1048,
+        "width": 133,
+        "height": 29
+      }
+    ],
+    "map": {
+      "x": -836.1328125,
+      "y": 2198.470703125,
+      "map": "Teyvat",
+      "cameraAngle": 105.5
+    },
+    "hud": {
+      "world": true,
+      "groundControls": true,
+      "climbing": false,
+      "auto": false,
+      "dialogueReady": false,
+      "choice": false,
+      "bigMap": false,
+      "journal": false,
+      "health": {
+        "current": 3649,
+        "max": 4015
+      },
+      "lowHealth": false,
+      "enemyBars": [],
+      "objectives": [],
+      "captureStamp": {
+        "session": "mw3rd6c0-33eyc0lflkn",
+        "frameId": 154,
+        "capturedAt": 1793896167157,
+        "source": "game-capture-start"
+      },
+      "enemyBarObservation": {
+        "version": 1,
+        "kind": "normal-ground-enemy-observation-v1",
+        "state": "clear",
+        "session": "mw3rd6c0-33eyc0lflkn",
+        "frameId": 154,
+        "capturedAt": 1793896167157,
+        "reason": "no_bar_shaped_components",
+        "candidateCount": 0,
+        "acceptedCount": 0
+      }
+    }
+  },
+  "climb": {
+    "session": "mw3rd6c0-33eyc0lflkn",
+    "frameId": 155,
+    "timestamp": 1793896169014,
+    "screenshotPath": "observations/mw3rd6c0-33eyc0lflkn/frame-0155.png",
+    "ocr": [
+      {
+        "text": "X",
+        "x": 1590,
+        "y": 1020,
+        "width": 37,
+        "height": 35
+      },
+      {
+        "text": "Space",
+        "x": 1680,
+        "y": 1024,
+        "width": 71,
+        "height": 31
+      },
+      {
+        "text": "UID: 693306810",
+        "x": 1682,
+        "y": 1048,
+        "width": 181,
+        "height": 29
+      }
+    ],
+    "map": {
+      "x": -836.080078125,
+      "y": 2198.669921875,
+      "map": "Teyvat",
+      "cameraAngle": 113.5
+    },
+    "hud": {
+      "world": true,
+      "groundControls": false,
+      "climbing": true,
+      "auto": false,
+      "dialogueReady": false,
+      "choice": false,
+      "bigMap": false,
+      "journal": false,
+      "health": {
+        "current": 3649,
+        "max": 4015
+      },
+      "lowHealth": false,
+      "enemyBars": [],
+      "objectives": [],
+      "captureStamp": {
+        "session": "mw3rd6c0-33eyc0lflkn",
+        "frameId": 155,
+        "capturedAt": 1793896168612,
+        "source": "game-capture-start"
+      },
+      "enemyBarObservation": {
+        "version": 1,
+        "kind": "normal-ground-enemy-observation-v1",
+        "state": "unavailable",
+        "session": "mw3rd6c0-33eyc0lflkn",
+        "frameId": 155,
+        "capturedAt": 1793896168612,
+        "reason": "not_recognized_overworld_ground",
+        "candidateCount": null,
+        "acceptedCount": null
+      }
+    }
+  },
+  "parked": {
+    "session": "mw3rd6c0-33eyc0lflkn",
+    "frameId": 156,
+    "timestamp": 1793896169509,
+    "screenshotPath": "observations/mw3rd6c0-33eyc0lflkn/frame-0156.png",
+    "ocr": [
+      {
+        "text": "X",
+        "x": 1590,
+        "y": 1018,
+        "width": 37,
+        "height": 37
+      },
+      {
+        "text": "Space",
+        "x": 1680,
+        "y": 1024,
+        "width": 69,
+        "height": 31
+      },
+      {
+        "text": "UID: 693306810",
+        "x": 1680,
+        "y": 1048,
+        "width": 183,
+        "height": 29
+      }
+    ],
+    "map": {
+      "x": -836.080078125,
+      "y": 2198.6689453125,
+      "map": "Teyvat",
+      "cameraAngle": 113.5
+    },
+    "hud": {
+      "world": true,
+      "groundControls": false,
+      "climbing": true,
+      "auto": false,
+      "dialogueReady": false,
+      "choice": false,
+      "bigMap": false,
+      "journal": false,
+      "health": {
+        "current": 3649,
+        "max": 4015
+      },
+      "lowHealth": false,
+      "enemyBars": [],
+      "objectives": [],
+      "captureStamp": {
+        "session": "mw3rd6c0-33eyc0lflkn",
+        "frameId": 156,
+        "capturedAt": 1793896169038,
+        "source": "game-capture-start"
+      },
+      "enemyBarObservation": {
+        "version": 1,
+        "kind": "normal-ground-enemy-observation-v1",
+        "state": "unavailable",
+        "session": "mw3rd6c0-33eyc0lflkn",
+        "frameId": 156,
+        "capturedAt": 1793896169038,
+        "reason": "not_recognized_overworld_ground",
+        "candidateCount": null,
+        "acceptedCount": null
+      }
+    }
+  }
+}

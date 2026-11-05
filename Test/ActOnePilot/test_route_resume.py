@@ -234,6 +234,12 @@ class ReplayPilot:
     def validate_route(self, route, deadline_ms):
         command_tool.validate_navigation_plan(route, min(45000, deadline_ms))
 
+    def quest_navigation_from_inventory(self, objective, points):
+        # Read the same installed mission as the real pilot, without a Windows input endpoint.
+        client = types.SimpleNamespace(command=command_tool, root=SCRIPT.parents[2] /
+            'BetterGenshinImpact/User/JsScript/ActOnePilot')
+        return route_tool.GuardedPilot.quest_navigation_from_inventory(client, objective, points)
+
     def inventory_ready(self, source):
         return source.get('map') is None and any(row.get('text') == 'Food' for row in source['ocr'])
 
@@ -360,6 +366,27 @@ class SupervisedRouteControllerTests(unittest.TestCase):
         conversation = next(q for q in pilot.calls if q['mission'] == 'dialogue')
         self.assertEqual((conversation['talkTo'], conversation['expectedUid']), ('Amber', '693306810'))
         self.assertLessEqual(conversation['deadlineMs'], 60000)
+
+    def test_quest_guild_navigation_visits_inventory_after_measuring_the_actual_objective(self):
+        objective = "Go to the Adventurers' Guild and listen to their report"
+        self.route.update(objective=objective, talkTo='Cyrus')
+        inventory = controller_scene('inventory')
+        field = controller_scene(objective=objective)
+        pilot = ReplayPilot(self.clock, [
+            dict(mission='questStep', source=field, result=dict(status='completed')),
+            dict(mission='questStep', source=inventory, result=dict(pausedInventory=True)),
+            self.arrival(3, inventory),
+            dict(mission='questStep', source=field, result=dict(status='completed')),
+            dict(mission='dialogue', source=field, frames=3, result=dict(status='completed',
+                reason='world_returned', talkTo='Cyrus', greetingFrameId=12, worldFrameId=13)),
+            dict(mission='questStep', source=inventory, result=dict(pausedInventory=True))], source=inventory)
+        report = self.run_controller(pilot)
+        self.assertEqual(report['status'], 'arrived', report.get('reason'))
+        actions = [q.get('step') or q['mission'] for q in pilot.calls if q['mission'] != 'observe']
+        self.assertEqual(actions, ['worldInventoryClose', 'worldInventory', 'navigation',
+                                  'worldInventoryClose', 'dialogue', 'worldInventory'])
+        navigation = next(q for q in pilot.calls if q['mission'] == 'navigation')
+        self.assertEqual(navigation['objective'], objective)
 
     def test_named_npc_missing_prompt_keeps_arrival_cursor_without_a_second_interaction(self):
         self.route['talkTo'] = 'Amber'

@@ -96,3 +96,12 @@ test('legacy dialogue and bounded named dialogue validate independently',()=>{
         {...base,deadlineMs:5000},{...named,mission:'observe'}]) assert.notEqual(verify(rejected),null);
 });
 
+test('native guild quest routing and its launcher share the same inventory entry predicate',()=>{
+    const base={objective:"Go to the Adventurers' Guild and listen to their report",
+        waypoints:[{map:'Teyvat',x:-834,y:2188}]};
+    assert.equal(mission.guildNavigationFromInventory(base),true);
+    assert.equal(mission.guildNavigationFromInventory({...base,objective:'Go to Mondstadt'}),false);
+    const amber={objective:'Talk to Amber',waypoints:[{map:'Teyvat',x:-1309.119,y:1722.077}]};
+    assert.equal(mission.guildNavigationFromInventory(amber),true);
+    assert.equal(mission.guildNavigationFromInventory({...amber,waypoints:[{map:'Teyvat',x:0,y:0}]}),false);
+});

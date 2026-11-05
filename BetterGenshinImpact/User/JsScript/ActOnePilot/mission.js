@@ -121,15 +121,19 @@ var ActOneMission = (function () {
         var p=request&&request.waypoints,m=o&&o.map,h=o&&o.hud;
         return !!(request&&request.objective==='Explore for Adventure Rank'&&request.deadlineMs<=10000&&Array.isArray(p)&&p.length===1&&p[0].map==='Teyvat'&&p[0].x===-1265.917&&p[0].y===1928.381&&m&&m.map==='Teyvat'&&Math.hypot(m.x+1265.917,m.y-1928.381)<=8&&h&&h.world&&h.groundControls&&!h.climbing&&Array.isArray(h.enemyBars)&&h.enemyBars.length===0&&h.health&&[2635,4015].includes(h.health.max)&&h.health.current>0&&h.health.current<=h.health.max);
     }
+    // Route launchers can use this same predicate to prepare the native quest's starting screen.
+    function guildNavigationFromInventory(request) {
+        var amberCity=request&&request.objective==='Talk to Amber'&&Array.isArray(request.waypoints)&&request.waypoints.length>0&&request.waypoints.every(p=>p.map==='Teyvat'&&(p.x>=-900&&p.x<=-700&&p.y>=2200&&p.y<=2450||p.x>=-720&&p.x<=-670&&p.y>=2320&&p.y<=2370));
+        var amberExam=request&&request.objective==='Talk to Amber'&&Array.isArray(request.waypoints)&&request.waypoints.length>0&&request.waypoints.every(p=>p.map==='Teyvat'&&p.x>=-1340&&p.x<=-1280&&p.y>=1690&&p.y<=1750);
+        return !!(amberCity||amberExam||request&&["Go to the exam point","Check the suspicious location and eliminate any threats","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0);
+    }
     async function runNavigation(request, observation, api, observe, protectedLisa) {
         var exploring=request&&request.objective==='Explore for Adventure Rank';
         // Exploration is an explicitly requested, bounded errand. Ambient NPC
         // labels (or an independently tracked quest) are not its objective.
         function navigationObjective(o){return exploring||hasObjective(o,request.objective);}
         if(exploring&&(!Array.isArray(request.waypoints)||request.waypoints.some(function(p){return !p||p.map!=='Teyvat'||!Number.isFinite(p.x)||!Number.isFinite(p.y)||(p.x< -1600&&!(p.x>=-1660&&p.y>=2600&&p.y<=2700))||p.x> -700||(p.y<1700&&!(p.x>=-1500&&p.x<=-1300&&p.y>=1400))||p.y>2700;})))return {status:'stopped',reason:'Exploration limited to bounded starter Mondstadt region'};
-        var amberCity=request&&request.objective==='Talk to Amber'&&Array.isArray(request.waypoints)&&request.waypoints.length>0&&request.waypoints.every(p=>p.map==='Teyvat'&&(p.x>=-900&&p.x<=-700&&p.y>=2200&&p.y<=2450||p.x>=-720&&p.x<=-670&&p.y>=2320&&p.y<=2370));
-        var amberExam=request&&request.objective==='Talk to Amber'&&Array.isArray(request.waypoints)&&request.waypoints.length>0&&request.waypoints.every(p=>p.map==='Teyvat'&&p.x>=-1340&&p.x<=-1280&&p.y>=1690&&p.y<=1750);
-        var guildObjective=amberCity||amberExam||request&&["Go to the exam point","Check the suspicious location and eliminate any threats","Explore for Adventure Rank","Purchase Fisherman's Toast",'Offer the Anemoculus to the Statue','Give the Chicken-Mushroom Skewer to Lynn','Speak to Lynn','Talk to Katheryne for more details','Talk to Wagner the blacksmith','Collect three Iron Chunks and give them to Wagner','Talk to Kaeya','Talk to Kaeya at the meeting spot','Report to Kaeya','Meet with the informant at the designated location','Talk to the informant','Solve the mystery (Go to Kaeya at the Knights of Favonius HQ for a hint)',"Go to the Adventurers' Guild and listen to their report"].indexOf(request.objective)>=0;
+        var guildObjective = guildNavigationFromInventory(request);
         if(guildObjective&&!protectedLisa){
             if(!Number.isInteger(request.deadlineMs)||request.deadlineMs<1000||request.deadlineMs>45000||
                 !Array.isArray(request.waypoints)||request.waypoints.length<1||request.waypoints.length>4||
@@ -1846,6 +1850,6 @@ var ActOneMission = (function () {
             if(current&&current.hud&&current.hud.climbing) grounded=0;
         }
     }
-    return { travelHoldMs:travelHoldMs, reviewedClimbRelease:reviewedClimbRelease, settledClimbLanding:settledClimbLanding, statueHealingApproach:statueHealingApproach, runNavigation: runNavigation, runDialogue: runDialogue, runQuestStep:runQuestStep, bearing: bearing, objectiveMatches: objectiveMatches, selectDialogueChoice: selectDialogueChoice };
+    return { guildNavigationFromInventory:guildNavigationFromInventory, travelHoldMs:travelHoldMs, reviewedClimbRelease:reviewedClimbRelease, settledClimbLanding:settledClimbLanding, statueHealingApproach:statueHealingApproach, runNavigation: runNavigation, runDialogue: runDialogue, runQuestStep:runQuestStep, bearing: bearing, objectiveMatches: objectiveMatches, selectDialogueChoice: selectDialogueChoice };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = ActOneMission;

@@ -288,6 +288,16 @@ class GuardedPilot:
         self.command.atomic(self.root / 'stop.json', dict(session=self.session, createdAt=int(time.time() * 1000)))
         self.cancelled = True
 
+    def quest_navigation_from_inventory(self, objective, points):
+        """Ask the installed native mission which screen its quest-navigation wrapper requires."""
+        program = ("const m=require(process.argv[1]), route=JSON.parse(process.argv[2]);"
+                   "process.exit(m.guildNavigationFromInventory(route)?0:2)")
+        result = self.command.subprocess.run(['node', '-e', program, str(self.root / 'mission.js'),
+            json.dumps(dict(objective=objective, waypoints=points))], capture_output=True, text=True, timeout=5)
+        if result.returncode not in (0, 2):
+            raise RouteError('Could not determine the installed native quest navigation entry screen.')
+        return result.returncode == 0
+
     def inventory_ready(self, source, *, at_ms=None):
         """Reuse the installed, input-free inventory predicate before native navigation."""
         check = self.command.subprocess.run(['node', '-e',
@@ -1079,7 +1089,7 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
                     **{key: continuation[key] for key in ('requestId', 'sourceFrameId', 'pauseFrameId', 'terminalFrameId')})
             # Native travel ends in inventory. Open it once for a fresh field measurement before
             # navigation; a delayed transition must never turn into a second Escape.
-            if (inventory_navigation is None and objective == EXPLORATION_OBJECTIVE
+            if (inventory_navigation is None and (objective == EXPLORATION_OBJECTIVE or talk_to)
                     and (len(state['records']) == 1 or inspect_after_encounter)
                     and source['hud'].get('world') is False and source.get('map') is None
                     and source_account_matches(source, expected_uid) and pilot.inventory_ready(source)):
@@ -1220,12 +1230,13 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
                 raise RouteError('No further native combat handoff is authorized.')
             if remaining < reserve + 1000:
                 raise RouteError('Insufficient original deadline for navigation and its native handoff.')
-            if value == EXPLORATION_OBJECTIVE and not paused_navigation:
+            if (not paused_navigation and (value == EXPLORATION_OBJECTIVE or talk_to and
+                    pilot.quest_navigation_from_inventory(value, points[state['nextWaypointIndex']:]))):
                 if remaining < 20000:
-                    raise RouteError('Insufficient original deadline for exploration pause and navigation.')
+                    raise RouteError('Insufficient original deadline for inventory preparation and navigation.')
                 result = dispatch('questStep', source, dict(step='worldInventory'))
                 if not isinstance(result, dict) or result.get('pausedInventory') is not True:
-                    raise RouteError('Exploration inventory pause did not complete.')
+                    raise RouteError('Navigation inventory preparation did not complete.')
                 inventory_navigation = value
                 continue
             inventory_navigation = None

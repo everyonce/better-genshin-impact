@@ -122,6 +122,10 @@ test('sparse camp torch outline is diagnostic only; dense or anchored fragments 
   const clearFlicker=await measure({contours:[flicker],flameCounts:{188:151,169:0}});
   assert.equal(clearFlicker.observation.hud.enemyBarObservation.state,'clear');
   assert.equal(clearFlicker.observation.hud.enemyBarDiagnostic.flameTips[0].orangePixelsBelow,151);
+  // Next camp capture showed two tips simultaneously, including a taller 12-by-14 outline.
+  const twoTips=await measure({contours:[{x:1346,y:151,width:12,height:14,area:4.5},{x:1371,y:151,width:12,height:12,area:16.5}],flameCounts:{192:145,173:2,191:123,172:0}});
+  assert.equal(twoTips.observation.hud.enemyBarObservation.state,'clear');
+  assert.equal(twoTips.observation.hud.enemyBarDiagnostic.flameTips.length,2);
   for(const flameCounts of [{},{185:95,166:0},{185:144,166:100}]){
     const fragment=await measure({contours:[torch],flameCounts});
     assert.equal(fragment.observation.hud.enemyBarObservation.state,'ambiguous');

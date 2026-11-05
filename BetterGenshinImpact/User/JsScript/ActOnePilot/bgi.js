@@ -3370,7 +3370,7 @@ function createActOneAdapter(sessionId,options) {
                     if(actOneOutdoorEnemyBarCandidate(bar,rows))return true;
                     // In a camp flame, a short red tip sits above a bright orange plume.
                     // An uncertain fragment stays in the field scan until the same image proves both colors.
-                    var shortTip=bar.height>=6&&bar.height<=13&&bar.width>=5&&bar.width<=14&&
+                    var shortTip=bar.height>=6&&bar.height<=20&&bar.width>=5&&bar.width<=25&&
                         bar.width<=1.8*bar.height&&bar.rectangularity<0.5;
                     if(shortTip&&bar.y>=16&&bar.y<=1060&&bar.x>=13&&bar.x<=1906){
                         var below=flamePixels(Math.round(bar.x)-12,Math.round(bar.y)+4);

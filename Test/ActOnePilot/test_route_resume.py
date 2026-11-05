@@ -614,6 +614,22 @@ class SupervisedRouteControllerTests(unittest.TestCase):
             sample['hud']['enemyBarObservation']['candidateCount'] += 1
             self.assertEqual(phase(sample, True), 'wait')
 
+    def test_recent_positive_scan_can_park_for_native_remeasurement_under_capture_load(self):
+        now = self.clock.milliseconds()
+        source = controller_scene(objective='', enemies=True)
+        source['timestamp'] = now - 1316
+        record_ground_scan(source)
+        source['timestamp'] += 949  # Measured native OCR and publication on Temple frame 36.
+        def phase(at):
+            return route_tool.route_phase(source, '693306810', [route_tool.EXPLORATION_OBJECTIVE],
+                allow_dialogue=False, journal_resume=False, now_ms=at, allow_field_combat=True)[0]
+        self.assertEqual(phase(now), 'fieldCombat')
+        self.assertEqual(phase(now + 685), 'wait')
+        source['hud']['enemyBars'] = []
+        source['timestamp'] = now - 1316
+        record_ground_scan(source)
+        self.assertEqual(phase(now), 'wait')
+
     def test_field_encounter_rejects_ambiguous_scan_or_failed_rotation(self):
         self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
         now = self.clock.milliseconds()

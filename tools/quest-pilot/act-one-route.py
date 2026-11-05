@@ -546,7 +546,7 @@ def source_account_matches(source, expected_uid):
     return matches == [expected_uid]
 
 
-def ground_scan_matches(source, now_ms, state, count, *, candidate_count=None):
+def ground_scan_matches(source, now_ms, state, count, *, candidate_count=None, max_age_ms=1000):
     """Match the requested count to native evidence from this exact, still-fresh ground frame."""
     hud = source['hud']
     scan = hud.get('enemyBarObservation')
@@ -555,7 +555,7 @@ def ground_scan_matches(source, now_ms, state, count, *, candidate_count=None):
         return False
     captured_at = stamp.get('capturedAt')
     return (stamp.get('source') == 'game-capture-start' and type(captured_at) is int
-            and captured_at <= source['timestamp'] <= now_ms and now_ms - captured_at <= 1000
+            and captured_at <= source['timestamp'] <= now_ms and now_ms - captured_at <= max_age_ms
             and stamp.get('session') == scan.get('session') == source['session']
             and type(stamp.get('frameId')) is int and type(scan.get('frameId')) is int
             and stamp['frameId'] == scan['frameId'] == source['frameId']
@@ -619,9 +619,11 @@ def route_phase(source, expected_uid, objectives, *, allow_dialogue, journal_res
         return 'wait', 'Objective evidence is malformed'
     if objectives == [EXPLORATION_OBJECTIVE]:
         now_ms = int(time.time() * 1000) if now_ms is None else now_ms
+        # A positive field scan only requests an inventory pause. The native combat action
+        # measures the target, health, and controls again after reopening the world.
         if (allow_field_combat and not any(text.strip() for text in visible_objectives)
                 and hp['current'] >= hp['max'] * .85 and 1 <= len(bars) <= 3
-                and ground_scan_matches(source, now_ms, 'threat', len(bars))):
+                and ground_scan_matches(source, now_ms, 'threat', len(bars), max_age_ms=2000)):
             return 'fieldCombat', None
         if bars or any(re.fullmatch(r'Defeatallopponents[0-9]+/[0-9]+', re.sub(r'\s', '', x)) for x in visible_objectives):
             return 'wait', 'Exploration requires zero visible threat'

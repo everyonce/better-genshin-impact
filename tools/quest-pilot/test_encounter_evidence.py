@@ -27,7 +27,7 @@ def encounter(fixture, start=3, dialogue=False):
     if dialogue:
         req['talkTo'] = 'Cyrus'
         actions = dict(talkTo='Cyrus', interactionFrameId=start, greetingFrameId=start+1, menuFrameId=start+1,
-                       farewellFrameId=start+1, worldFrameId=start+2)
+                       farewell=dict(label='Goodbye.', frameId=start+1), worldFrameId=start+2)
     else:
         req['step'] = 'actTwoFieldCombat'
         actions = dict(nativeAttempted=True, beforeFrameId=start, afterFrameId=start+2,

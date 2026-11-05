@@ -96,6 +96,16 @@ test('actual panel follows only five existing portrait callbacks then Escape and
   assert.equal(await f.runner.process(f.request(), () => f.policy), 'rejected', 'request cannot replay');
 });
 
+test('combined party heading and healing instruction allow scoped Statue recovery', async () => {
+  const f = fixture(o => {
+    if (o.map !== null || !o.ocr[0]) return;
+    o.ocr[0] = { text: ' In combat Click on the character portrait to restore HP', x: 28, y: 34, width: 749, height: 29 };
+  });
+  await f.runner.observe();
+  assert.equal(await f.runner.process(f.request(), () => f.policy), 'completed');
+  assert.ok(f.calls.some(call => call[0] === 'click'));
+});
+
 test('fresh engine entry rejects changed menu, stale source, different session/UID, depletion and ambiguous Kaeya', async () => {
   const mutations = [
     o => { o.hud.world = true; }, o => { o.timestamp -= 1001; },
@@ -103,6 +113,7 @@ test('fresh engine entry rejects changed menu, stale source, different session/U
     o => { o.ocr[3].text = 'Restorative Power: 0 / 10000'; },
     o => { o.ocr[3].text = 'Restorative Power: 0 710000'; },
     o => { o.ocr.splice(0, 1); }, o => { o.ocr[2].text = 'Lv. 19'; },
+    o => { o.ocr[0] = { text: 'In combat Click on the character portrait to restore HP', x: 1200, y: 34, width: 749, height: 29 }; },
     o => { o.ocr.push({ ...o.ocr[2], text: 'Lv. 30' }); },
     o => { o.ocr.push({ ...o.ocr[3] }); },
   ];

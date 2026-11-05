@@ -321,7 +321,13 @@ function actOneStatuePanelRecoveryReady(o,now,session) {
        h.auto!==false||h.climbing!==false||!Array.isArray(rows))return false;
     function one(predicate){return rows.filter(predicate).length===1;}
     if(!one(function(r){return /^(?:UID)?[: ]*693306810$/.test(String(r.text||'').trim())&&r.x>1600&&r.y>1030;})||
-       !one(function(r){return String(r.text||'').trim()==='Click on the character portrait to restore HP'&&r.y<100;})||
+       !one(function(r){
+           var text=String(r.text||'').trim(), guide='Click on the character portrait to restore HP';
+           if(text===guide)return r.y<100;
+           // OCR can combine the party heading and healing instruction across the top left of the panel.
+           return text==='In combat '+guide && [r.x,r.y,r.width,r.height].every(Number.isFinite) &&
+               r.x>=10 && r.x<=65 && r.y>=15 && r.y<=70 && r.width>=650 && r.width<=850 && r.height>=18 && r.height<=55;
+       })||
        !one(function(r){return /^Statue.s Blessing$/.test(String(r.text||'').trim())&&r.x>1400&&r.y<100;}))return false;
     var cards=rows.filter(function(r){return /^Lv\.?\s*[1-9][0-9]?$/.test(String(r.text||'').trim())&&
         [r.x,r.y,r.width,r.height].every(Number.isFinite)&&r.x>=430&&r.x<=510&&

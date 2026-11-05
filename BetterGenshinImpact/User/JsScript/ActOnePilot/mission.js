@@ -427,6 +427,18 @@ var ActOneMission = (function () {
         if (!known) return null;
         return options[0].text.trim();
     }
+    // Only a uniquely labeled farewell is authorized by a named waypoint conversation.
+    function namedFarewell(current, name, options) {
+        if (current.hud.choice !== true || current.hud.auto !== true || current.map !== null ||
+            !namedSpeakerVisible(current, name)) return null;
+        var matches = options.filter(function(r) { return /^(Goodbye|Farewell|See you|Bye)[.!]?$/i.test(r.text.trim()); });
+        return matches.length === 1 ? matches[0].text.trim() : null;
+    }
+    function namedSpeakerVisible(current, name) {
+        return current.ocr.filter(function(r) {
+            return r.text.trim() === name && r.x >= 600 && r.x <= 1200 && r.y >= 820 && r.y < 900;
+        }).length === 1;
+    }
     // Match the account on the actual frame used for input, including after a scene transition.
     function namedDialogueAccount(frame, uid) {
         var matches = (frame.ocr || []).filter(function(row) {
@@ -471,10 +483,7 @@ var ActOneMission = (function () {
                 })) break;
                 await api.sleep(200); current = await observe(); continue;
             }
-            var speaker = current.ocr.filter(function(r) {
-                return r.text.trim() === request.talkTo && r.x >= 600 && r.x <= 1200 && r.y >= 820 && r.y < 900;
-            });
-            if ((openingFrame === null || current.frameId > openingFrame) && speaker.length === 1 &&
+            if ((openingFrame === null || current.frameId > openingFrame) && namedSpeakerVisible(current, request.talkTo) &&
                 current.map === null && current.hud.world === false && !current.hud.health && current.hud.auto === true &&
                 (current.hud.dialogueReady === true || current.hud.choice === true)) {
                 var remaining = Math.floor(end - api.now());
@@ -497,7 +506,7 @@ var ActOneMission = (function () {
         var deadlineMs=Number.isInteger(options.deadlineMs)&&options.deadlineMs>=1000?Math.min(60000,options.deadlineMs):60000;
         var maxPresses=Number.isInteger(options.maxPresses)&&options.maxPresses>=1?Math.min(40,options.maxPresses):40;
         var began = api.now(), presses = 0, inputMs = 0, current = options.initial || await observe(), unknown = 0, tutorialSteps = Object.create(null);
-        var dialogueSignature = null, unchangedActions = 0, unchangedSince = api.now();
+        var dialogueSignature = null, unchangedActions = 0, unchangedSince = api.now(), farewell = null;
         while (api.now() - began < deadlineMs && presses < maxPresses) {
             api.checkStop();
             if (options.namedRequest) {
@@ -510,7 +519,8 @@ var ActOneMission = (function () {
                 if (current.hud.world) {
                     if (!current.map || current.map.map !== 'Teyvat' || !current.hud.groundControls || !validHealth(current.hud.health))
                         return {status:'stopped', reason:'Named conversation world return is ambiguous'};
-                    return {status:'completed', reason:'world_returned', worldFrameId:current.frameId, presses:presses, inputMs:inputMs};
+                    return {status:'completed', reason:'world_returned', worldFrameId:current.frameId, presses:presses,
+                        inputMs:inputMs, farewell:farewell};
                 }
             }
             if(typeof api.actTwoHideoutTutorialReady==='function'&&api.actTwoHideoutTutorialReady(current)&&typeof api.runActTwoHideoutDialogueTutorials==='function'){
@@ -564,9 +574,24 @@ var ActOneMission = (function () {
                 else if(++unchangedActions>=4&&api.now()-unchangedSince>=4000)
                     return {status:'stopped',reason:'dialogue_did_not_advance',presses:presses,inputMs:inputMs};
             }
-            if (current.hud.choice) {
-                var choice = selectDialogueChoice(current);
-                if (!choice) return { status: 'stopped', reason: 'dialogue_choice', presses: presses, inputMs: inputMs };
+            // A short option can be readable even when the general HUD detector misses the menu.
+            var namedOptions = options.namedRequest ? (current.ocr || []).filter(function(r) {
+                return r.x > 1000 && r.x < 1800 && r.y > 430 && r.y < 820 && /[A-Za-z]/.test(r.text);
+            }) : [];
+            if (current.hud.choice || namedOptions.length) {
+                var choice;
+                if (options.namedRequest) {
+                    if (farewell) { // A slow closing menu must never receive a second selection.
+                        await api.sleep(200); current = await observe(); continue;
+                    }
+                    choice = namedFarewell(current, options.namedRequest.talkTo, namedOptions);
+                    if (!choice) return {status:'stopped', reason:'named_dialogue_no_farewell', menuFrameId:current.frameId,
+                        presses:presses, inputMs:inputMs};
+                    farewell = {label:choice, frameId:current.frameId};
+                } else {
+                    choice = selectDialogueChoice(current);
+                    if (!choice) return {status:'stopped', reason:'dialogue_choice', presses:presses, inputMs:inputMs};
+                }
                 var choiceStart = api.now(); await api.chooseChoice(choice); inputMs += api.now() - choiceStart; presses++;
                 await api.sleep(650); current = await observe(); continue;
             }

@@ -13,7 +13,7 @@ function replay(frames, name = 'Amber', budget = 6000) {
     const request = {id:'talk-test', mission:'dialogue', session, expectedFrameId:0, createdAt:now,
         talkTo:name, expectedUid:uid, deadlineMs:budget};
     const api = {now:()=>now, checkStop(){}, sleep:async ms=>{ now += ms; },
-        keyPress:async (key, source)=>keys.push([key, source && source.frameId]), chooseChoice:async()=>assert.fail('unexpected choice')};
+        keyPress:async (key, source)=>keys.push([key, source && source.frameId]), chooseChoice:async label=>keys.push(['choice', label])};
     async function observe() {
         const frame = structuredClone(frames[Math.min(count, frames.length - 1)]);
         frame.frameId = ++count; frame.session = session; frame.timestamp = now;
@@ -75,6 +75,34 @@ test('a missed interaction, a different speaker or a changed account cannot coun
         assert.equal(result.status,'stopped');
         assert.deepEqual(keys.map(call=>call[0]),['VK_F']);
         assert.equal(result.worldFrameId,undefined);
+    }
+});
+
+// Use real English dialogue HUD geometry; the service rows represent the shipped guild interaction.
+function guildMenu(labels, choice=true, speaker='Katheryne') {
+    const scene=structuredClone(greeting);
+    scene.hud.choice=choice;scene.hud.dialogueReady=!choice;
+    scene.ocr=scene.ocr.filter(row=>!(row.x>1000 && row.x<1800 && row.y>430 && row.y<820));
+    scene.ocr.find(row=>row.text==='Amber' && row.y>=820 && row.y<900).text=speaker;
+    labels.forEach((text,i)=>scene.ocr.push({text,x:1280,y:475+55*i,width:250,height:36}));
+    return scene;
+}
+test('Katheryne chooses the exact farewell after Daily and Expedition and waits through a slow closing menu',async()=>{
+    const menu=guildMenu(['Claim Daily Commission Rewards','Dispatch Character on Expedition','Goodbye.']);
+    const {result,keys}=await replay([menu,menu,prompt],'Katheryne');
+    assert.equal(result.status,'completed');assert.deepEqual(result.farewell,{label:'Goodbye.',frameId:1});
+    assert.deepEqual([result.greetingFrameId,result.worldFrameId],[1,3]);
+    assert.deepEqual(keys,[['choice','Goodbye.']]);
+});
+test('named arrival records a greeting and leaves unknown, ambiguous and unconfirmed menus untouched',async()=>{
+    const greetingOnly=guildMenu([],false);
+    for(const menu of [guildMenu(['Daily Commission Rewards','Expeditions']),
+                       guildMenu(['Bye.','Farewell!']),guildMenu(['Goodbye for now, tell me more']),
+                       guildMenu(['Bye.'],false),guildMenu(['Goodbye.'],true,'Amber')]){
+        const {result,keys}=await replay([greetingOnly,menu],'Katheryne');
+        assert.equal(result.status,'stopped');assert.equal(result.reason,'named_dialogue_no_farewell');
+        assert.deepEqual([result.greetingFrameId,result.menuFrameId],[1,2]);
+        assert.deepEqual(keys.map(row=>row[0]),['VK_SPACE']);
     }
 });
 

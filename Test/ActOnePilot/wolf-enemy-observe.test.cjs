@@ -86,12 +86,23 @@ async function observeStep(step, missionName='questStep', options={}) {
       },dispose(){}}),dispose(){}}),
     sleep:async()=>{},click:()=>{},log:{info(){}}
   };
+  if(options.adviser){
+    // In-memory same-user mailboxes for the real adapter. Normal script reads use the existing fixture boundary.
+    const read=context.file.readTextSync,write=context.file.writeTextSync,files=options.adviser.files;
+    context.file.readTextSync=p=>p.endsWith('quest-adviser-latest.json')?(files.latest||'null'):read(p);
+    context.file.writeTextSync=(p,data)=>{
+      if(p.endsWith('quest-adviser-context.json'))files.context=JSON.parse(data);
+      return write(p,data);
+    };
+  }
   if(options.pngDelay)context.file.writeImageAsync=async()=>{now+=options.pngDelay;return true;};
   vm.runInNewContext(source,context);
-  const adapter=context.createActOneAdapter(7,options.inventoryUiOnly?{inventoryUiOnlyV1:true}:undefined);
+  const adapter=context.createActOneAdapter(7,options.adviser?{gpuAdviserIdentity:options.adviser.identity}:
+    options.inventoryUiOnly?{inventoryUiOnlyV1:true}:undefined);
   if(!options.idle)adapter.beginMission({mission:missionName,step,session:'test',createdAt:2000000,...options.request});
   if(options.rotationEvent)adapter.events().push(options.rotationEvent);
   const observation=await adapter.observe('test',66);
+  if(options.adviser)return options.adviser.inspect(adapter,observation);
   return {bars:JSON.parse(JSON.stringify(observation.hud.enemyBars)),enemyScans,groundScans,
     observation:JSON.parse(JSON.stringify(observation))};
 }
@@ -387,4 +398,39 @@ test('extra tiny components stay unresolved when their pixel-probe budget is exh
   const hud=(await measure({contours:cases.map(c=>c.contour),terrainTiles:cases.map(c=>c.tile)})).observation.hud;
   assert.equal(hud.enemyBarDiagnostic.rawCandidates.length,9);assert.equal(hud.enemyBarDiagnostic.warmTerrain.length,8);
   assert.equal(hud.enemyBarObservation.state,'ambiguous');assert.equal(hud.enemyBarObservation.candidateCount,1);
+});
+
+test('measured navigation prearms its first capture and preserves it only for the same request and target',async()=>{
+  const a={map:'Teyvat',x:25,y:10},b={map:'Teyvat',x:45,y:10},identity={session:'test',processId:1234,
+    windowsSessionId:7,gameProcessId:5432,expectedUid:'123456789'};
+  const req={id:'request-a',objective:'Explore for Adventure Rank',requireMeasuredGround:true,waypoints:[a,b]};
+  const files={};
+  const offer=(frameId)=>{
+    const c=files.context,now=c.observedAtUnixMs;
+    files.latest=JSON.stringify({...identity,type:'steeringSuggestion',protocolVersion:1,sourceEpoch:'b'.repeat(32),
+      frameId,capturedAtUnixMs:now,publishedAtUnixMs:now,validUntilUnixMs:now+250,context:c,steering:{forward:true,holdMs:90}});
+  };
+  await observeStep(undefined,'navigation',{...groundOptions(),request:req,adviser:{identity,files,inspect:async(api,first)=>{
+    assert.equal(files.context.requestId,req.id);assert.equal(files.context.frameId,first.frameId);
+    assert.deepEqual(files.context.waypoint,a);offer(71);
+    api.setGpuAdviserWaypoint({...a});
+    assert.equal(api.gpuAdvisedForwardMs(first,a,800),90); // No second capture or blocking wait.
+    api.setGpuAdviserWaypoint(b);
+    assert.equal(api.gpuAdvisedForwardMs(first,b,800),800);
+    const next=await api.observe('test',67);assert.deepEqual(files.context.waypoint,b);
+    assert.equal(api.gpuAdvisedForwardMs(next,b,800),800); // A's latest prediction cannot follow B's new frame.
+    offer(72);assert.equal(api.gpuAdvisedForwardMs(next,b,800),90);
+    api.beginMission({...req,id:'request-b',mission:'navigation',session:'test',waypoints:[b]});
+    assert.equal(api.gpuAdvisedForwardMs(next,b,800),800);
+    const again=await api.observe('test',68);
+    assert.equal(files.context.requestId,'request-b');offer(73);
+    assert.equal(api.gpuAdvisedForwardMs(again,b,800),90);
+    api.setGpuAdviserWaypoint(null);assert.equal(files.context,null);
+  }}});
+  for(const change of [{requireMeasuredGround:false},{objective:'Talk to Amber'},{expectedUid:'999999999'},
+                        {session:'foreign'},{waypoints:[]},{waypoints:[{...a,map:'Elsewhere'}]}]){
+    const mailbox={};
+    await observeStep(undefined,'navigation',{...groundOptions(),request:{...req,...change},
+      adviser:{identity,files:mailbox,inspect:()=>assert.equal(mailbox.context,undefined)}});
+  }
 });

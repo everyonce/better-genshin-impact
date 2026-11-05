@@ -3940,6 +3940,8 @@ function createActOneAdapter(sessionId,options) {
         },
         setGpuAdviserWaypoint: function (target) {
             if (!adviser) return;
+            // The navigation loop selects the initial waypoint again after its entry observation.
+            if(target&&adviserTarget&&target.map===adviserTarget.map&&target.x===adviserTarget.x&&target.y===adviserTarget.y)return;
             adviserTarget=target ? {map:target.map,x:target.x,y:target.y} : null;
             adviserContext=null;
             if (!target) try { file.writeTextSync('quest-adviser-context.json','null'); } catch (_) {}
@@ -3972,6 +3974,16 @@ function createActOneAdapter(sessionId,options) {
             if(inventoryUiOnly&&!(value&&(value.mission==='observe'||value.mission==='stop'||
                value.mission==='questStep'&&['worldInventory','worldInventoryClose'].indexOf(value.step)>=0)))
                 throw new Error('Inventory UI-only mode rejects unrelated commands');
+            if(adviser){
+                // Arm only this validated request's first waypoint before the engine's scheduled native capture.
+                // A different request must never consume a context from its predecessor, even at the same waypoint.
+                var first=value&&value.mission==='navigation'&&value.objective==='Explore for Adventure Rank'&&
+                    value.requireMeasuredGround===true&&value.session===adviser.session&&
+                    (!value.expectedUid||value.expectedUid===adviser.expectedUid)&&Array.isArray(value.waypoints)&&value.waypoints[0];
+                adviserContext=null;
+                if(first&&first.map==='Teyvat'&&Number.isFinite(first.x)&&Number.isFinite(first.y))this.setGpuAdviserWaypoint(first);
+                else if(adviserTarget)this.setGpuAdviserWaypoint(null);
+            }
             pauseProtectionActive=false;pauseProtectionObserver=null;pauseProtectionKeys=Object.create(null);pauseProtectionLastInputFrame=-1;pauseProtectionLastStatusAt=-Infinity;
             lionFieldState={closed:false,selected:false,fought:false,returnedAmber:false,paused:false,lastInputFrame:-1,observer:null,chartedProbePending:false,chartedProbeAnchor:null,climbReleaseArmed:false,climbReleaseAttempted:false};
             lisaRecoveryState={closed:false,mapOpened:false,teleported:false,lastInputFrame:-1,observer:null};

@@ -67,6 +67,14 @@ Open `encounter-evidence.json` beside `worker-result.json` to find frame paths, 
 
 If a retired run stopped immediately after a verified defeat, use `--resume-after-defeat PATH_TO_RUN.rdp` in place of the route arguments and choose a new `--progress` path. The launcher checks the native receipt, experience award, clear field, original game lifetime, and remaining waypoints. It starts from the measured post-fight position and preserves the original run's evidence.
 
+## Test the Mondstadt watchtower
+
+Run the gate road through the archer's platform and continue to the waypoint beyond it. With the archer present, BetterGI selects Amber, enters bow aim, corrects both screen axes and checks the live target and experience award. A previously cleared camp follows the same route without an attack. The encounter archive includes the bow-sight and arrow-release frames when a shot occurs.
+
+```powershell
+python -B tools/quest-pilot/run-rdp-route.py --route tools/quest-pilot/routes/mondstadt-gate-watchtower.json --progress artifacts/tower-run-01.json --expected-uid YOUR_GAME_UID --allow-field-combat --gpu-adviser --continuous --save-encounter-frames --deadline-ms 180000
+```
+
 ## Update idle pilot scripts
 
 After a public route has retired, replace named scripts in its existing RDP child. Pass the completed run’s `.rdp` directory, the Git commit matching the installed files, the desired commit and the top-level JavaScript filenames, for example:

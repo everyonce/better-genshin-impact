@@ -1,0 +1,38 @@
+{
+  "objective": "Explore for Adventure Rank",
+  "teleportTo": "mondstadt-gate",
+  "startNear": {
+    "map": "Teyvat",
+    "x": -1120.63,
+    "y": 2190.83,
+    "radius": 10
+  },
+  "provenance": "Follows the surveyed Mondstadt gate road beyond the hilichurl watchtower. The first four waypoints follow breeze-waypoint-to-camp.json.",
+  "waypoints": [
+    {
+      "x": -1148,
+      "map": "Teyvat",
+      "y": 2193
+    },
+    {
+      "x": -1160,
+      "map": "Teyvat",
+      "y": 2192
+    },
+    {
+      "x": -1180,
+      "map": "Teyvat",
+      "y": 2189
+    },
+    {
+      "x": -1187,
+      "map": "Teyvat",
+      "y": 2207
+    },
+    {
+      "map": "Teyvat",
+      "x": -1178.748046875,
+      "y": 2208.9365234375
+    }
+  ]
+}

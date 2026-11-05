@@ -2636,7 +2636,7 @@ function createActOneAdapter(sessionId,options) {
         return !!(request&&request.mission==='questStep'&&request.step==='windriseReveal'&&o&&lastObservation&&o.session===request.session&&
             o.frameId===lastObservation.frameId&&o.timestamp===lastObservation.timestamp&&o.frameId>windriseState.lastInputFrame);
     }
-    var worldInventoryCloseAttempted=false;
+    var worldInventoryCloseAttempted=false,cityStairReleaseAttempted=false;
     // A new request cannot inherit another request's positive before-frame or B attempt.
     var inventoryUiPauseBefore=null,inventoryUiPauseAdmittedAt=null,inventoryUiPauseAttempted=false;
     // A request may reread its own UID pixels once before B, never after an input attempt.
@@ -9242,6 +9242,27 @@ function createActOneAdapter(sessionId,options) {
         combatBurst: function () { requireCombat(); return boundedKey('VK_Q',60); },
         combatAdvance: function () { requireCombat(); return boundedKey('VK_W',250); },
         selectAmber: function () { requireCombat(); return boundedKey('VK_2',60); },
+        // Confirm that the reviewed steps are still immediately below the climber before releasing.
+        releaseCityStair: async function(o,sourceGuard) {
+            checkStop();ready();
+            if(cityStairReleaseAttempted||!request||request.mission!=='questStep'||request.step!=='cityStairRelease'||
+               !lastObservation||o.session!==request.session||o.frameId!==lastObservation.frameId||o.timestamp!==lastObservation.timestamp)
+                throw new Error('Owned current city stair frame required');
+            sourceGuard();
+            var img=captureGameRegion(),mat=null,ro=null,found=null;
+            try {
+                if(Number(img.width)!==1920||Number(img.height)!==1080)throw new Error('City stair capture size changed');
+                mat=file.readImageMatSync('assets/mondstadt-cyrus-low-stair.png');
+                ro=RecognitionObject.TemplateMatch(mat,1350,660,371,251);ro.threshold=.90;ro.use3Channels=false;
+                found=img.findMulti(ro);
+                if(found.count<1)throw new Error('Reviewed stair treads below the current wall are not visible');
+            } finally {
+                if(found){for(var i=0;i<found.count;i++)dispose(found[i]);dispose(found);}
+                if(ro)dispose(ro.templateImageGreyMat);dispose(mat);dispose(img);
+            }
+            cityStairReleaseAttempted=true;
+            await boundedKey('VK_X',60,o.frameId,sourceGuard);
+        },
         releaseClimb: async function () {
             checkStop();
             if(!lastObservation || Date.now()-lastObservation.timestamp>1000 || !lastObservation.hud.climbing) throw new Error('Fresh climbing controls required');

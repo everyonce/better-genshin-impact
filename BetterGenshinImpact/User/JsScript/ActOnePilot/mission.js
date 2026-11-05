@@ -67,6 +67,24 @@ var ActOneMission = (function () {
         var h=o&&o.hud,p=h&&h.health;
         return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=3000&&o.map&&o.map.map==='Teyvat'&&h&&h.world&&h.groundControls&&!h.climbing&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.bigMap&&!h.journal&&p&&p.max===4015&&p.current>=entryHealth&&p.current<=p.max&&Array.isArray(h.enemyBars)&&!h.enemyBars.length);
     }
+    // The low masonry wall beside the Cyrus stairs was inspected in city-cyrus-01 frame 163.
+    function cityStairClimbSource(o, session, now) {
+        var h=o&&o.hud,m=o&&o.map,hp=h&&h.health;
+        if(!o||o.session!==session||!Number.isInteger(o.frameId)||!Number.isFinite(o.timestamp)||
+            now<o.timestamp||now-o.timestamp>1000||o.fastSample||o.mapPositionInherited||
+            !m||m.map!=='Teyvat'||!(Math.hypot(m.x+836.08,m.y-2198.67)<=1.5)||
+            !h||h.world!==true||h.climbing!==true||h.groundControls!==false||
+            h.auto||h.journal||h.bigMap||h.dialogueReady||h.choice||h.tutorialStep||h.interact||
+            h.loading||h.unknownHud||h.swimming||h.lowHealth||!hp||hp.max!==4015||
+            !(hp.current>=hp.max*.9&&hp.current<=hp.max)||!Array.isArray(h.enemyBars)||h.enemyBars.length||
+            !Array.isArray(o.ocr))return false;
+        var hasControl=function(text,left,right){return o.ocr.some(function(r){
+            return r.text===text&&r.x>=left&&r.x<=right&&r.y>=1007&&r.y<=1038;
+        });};
+        var uids=o.ocr.filter(function(r){return r.x>1600&&r.y>1020&&/^(?:UID)?[: ]*[0-9]{9,10}$/.test(String(r.text).trim());});
+        return uids.length===1&&/^(?:UID)?[: ]*693306810$/.test(String(uids[0].text).trim())&&
+            hasControl('X',1572,1615)&&hasControl('Space',1655,1710);
+    }
     function clean(s) { return String(s).toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, '').trim(); }
     function objectiveMatches(value, expected) {
         var a = clean(value), b = clean(expected);
@@ -1650,6 +1668,30 @@ var ActOneMission = (function () {
         if(name==='wolfFalconWaypoint') {await api.wolfFalconWaypoint();var next=await observe();return {status:'completed',step:name,reason:'Native teleport to unlocked Falcon waypoint returned; inspect arrival',frameId:next.frameId};}
         if(name==='wolfReturnToEntrance') return runWolfReturnToEntrance(observation,api,observe);
         if(name==='fieldRetreatToStatue') {await api.fieldRetreatToStatue();var next=await observe();return {status:'completed',step:name,reason:'Native teleport to unlocked Statue returned; inspect world and healing',frameId:next.frameId};}
+        if(name==='cityStairRelease') {
+            var entry=observation, last=entry, groundedFrames=[];
+            function requireStairSource(){
+                if(!cityStairClimbSource(entry,entry.session,api.now()))throw new Error('Fresh city stair climb with both controls required');
+            }
+            requireStairSource();
+            await api.releaseCityStair(entry,requireStairSource);
+            // Observe the landing without steering. A second X could detach on a different surface.
+            for(var sample=0;sample<4;sample++){
+                await api.sleep(250);
+                var landed=await observe();
+                if(!landed||landed.frameId<=last.frameId||landed.timestamp<=last.timestamp)break;
+                last=landed;
+                if(!settledClimbLanding(landed,entry.session,entry.hud.health.current,api.now())||
+                    !(Math.hypot(landed.map.x-entry.map.x,landed.map.y-entry.map.y)<=3)){
+                    groundedFrames=[];continue;
+                }
+                groundedFrames.push(landed.frameId);
+                if(groundedFrames.length===2)return {status:'completed',step:name,sourceFrameId:entry.frameId,
+                    groundedFrames:groundedFrames,frameId:landed.frameId};
+            }
+            return {status:'stopped',step:name,sourceFrameId:entry.frameId,groundedFrames:groundedFrames,
+                reason:'City stair landing was not confirmed twice',frameId:last.frameId};
+        }
         if(name==='worldInventoryClose') {
             if(typeof api.worldInventoryCloseReady!=='function'||typeof api.closeWorldInventory!=='function'||!api.worldInventoryCloseReady(observation))
                 return {status:'stopped',step:name,reason:'Fresh exact ordinary inventory required; no Escape sent',inputMs:0,frameId:observation.frameId};

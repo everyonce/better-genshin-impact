@@ -515,6 +515,9 @@ class GuardedPilot:
             elif step == 'actTwoFaceRemainingEnemy':
                 if field_direction_side(source) is None:
                     raise RouteError('A measured single hostile direction arrow is required.')
+            elif step == 'cityStairRelease':
+                if not city_stair_climb(source, self.session, '693306810'):
+                    raise RouteError('The original account and the witnessed city stair climb are required.')
             elif step != 'worldInventory':
                 raise RouteError('Unsupported exploration inventory operation.')
         if mission == 'navigation':
@@ -872,6 +875,25 @@ def require_start_near(source, session, expected_uid, start, now_ms):
                 position=dict(map=position['map'], x=position['x'], y=position['y']), distance=distance)
 
 
+def city_stair_climb(source, session, expected_uid):
+    """Limit a single native dismount to the inspected low wall and both visible climb controls."""
+    hud = source.get('hud') or {}
+    position, health = source.get('map') or {}, hud.get('health') or {}
+    if (source.get('session') != session or expected_uid != '693306810'
+            or not source_account_matches(source, expected_uid) or source.get('fastSample') or source.get('mapPositionInherited')
+            or position.get('map') != 'Teyvat' or any(type(position.get(k)) not in (int, float) for k in ('x', 'y'))
+            or not math.hypot(position['x'] + 836.08, position['y'] - 2198.67) <= 1.5
+            or hud.get('world') is not True or hud.get('climbing') is not True or hud.get('groundControls') is not False
+            or any(hud.get(k) for k in ('loading', 'unknownHud', 'auto', 'swimming', 'lowHealth', 'journal', 'bigMap',
+                                       'dialogueReady', 'choice', 'tutorialStep', 'interact'))
+            or health.get('max') != 4015 or type(health.get('current')) is not int
+            or not .9 * health['max'] <= health['current'] <= health['max'] or hud.get('enemyBars') != []):
+        return False
+    return all(any(row.get('text') == label and type(row.get('x')) in (int, float)
+                   and type(row.get('y')) in (int, float) and low <= row['x'] <= high and 1007 <= row['y'] <= 1038
+                   for row in source['ocr']) for label, low, high in (('X', 1572, 1615), ('Space', 1655, 1710)))
+
+
 def positive_parking_field(source, session, expected_uid):
     """A known living field may request protection; threat/objective evidence grants no extra gameplay."""
     hud = source.get('hud', {})
@@ -1169,6 +1191,27 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
                     and source_account_matches(source, expected_uid) and pilot.inventory_ready(source)):
                 dispatch('questStep', source, dict(step='worldInventoryClose'))
                 inspect_after_encounter = False
+                continue
+            # Only the previously surveyed bypass is eligible to start on this specific low wall.
+            # Every other route retains its existing field, teleport, and start-near admission.
+            if (not destination and objective == EXPLORATION_OBJECTIVE and not talk_to
+                    and not state.get('cityStairRelease') and len(state['records']) == 1
+                    and math.hypot(points[0]['x'] + 836, points[0]['y'] - 2204.5) <= 1
+                    and city_stair_climb(source, pilot.session, expected_uid)
+                    and (not start_near or math.hypot(source['map']['x'] - start_near['x'],
+                        source['map']['y'] - start_near['y']) <= start_near['radius'])):
+                stair = dispatch('questStep', source, dict(step='cityStairRelease'))
+                terminal = pilot.current()
+                require_fresh_source(terminal, pilot.session, clock_ms())
+                frames = (stair or {}).get('groundedFrames')
+                if (not isinstance(stair, dict) or stair.get('status') != 'completed' or stair.get('step') != 'cityStairRelease'
+                        or type(stair.get('sourceFrameId')) is not int or stair['sourceFrameId'] < source['frameId']
+                        or not isinstance(frames, list) or len(frames) != 2 or any(type(f) is not int for f in frames)
+                        or not stair['sourceFrameId'] < frames[0] < frames[1] == stair.get('frameId') <= terminal['frameId']
+                        or not positive_parking_field(terminal, pilot.session, expected_uid)):
+                    raise RouteError('City stair release did not confirm two local grounded frames.')
+                state['cityStairRelease'] = dict(requestId=state['records'][-1]['request']['id'], groundedFrames=frames)
+                save()
                 continue
             if inspect_after_encounter:
                 raise RouteError('Encounter handoff did not settle in the expected inventory.')

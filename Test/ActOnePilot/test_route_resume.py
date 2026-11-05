@@ -349,6 +349,37 @@ class SupervisedRouteControllerTests(unittest.TestCase):
         self.assertEqual(self.run_controller(pilot)['status'], 'waiting')
         self.assertEqual([x['mission'] for x in pilot.calls], ['observe'])
 
+    def test_city_stair_bootstrap_releases_once_then_uses_surveyed_landing(self):
+        field = controller_scene(objective='')
+        field['map'].update(x=-836.08, y=2198.67)
+        field['hud']['health'] = dict(current=3649, max=4015)
+        climb = copy.deepcopy(field)
+        climb['hud'].update(climbing=True, groundControls=False)
+        climb['ocr'].extend([dict(text='X', x=1594, y=1022), dict(text='Space', x=1680, y=1024)])
+        self.route = dict(objective=route_tool.EXPLORATION_OBJECTIVE,
+                          waypoints=[dict(map='Teyvat', x=-836, y=2204.5)])
+        pilot = ReplayPilot(self.clock, [dict(mission='questStep', frames=3, source=field,
+            result=dict(status='completed', step='cityStairRelease', sourceFrameId=2, groundedFrames=[3, 4], frameId=4)),
+            dict(mission='questStep', source=controller_scene('inventory'), result=dict(pausedInventory=True)),
+            self.arrival(1)], source=climb)
+        report = self.run_controller(pilot)
+        self.assertEqual(report['cityStairRelease']['groundedFrames'], [3, 4])
+        self.assertEqual([r.get('step',r['mission']) for r in pilot.calls if r['mission'] != 'observe'],
+                         ['cityStairRelease', 'worldInventory', 'navigation'])
+        self.assertEqual(pilot.calls[1]['step'], 'cityStairRelease')
+
+    def test_city_stair_requires_local_pose_original_uid_and_both_controls(self):
+        climb = controller_scene(objective='')
+        climb['map'].update(x=-836.08, y=2198.67)
+        climb['hud'].update(health=dict(current=3649, max=4015), climbing=True, groundControls=False)
+        climb['ocr'].extend([dict(text='X', x=1594, y=1022), dict(text='Space', x=1680, y=1024)])
+        ready = lambda o: route_tool.city_stair_climb(o, 'route-session', '693306810')
+        self.assertTrue(ready(climb))
+        for patch in [dict(map=dict(climb['map'], y=2204)), dict(ocr=climb['ocr'][:-1]),
+                      dict(ocr=climb['ocr'][1:]), dict(hud=dict(climb['hud'], enemyBars=[{}])),
+                      dict(hud=dict(climb['hud'], groundControls=True))]:
+            self.assertFalse(ready(dict(climb, **patch)))
+
     def test_named_npc_after_arrival_joins_both_frames_then_parks(self):
         self.route['talkTo'] = 'Amber'
         inventory, field = controller_scene('inventory'), controller_scene()

@@ -3925,7 +3925,10 @@ function createActOneAdapter(sessionId,options) {
             if (accepted) { lastAdviserEpoch=suggestion.sourceEpoch; lastAdvisedFrame=suggestion.frameId; }
             events.push({type:'gpuSteeringDecision',frameId:frame.frameId,pipeFrameId:suggestion&&suggestion.frameId,
                 status:accepted?'accepted':'rejected',reason:accepted?'measured_native_forward_agrees':result,
-                sourceEpoch:suggestion&&suggestion.sourceEpoch,nativeMs:nativeMs,holdMs:accepted?result:nativeMs,startedAt:now});
+                sourceEpoch:suggestion&&suggestion.sourceEpoch,nativeMs:nativeMs,holdMs:accepted?result:nativeMs,startedAt:now,
+                // The matching VK_W receipt supplies the actual software input time.
+                capturedAtUnixMs:accepted?suggestion.capturedAtUnixMs:undefined,
+                publishedAtUnixMs:accepted?suggestion.publishedAtUnixMs:undefined,decidedAtUnixMs:Date.now()});
             return accepted?result:nativeMs;
         },
         setHeartbeat: function (callback) {heartbeat=callback;},

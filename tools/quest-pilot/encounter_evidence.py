@@ -68,6 +68,8 @@ def _selected(request, receipt, rewards):
     for role, key in [('combat-before', 'beforeFrameId'), ('combat-after', 'afterFrameId')]:
         if result.get(key) is not None:
             yield role, result[key]
+    if (result.get('gateTower') or {}).get('assessment') == 'defeat' and (result.get('pauseProof') or {}).get('verified'):
+        yield 'tower-pause-source', result['pauseProof']['sourceFrameId']
     for reward in rewards:
         if reward.get('requestId') == request['id']:
             if reward.get('attackFrameId') != result.get('beforeFrameId') or not isinstance(reward.get('rewardText'), str):

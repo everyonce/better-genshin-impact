@@ -667,6 +667,31 @@ class LauncherTests(unittest.TestCase):
             self.assertTrue((old/'retired-launcher.lease').exists())
             self.assertFalse(lease.exists() or canonical.exists())
 
+    def test_archived_defeat_requires_actual_capture_pairs_bound_to_the_same_native_receipt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp).resolve()
+            raw=b'native-receipt';digest=hashlib.sha256(raw).hexdigest();entries=[]
+            req=dict(id='r',session='s')
+            result=dict(chunks=[dict(beforeFrameId=1,afterFrameId=2)],afterFrameId=3,
+                        gateTower=dict(assessment='defeat'),pauseProof=dict(sourceFrameId=4))
+            row=dict(request=req,receipt=dict(details=dict(result=result)))
+            for n in (1,2,3):
+                stem='frame-%04d'%n;folder=root/'encounters'/'s'/stem;folder.mkdir(parents=True)
+                entry=dict(frameId=n,session='s',uses=[dict(requestId='r',receiptSha256=digest)])
+                for ext,data in [('json',json.dumps(dict(map=dict(x=n,y=n,map='Teyvat'))).encode()),('png',b'pixels')]:
+                    f=folder/(stem+'.'+ext);f.write_bytes(data);entry[ext]=f.relative_to(root).as_posix()
+                    entry[ext+'Sha256']=hashlib.sha256(data).hexdigest()
+                entries.append(entry)
+            launcher.save(root/'encounter-evidence.json',dict(frames=entries))
+            api=SimpleNamespace(field_combat_feedback=mock.Mock(return_value=dict(measuredClear=True)))
+            witness,position=launcher.archived_tower_defeat(root,row,'123456789',api,raw)
+            self.assertTrue(witness['measuredClear']);self.assertEqual(position['x'],3)
+            self.assertEqual(api.field_combat_feedback.call_args.kwargs['retained_clear_frame'],3)
+            self.assertIsNone(launcher.archived_tower_defeat(root,row,'123456789',api,b'other'))
+            (root/entries[1]['png']).write_bytes(b'changed')
+            with self.assertRaisesRegex(RuntimeError,'hash changed'):
+                launcher.archived_tower_defeat(root,row,'123456789',api,raw)
+
     def test_recovered_defeat_uses_only_original_pending_points_and_verified_game(self):
         with tempfile.TemporaryDirectory() as temporary:
             f = Fixture(Path(temporary), count=1)

@@ -951,7 +951,7 @@ def route_phase(source, expected_uid, objectives, *, allow_dialogue, journal_res
     return 'navigation', objective
 
 
-def field_combat_feedback(record, expected_uid, frame_at):
+def field_combat_feedback(record, expected_uid, frame_at, *, retained_clear_frame=None):
     """Join a new character EXP award to a returned attack, then independently check the routing field."""
     request, receipt = record['request'], record['receipt']
     result = receipt['details']['result']
@@ -1000,7 +1000,17 @@ def field_combat_feedback(record, expected_uid, frame_at):
                 or not initial['timestamp'] <= actions[0]['startedAt'] < actions[0]['finishedAt'] <= keys[0]['startedAt']):
             return None
         evidence = None
-        for frame in range(after, end + 1):
+        inspected = range(after, end + 1)
+        if retained_clear_frame is not None:
+            # Old bounded archives keep impact and the final ground frame, sometimes one
+            # capture before parking. Both must belong to the same confirmed aimed defeat.
+            if (len(chunks) != 1 or (result.get('gateTower') or {}).get('assessment') != 'defeat' or
+                    first.get('assessment', {}).get('evidence') != 'new_character_exp_and_clear_ground' or
+                    first['afterFrameId'] != result['gateTower'].get('impactFrameId') or not after < retained_clear_frame <= end or
+                    retained_clear_frame not in (end, result.get('afterFrameId')) or end-retained_clear_frame > 1):
+                return None
+            inspected = (after,retained_clear_frame)
+        for frame in inspected:
             source = world(frame)
             stamp = source['hud']['captureStamp']
             if (stamp['session'] != session or stamp['frameId'] != frame or stamp['source'] != 'game-capture-start'
@@ -1019,6 +1029,10 @@ def field_combat_feedback(record, expected_uid, frame_at):
             phase, _ = route_phase(source, expected_uid, [EXPLORATION_OBJECTIVE], allow_dialogue=False,
                                    journal_resume=False, now_ms=keys[0]['startedAt'])
             evidence.update(pauseSourceFrameId=end, measuredClear=phase == 'navigation')
+            if retained_clear_frame is not None:
+                if evidence['rewardFrameId'] != after or math.hypot(source['map']['x']-initial['map']['x'],source['map']['y']-initial['map']['y']) > 1.25:
+                    return None
+                evidence.update(clearFrameId=retained_clear_frame, source='retained-native-captures')
         return evidence
     except (OSError, ValueError, KeyError, IndexError, TypeError):
         return None

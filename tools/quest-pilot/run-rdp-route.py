@@ -784,6 +784,41 @@ def verify_split_routes(config):
             'A derived exploration leg has no corresponding original.')
 
 
+def archived_tower_defeat(directory, row, expected_uid, route_cli, receipt_bytes):
+    """Recheck the retained native before, XP and clear frames when the live capture ring has expired."""
+    req = row['request']
+    result = (row['receipt'].get('details') or {}).get('result') or {}
+    chunks = result.get('chunks') or []
+    if len(chunks) != 1 or (result.get('gateTower') or {}).get('assessment') != 'defeat':
+        return None
+    if not (directory/'encounter-evidence.json').is_file():
+        return None
+    manifest = read(directory/'encounter-evidence.json')
+    digest = hashlib.sha256(receipt_bytes).hexdigest()
+    available = {e['frameId']:e for e in manifest['frames'] if e['session'] == req['session'] and
+                 any(u.get('requestId') == req['id'] and u.get('receiptSha256') == digest for u in e['uses'])}
+    end = result['pauseProof']['sourceFrameId']
+    clear = end if end in available else result['afterFrameId']
+    needed = {chunks[0]['beforeFrameId'],chunks[0]['afterFrameId'],clear}
+    if not needed.issubset(available):
+        return None
+    frames = {}
+    for number in needed:
+        entry = available[number]
+        stem = 'frame-%04d' % number
+        for ext in ('json','png'):
+            path = directory/'encounters'/req['session']/stem/(stem+'.'+ext)
+            require(path.resolve() == path and (directory/entry[ext]).resolve() == path, 'Archived fight frame path changed.')
+            data = path.read_bytes()
+            require(hashlib.sha256(data).hexdigest() == entry[ext+'Sha256'], 'Archived fight capture hash changed.')
+            if ext == 'json':
+                frames[number] = json.loads(data)
+    witness = route_cli.field_combat_feedback(row,expected_uid,frames.__getitem__,retained_clear_frame=clear)
+    if witness and witness['measuredClear']:
+        return witness,frames[clear]['map']
+    return None
+
+
 def resume_defeated_route(directory, expected_uid, route_cli):
     """Recover only pending waypoints after an independently witnessed defeat in the same game."""
     directory = Path(directory).resolve()
@@ -801,14 +836,17 @@ def resume_defeated_route(directory, expected_uid, route_cli):
     require(req.get('step') == 'actTwoFieldCombat' and req.get('session') == pin['session']
             and re.fullmatch(r'mission-[0-9a-f]{32}', req['id']), 'Last operation was not a bounded field encounter.')
     pilot = Path(pin['owner']['child']['appDirectory']) / 'User/JsScript/ActOnePilot'
-    require(receipt == read(pilot / 'receipts' / pin['session'] / (req['id'] + '.json')),
-            'Saved combat receipt differs from the native receipt.')
+    native_receipt = (pilot / 'receipts' / pin['session'] / (req['id'] + '.json')).read_bytes()
+    require(receipt == json.loads(native_receipt), 'Saved combat receipt differs from the native receipt.')
     def frame(number):
         return read(pilot / 'observations' / pin['session'] / ('frame-%04d.json' % number))
     witness = route_cli.field_combat_feedback(row, expected_uid, frame)
-    require(witness and witness['measuredClear'] and witness['minimumDefeated'] >= 1,
-            'Combat has no independently verified experience award and clear field.')
-    position = frame(witness['pauseSourceFrameId'])['map']
+    if witness and witness['measuredClear']:
+        position = frame(witness['pauseSourceFrameId'])['map']
+    else:
+        retained = archived_tower_defeat(directory,row,expected_uid,route_cli,native_receipt)
+        require(retained, 'Combat has no independently verified experience award and clear field.')
+        witness,position = retained
     paths = []
     for ordinal, source in enumerate(launch['routes'][index:], index + 1):
         path = directory / ('route-%03d.json' % ordinal)

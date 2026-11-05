@@ -76,6 +76,9 @@ def validate_route(value):
                 or any(type(start.get(k)) not in (int, float) or not math.isfinite(start[k])
                        for k in ('x', 'y', 'radius')) or start['radius'] <= 0):
             raise RouteError('startNear requires exactly map Teyvat, finite x/y and a positive finite radius.')
+    if 'talkTo' in value and (not isinstance(value['talkTo'], str) or value['talkTo'] != value['talkTo'].strip()
+            or re.fullmatch(r"[A-Za-z][A-Za-z '.-]{0,47}", value['talkTo']) is None):
+        raise RouteError('talkTo requires the exact displayed NPC name.')
     if 'teleportTo' in value and (not isinstance(value['teleportTo'], str) or value['teleportTo'] not in ROUTE_TELEPORT_STEPS):
         raise RouteError('teleportTo must identify a supported native teleport destination.')
     return value['objective'], waypoints
@@ -142,6 +145,8 @@ def run_route(root, route, session, *, max_segments=MAX_SEGMENTS, deadline_ms=MA
     if isinstance(deadline_ms, bool) or not isinstance(deadline_ms, int) or not 1000 <= deadline_ms <= MAX_DEADLINE_MS:
         raise RouteError(f'deadline-ms must be from 1000 to {MAX_DEADLINE_MS}.')
     objective, original_waypoints = validate_route(route)
+    if 'talkTo' in route:
+        raise RouteError('Named NPC arrival requires controller mode.')
     if 'startNear' in route or 'teleportTo' in route:
         raise RouteError('startNear and teleportTo require controller mode and a fresh account-bound world measurement.')
     next_index = 0
@@ -443,6 +448,14 @@ class GuardedPilot:
         expected_fields = {'observe': set(), 'dialogue': set(), 'keyPress': {'key'},
                            'combat': {'objective', 'deadlineMs'},
                            'navigation': {'objective', 'waypoints', 'deadlineMs'}, 'questStep': {'step'}}
+        if mission == 'dialogue' and 'talkTo' in fields:
+            expected_fields['dialogue'] = {'talkTo', 'expectedUid', 'deadlineMs'}
+            if (not isinstance(fields['talkTo'], str) or fields['talkTo'] != fields['talkTo'].strip()
+                    or re.fullmatch(r"[A-Za-z][A-Za-z '.-]{0,47}", fields['talkTo']) is None
+                    or not isinstance(fields.get('expectedUid'), str)
+                    or re.fullmatch(r'[0-9]{9,10}', fields['expectedUid']) is None
+                    or type(fields.get('deadlineMs')) is not int or not 1000 <= fields['deadlineMs'] <= 60000):
+                raise RouteError('Invalid named NPC conversation request.')
         if mission == 'navigation' and fields.get('objective') == EXPLORATION_OBJECTIVE:
             expected_fields['navigation'].add('requireMeasuredGround')
             if fields.get('requireMeasuredGround', True) is not True:
@@ -815,6 +828,9 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
         route=dict(objective=objective, waypoints=points), expectedUid=expected_uid,
         nextWaypointIndex=0, navigationRequests=0, handoffs=0, pending=None, records=[],
         originalDeadlineMs=deadline_ms, startedAt=int(clock_ms()))
+    talk_to = route.get('talkTo')
+    if talk_to:
+        state['route']['talkTo'] = talk_to
     destination = route.get('teleportTo')
     if destination is not None:
         state['route']['teleportTo'] = destination
@@ -908,6 +924,48 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
         if outcome.get('cancelled') or not (status == 'completed' or deadline_checkpoint or measured_threat or rotation):
             raise RouteError('Mission did not complete; original result retained without retry.')
         return result
+
+    def finish_arrival():
+        """Join the requested NPC interaction to the completed waypoint cursor before declaring arrival."""
+        if not talk_to:
+            state.update(status='arrived', reason='All native waypoint checkpoints are complete')
+            return
+        if (deadline - monotonic()) < 10:
+            raise RouteError('Reached the destination with insufficient time for the named conversation.')
+        dispatch('observe', pilot.current(), {})
+        source = pilot.current()
+        require_fresh_source(source, pilot.session, clock_ms())
+        if not source_account_matches(source, expected_uid):
+            raise RouteError('Named conversation arrival belongs to another account.')
+        if pilot.inventory_ready(source):
+            dispatch('questStep', source, dict(step='worldInventoryClose'))
+            dispatch('observe', pilot.current(), {})
+            source = pilot.current()
+        require_fresh_source(source, pilot.session, clock_ms())
+        if not source_account_matches(source, expected_uid):
+            raise RouteError('Named conversation source belongs to another account.')
+        # Leave room for the native terminal capture and inventory protection inside the original clock.
+        budget = min(60000, int((deadline - monotonic()) * 1000) - 7000)
+        if budget < 1000:
+            raise RouteError('Insufficient original deadline for the named conversation.')
+        result = dispatch('dialogue', source, dict(talkTo=talk_to, expectedUid=expected_uid, deadlineMs=budget))
+        terminal = pilot.current()
+        require_fresh_source(terminal, pilot.session, clock_ms())
+        if (not isinstance(result, dict) or result.get('status') != 'completed' or result.get('reason') != 'world_returned'
+                or result.get('talkTo') != talk_to or type(result.get('greetingFrameId')) is not int
+                or type(result.get('worldFrameId')) is not int or not
+                    source['frameId'] < result['greetingFrameId'] < result['worldFrameId'] <= terminal['frameId']
+                or not positive_parking_field(terminal, pilot.session, expected_uid)):
+            raise RouteError('Conversation and return to the expected world are unverified.')
+        state['conversation'] = dict(npc=talk_to, requestId=state['records'][-1]['request']['id'],
+            greetingFrameId=result['greetingFrameId'], worldFrameId=result['worldFrameId'])
+        save()
+        parked = dispatch('questStep', terminal, dict(step='worldInventory'))
+        paused = pilot.current()
+        if (not isinstance(parked, dict) or parked.get('pausedInventory') is not True
+                or not source_account_matches(paused, expected_uid) or not pilot.inventory_ready(paused)):
+            raise RouteError('Named conversation completed, but its final inventory pause is unverified.')
+        state.update(status='arrived', reason='Waypoints and the named conversation are complete')
 
     def protect_failed_exit():
         """One fresh observation and one existing inventory pause, within the original clock only."""
@@ -1151,7 +1209,7 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
                 journal_resume, last_phase = True, 'combat'
                 continue
             if state['nextWaypointIndex'] == len(points):
-                state.update(status='arrived', reason='All native waypoint checkpoints are complete')
+                finish_arrival()
                 break
             if state['navigationRequests'] >= max_segments:
                 raise RouteError('Maximum route segments reached; retained progress requires inspection.')
@@ -1215,7 +1273,7 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
                 nativeCombatHandoff=handoff, requestId=state['records'][-1]['request']['id'])))
             save()
             if not handoff:
-                state.update(status='arrived', reason='All native waypoint checkpoints are complete')
+                finish_arrival()
                 break
         else:
             raise RouteError('Original controller deadline reached.')

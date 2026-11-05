@@ -56,6 +56,12 @@ var ActOnePilot = (function () {
                 if (!integer(r.lookAmount,16,250)) return 'Invalid lookAmount';
             }
         }
+        if (r.mission === 'dialogue' && r.talkTo !== undefined) {
+            allowed.push('talkTo', 'expectedUid', 'deadlineMs');
+            if (typeof r.talkTo !== 'string' || !/^[A-Za-z][A-Za-z '.-]{0,47}$/.test(r.talkTo) || r.talkTo !== r.talkTo.trim() ||
+                typeof r.expectedUid !== 'string' || !/^[0-9]{9,10}$/.test(r.expectedUid) ||
+                !integer(r.deadlineMs, 1000, 60000)) return 'Invalid named conversation';
+        }
         if (r.mission === 'combat') {
             allowed.push('objective','deadlineMs');
             if (!combatObjective(r.objective) && r.objective !== 'Stormterror aerial encounter') return 'Unsupported combat objective';
@@ -267,7 +273,7 @@ var ActOnePilot = (function () {
                     if (req.objective !== 'Stormterror aerial encounter' && routeResult.status !== 'completed') throw new Error(routeResult.reason);
                 } else if (req.mission === 'dialogue') {
                     if (!enabled) throw new Error('Input is disabled');
-                    routeResult = await missionFactory().runDialogue(api, observe);
+                    routeResult = await missionFactory().runDialogue(api, observe, req.talkTo ? req : undefined);
                     if (routeResult.status !== 'completed') throw new Error(routeResult.reason);
                 }
                 if (req.mission !== 'stop') {

@@ -30,3 +30,5 @@ result = launcher.run(args, expected_owner={'root': original_root, 'child': orig
 ```
 
 Run `python -B tools/quest-pilot/test_run_rdp_route.py -v` for the launcher regression tests.
+
+To talk to an NPC at the final waypoint, add `"talkTo": "Amber"` (or the NPC's exact English name) to an exploration route. This authorizes that named arrival, while `--allow-dialogue` separately enables dialogue encountered on the way. Place the last waypoint within interaction range. BetterGI matches the selected F prompt, confirms the speaker after opening the conversation, advances recognized lines and choices, and verifies a return to the world before parking in inventory. A missed prompt or a tutorial handoff leaves the waypoint cursor available for inspection. The recorded conversation establishes that the NPC spoke, while quest completion still needs separate objective or reward evidence.

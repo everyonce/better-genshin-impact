@@ -265,7 +265,7 @@ class ReplayPilot:
         self.clock.advance(item.get('seconds', .02))
         if item.get('pending'):
             raise route_tool.RouteError('Exact request remains unresolved')
-        frame = self.source['frameId'] + 1
+        frame = self.source['frameId'] + item.get('frames', 1)
         self.source = copy.deepcopy(item.get('source', self.source))
         self.source.update(session=self.session, frameId=frame, timestamp=self.clock.milliseconds())
         if mission == 'observe' and self.source['hud'].get('groundControls'):
@@ -342,6 +342,55 @@ class SupervisedRouteControllerTests(unittest.TestCase):
         pilot = ReplayPilot(self.clock, source=controller_scene('journal'))
         self.assertEqual(self.run_controller(pilot)['status'], 'waiting')
         self.assertEqual([x['mission'] for x in pilot.calls], ['observe'])
+
+    def test_named_npc_after_arrival_joins_both_frames_then_parks(self):
+        self.route['talkTo'] = 'Amber'
+        inventory, field = controller_scene('inventory'), controller_scene()
+        pilot = ReplayPilot(self.clock, [
+            self.arrival(3, inventory),
+            dict(mission='questStep', source=field, result=dict(status='completed')),
+            dict(mission='dialogue', source=field, frames=3, result=dict(status='completed', reason='world_returned',
+                talkTo='Amber', interactionFrameId=7, greetingFrameId=8, worldFrameId=9)),
+            dict(mission='questStep', source=inventory, result=dict(pausedInventory=True))])
+        report = self.run_controller(pilot)
+        self.assertEqual((report['status'], report['nextWaypointIndex']), ('arrived', 3))
+        self.assertEqual(report['conversation']['npc'], 'Amber')
+        self.assertEqual([q.get('step') or q['mission'] for q in pilot.calls if q['mission'] != 'observe'],
+            ['navigation', 'worldInventoryClose', 'dialogue', 'worldInventory'])
+        conversation = next(q for q in pilot.calls if q['mission'] == 'dialogue')
+        self.assertEqual((conversation['talkTo'], conversation['expectedUid']), ('Amber', '693306810'))
+        self.assertLessEqual(conversation['deadlineMs'], 60000)
+
+    def test_named_npc_missing_prompt_keeps_arrival_cursor_without_a_second_interaction(self):
+        self.route['talkTo'] = 'Amber'
+        pilot = ReplayPilot(self.clock, [
+            self.arrival(3), dict(mission='dialogue', status='failed', source=controller_scene(),
+                                 result=dict(status='stopped', reason='Named NPC is not selected on clear ground')),
+            dict(mission='questStep', source=controller_scene('inventory'), result=dict(pausedInventory=True))])
+        report = self.run_controller(pilot, allow_dialogue=True)
+        self.assertEqual((report['status'], report['nextWaypointIndex']), ('stopped', 3))
+        self.assertNotIn('conversation', report)
+        self.assertEqual([q['mission'] for q in pilot.calls].count('dialogue'), 1)
+
+    def test_legacy_route_cannot_ignore_a_named_npc_and_bad_names_are_rejected(self):
+        self.route['talkTo'] = 'Amber'
+        pilot = ReplayPilot(self.clock)
+        with self.assertRaisesRegex(route_tool.RouteError, 'controller mode'):
+            route_tool.run_route(Path(self.temp.name), self.route, pilot.session)
+        self.assertEqual(pilot.calls, [])
+        for value in ('', ' Amber', 'Amber\n', 7):
+            with self.assertRaises(route_tool.RouteError):
+                route_tool.validate_route(dict(self.route, talkTo=value))
+
+    def test_generic_world_return_without_a_later_named_greeting_cannot_finish_arrival(self):
+        self.route['talkTo'] = 'Amber'
+        pilot = ReplayPilot(self.clock, [
+            self.arrival(3), dict(mission='dialogue', source=controller_scene(), result=dict(
+                status='completed', reason='world_returned', talkTo='Amber', greetingFrameId=2, worldFrameId=4)),
+            dict(mission='questStep', source=controller_scene('inventory'), result=dict(pausedInventory=True))])
+        report = self.run_controller(pilot, allow_dialogue=True)
+        self.assertEqual(report['status'], 'stopped')
+        self.assertNotIn('conversation', report)
 
     def test_direct_enemy_uses_existing_bounded_combat_then_route(self):
         pilot = ReplayPilot(self.clock, [dict(mission='combat', source=controller_scene(),

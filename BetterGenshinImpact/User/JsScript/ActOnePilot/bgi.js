@@ -272,6 +272,7 @@ function actOneEnemyBarSize(w,h) { return w>=2 && w<=300 && h>=3 && h<=12 && w/h
 // Keep field combat's attack detector until the final protector captures the pre-pause world.
 function actOneRequestsGroundObservation(request,inventoryUiOnly,protecting) {
     return !!request&&!inventoryUiOnly&&(request.mission==='observe'||
+        request.mission==='dialogue'&&typeof request.talkTo==='string'||
         request.mission==='navigation'&&request.objective==='Explore for Adventure Rank'&&request.requireMeasuredGround===true||
         protecting&&request.mission==='questStep'&&request.step==='actTwoFieldCombat');
 }

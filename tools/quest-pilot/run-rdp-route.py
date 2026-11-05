@@ -248,6 +248,7 @@ def run_worker(config, *, control, rdp, execute=execute_route, game_probe=foregr
 
     try:
         require(not progress.exists(), 'Existing progress is never resumed or replayed.')
+        verify_split_routes(config)
         if len(config['routes']) > 1:
             with progress.open('x', encoding='utf-8') as stream:
                 json.dump(dict(kind='rdp-route-chain-v1', **state), stream)
@@ -394,6 +395,86 @@ def parse_args(argv=None):
     return parser.parse_args(argv)
 
 
+def exploration_legs(route):
+    """Cut only free exploration at its four-waypoint native limit, retaining the source order."""
+    points = route.get('waypoints') if isinstance(route, dict) else None
+    if (not isinstance(points, list) or len(points) <= 4
+            or route.get('objective') != 'Explore for Adventure Rank'):
+        return [route]
+    require(len(points) <= 80, 'The expanded plan exceeds twenty canonical route legs.')
+    legs = []
+    for start in range(0, len(points), 4):
+        leg = dict(route, waypoints=points[start:start + 4])
+        if start:
+            leg.pop('teleportTo', None)
+            leg.pop('startNear', None)
+        if start + 4 < len(points):
+            leg.pop('talkTo', None)
+        legs.append(leg)
+    return legs
+
+
+def leg_bytes(leg):
+    """Give a derived leg a stable UTF-8 representation that the worker can verify independently."""
+    return json.dumps(leg, ensure_ascii=False, separators=(',', ':'), allow_nan=False).encode('utf-8')
+
+
+def snapshot_routes(sources, output, route_cli):
+    """Validate every input and the total leg count before creating evidence or starting the broker."""
+    routes, originals, files = [], [], []
+    for source_number, source in enumerate(sources, 1):
+        data = source.read_bytes()
+        require(len(data) <= 65536, 'Route JSON exceeds 64 KiB.')
+        legs = exploration_legs(json.loads(data.decode('utf-8-sig')))
+        require(len(routes) + len(legs) <= 20, 'The expanded plan exceeds twenty canonical route legs.')
+        original = str(source.resolve())
+        split = len(legs) > 1
+        if split:
+            saved = output / ('source-%03d.json' % source_number)
+            originals.append(dict(path=str(saved), original=original, sha256=hashlib.sha256(data).hexdigest(),
+                                  firstLeg=len(routes), legCount=len(legs)))
+            files.append((saved, data))
+        for index, leg in enumerate(legs):
+            route_cli.validate_route(leg)
+            path = output / ('route-%03d.json' % (len(routes) + 1))
+            payload = leg_bytes(leg) if split else data
+            record = dict(path=str(path), sha256=hashlib.sha256(payload).hexdigest(), original=original)
+            if split:
+                record.update(sourceSnapshot=str(saved), firstWaypoint=index * 4)
+            files.append((path, payload))
+            routes.append(record)
+    output.mkdir(parents=True)
+    for path, data in files:
+        path.write_bytes(data)
+    return routes, originals
+
+
+def verify_split_routes(config):
+    """Reconstruct every derived leg from the archived original before the worker takes ownership."""
+    routes = config['routes']
+    require(1 <= len(routes) <= 20, 'The expanded plan must have one to twenty canonical route legs.')
+    verified = set()
+    for original in config.get('splitRoutes', []):
+        data = Path(original['path']).read_bytes()
+        require(hashlib.sha256(data).hexdigest() == original['sha256'], 'Original exploration snapshot changed.')
+        expected = exploration_legs(json.loads(data.decode('utf-8-sig')))
+        first, count = original['firstLeg'], original['legCount']
+        require(type(first) is int and type(count) is int and count == len(expected) > 1
+                and 0 <= first <= len(routes) - count, 'Invalid exploration leg range.')
+        for index, expected_leg in enumerate(expected):
+            ordinal = first + index
+            record = routes[ordinal]
+            payload = leg_bytes(expected_leg)
+            require(ordinal not in verified and record.get('original') == original['original']
+                    and record.get('sourceSnapshot') == original['path'] and record.get('firstWaypoint') == index * 4
+                    and hashlib.sha256(payload).hexdigest() == record['sha256']
+                    and Path(record['path']).read_bytes() == payload,
+                    'Exploration leg differs from the archived waypoint sequence.')
+            verified.add(ordinal)
+    require(verified == {i for i, r in enumerate(routes) if 'sourceSnapshot' in r},
+            'A derived exploration leg has no corresponding original.')
+
+
 def run(args, *, expected_owner=None, dependencies=None):
     """Console API also used by an opt-in caller retaining its original authenticated owner pair."""
     rdp, _, route_cli = helpers() if dependencies is None else dependencies
@@ -409,17 +490,9 @@ def run(args, *, expected_owner=None, dependencies=None):
     require(node and Path(node).is_file() and Path(node).name.lower() == 'node.exe',
             'Provide an installed node.exe with --node.')
     output = progress.parent / (progress.stem + '.rdp')
-    output.mkdir(parents=True)
-    routes = []
-    for index, source in enumerate(args.route):
-        data = source.read_bytes()
-        require(len(data) <= 65536, 'Route JSON exceeds 64 KiB.')
-        route_cli.validate_route(json.loads(data.decode('utf-8-sig')))
-        snapshot = output / ('route-%03d.json' % (index + 1))
-        snapshot.write_bytes(data)
-        routes.append(dict(path=str(snapshot), sha256=hashlib.sha256(data).hexdigest(), original=str(source.resolve())))
+    routes, originals = snapshot_routes(args.route, output, route_cli)
     config = dict(version=1, launchId=uuid.uuid4().hex, owner=owner, output=str(output), progress=str(progress),
-                  routes=routes, expectedUid=args.expected_uid, node=str(Path(node).resolve()),
+                  routes=routes, splitRoutes=originals, expectedUid=args.expected_uid, node=str(Path(node).resolve()),
                   allowFieldCombat=args.allow_field_combat, allowDialogue=args.allow_dialogue,
                   deadlineMs=args.deadline_ms, maxSegments=args.max_segments, continueObjectives=args.continue_objective,
                   stopFiles=[str(p.resolve()) for p in [progress.parent / 'STOP', progress.with_suffix('.STOP'),

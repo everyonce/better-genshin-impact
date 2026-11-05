@@ -10,15 +10,17 @@ python -B tools/quest-pilot/run-rdp-route.py `
   --allow-field-combat
 ```
 
-An optional `teleportTo` field in a route JSON selects `temple-of-the-lion`, `mondstadt-gate`, or `starfell-lake`. BetterGI opens the map when needed and verifies arrival before walking the waypoints. Travel uses the same route deadline. A route with `startNear` checks its starting position after teleporting.
+An optional `teleportTo` field in a route JSON selects `temple-of-the-lion`, `mondstadt-gate`, `mondstadt-city`, or `starfell-lake`. BetterGI opens the map when needed and verifies arrival before walking the waypoints. Travel uses the same route deadline. A route with `startNear` checks its starting position after teleporting.
 
 The launcher discovers the connected child and verifies the running game against BetterGI’s configured executable, Windows session, window, and process start time. Use `--process-id PID` to select a child when several are connected. It uses Node from the console PATH. Use `--node PATH` to select an installed `node.exe`.
 
-- Repeat `--route PATH` to run up to 20 routes on one pilot. Each route starts after the previous route verifies arrival. A verified inventory handoff lets the next route skip an extra menu transition.
+- Repeat `--route PATH` for a sequence. Exploration routes with more than four waypoints split automatically into ordered legs of up to four. The combined plan can have up to 20 legs on one pilot. Each leg starts after the previous one verifies arrival and has its own route deadline. A split route teleports and checks its starting position once, and talks to its NPC after the final waypoint. A verified inventory handoff lets the next route skip an extra menu transition.
 - Use `--allow-field-combat` to engage measured enemies during exploration. Use `--allow-dialogue` for routes that support dialogue and `--continue-objective TEXT` for each subsequent quest objective you want to follow.
 - Use `--stop-file PATH` to choose a stop signal. Creating that file during the run requests a stop. Choose a fresh progress filename for each run.
 
-For a single route, `--progress` contains its native requests and results. For a sequence, it contains the chain summary, and the adjacent `.rdp` directory contains the individual progress files. Exit code 0 means every route verified arrival and the pilot retired. For an interrupted run, the worker result identifies the last leg and records whether the pilot retired.
+For a single leg, `--progress` contains its native requests and results. For two or more legs, it contains the chain summary, and the adjacent `.rdp` directory contains the individual progress files. Exit code 0 means every route verified arrival and the pilot retired. For an interrupted run, the worker result identifies the last leg and records whether the pilot retired.
+
+For a city-to-NPC example, use `tools/quest-pilot/routes/mondstadt-city-to-cyrus.json`. The road and stair waypoints come from recorded gameplay. Two short connections are inferred, including the final approach from the stair corridor to Cyrus. A split route's evidence directory retains its original bytes as `source-NNN.json`, its SHA-256 in `launch.json`, and a numbered snapshot for each leg.
 
 Other Python callers can retain the exact root and child identities between operations.
 

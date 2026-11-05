@@ -48,6 +48,13 @@ class TeleportRouteTests(unittest.TestCase):
         self.assertEqual(report['status'], 'arrived', report.get('reason'))
         self.assertEqual(calls[0], 'actTwoLionTeleport')
 
+    def test_mondstadt_city_uses_the_existing_city_waypoint(self):
+        self.route['teleportTo'] = 'mondstadt-city'
+        report, calls = self.run_route(self.map_screen, [self.landed('actTwoCityTeleport'), self.step(self.field),
+            dict(mission='navigation', source=self.field, result=dict(status='arrived', nextWaypointIndex=1))])
+        self.assertEqual(report['status'], 'arrived', report.get('reason'))
+        self.assertEqual(calls[0], 'actTwoCityTeleport')
+
     def test_direct_starfell_inventory_travel(self):
         self.route['teleportTo'] = 'starfell-lake'
         report, calls = self.run_route(self.inventory, [self.landed('actTwoStarfellInventoryTeleport'), self.step(self.field),

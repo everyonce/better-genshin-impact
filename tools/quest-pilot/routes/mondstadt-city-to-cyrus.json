@@ -1,0 +1,99 @@
+{
+  "objective": "Explore for Adventure Rank",
+  "teleportTo": "mondstadt-city",
+  "startNear": {
+    "map": "Teyvat",
+    "x": -867.68,
+    "y": 2281.38,
+    "radius": 10
+  },
+  "talkTo": "Cyrus",
+  "provenance": "The first 11 road and stair points come from the city approach recorded in frames 19347 through 19553. Frame 98 supplies the pillar departure. Three Blue Roof legs reached the pillar and stair corridor in session mvf7ifnp-30yiczwdy7v. The short joins from the lower street to the pillar departure and from the stair corridor to the Cyrus approach are inferred. Frame 1044 establishes the final location of the selected Cyrus prompt.",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -865,
+      "y": 2280
+    },
+    {
+      "map": "Teyvat",
+      "x": -860,
+      "y": 2268
+    },
+    {
+      "map": "Teyvat",
+      "x": -850,
+      "y": 2265
+    },
+    {
+      "map": "Teyvat",
+      "x": -851,
+      "y": 2255
+    },
+    {
+      "map": "Teyvat",
+      "x": -852,
+      "y": 2242
+    },
+    {
+      "map": "Teyvat",
+      "x": -845,
+      "y": 2230
+    },
+    {
+      "map": "Teyvat",
+      "x": -845,
+      "y": 2223
+    },
+    {
+      "map": "Teyvat",
+      "x": -852,
+      "y": 2225
+    },
+    {
+      "map": "Teyvat",
+      "x": -854,
+      "y": 2216
+    },
+    {
+      "map": "Teyvat",
+      "x": -856,
+      "y": 2210
+    },
+    {
+      "map": "Teyvat",
+      "x": -849,
+      "y": 2205
+    },
+    {
+      "map": "Teyvat",
+      "x": -849.1699,
+      "y": 2201.0693
+    },
+    {
+      "map": "Teyvat",
+      "x": -849.2,
+      "y": 2196
+    },
+    {
+      "map": "Teyvat",
+      "x": -842,
+      "y": 2198
+    },
+    {
+      "map": "Teyvat",
+      "x": -834.5,
+      "y": 2198
+    },
+    {
+      "x": -834,
+      "map": "Teyvat",
+      "y": 2188
+    },
+    {
+      "map": "Teyvat",
+      "x": -833.494140625,
+      "y": 2185.39453125
+    }
+  ]
+}

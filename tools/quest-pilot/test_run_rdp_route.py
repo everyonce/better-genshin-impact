@@ -88,7 +88,8 @@ class Fixture:
         request = dict(id='own-' + str(len(self.calls)), session=session, mission='navigation')
         written = dict(request, id='foreign') if self.foreign_request else request
         (self.pilot / 'request.json').write_text(json.dumps(written))
-        report = dict(status=self.route_status, session=session, nextWaypointIndex=1,
+        count = len(launcher.read(argv[3])['waypoints'])
+        report = dict(status=self.route_status, session=session, nextWaypointIndex=count,
                       pending=request if self.route_status == 'pending' else None,
                       records=[] if self.route_status == 'pending' else [dict(request=request)])
         progress.write_text(json.dumps(report))
@@ -252,6 +253,102 @@ class LauncherTests(unittest.TestCase):
                                     '--expected-uid', '123456789', '--node', str(node)])
         rdp = SimpleNamespace(discover=lambda: dict(instances=[f.parent, f.child], unavailable=[]), run_command=broker)
         return args, (rdp, None, self.canonical())
+
+    def test_city_to_cyrus_source_and_all_seventeen_points_run_in_order_on_one_pilot(self):
+        fixture = Fixture(self.root)
+        specimen = Path(launcher.__file__).with_name('routes') / 'mondstadt-city-to-cyrus.json'
+        original = specimen.read_bytes()
+        plan = json.loads(original)
+        def broker(root, argv, work_dir, python_exe, timeout, job_dir, output_limit):
+            fixture.config = launcher.read(argv[-2])
+            retained = fixture.config['splitRoutes']
+            self.assertEqual(len(retained), 1)
+            self.assertEqual(Path(retained[0]['path']).read_bytes(), original)
+            self.assertEqual(retained[0]['sha256'], hashlib.sha256(original).hexdigest())
+            legs = [launcher.read(r['path']) for r in fixture.config['routes']]
+            self.assertEqual([len(r['waypoints']) for r in legs], [4, 4, 4, 4, 1])
+            self.assertEqual([point for r in legs for point in r['waypoints']], plan['waypoints'])
+            self.assertEqual([r['teleportTo'] for r in legs if 'teleportTo' in r], ['mondstadt-city'])
+            self.assertEqual([r for r in legs if 'startNear' in r], [legs[0]])
+            self.assertEqual(legs[-1]['talkTo'], 'Cyrus')
+            self.assertTrue(all('talkTo' not in r for r in legs[:-1]))
+            result = fixture.worker()
+            return dict(returnCode=result['exitCode'], timedOut=False)
+        args, dependencies = self.console(fixture, broker)
+        args.route = [specimen]
+        result = launcher.run(args, expected_owner=fixture.owner, dependencies=dependencies)
+        self.assertEqual(result['status'], 'arrived', result)
+        self.assertEqual(fixture.commands, ['startPilot', 'stopPilot'])
+        self.assertEqual(len(fixture.calls), 5)
+        self.assertEqual({r[r.index('--session') + 1] for r in fixture.calls}, {'new-owned'})
+
+    def test_mixed_sources_keep_short_bytes_and_verify_each_reference_to_a_long_source(self):
+        fixture = Fixture(self.root)
+        short = Path(fixture.config['routes'][0]['path'])
+        short_bytes = short.read_bytes()
+        long = self.root / 'large.json'
+        value = launcher.read(short)
+        value.update(waypoints=[dict(map='Teyvat', x=n, y=n+1) for n in range(9)],
+                     teleportTo='mondstadt-city', talkTo='Cyrus')
+        # Preserve the user's literal BOM, indentation, and CRLF in the long source snapshot.
+        raw = b'\xef\xbb\xbf' + json.dumps(value, indent=3).replace('\n', '\r\n').encode()
+        long.write_bytes(raw)
+        output = self.root / 'mixed'
+        routes, sources = launcher.snapshot_routes([short, long, short], output, self.canonical())
+        self.assertEqual((sources[0]['firstLeg'], sources[0]['legCount']), (1,3))
+        self.assertEqual(Path(sources[0]['path']).read_bytes(), raw)
+        self.assertEqual([Path(routes[i]['path']).read_bytes() for i in (0,4)], [short_bytes,short_bytes])
+        config = dict(routes=routes, splitRoutes=sources)
+        launcher.verify_split_routes(config)
+        legs = routes[1:4]
+        self.assertEqual([r['firstWaypoint'] for r in legs], [0,4,8])
+        # A self-consistent rewritten intermediate leg still disagrees with its pinned source.
+        changed = launcher.read(legs[1]['path'])
+        changed['waypoints'].reverse()
+        payload = launcher.leg_bytes(changed)
+        Path(legs[1]['path']).write_bytes(payload)
+        legs[1]['sha256'] = hashlib.sha256(payload).hexdigest()
+        with self.assertRaisesRegex(RuntimeError, 'archived waypoint sequence'):
+            launcher.verify_split_routes(config)
+        Path(sources[0]['path']).write_bytes(b'{}')
+        with self.assertRaisesRegex(RuntimeError, 'Original exploration snapshot'):
+            launcher.verify_split_routes(config)
+        fixture.config.update(config)
+        result = fixture.worker()
+        self.assertIn('Original exploration snapshot', result['error'])
+        self.assertEqual(fixture.commands, [])
+
+    def test_non_exploration_route_retains_its_existing_waypoint_limit_and_original_bytes(self):
+        fixture = Fixture(self.root)
+        source = Path(fixture.config['routes'][0]['path'])
+        route = launcher.read(source)
+        route.update(objective='Talk to Kaeya', waypoints=[dict(map='Teyvat',x=n,y=2) for n in range(6)])
+        data = json.dumps(route, indent=4).encode()
+        source.write_bytes(data)
+        routes, originals = launcher.snapshot_routes([source], self.root / 'quest', self.canonical())
+        self.assertEqual((len(routes), originals), (1, []))
+        self.assertEqual(Path(routes[0]['path']).read_bytes(), data)
+
+    def test_review_all_legs_before_starting_and_keep_twenty_expanded_legs_as_the_limit(self):
+        fixture = Fixture(self.root)
+        source = Path(fixture.config['routes'][0]['path'])
+        value = launcher.read(source)
+        point = value['waypoints'][0]
+        output = self.root / 'expanded'
+        def plan(points):
+            source.write_text(json.dumps(dict(value, waypoints=points)), encoding='utf-8')
+        plan([point] * 41)
+        with self.assertRaisesRegex(RuntimeError, 'twenty canonical route legs'):
+            launcher.snapshot_routes([source,source], output, self.canonical())
+        self.assertFalse(output.exists())
+        plan([point] * 8 + [dict(point,x='bad')])
+        with self.assertRaisesRegex(RuntimeError, 'numeric x/y'):
+            launcher.snapshot_routes([source], output, self.canonical())
+        self.assertFalse(output.exists())
+        plan([point] * 80)
+        routes, originals = launcher.snapshot_routes([source], output, self.canonical())
+        self.assertEqual(len(routes),20)
+        launcher.verify_split_routes(dict(routes=routes, splitRoutes=originals))
 
     def test_console_copies_original_bytes_and_joins_worker_retirement(self):
         f = Fixture(self.root)

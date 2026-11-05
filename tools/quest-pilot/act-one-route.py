@@ -17,7 +17,8 @@ MAX_SEGMENTS = 3
 EXPLORATION_OBJECTIVE = 'Explore for Adventure Rank'
 # Each name resolves to an existing native teleport that verifies its own destination.
 ROUTE_TELEPORT_STEPS = {'temple-of-the-lion': 'actTwoLionTeleport',
-                        'mondstadt-gate': 'actTwoGateTeleport', 'starfell-lake': 'actTwoStarfellTeleport'}
+                        'mondstadt-gate': 'actTwoGateTeleport', 'mondstadt-city': 'actTwoCityTeleport',
+                        'starfell-lake': 'actTwoStarfellTeleport'}
 # Leave capture time before another stationary observation; retirement alone cannot grant input.
 STATIONARY_OBSERVATION_RESERVE_SECONDS = 1.0
 PASSIVE_TERMINAL_SETTLEMENT_SECONDS = 1.0

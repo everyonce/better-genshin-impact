@@ -10,6 +10,12 @@ python -B tools/quest-pilot/run-rdp-route.py `
   --allow-field-combat
 ```
 
+Add `--gpu-adviser` to run the locally installed Open P2P 150M model on the RDP GPU. The launcher warms the model once and keeps it resident across all legs. BetterGI supplies current 192×192 RGB game frames over a read-only pipe. A fresh forward suggestion can adjust the duration of a walk after BetterGI has verified the current game, ground and waypoint. BetterGI handles turns, obstacles, combat and dialogue. The local runtime uses `artifacts/agent/envs/gamescaling/Scripts/python.exe`, the cached checkpoint and the precomputed navigation instruction.
+
+Use `--continuous` for consecutive ground-exploration legs. BetterGI verifies the end of an intermediate leg in the game world, then measures the scene again before starting the next leg. The final leg parks normally. Teleports, conversations and encounters use their own transitions.
+
+Each GPU run writes `gpu-adviser/terminal.json` in the run’s `.rdp` output directory. It includes inference and capture-to-publication timings. To measure actual controller response, match an accepted `gpuSteeringDecision` in a navigation receipt to the following `VK_W` event for that public frame, then subtract the decision’s `capturedAtUnixMs` from the key’s `startedAt`. The sidecar’s accepted-frame count measures input images. The navigation receipts show which suggestions affected gameplay.
+
 An optional `teleportTo` field in a route JSON selects `temple-of-the-lion`, `mondstadt-gate`, `mondstadt-city`, or `starfell-lake`. BetterGI opens the map when needed and verifies arrival before walking the waypoints. Travel uses the same route deadline. Each controller leg defaults to 90 seconds. Set `--deadline-ms 150000` for a 150-second leg, up to 300 seconds. The controller shares this time across teleport, combat, and navigation. Each native request keeps its own limit, and the combined plan must fit the one-hour RDP job including setup and cleanup. A route with `startNear` checks its starting position after teleporting.
 
 The launcher discovers the connected child and verifies the running game against BetterGI’s configured executable, Windows session, window, and process start time. Use `--process-id PID` to select a child when several are connected. It uses Node from the console PATH. Use `--node PATH` to select an installed `node.exe`.

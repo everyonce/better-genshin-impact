@@ -516,8 +516,8 @@ var ActOneMission = (function () {
         function one(text,x1,x2,y1,y2){
             return rows.filter(r=>r.text.trim().replace(/\bW\s+S\b/g,'WS')===text&&r.x>=x1&&r.x<=x2&&r.y>=y1&&r.y<=y2).length===1;
         }
-        if(!one('Use the scroll wheel or WS keys to',600,1050,120,240)||!one('switch options',750,1150,180,280)||
-            !one('W',580,800,150,270)||!one('S',680,860,150,270))return null;
+        // The complete guide names both keys even when OCR misses a separate keycap.
+        if(!one('Use the scroll wheel or WS keys to',600,1050,120,240)||!one('switch options',750,1150,180,280))return null;
         var options=rows.filter(r=>r.x>=1260&&r.x<=1780&&r.y>=430&&r.y<820&&r.text.trim()&&Number.isFinite(r.height)).sort((a,b)=>a.y-b.y);
         var labels=options.map(r=>r.text.trim());
         var markers=rows.filter(r=>r.text.trim()==='F'&&r.x>=1150&&r.x<=1260&&r.y>=430&&r.y<820&&Number.isFinite(r.height));

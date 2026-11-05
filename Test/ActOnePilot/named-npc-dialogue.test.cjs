@@ -117,6 +117,14 @@ test('recorded Auto-off frame 35 clicks only the confirmed Goodbye row and verif
     assert.deepEqual(keys,[['choice','Goodbye.']]);assert.equal(result.status,'completed');
     assert.deepEqual([result.interactionFrameId,result.greetingFrameId,result.farewell.frameId,result.worldFrameId],[null,1,2,3]);
 });
+test('the full guide and aligned marker identify the exit when a separate keycap is unreadable',async()=>{
+    const scene=structuredClone(guildKeyboard);
+    scene.ocr=scene.ocr.filter(row=>row.text.trim()!=='S');
+    const guide=scene.ocr.find(row=>row.text.includes('Use the scroll wheel'));
+    guide.text='Use the scroll wheel or W S keys to';
+    const {result,keys}=await replay([scene,scene,prompt],'Katheryne',8000,{resumeMenuOnly:true});
+    assert.deepEqual(keys,[['choice','Goodbye.']]);assert.equal(result.status,'completed');
+});
 test('a persistent keyboard guide moves the highlight one observed step at a time before F',async()=>{
     const scenes=[0,0,0,0,1,1,2,2].map(highlighted);
     const {result,keys}=await replay([...scenes,prompt],'Katheryne',10000,{resumeMenuOnly:true});

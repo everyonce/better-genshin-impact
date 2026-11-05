@@ -12,21 +12,6 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# Hash the published bytes without depending on PowerShell module auto-loading.
-# Nested cleanup also disposes the algorithm when opening the file fails.
-function Get-BuildFileSha256 {
-    param([Parameter(Mandatory)][string] $Path)
-    $algorithm = [Security.Cryptography.SHA256]::Create()
-    try {
-        $stream = [IO.File]::OpenRead($Path)
-        try {
-            return [BitConverter]::ToString($algorithm.ComputeHash($stream)).Replace('-', '').ToLowerInvariant()
-        }
-        finally { $stream.Dispose() }
-    }
-    finally { $algorithm.Dispose() }
-}
-
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 # Resolve caller-selected locations explicitly; drive-relative paths depend on hidden shell state.
 foreach ($requestedPath in @($ArtifactsDirectory, $PackageCacheDirectory)) {
@@ -95,41 +80,16 @@ try {
     # Record identity for later readiness and hot-replacement verification.
     $revision = (& git rev-parse HEAD).Trim()
     if ($LASTEXITCODE -ne 0) { throw 'Could not identify the repository revision.' }
-    $manifest = [ordered]@{
-        version = 1
-        targetDirectory = $target
-        builtAtUtc = [DateTime]::UtcNow.ToString('o')
-        sourceRevision = $revision
-        workingTreeDirty = [bool](& git status --porcelain)
-        sdkVersion = $sdkVersion
-        validationConfiguration = 'Debug'
-        publishConfiguration = $PublishConfiguration
-        runtimeIdentifier = 'win-x64'
-        selfContained = $true
-        exeSha256 = Get-BuildFileSha256 -Path (Join-Path $target 'BetterGI.exe')
-        dllSha256 = Get-BuildFileSha256 -Path (Join-Path $target 'BetterGI.dll')
-    }
-    $json = $manifest | ConvertTo-Json -Depth 4
-    [IO.File]::WriteAllText((Join-Path $releaseRoot 'build-manifest.json'), $json, [Text.UTF8Encoding]::new($false))
+    $dirty = @(& git status --porcelain)
+    if ($LASTEXITCODE -ne 0) { throw 'Could not record source working tree status.' }
+    & (Join-Path $PSScriptRoot 'register-build-identity.ps1') -TargetDirectory $target -SourceRevision $revision `
+        -SdkVersion $sdkVersion -PublishConfiguration $PublishConfiguration -ValidationConfiguration Debug `
+        -ValidationKind solution-build -WorkingTreeDirty ([bool]$dirty.Count) -PreserveWitness:$managedArtifacts
     if ($managedArtifacts) {
-        # Preserve only the exact package identity bytes needed to replay historical handoffs.
-        # Runtime assets remain eligible for normal cleanup; witnesses never become launch targets.
-        $witness = Join-Path $artifactRoot "release-retention\package-witnesses\release-r$Release"
-        if (Test-Path -LiteralPath $witness) { throw "Package identity witness already exists: $witness" }
-        $witnessTarget = Join-Path $witness 'BetterGI-English-win-x64'
-        New-Item -ItemType Directory -Path $witnessTarget | Out-Null
-        Copy-Item -LiteralPath (Join-Path $releaseRoot 'build-manifest.json') -Destination $witness
-        foreach ($extension in @('exe','dll')) {
-            $witnessFile = Join-Path $witnessTarget "BetterGI.$extension"
-            Copy-Item -LiteralPath (Join-Path $target "BetterGI.$extension") -Destination $witnessFile
-            if ((Get-BuildFileSha256 -Path $witnessFile) -ne $manifest[($extension+'Sha256')]) {
-                throw 'Published package identity witness differs.'
-            }
-        }
         & $retentionScript -Repository $repoRoot -Action Register -PublishDirectory $target
         & $retentionScript -Repository $repoRoot -Action Apply -PublishDirectory $target
     }
-    Write-Output $json
+    Write-Output ([IO.File]::ReadAllText((Join-Path $releaseRoot 'build-manifest.json')))
 }
 finally {
     Pop-Location

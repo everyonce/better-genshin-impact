@@ -54,8 +54,24 @@ Get-FileHash -LiteralPath @((Join-Path $OutputDirectory 'BetterGI.exe'), (Join-P
     ConvertTo-Json | Set-Content -LiteralPath (Join-Path $OutputDirectory 'Build-SHA256.json') -Encoding utf8
 $sourceCommit = & git -C $repo rev-parse HEAD
 if ($LASTEXITCODE) { throw 'Could not record the source commit.' }
-@{ sourceCommit = $sourceCommit; sdk = (& $DotNet --version); runtime = 'win-x64'; selfContained = $true } |
-    ConvertTo-Json | Set-Content -LiteralPath (Join-Path $OutputDirectory 'Build-Source.json') -Encoding utf8
+$sdk = (& $DotNet --version).Trim()
+if ($LASTEXITCODE) { throw 'Could not record the SDK version.' }
+$buildSource = @{ sourceCommit = $sourceCommit; sdk = $sdk; runtime = 'win-x64'; selfContained = $true }
+$packagePath = [IO.DirectoryInfo]::new($OutputDirectory)
+$numberedRelease = $packagePath.Name -ieq 'BetterGI-English-win-x64' -and $packagePath.Parent.Name -match '^release-r[0-9]+$'
+if ($numberedRelease) {
+    $status = @(& git -C $repo status --porcelain)
+    if ($LASTEXITCODE) { throw 'Could not record source working tree status.' }
+    $buildSource.workingTreeDirty = [bool]$status.Count
+    if (!$SkipTests) {
+        $buildSource.validationConfiguration = 'Release'
+        $buildSource.validationKind = 'english-tests'
+    }
+}
+$buildSource | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $OutputDirectory 'Build-Source.json') -Encoding utf8
+if ($numberedRelease) {
+    & (Join-Path $repo 'tools/rdp-automation/register-build-identity.ps1') -TargetDirectory $OutputDirectory -PreserveWitness
+}
 # Record generated files while the publish is clean. Later user files and modified
 # program files are excluded from automatic retirement by this manifest.
 $artifactsRoot = (Join-Path $repo 'artifacts').TrimEnd('\') + '\'

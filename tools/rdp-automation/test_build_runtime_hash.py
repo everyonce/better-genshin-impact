@@ -78,7 +78,7 @@ $result | ConvertTo-Json -Compress
 ''', encoding='utf-8')
         result = subprocess.run(
             [POWERSHELL, '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
-             '-File', str(script), str(DIRECTORY / 'build-runtime.ps1'), str(path), mode],
+             '-File', str(script), str(DIRECTORY / 'register-build-identity.ps1'), str(path), mode],
             capture_output=True, text=True, timeout=30,
             creationflags=subprocess.CREATE_NO_WINDOW)
         self.assertEqual(result.returncode, 0, result.stderr)

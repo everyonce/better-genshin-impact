@@ -598,6 +598,21 @@ def ground_scan_matches(source, now_ms, state, count, *, candidate_count=None, m
             and isinstance(hud.get('enemyBars'), list) and len(hud['enemyBars']) == count)
 
 
+def ground_scan_has_combat_pack(source, now_ms):
+    """Count accepted hostiles separately from the image components the detector considered."""
+    hud = source['hud']
+    bars = hud['enemyBars']
+    diagnostic = hud.get('enemyBarDiagnostic', {})
+    if not isinstance(diagnostic, dict) or diagnostic.get('overloaded') or not 1 <= len(bars) <= 3:
+        return False
+    # The full-width detector records its candidates before level/shape rejection. When that
+    # list is absent, retain the old exact-count contract for older observations.
+    candidates = diagnostic.get('fieldCandidates', bars)
+    return (isinstance(candidates, list) and len(bars) <= len(candidates) <= 64
+            and ground_scan_matches(source, now_ms, 'threat', len(bars),
+                                    candidate_count=len(candidates), max_age_ms=2000))
+
+
 def ground_scan_is_clear(source, now_ms):
     """Keep ordinary exploration restricted to a measured empty field."""
     return ground_scan_matches(source, now_ms, 'clear', 0)
@@ -652,8 +667,7 @@ def route_phase(source, expected_uid, objectives, *, allow_dialogue, journal_res
         # A positive field scan only requests an inventory pause. The native combat action
         # measures the target, health, and controls again after reopening the world.
         if (allow_field_combat and not any(text.strip() for text in visible_objectives)
-                and hp['current'] >= hp['max'] * .85 and 1 <= len(bars) <= 3
-                and ground_scan_matches(source, now_ms, 'threat', len(bars), max_age_ms=2000)):
+                and hp['current'] >= hp['max'] * .85 and ground_scan_has_combat_pack(source, now_ms)):
             return 'fieldCombat', None
         if bars or any(re.fullmatch(r'Defeatallopponents[0-9]+/[0-9]+', re.sub(r'\s', '', x)) for x in visible_objectives):
             return 'wait', 'Exploration requires zero visible threat'

@@ -752,7 +752,7 @@ class SupervisedRouteControllerTests(unittest.TestCase):
             self.assertEqual([r['waypoints'] for r in pilot.calls if r['mission'] == 'navigation'],
                              [self.points,self.points[1:]])
 
-    def test_exploration_pack_requires_matching_counts_and_field_combat_opt_in(self):
+    def test_exploration_pack_requires_matching_counts_without_a_candidate_list_and_opt_in(self):
         now = self.clock.milliseconds()
         base = controller_scene(objective='', enemies=True)
         base['timestamp'] = now
@@ -768,6 +768,41 @@ class SupervisedRouteControllerTests(unittest.TestCase):
             self.assertEqual(phase(sample, False), 'wait')
             sample['hud']['enemyBarObservation']['candidateCount'] += 1
             self.assertEqual(phase(sample, True), 'wait')
+
+    def test_temple_accepted_hostiles_survive_rejected_field_fragments(self):
+        now = self.clock.milliseconds()
+        # Slime clearing frames 25 and 26. The small red pieces below the acceptance threshold
+        # remain in the ground diagnostic, but they are not separate hostile targets.
+        for geometry, accepted in (
+                ([(1344,440,64,6),(1538,446,52,4),(1506,446,8,4),(1498,446,4,4)], 2),
+                ([(1535.5,446,57,4),(1498,446,4,4)], 1)):
+            source = controller_scene(objective='')
+            source['timestamp'] = now
+            components = [dict(x=x,y=y,width=w,height=h) for x,y,w,h in geometry]
+            hud = source['hud']
+            hud['enemyBars'] = components[:accepted]
+            record_ground_scan(source)
+            scan = hud['enemyBarObservation']
+            scan.update(candidateCount=len(components), reason='outdoor_bar_candidates')
+            hud['enemyBarDiagnostic'] = dict(level='any', fieldCandidates=components)
+            def phase(at=now):
+                return route_tool.route_phase(source, '693306810', [route_tool.EXPLORATION_OBJECTIVE],
+                    allow_dialogue=False, journal_resume=False, now_ms=at, allow_field_combat=True)[0]
+            self.assertEqual(phase(), 'fieldCombat')
+            self.assertEqual(phase(now + 2001), 'wait')
+            self.assertFalse(route_tool.ground_scan_is_clear(source, now))
+            scan['candidateCount'] -= 1
+            self.assertEqual(phase(), 'wait')
+            scan['candidateCount'] = len(components)
+            hud['enemyBarDiagnostic']['overloaded'] = True
+            self.assertEqual(phase(), 'wait')
+            hud['enemyBarDiagnostic']['overloaded'] = False
+            scan['acceptedCount'] = 0
+            self.assertEqual(phase(), 'wait')
+            hud['enemyBars'] = []
+            scan['state'] = 'ambiguous'
+            self.assertEqual(phase(), 'wait')
+            self.assertFalse(route_tool.ground_scan_is_clear(source, now))
 
     def test_recent_positive_scan_can_park_for_native_remeasurement_under_capture_load(self):
         now = self.clock.milliseconds()

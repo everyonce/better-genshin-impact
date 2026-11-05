@@ -636,11 +636,13 @@ class GuardedPilotProtocolTests(unittest.TestCase):
 
     def test_real_atomic_terminal_and_quiescence_retire_before_next_request(self):
         saved = []
-        outcome = self.pilot.execute('observe', self.source, {}, self.clock.monotonic() + 5, saved.append)
+        started = self.clock.monotonic()
+        outcome = self.pilot.execute('observe', self.source, {}, started + 5, saved.append)
+        self.assertGreaterEqual(self.clock.monotonic() - started, 0.05)
+        self.assertLess(self.clock.monotonic() - started, 0.4)
         self.assertEqual(outcome['receipt']['status'], 'completed')
         self.assertIsNone(self.pilot.pending)
         self.assertEqual(saved, [outcome['request']])
-        self.assertGreaterEqual(self.clock.value, 100.4)
         self.pilot.close(); self.assertFalse(self.pilot.lock.exists())
 
     def test_owner_nonce_changes_before_rename_without_request_publication(self):

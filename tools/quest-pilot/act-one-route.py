@@ -377,8 +377,11 @@ class GuardedPilot:
                 if receipt.get('status') not in ('started', 'running'):
                     observed = read(self.command.observation_path(self.root, self.session, receipt.get('frameId')))
                     frame = self.command.validate_terminal_receipt(request, receipt, observed)
+                    # Passive observations have no pending input to settle. Confirm the idle frame
+                    # across polls while its ground scan is still fresh enough for the next decision.
                     settled = self.command.wait_for_controller_quiescence(self.root, self.session, self.pid,
-                        self.wts, frame, timeout_seconds=max(0, min(5, deadline - time.monotonic())))
+                        self.wts, frame, timeout_seconds=max(0, min(5, deadline - time.monotonic())),
+                        stable_seconds=0.05 if mission == 'observe' else 0.4)
                     if not settled['controllerQuiescent']:
                         raise RouteError('Terminal request has no settled controller proof.')
                     self._owner()

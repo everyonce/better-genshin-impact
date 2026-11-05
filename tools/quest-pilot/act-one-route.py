@@ -322,8 +322,10 @@ class GuardedPilot:
             raise RouteError('Unexpected route-controller mission fields.')
         if mission == 'keyPress' and fields != {'key': 'VK_ESCAPE'}:
             raise RouteError('Only the fixed Journal-close operation is available.')
-        if mission == 'questStep' and fields != {'step': 'worldInventory'}:
-            raise RouteError('Only the existing exploration inventory-pause operation is available.')
+        if mission == 'questStep' and fields['step'] not in ('worldInventory', 'worldInventoryClose'):
+            raise RouteError('Unsupported exploration inventory operation.')
+        if mission == 'questStep' and fields['step'] == 'worldInventoryClose' and not self.inventory_ready(source):
+            raise RouteError('A recognized inventory is required before returning to the field.')
         if mission == 'navigation':
             self.command.validate_navigation_plan(fields, fields['deadlineMs'])
         self._admit(source, passive=mission == 'observe')
@@ -574,6 +576,13 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
             source = pilot.current()
             now_ms = clock_ms()
             require_fresh_source(source, pilot.session, now_ms)
+            # Native travel ends in inventory. Open it once for a fresh field measurement before
+            # navigation; a delayed transition must never turn into a second Escape.
+            if (objective == EXPLORATION_OBJECTIVE and len(state['records']) == 1
+                    and source['hud'].get('world') is False and source.get('map') is None
+                    and source_account_matches(source, expected_uid) and pilot.inventory_ready(source)):
+                dispatch('questStep', source, dict(step='worldInventoryClose'))
+                continue
             phase, value = route_phase(source, expected_uid, authorized_objectives,
                 allow_dialogue=allow_dialogue, journal_resume=journal_resume, now_ms=now_ms)
             paused_navigation = inventory_navigation is not None

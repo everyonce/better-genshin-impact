@@ -403,6 +403,29 @@ class SupervisedRouteControllerTests(unittest.TestCase):
         self.assertIs(inputs[1]['requireMeasuredGround'], True)
         self.assertLessEqual(inputs[1]['deadlineMs'], 45000)
 
+    def test_exploration_begins_from_the_inventory_left_by_travel(self):
+        self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
+        inv = controller_scene('inventory')
+        ground = controller_scene(objective='')
+        pilot = ReplayPilot(self.clock, [
+            dict(mission='questStep', source=ground, result=dict(worldVisible=True)),
+            dict(mission='questStep', source=inv, result=dict(pausedInventory=True)),
+            self.arrival(3, inv)], source=inv)
+        result = self.run_controller(pilot)
+        self.assertEqual(result['status'], 'arrived')
+        self.assertEqual([r.get('step', r['mission']) for r in pilot.calls],
+                         ['observe', 'worldInventoryClose', 'observe', 'worldInventory',
+                          'observe', 'navigation'])
+
+    def test_unsettled_inventory_close_stops_without_repeating_escape(self):
+        self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
+        inv = controller_scene('inventory')
+        pilot = ReplayPilot(self.clock, [dict(mission='questStep', source=inv,
+                                             result=dict(worldVisible=False))], source=inv)
+        self.assertEqual(self.run_controller(pilot)['status'], 'waiting')
+        self.assertEqual([r.get('step', r['mission']) for r in pilot.calls],
+                         ['observe', 'worldInventoryClose', 'observe'])
+
     def test_exploration_threat_low_health_and_oversized_route_refuse(self):
         self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
         for index, mutation in enumerate([

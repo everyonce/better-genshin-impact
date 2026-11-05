@@ -141,7 +141,8 @@ class LauncherTests(unittest.TestCase):
             self.assertEqual(argv[argv.index('--pilot-dir')+1],str(fixture.pilot))
             self.assertEqual(launcher.read(fixture.pilot/'gpu-adviser-config.json'),
                              dict(version=1,expectedUid=fixture.config['expectedUid'],**identity))
-            launcher.save(output/'ready.json', dict(ready=True,modelLoaded=True,model=model,**identity))
+            selected = {'goalEmbedding':argv[argv.index('--goal-embedding')+1]} if '--goal-embedding' in argv else {}
+            launcher.save(output/'ready.json', dict(ready=True,modelLoaded=True,model=model,**selected,**identity))
             launcher.save(fixture.pilot/'controller-status.json',dict(gpuAdviserFrameStream=native_ready,
                           heartbeatAt=int(launcher.time.time()*1000),**identity))
             return process
@@ -167,6 +168,8 @@ class LauncherTests(unittest.TestCase):
         original = group.read_bytes()
         with self.gpu_fixture(f) as (spawn,process,job):
             result = f.worker()
+        self.assertNotIn('--goal-embedding',spawn.call_args.args[0])
+        self.assertNotIn('goalEmbedding',result['gpuAdviser'])
         self.assertEqual(result['status'],'arrived',result)
         self.assertEqual(result['gpuAdviser']['status'],'verified')
         self.assertEqual(result['gpuAdviser']['terminal']['counts']['accepted'],3)
@@ -584,6 +587,50 @@ class LauncherTests(unittest.TestCase):
         routes, originals = launcher.snapshot_routes([source], output, self.canonical())
         self.assertEqual(len(routes),20)
         launcher.verify_split_routes(dict(routes=routes, splitRoutes=originals))
+
+    def test_cli_goal_embedding_crosses_broker_and_uses_the_exact_selected_bytes(self):
+        f=Fixture(self.root)
+        source=self.root/'my walking goal.json'
+        content=json.dumps(dict(version=1,encoder='google/embeddinggemma-300m',
+            pooling='attention-mask-mean-of-last-hidden-state; no-projection; no-normalization',maxLength=128,
+            instruction='Keep walking along the street',embedding=[[.25]+[0.0]*767])).encode()
+        source.write_bytes(content)
+        def broker(root, argv, *unused):
+            self.assertEqual(argv[-3],'--worker')
+            manifest=Path(argv[-2])
+            self.assertEqual(hashlib.sha256(manifest.read_bytes()).hexdigest(),argv[-1])
+            f.config=launcher.read(manifest)
+            f.output=Path(f.config['output'])
+            source.write_bytes(b'changed after launch')
+            with self.gpu_fixture(f) as (spawn,_,_):
+                result=f.worker()
+                gpu_argv=spawn.call_args.args[0]
+            frozen=Path(gpu_argv[gpu_argv.index('--goal-embedding')+1])
+            self.assertEqual(frozen.parent,f.output);self.assertEqual(frozen.read_bytes(),content)
+            self.assertNotIn('--goal-embedding',f.calls[0])
+            return dict(returnCode=result['exitCode'],timedOut=False)
+        args,deps=self.console(f,broker)
+        parsed=launcher.parse_args(['--route',str(args.route[0]),'--progress',str(args.progress),'--node',str(args.node),
+            '--expected-uid',args.expected_uid,'--gpu-adviser','--gpu-goal-embedding',str(source)])
+        result=launcher.run(parsed,expected_owner=f.owner,dependencies=deps)
+        self.assertEqual(result['status'],'arrived',result)
+        selected=result['gpuAdviser']['goalEmbedding']
+        self.assertEqual(selected,dict(source=str(source.resolve()),sha256=hashlib.sha256(content).hexdigest(),
+                                       instruction='Keep walking along the street'))
+        self.assertEqual(selected,f.config['gpuGoalEmbedding'])
+
+    def test_goal_requires_opt_in_and_bounded_local_bytes_before_starting_the_broker(self):
+        f=Fixture(self.root)
+        boundary=mock.Mock()
+        args,deps=self.console(f,boundary)
+        args.gpu_goal_embedding=self.root/'goal.json'
+        for enabled, content in ((False,b'{}'),(True,b'x'*131073),(True,b'{}')):
+            args.gpu_adviser=enabled
+            args.gpu_goal_embedding.write_bytes(content)
+            with self.assertRaises(RuntimeError):
+                launcher.run(args,expected_owner=f.owner,dependencies=deps)
+        boundary.assert_not_called()
+        self.assertFalse((args.progress.parent/(args.progress.stem+'.rdp')).exists())
 
     def test_console_copies_original_bytes_and_joins_worker_retirement(self):
         f = Fixture(self.root)

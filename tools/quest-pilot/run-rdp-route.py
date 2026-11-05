@@ -211,7 +211,8 @@ def foreground_game(app, windows_session_id):
 class GpuRouteAdviser:
     """Own one optional image-only adviser and its exact session-scoped native config."""
 
-    def __init__(self, output, pilot, identity):
+    def __init__(self, output, pilot, identity, goal_embedding=None):
+        self.goal_embedding = goal_embedding
         self.output = output / 'gpu-adviser'
         self.pilot = pilot
         self.identity = identity
@@ -221,6 +222,8 @@ class GpuRouteAdviser:
         self.job = None
         self.created_output = False
         self.summary = dict(status='starting', output=str(self.output))
+        if goal_embedding is not None:
+            self.summary['goalEmbedding'] = goal_embedding
 
     def start(self, runtime):
         """Publish a complete config without replacing another launch, then resume this exact process in a job."""
@@ -247,6 +250,13 @@ class GpuRouteAdviser:
                 '--process-id', str(ident['processId']), '--windows-session-id', str(ident['windowsSessionId']),
                 '--game-process-id', str(ident['gameProcessId']), '--output', str(self.output),
                 '--launcher-pid', str(os.getpid()), '--max-runtime-seconds', str(runtime)]
+        if self.goal_embedding is not None:
+            snapshot = self.output.parent / 'gpu-goal-embedding.json'
+            with snapshot.open('rb') as stream:
+                chosen_bytes = stream.read(131073)
+            require(len(chosen_bytes) <= 131072 and hashlib.sha256(chosen_bytes).hexdigest() == self.goal_embedding['sha256'],
+                    'GPU goal embedding snapshot changed after launch.')
+            argv.extend(['--goal-embedding', str(snapshot)])
         self.job = CommandJob()
         with (self.output / 'stdout.log').open('xb') as stdout, (self.output / 'stderr.log').open('xb') as stderr:
             self.process = subprocess.Popen(argv, cwd=REPO, stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr,
@@ -281,6 +291,9 @@ class GpuRouteAdviser:
         ready = read(ready_path)
         require(self.matches(ready) and ready.get('ready') is True and ready.get('modelLoaded') is True
                 and ready.get('model') == 'open-p2p-150M', 'GPU readiness does not match the pinned model and native owner.')
+        if self.goal_embedding is not None:
+            require(isinstance(ready.get('goalEmbedding'), str) and Path(ready['goalEmbedding']).resolve() ==
+                    (self.output.parent/'gpu-goal-embedding.json').resolve(), 'GPU readiness reports another goal embedding.')
         self.summary.update(status='running', ready=ready)
         return True
 
@@ -468,7 +481,8 @@ def run_worker(config, *, control, rdp, execute=execute_route, game_probe=foregr
             not_stopped()
             identity = dict(session=session, processId=expected['processId'], windowsSessionId=expected['windowsSessionId'],
                             gameProcessId=game['processId'], expectedUid=config['expectedUid'])
-            adviser = adviser_factory(output, pilot, identity)
+            goal = config.get('gpuGoalEmbedding')
+            adviser = adviser_factory(output, pilot, identity) if goal is None else adviser_factory(output, pilot, identity, goal)
             state['gpuAdviser'] = adviser.summary
             record()
             adviser.start(GPU_SETUP_SECONDS + 20 + len(config['routes']) * ((config['deadlineMs'] + 999)//1000 + 20))
@@ -608,6 +622,8 @@ def parse_args(argv=None):
     parser.add_argument('--expected-uid', required=True)
     parser.add_argument('--allow-field-combat', action='store_true')
     parser.add_argument('--gpu-adviser', action='store_true', help='Run one local Open P2P GPU adviser during the owned route.')
+    parser.add_argument('--gpu-goal-embedding', type=Path, metavar='FILE',
+                        help='Use this local precomputed Open P2P goal with --gpu-adviser.')
     parser.add_argument('--continuous', action='store_true', help='Allow verified world handoffs between ordinary ground exploration legs.')
     parser.add_argument('--save-encounter-frames', action='store_true',
                         help='Retain a bounded set of native combat and named NPC capture pairs for replay.')
@@ -711,6 +727,21 @@ def run(args, *, expected_owner=None, dependencies=None):
             'Use one to twenty routes, the canonical finite limits, and an explicit numeric account.')
     progress = args.progress.resolve()
     require(not progress.exists(), 'Existing progress is never replayed.')
+    use_gpu = getattr(args, 'gpu_adviser', False)
+    goal_file = getattr(args, 'gpu_goal_embedding', None)
+    goal = None
+    if goal_file is not None:
+        require(use_gpu, '--gpu-goal-embedding requires --gpu-adviser.')
+        path = goal_file.resolve()
+        require(path.is_file(), 'GPU goal embedding file does not exist.')
+        with path.open('rb') as stream:
+            goal_bytes = stream.read(131073)  # Same 128 KiB limit as the installed model's goal reader.
+        require(0 < len(goal_bytes) <= 131072, 'GPU goal embedding must contain at most 128 KiB of JSON.')
+        document = json.loads(goal_bytes)
+        instruction = document.get('instruction') if isinstance(document, dict) else None
+        require(isinstance(instruction, str) and instruction.strip() and len(instruction) <= 2000,
+                'GPU goal embedding is missing its instruction.')
+        goal = dict(source=str(path), sha256=hashlib.sha256(goal_bytes).hexdigest(), instruction=instruction)
     owner = select_owner(rdp.discover(), args.process_id, expected_owner)
     app = Path(owner['child']['appDirectory']).resolve()
     require(not progress.is_relative_to(app / 'User/JsScript/ActOnePilot'), 'Progress must be outside native protocol files.')
@@ -720,7 +751,6 @@ def run(args, *, expected_owner=None, dependencies=None):
     output = progress.parent / (progress.stem + '.rdp')
     # Round up for the broker's integral timeout and retain the worker's existing cleanup allowances.
     leg_seconds = (args.deadline_ms + 999) // 1000 + 20
-    use_gpu = getattr(args, 'gpu_adviser', False)
     setup_and_cleanup_seconds = 80 + (GPU_SETUP_SECONDS + 17 if use_gpu else 0)
     broker_leg_limit = (3600 - setup_and_cleanup_seconds) // leg_seconds
     routes, originals = snapshot_routes(args.route, output, route_cli, broker_leg_limit=broker_leg_limit)
@@ -731,6 +761,10 @@ def run(args, *, expected_owner=None, dependencies=None):
                   deadlineMs=args.deadline_ms, maxSegments=args.max_segments, continueObjectives=args.continue_objective,
                   stopFiles=[str(p.resolve()) for p in [progress.parent / 'STOP', progress.with_suffix('.STOP'),
                              output / 'STOP', app / 'User/JsScript/ActOnePilot/STOP', *args.stop_file]])
+    if goal is not None:
+        # Capture the selected bytes once so moving or editing the original cannot change this run.
+        (output/'gpu-goal-embedding.json').write_bytes(goal_bytes)
+        config['gpuGoalEmbedding'] = goal
     config_path = output / 'launch.json'
     save(config_path, config)
     digest = hashlib.sha256(config_path.read_bytes()).hexdigest()

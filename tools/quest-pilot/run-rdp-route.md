@@ -10,7 +10,7 @@ python -B tools/quest-pilot/run-rdp-route.py `
   --allow-field-combat
 ```
 
-Add `--gpu-adviser` to run the locally installed Open P2P 150M model on the RDP GPU. The launcher warms the model once and keeps it resident across all legs. BetterGI supplies current 192×192 RGB game frames over a read-only pipe. A fresh forward suggestion can adjust the duration of a walk after BetterGI has verified the current game, ground and waypoint. BetterGI handles turns, obstacles, combat and dialogue. The local runtime uses `artifacts/agent/envs/gamescaling/Scripts/python.exe`, the cached checkpoint and the precomputed navigation instruction.
+Add `--gpu-adviser` to run the locally installed Open P2P 150M model on the RDP GPU. The launcher warms the model once and keeps it resident across all legs. BetterGI supplies current 192×192 RGB game frames over a read-only pipe. A fresh forward suggestion can adjust the duration of a walk after BetterGI has verified the current game, ground and waypoint. BetterGI handles turns, obstacles, combat and dialogue. The local runtime uses `artifacts/agent/envs/gamescaling/Scripts/python.exe`, the cached checkpoint and the precomputed navigation instruction. To compare instructions, add `--gpu-goal-embedding FILE`. The default remains `ground-street-walk.json`. A custom run snapshots the local embedding and records its source path, SHA-256 and instruction in the GPU result.
 
 Use `--continuous` for consecutive ground-exploration legs. BetterGI verifies the end of an intermediate leg in the game world, then measures the scene again before starting the next leg. The final leg parks normally. Teleports, conversations and encounters use their own transitions.
 

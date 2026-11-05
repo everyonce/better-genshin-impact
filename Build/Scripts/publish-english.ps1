@@ -21,7 +21,7 @@ foreach ($asset in @('Map\Editor\index.html', 'Web\ScriptRepo\index.html')) {
 # pins the user's retained builds and preserves evidence through same-volume moves.
 $retentionScript = Join-Path $PSScriptRoot 'manage-release-retention.ps1'
 & $retentionScript -Repository $repo -Action Apply -PublishDirectory $OutputDirectory
-& (Join-Path $repo 'tools\quest-pilot\check-storage-headroom.ps1') -Repository $repo
+& (Join-Path $repo 'tools\quest-pilot\check-storage-headroom.ps1') -Repository $repo -PublishDirectory $OutputDirectory
 # Honor the configured NuGet sources and existing package cache throughout publication.
 & $DotNet run --project (Join-Path $repo 'Build\BetterGenshinImpact.I18nSync') -p:UseSharedCompilation=false -- --project (Join-Path $repo 'BetterGenshinImpact') --check-english
 if ($LASTEXITCODE) { throw 'English coverage check failed.' }

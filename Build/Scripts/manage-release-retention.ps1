@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('Plan', 'Apply', 'Register', 'Status')][string]$Action = 'Plan',
+    [ValidateSet('Plan', 'Apply', 'Register', 'Status', 'RecoverCapacity')][string]$Action = 'Plan',
     [string]$Repository = (Join-Path $PSScriptRoot '../..'),
     [string]$PolicyPath = (Join-Path $PSScriptRoot '../release-retention.json'),
     [string]$PublishDirectory,
@@ -107,7 +107,7 @@ if ($Action -eq 'Register') {
 }
 
 if (-not [IO.Directory]::Exists($taskArtifacts)) {
-    if ($Action -eq 'Status') { Get-RetentionStatus 0 | ConvertTo-Json -Depth 4 }
+    if ($Action -in @('Status','RecoverCapacity')) { Get-RetentionStatus 0 | ConvertTo-Json -Depth 4 }
     else { [pscustomobject]@{ action = $Action; releases = @(); deletedBytes = 0; ready = $true } | ConvertTo-Json }
     return
 }
@@ -118,28 +118,20 @@ $taskSuccessful = @($taskReleases | Where-Object {
     [IO.File]::Exists((Join-Path $_.FullName "$taskPackageName/$taskManifestName"))
 } | Sort-Object { [int]($_.Name -replace '^release-r', '') } -Descending)
 $taskKeep = [Collections.Generic.HashSet[string]]::new($taskPins, [StringComparer]::OrdinalIgnoreCase)
-foreach ($taskRecent in @($taskSuccessful | Select-Object -First $taskPolicy.keepRecentReleases)) { [void]$taskKeep.Add($taskRecent.Name) }
+$taskRecentReleases = @($taskSuccessful | Select-Object -First $taskPolicy.keepRecentReleases)
+foreach ($taskRecent in $taskRecentReleases) { [void]$taskKeep.Add($taskRecent.Name) }
+$taskPublishingRelease = $null
 if ($PublishDirectory) {
     $taskPublish = [IO.Path]::GetFullPath($PublishDirectory)
     foreach ($taskRelease in $taskReleases) {
-        if ($taskPublish.StartsWith($taskRelease.FullName + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { [void]$taskKeep.Add($taskRelease.Name) }
+        if ($taskPublish.StartsWith($taskRelease.FullName + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+            $taskPublishingRelease = $taskRelease.Name
+            [void]$taskKeep.Add($taskRelease.Name)
+        }
     }
 }
 
-# A current retained package supplies historical generated-path names, never byte hashes.
-$taskKnownProgramPaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-foreach ($taskRelease in $taskReleases) {
-    if (-not $taskKeep.Contains($taskRelease.Name)) { continue }
-    $taskPackage = Join-Path $taskRelease.FullName $taskPackageName
-    if (-not [IO.Directory]::Exists($taskPackage)) { continue }
-    $null = Assert-ContainedPath $taskPackage $taskArtifacts
-    foreach ($taskFile in Get-PackageFiles $taskPackage) {
-        $taskRelative = [IO.Path]::GetRelativePath($taskPackage, $taskFile.FullName)
-        if (Test-HistoricalProgramPath $taskRelative) { [void]$taskKnownProgramPaths.Add($taskRelative) }
-    }
-}
-
-function Get-ProgramCandidates([string]$Package) {
+function Get-ProgramCandidates([string]$Package, [switch]$RequireManifest) {
     $taskFileManifest = Join-Path $Package $taskManifestName
     if ([IO.File]::Exists($taskFileManifest)) {
         $null = Assert-ContainedPath $taskFileManifest $taskArtifacts
@@ -158,6 +150,7 @@ function Get-ProgramCandidates([string]$Package) {
         }
         return
     }
+    if ($RequireManifest) { return }
     foreach ($taskFile in Get-PackageFiles $Package) {
         $taskRelative = [IO.Path]::GetRelativePath($Package, $taskFile.FullName)
         $taskRootBinary = ($taskRelative -notmatch '[/\\]') -and (Test-HistoricalProgramPath $taskRelative)
@@ -167,7 +160,7 @@ function Get-ProgramCandidates([string]$Package) {
     }
 }
 
-if ($Action -eq 'Status') {
+function Get-CurrentStorageStatus {
     $taskProgramBytes = 0L
     foreach ($taskRelease in $taskReleases) {
         $taskPackage = Join-Path $taskRelease.FullName $taskPackageName
@@ -181,15 +174,62 @@ if ($Action -eq 'Status') {
         $null = Assert-ContainedPath $taskOther.FullName $taskArtifacts
         foreach ($taskFile in Get-PackageFiles $taskOther.FullName) { $taskProgramBytes += $taskFile.Length }
     }
-    Get-RetentionStatus $taskProgramBytes | ConvertTo-Json -Depth 4
-    return
+    Get-RetentionStatus $taskProgramBytes
+}
+
+# Only apply the rolling-release exception to packages with a verified published binary identity.
+function Test-RegisteredPackageIdentity([IO.DirectoryInfo]$Release) {
+    $package = Join-Path $Release.FullName $taskPackageName
+    $manifestPath = Assert-ContainedPath (Join-Path $Release.FullName 'build-manifest.json') $taskArtifacts
+    if (-not [IO.File]::Exists($manifestPath)) { return $false }
+    try {
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+        if ($manifest.version -ne 1 -or -not $manifest.targetDirectory -or
+            [IO.Path]::GetFullPath($manifest.targetDirectory) -ne $package) { return $false }
+        foreach ($file in @(@('BetterGI.exe', $manifest.exeSha256), @('BetterGI.dll', $manifest.dllSha256))) {
+            $binary = Assert-ContainedPath (Join-Path $package $file[0]) $Release.FullName
+            if ($file[1] -notmatch '^[0-9a-fA-F]{64}$' -or -not [IO.File]::Exists($binary) -or
+                (Get-FileHash -LiteralPath $binary -Algorithm SHA256 -ErrorAction Stop).Hash -ne $file[1]) { return $false }
+        }
+        return $true
+    } catch { return $false }
+}
+
+if ($Action -in @('Status','RecoverCapacity')) {
+    $taskCapacity = Get-CurrentStorageStatus
+    if ($Action -eq 'Status' -or $taskCapacity.ready) {
+        $taskCapacity | ConvertTo-Json -Depth 4
+        return
+    }
+    # Consider the ordinary rolling set only. Always keep its newest verified release, even if a
+    # higher numbered incomplete publication or unreadable binary is present.
+    $taskVerifiedRecent = @($taskRecentReleases | Where-Object { Test-RegisteredPackageIdentity $_ })
+    $taskRollingCandidates = @($taskVerifiedRecent | Select-Object -Skip 1 | Where-Object {
+        -not $taskPins.Contains($_.Name) -and $_.Name -ne $taskPublishingRelease -and
+            [IO.File]::Exists((Join-Path $_.FullName "$taskPackageName/$taskManifestName"))
+    })
+}
+else {
+    # A current retained package supplies historical generated-path names, never byte hashes.
+    $taskKnownProgramPaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($taskRelease in $taskReleases) {
+        if (-not $taskKeep.Contains($taskRelease.Name)) { continue }
+        $taskPackage = Join-Path $taskRelease.FullName $taskPackageName
+        if (-not [IO.Directory]::Exists($taskPackage)) { continue }
+        $null = Assert-ContainedPath $taskPackage $taskArtifacts
+        foreach ($taskFile in Get-PackageFiles $taskPackage) {
+            $taskRelative = [IO.Path]::GetRelativePath($taskPackage, $taskFile.FullName)
+            if (Test-HistoricalProgramPath $taskRelative) { [void]$taskKnownProgramPaths.Add($taskRelative) }
+        }
+    }
 }
 
 $taskResults = [Collections.Generic.List[object]]::new()
 $taskDeletedBytes = 0L
 $taskDeletedFiles = 0
-foreach ($taskRelease in $taskReleases | Sort-Object { [int]($_.Name -replace '^release-r', '') }) {
-    if ($taskKeep.Contains($taskRelease.Name)) { continue }
+$taskSelection = if ($Action -eq 'RecoverCapacity') { $taskRollingCandidates } else { $taskReleases }
+foreach ($taskRelease in $taskSelection | Sort-Object { [int]($_.Name -replace '^release-r', '') }) {
+    if ($Action -ne 'RecoverCapacity' -and $taskKeep.Contains($taskRelease.Name)) { continue }
     $taskSource = Assert-ContainedPath $taskRelease.FullName $taskArtifacts
     $taskPackage = Join-Path $taskSource $taskPackageName
     if (-not [IO.Directory]::Exists($taskPackage)) { continue }
@@ -201,7 +241,12 @@ foreach ($taskRelease in $taskReleases | Sort-Object { [int]($_.Name -replace '^
         $taskResults.Add([pscustomobject]@{ release = $taskRelease.Name; status = 'unregistered-preserved' })
         continue
     }
-    $taskCandidates = @(Get-ProgramCandidates $taskPackage)
+    $taskCandidates = @(Get-ProgramCandidates $taskPackage -RequireManifest:($Action -eq 'RecoverCapacity'))
+    if ($Action -eq 'RecoverCapacity' -and ($taskCandidates.path -notcontains 'BetterGI.exe' -or
+            $taskCandidates.path -notcontains 'BetterGI.dll')) {
+        $taskResults.Add([pscustomobject]@{ release = $taskRelease.Name; status = 'changed-package-preserved' })
+        continue
+    }
     $taskBytes = 0L
     foreach ($taskCandidate in $taskCandidates) { $taskBytes += $taskCandidate.bytes }
     $taskResult = [ordered]@{ release = $taskRelease.Name; originalPath = $taskSource; archivePath = $taskTarget;
@@ -260,6 +305,11 @@ foreach ($taskRelease in $taskReleases | Sort-Object { [int]($_.Name -replace '^
         }
     }
     if ($taskResult.status -eq 'partial-preserved') { break }
+    if ($Action -eq 'RecoverCapacity' -and $taskResult.status -eq 'retired') {
+        [void]$taskKeep.Remove($taskRelease.Name)
+        $taskCapacity = Get-CurrentStorageStatus
+        if ($taskCapacity.ready) { break }
+    }
 }
 $taskSummary = [pscustomobject]@{
     version = 1; action = $Action; utc = [DateTime]::UtcNow.ToString('o');
@@ -271,10 +321,13 @@ if ($AuditPath) {
     [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($taskAudit)) | Out-Null
     Write-RetentionJson $taskAudit $taskSummary
 }
-if ($Action -eq 'Apply') {
+if ($Action -in @('Apply','RecoverCapacity')) {
     [IO.Directory]::CreateDirectory($taskArchive) | Out-Null
     # Each archived release retains its own original-prefix mapping and deletion audit.
     Write-RetentionJson (Join-Path $taskArchive 'latest-retention-run.json') $taskSummary
 }
-$taskSummary | ConvertTo-Json -Depth 6
+if ($Action -eq 'RecoverCapacity') {
+    $taskCapacity | Add-Member -NotePropertyName capacityRecovery -NotePropertyValue $taskSummary
+    $taskCapacity | ConvertTo-Json -Depth 7
+} else { $taskSummary | ConvertTo-Json -Depth 6 }
 if (@($taskResults | Where-Object status -eq 'partial-preserved').Count) { throw 'Release retirement stopped after a partial operation; see the preserved audit.' }

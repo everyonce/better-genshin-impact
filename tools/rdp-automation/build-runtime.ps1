@@ -51,7 +51,7 @@ $retentionScript = Join-Path $repoRoot 'Build\Scripts\manage-release-retention.p
 $managedArtifacts = $artifactRoot.TrimEnd('\', '/') -eq (Join-Path $repoRoot 'artifacts').TrimEnd('\', '/')
 if ($managedArtifacts) {
     & $retentionScript -Repository $repoRoot -Action Apply -PublishDirectory $target
-    & (Join-Path $repoRoot 'tools\quest-pilot\check-storage-headroom.ps1') -Repository $repoRoot
+    & (Join-Path $repoRoot 'tools\quest-pilot\check-storage-headroom.ps1') -Repository $repoRoot -PublishDirectory $target
 }
 
 # Keep the SDK and package cache local; restore the caller's process environment afterward.

@@ -152,6 +152,87 @@ $taskStatus = Invoke-TaskRetention $taskFixture 'Status'
 Assert-TaskTest (-not $taskStatus.ready) 'Storage admission must fail when preserved builds exceed the configured capacity.'
 $taskPassed.Add('publish directory protection and storage-only admission')
 
+# Reproduce the ordinary publish preflight with small registered test binaries and actual archive guards.
+function New-VerifiedRelease([string]$Fixture, [int]$Number) {
+    $package = New-TaskRelease $Fixture $Number
+    $identity = @{
+        version=1; targetDirectory=$package; exeSha256=(Get-FileHash -LiteralPath (Join-Path $package 'BetterGI.exe')).Hash
+        dllSha256=(Get-FileHash -LiteralPath (Join-Path $package 'BetterGI.dll')).Hash
+    }
+    Write-TaskFile (Join-Path ([IO.Path]::GetDirectoryName($package)) 'build-manifest.json') ($identity | ConvertTo-Json)
+    $null = Invoke-TaskRetention $Fixture 'Register' $package
+    return $package
+}
+$taskFixture = New-TaskFixture 'pressured-publish' @('release-r1','release-r55','release-r56') 2
+foreach ($n in @(1,55,56,75,76,77)) { $null = New-VerifiedRelease $taskFixture $n }
+$taskSource = Join-Path $taskFixture 'artifacts/release-r76/BetterGI-English-win-x64'
+Write-TaskFile (Join-Path $taskSource 'User/recordings/scene.png') 'exact recording'
+Write-TaskFile (Join-Path $taskSource 'TestResults/native.trx') 'exact results'
+$taskPublish = Join-Path $taskFixture 'artifacts/release-r78/BetterGI-English-win-x64'
+# Use the public publisher check and its relative manager/policy paths inside this fixture only.
+$taskAdmission = Join-Path $taskFixture 'tools/quest-pilot/check-storage-headroom.ps1'
+$taskManager = Join-Path $taskFixture 'Build/Scripts/manage-release-retention.ps1'
+foreach ($f in ($taskAdmission,$taskManager)) { [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($f)) }
+[IO.File]::Copy((Join-Path $taskRoot 'tools/quest-pilot/check-storage-headroom.ps1'),$taskAdmission)
+[IO.File]::Copy($taskScript,$taskManager)
+$taskFixturePolicy = Join-Path $taskFixture 'Build/release-retention.json'
+$taskPolicy = Get-Content -LiteralPath (Join-Path $taskFixture 'policy.json') -Raw | ConvertFrom-Json
+Write-TaskFile $taskFixturePolicy ($taskPolicy | ConvertTo-Json)
+$taskGuard = [IO.File]::Open((Join-Path $taskFixture 'artifacts/release-r75/BetterGI-English-win-x64/BetterGI.exe'),'Open','Read','Read')
+try {
+    $normal = Invoke-TaskRetention $taskFixture 'Apply' $taskPublish
+    Assert-TaskTest ($normal.releases.status -contains 'in-use-or-inaccessible-preserved') 'Running older host must survive normal cleanup.'
+    $ample = & $taskAdmission -Repository $taskFixture -PublishDirectory $taskPublish | ConvertFrom-Json
+    Assert-TaskTest ($ample.ready -and (Test-Path -LiteralPath $taskSource)) 'A rolling release must survive when capacity is sufficient.'
+    $taskPolicy.maximumProgramBytes = $ample.buildBytes - 32
+    Write-TaskFile $taskFixturePolicy ($taskPolicy | ConvertTo-Json)
+    # A read-only check cannot retire anything, even when the configured budget is exceeded.
+    $rejected = $false
+    try { $null = & $taskAdmission -Repository $taskFixture } catch { $rejected = $_.Exception.Message -match 'Storage preflight failed' }
+    Assert-TaskTest ($rejected -and (Test-Path $taskSource)) 'Read-only admission may not retire a package.'
+    $blocked = $false
+    try { $null = & $taskAdmission -Repository $taskFixture -PublishDirectory $taskSource } catch { $blocked = $_.Exception.Message -match 'no eligible previous release' }
+    Assert-TaskTest ($blocked -and (Test-Path $taskSource)) 'Even under pressure the explicit publish target must stay intact.'
+    $recovered = & $taskAdmission -Repository $taskFixture -PublishDirectory $taskPublish | ConvertFrom-Json
+    Assert-TaskTest ($recovered.ready -and $recovered.buildBytes -eq $taskPolicy.maximumProgramBytes -and
+        $recovered.capacityRecovery.releases.Count -eq 1 -and $recovered.capacityRecovery.releases[0].release -eq 'release-r76') 'Only the inactive previous release should retire.'
+    foreach ($n in @(1,55,56,75,77)) {
+        Assert-TaskTest (Test-Path (Join-Path $taskFixture "artifacts/release-r$n/BetterGI-English-win-x64/BetterGI.exe")) 'A protected executable disappeared.'
+    }
+    $evidence = Join-Path $taskFixture 'artifacts/release-evidence/release-r76/BetterGI-English-win-x64'
+    Assert-TaskTest ((Get-Content (Join-Path $evidence 'User/recordings/scene.png') -Raw) -eq 'exact recording') 'Recording bytes changed.'
+    Assert-TaskTest ((Get-Content (Join-Path $evidence 'TestResults/native.trx') -Raw) -eq 'exact results') 'Test results changed.'
+} finally { $taskGuard.Dispose() }
+$taskPassed.Add('publish capacity recovery preserves pins, active host, newest build and evidence')
+
+$taskFixture = New-TaskFixture 'ineligible-rollback' @() 4
+$old = New-VerifiedRelease $taskFixture 70
+$active = New-VerifiedRelease $taskFixture 71
+$newest = New-VerifiedRelease $taskFixture 72
+# A higher unverified manifest cannot be used as proof that the last verified version has a successor.
+$null = New-TaskRelease $taskFixture 73
+Write-TaskFile (Join-Path $old 'BetterGI.dll') 'different executable bytes'
+$taskPolicy = Get-Content -LiteralPath (Join-Path $taskFixture 'policy.json') -Raw | ConvertFrom-Json
+$taskPolicy.maximumProgramBytes = 1
+Write-TaskFile (Join-Path $taskFixture 'policy.json') ($taskPolicy | ConvertTo-Json)
+$handle = [IO.File]::Open((Join-Path $active 'BetterGI.exe'),'Open','Read','Read')
+try {
+    $recovery = Invoke-TaskRetention $taskFixture 'RecoverCapacity'
+    Assert-TaskTest (-not $recovery.ready -and $recovery.capacityRecovery.deletedFiles -eq 0) 'Protected or unverified releases cannot satisfy the configured budget.'
+    foreach ($package in ($old,$active,$newest)) { Assert-TaskTest (Test-Path (Join-Path $package 'BetterGI.exe')) 'An ineligible package disappeared.' }
+} finally { $handle.Dispose() }
+$taskPassed.Add('capacity recovery rejects mismatched binaries, an in-use recent executable and an unverified successor')
+
+$taskFixture = New-TaskFixture 'minimal-recovery' @() 3
+foreach ($n in @(10,11,12)) { $null = New-VerifiedRelease $taskFixture $n }
+$taskPolicy = Get-Content -LiteralPath (Join-Path $taskFixture 'policy.json') -Raw | ConvertFrom-Json
+$taskPolicy.maximumProgramBytes = 64
+Write-TaskFile (Join-Path $taskFixture 'policy.json') ($taskPolicy | ConvertTo-Json)
+$recovery = Invoke-TaskRetention $taskFixture 'RecoverCapacity'
+Assert-TaskTest ($recovery.ready -and $recovery.buildBytes -eq 64 -and $recovery.capacityRecovery.releases.Count -eq 1 -and
+    $recovery.capacityRecovery.releases[0].release -eq 'release-r10') 'Stop as soon as enough bytes have been recovered.'
+$taskPassed.Add('only the oldest necessary verified rollback retires')
+
 $taskFixture = New-TaskFixture 'first-publish'
 # This is the known empty fixture directory, not a recursive removal.
 [IO.Directory]::Delete((Join-Path $taskFixture 'artifacts'))

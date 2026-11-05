@@ -2021,6 +2021,67 @@ class RouteStartNearTests(unittest.TestCase):
         self.assertEqual([p.get('step',p['mission']) for p in pilot.calls if p['mission']!='observe'],
             ['worldInventoryClose','worldInventory','navigation'])
 
+    def regional_map(self):
+        """Reproduce the map-close landmarks and footer measured in the west-gate recording."""
+        scene = controller_scene('modal')
+        scene['hud'].update(bigMap=True, journal=False, dialogueReady=False, choice=False)
+        for label, x, y in [('Cider Lake',516,20),('Mondstadt',490,288),('Windrise',978,741),
+                            ('Fastarfevalley',1530,980),('Exploration Progress: 16%',1501,1017)]:
+            scene['ocr'].append(dict(text=label,x=x,y=y))
+        return scene
+
+    def confirmed_map_close(self):
+        return dict(mission='questStep',source=controller_scene('inventory'),
+            result=dict(status='completed',step='actTwoMapClose',pauseVerified=True,
+                pauseProof=dict(kind='inventory',verified=True,session='route-session',pauseFrameId=3)))
+
+    def test_map_start_requires_native_pause_then_an_independent_world_measurement(self):
+        inventory = controller_scene('inventory')
+        pilot = ReplayPilot(self.clock,[self.confirmed_map_close(),
+            dict(mission='questStep',source=self.world(),result=dict(resumedWorld=True)),
+            dict(mission='questStep',source=inventory,result=dict(pausedInventory=True)),
+            dict(mission='navigation',source=inventory,result=dict(status='arrived',nextWaypointIndex=1))],
+            source=self.regional_map())
+        result = self.run_route(pilot)
+        self.assertEqual(result['status'],'arrived')
+        self.assertEqual(result['startNearVerified']['frameId'],6)
+        self.assertEqual(result['startMapClose']['pauseFrameId'],3)
+        self.assertEqual([p.get('step',p['mission']) for p in pilot.calls],
+            ['observe','actTwoMapClose','observe','worldInventoryClose','observe','worldInventory','observe','navigation'])
+
+    def test_ambiguous_foreign_and_menu_maps_cannot_send_a_close(self):
+        for index, mutate in enumerate((lambda s:s['ocr'].pop(),lambda s:s['ocr'].append(dict(text='Teleport',x=1660,y=1000)),
+                       lambda s:s['hud'].update(loading=True),lambda s:s['ocr'][0].update(text='UID: 123456789'),
+                       lambda s:s['ocr'].append(dict(text='Mondstadt',x=555,y=555)))):
+            self.progress = Path(self.temp.name)/f'rejected-map-{index}.json'
+            s=self.regional_map();mutate(s)
+            pilot=ReplayPilot(self.clock,source=s)
+            result=self.run_route(pilot)
+            self.assertNotEqual(result['status'],'arrived')
+            self.assertEqual([p['mission'] for p in pilot.calls],['observe'])
+
+    def test_a_failed_late_or_unverified_map_close_cannot_replay_or_move(self):
+        for index, mutate in enumerate((lambda e:e.update(status='failed'),lambda e:e['result']['pauseProof'].update(pauseFrameId=2),
+                       lambda e:e['result'].update(step='other'),lambda e:e.update(source=self.regional_map()),
+                       lambda e:e.update(seconds=1.05))):
+            self.progress = Path(self.temp.name)/f'failed-close-{index}.json'
+            event=self.confirmed_map_close();mutate(event)
+            pilot=ReplayPilot(self.clock,[event],source=self.regional_map())
+            result=self.run_route(pilot,deadline_ms=1000)
+            self.assertNotEqual(result['status'],'arrived')
+            self.assertNotIn('startNearVerified',result)
+            self.assertEqual([p.get('step',p['mission']) for p in pilot.calls if p['mission']!='observe'],['actTwoMapClose'])
+
+    def test_map_start_outside_the_measured_radius_cannot_submit_movement(self):
+        pilot=ReplayPilot(self.clock,[self.confirmed_map_close(),
+            dict(mission='questStep',source=self.world(far=True),result=dict(resumedWorld=True))],
+            source=self.regional_map())
+        result=self.run_route(pilot)
+        self.assertIn('outside startNear',result['reason'])
+        self.assertNotIn('startNearVerified',result)
+        self.assertEqual([p.get('step',p['mission']) for p in pilot.calls if p['mission']!='observe'],
+                         ['actTwoMapClose','worldInventoryClose'])
+
     def test_wrong_start_after_inventory_close_has_no_second_key_or_movement(self):
         inventory = controller_scene('inventory')
         pilot = ReplayPilot(self.clock, [dict(mission='questStep', source=self.world(far=True),

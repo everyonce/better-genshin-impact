@@ -562,6 +562,9 @@ class GuardedPilot:
             if step in ROUTE_TELEPORT_STEPS.values():
                 if not regional_map_ready(source):
                     raise RouteError('Native map teleport requires an open regional map.')
+            elif step == 'actTwoMapClose':
+                if not start_regional_map(source):
+                    raise RouteError('Start-map close requires a recognized open regional map.')
             elif step == 'actTwoFieldCombat' and fields.get('entryScene') == 'world':
                 phase, _ = route_phase(source, fields['expectedUid'], [EXPLORATION_OBJECTIVE], allow_dialogue=False,
                                        journal_resume=False, allow_field_combat=True)
@@ -719,6 +722,26 @@ def regional_map_ready(source):
     """Distinguish the regional map from an unrelated menu before dispatching native map travel."""
     hud = source['hud']
     return hud.get('bigMap') is True and hud.get('world') is False and not hud.get('journal')
+
+
+def start_regional_map(source):
+    """Match the native map-close landmark evidence on an unobstructed regional map."""
+    hud = source['hud']
+    if (not regional_map_ready(source) or source.get('map') is not None
+            or hud.get('health') is not None or any(hud.get(k) for k in
+                ('groundControls', 'dialogueReady', 'auto', 'choice', 'loading', 'unknownHud'))):
+        return False
+    rows = source['ocr']
+    if not all(isinstance(row, dict) for row in rows):
+        return False
+    labels = [row.get('text') for row in rows]
+    if (any(labels.count(name) != 1 for name in ('Mondstadt', 'Windrise', 'Cider Lake'))
+            or any(name in labels for name in ('Teleport', 'Navigate', 'Confirm', 'Cancel'))):
+        return False
+    return sum(1 for r in rows if isinstance(r.get('text'), str)
+               and re.fullmatch(r'Exploration Progress:\s*\d+(?:\.\d+)?%', r['text'])
+               and type(r.get('x')) in (int, float) and 1450 <= r['x'] <= 1810
+               and type(r.get('y')) in (int, float) and 995 <= r['y'] <= 1050) == 1
 
 
 def ground_scan_matches(source, now_ms, state, count, *, candidate_count=None, max_age_ms=1000):
@@ -1318,7 +1341,7 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
         source = pilot.current()
         require_fresh_source(source, pilot.session, clock_ms())
         if not source_account_matches(source, expected_uid):
-            raise RouteError('Teleport requires the expected account on the current game screen.')
+            raise RouteError('The current travel screen does not show the expected account.')
         return source
 
     def teleport_before_route():
@@ -1385,6 +1408,32 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
                 inventory_navigation = None if continuous_ground in ('world','park') and not talk_to else EXPLORATION_OBJECTIVE
                 state['continuedFromProgress'] = dict(path=str(continue_from_progress),
                     **{key: continuation[key] for key in ('requestId', 'sourceFrameId', 'pauseFrameId', 'terminalFrameId')})
+            # At entry only, let the native map-close operation restore inventory. The
+            # ordinary world observation must still locate the avatar inside startNear.
+            if (len(state['records']) == 1 and start_near and not destination
+                    and objective == EXPLORATION_OBJECTIVE and source_account_matches(source, expected_uid)
+                    and start_regional_map(source)):
+                if pilot.stopped() or monotonic() >= deadline:
+                    raise RouteError('Start-map close stopped before dispatch.')
+                closed = dispatch('questStep', source, dict(step='actTwoMapClose'))
+                terminal = pilot.current()
+                require_fresh_source(terminal, pilot.session, clock_ms())
+                pause_frame = closed['pauseProof'].get('pauseFrameId') if protected_inventory(closed) else None
+                if (type(pause_frame) is not int or closed.get('step') != 'actTwoMapClose'
+                        or closed.get('status') != 'completed'
+                        or not source['frameId'] < pause_frame <= terminal['frameId']
+                        or not source_account_matches(terminal, expected_uid) or not pilot.inventory_ready(terminal)):
+                    raise RouteError('Start-map close did not verify the expected inventory.')
+                state['startMapClose'] = dict(requestId=state['records'][-1]['request']['id'],
+                    sourceFrameId=source['frameId'], pauseFrameId=pause_frame)
+                save()
+                if pilot.stopped() or monotonic() >= deadline:
+                    raise RouteError('Start-map handoff stopped before inventory close.')
+                source = travel_source()
+                if pilot.stopped() or monotonic() >= deadline or not pilot.inventory_ready(source):
+                    raise RouteError('Fresh inventory after start-map close is unavailable.')
+                dispatch('questStep', source, dict(step='worldInventoryClose'))
+                continue
             # Native travel ends in inventory. Open it once for a fresh field measurement before
             # navigation; a delayed transition must never turn into a second Escape.
             if (inventory_navigation is None and (objective == EXPLORATION_OBJECTIVE or talk_to)

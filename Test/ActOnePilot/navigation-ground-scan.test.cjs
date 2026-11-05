@@ -163,3 +163,17 @@ test('both landed frames must independently prove fresh measured clear ground; n
         assert.equal(result.groundRecovered, false);
     }
 });
+
+test('a hostile during inventory exit reports a protected zero-waypoint interruption',()=>{
+    const fs=require('node:fs'),vm=require('node:vm'),context={};
+    vm.createContext(context);
+    vm.runInContext(fs.readFileSync('BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js','utf8'),context);
+    const o={session:'s',frameId:15,hud:{enemyBars:[{width:37}],enemyBarObservation:{session:'s',frameId:15,state:'threat'}}};
+    const entry=context.actOneExplorationEntryThreat(request,o);
+    assert.equal(entry.reason,'Enemy observed during exploration');
+    assert.equal(entry.nextWaypointIndex,0);
+    assert.equal(entry.movements,0);
+    o.hud.enemyBarObservation.frameId=14;
+    assert.equal(context.actOneExplorationEntryThreat(request,o).reason,'Ground enemy scan did not establish clear ground');
+    assert.equal(context.actOneExplorationEntryThreat({...request,requireMeasuredGround:false},o),null);
+});

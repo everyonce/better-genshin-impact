@@ -269,6 +269,15 @@ function actOneWagnerChoiceTutorial(rows) {
         one("I've got the Iron Chunks.",1290,1360,700,750)&&one('F',1180,1250,700,750)&&one('Wagner',860,920,830,880);
 }
 function actOneEnemyBarSize(w,h) { return w>=2 && w<=300 && h>=3 && h<=12 && w/h>=0.15; }
+// An enemy arriving during the inventory transition is a route interruption at waypoint zero.
+function actOneExplorationEntryThreat(request,current) {
+    if(request.mission!=='navigation'||request.objective!=='Explore for Adventure Rank'||
+       request.requireMeasuredGround!==true||!(current.hud.enemyBars||[]).length)return null;
+    var scan=current.hud.enemyBarObservation;
+    var measured=scan&&scan.session===current.session&&scan.frameId===current.frameId&&scan.state==='threat';
+    return {status:'stopped',reason:measured?'Enemy observed during exploration':'Ground enemy scan did not establish clear ground',
+        nextWaypointIndex:0,movements:0,turns:0,fieldFrameId:current.frameId,questComplete:false};
+}
 function actOneOutdoorEnemyBarCandidate(bar,rows) {
     if(!bar||![bar.x,bar.y,bar.width,bar.height].every(Number.isFinite))return false;
     if(bar.width>=16&&bar.width/bar.height>=3.5&&
@@ -5230,7 +5239,12 @@ function createActOneAdapter(sessionId,options) {
                 var encounter=request.step==='actTwoFieldInspect'&&actTwoEncounterDispatch(current,Date.now(),request.session,request.step);
                 if(encounter){result=Object.assign({status:'stopped',reason:'Fresh Ley Line encounter; use guarded native combat plan',actions:0,fieldFrameId:current.frameId,health:current.hud.health,questComplete:false},encounter);return await finishWithLocalPause(protector,this,initial,observe,initial.frameId,result,null);}
                 if(!actTwoOriginalAccount(current.ocr)||!current.hud.world||(!current.hud.groundControls||current.hud.climbing)&&!(request.mission==='navigation'&&request.objective==='Explore for Adventure Rank'&&actTwoLionBaseRecovery(current,Date.now(),request.session))||
-                    (current.hud.enemyBars||[]).length||!current.map)throw new Error('Original account and safe Guild field required');
+                    !current.map)throw new Error('Original account and safe Guild field required');
+                if((current.hud.enemyBars||[]).length){
+                    var entryThreat=actOneExplorationEntryThreat(request,current);
+                    if(entryThreat)return await finishWithLocalPause(protector,this,initial,observe,initial.frameId,entryThreat,null);
+                    throw new Error('Original account and safe Guild field required');
+                }
                 navLastAcceptedPosition={x:current.map.x,y:current.map.y};
                 result=await navigate(current);
                 if(navigationGuard&&result.status==='arrived'){

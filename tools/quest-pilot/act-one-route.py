@@ -659,6 +659,23 @@ def require_start_near(source, session, expected_uid, start, now_ms):
                 position=dict(map=position['map'], x=position['x'], y=position['y']), distance=distance)
 
 
+def positive_parking_field(source, session, expected_uid):
+    """A known living field may request protection; threat/objective evidence grants no extra gameplay."""
+    hud = source.get('hud', {})
+    hp, position = hud.get('health'), source.get('map')
+    return (source.get('session') == session and type(source.get('frameId')) is int
+            and source['frameId'] > 0 and isinstance(source.get('ocr'), list)
+            and source_account_matches(source, expected_uid)
+            and not source.get('fastSample') and not source.get('mapPositionInherited')
+            and hud.get('world') is True and hud.get('groundControls') is True
+            and not any(hud.get(k) for k in ('loading', 'unknownHud', 'auto', 'climbing', 'swimming',
+                                           'journal', 'bigMap', 'dialogueReady', 'choice', 'tutorialStep'))
+            and isinstance(hp, dict) and type(hp.get('current')) is int and type(hp.get('max')) is int
+            and 0 < hp['current'] <= hp['max']
+            and isinstance(position, dict) and position.get('map') == 'Teyvat'
+            and all(type(position.get(k)) in (int, float) and math.isfinite(position[k]) for k in ('x', 'y')))
+
+
 def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=False, allow_field_combat=False,
                    continuation_objectives=(), max_segments=MAX_SEGMENTS, deadline_ms=MAX_DEADLINE_MS,
                    continue_from_progress=None,
@@ -772,6 +789,55 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
         if outcome.get('cancelled') or not (status == 'completed' or deadline_checkpoint or measured_threat or rotation):
             raise RouteError('Mission did not complete; original result retained without retry.')
         return result
+
+    def protect_failed_exit():
+        """One fresh observation and one existing inventory pause, within the original clock only."""
+        protection = dict(kind='route-failure-inventory-protection-v1', status='notAttempted',
+            protectionVerified=False, originalStatus=state['status'], originalReason=state.get('reason'),
+            originalRecordCount=len(state['records']), startedAt=int(clock_ms()), maximumMilliseconds=8000)
+        state['exitProtection'] = protection
+        try:
+            if pilot.stopped() or state['pending'] is not None or pilot.pending is not None:
+                protection['reason'] = 'STOP or pending input prevents exit protection.'
+                return
+            if monotonic() >= deadline:
+                protection['reason'] = 'Original route deadline already elapsed.'
+                return
+            prior_inputs = [r['request'] for r in state['records'] if r['request']['mission'] != 'observe']
+            if prior_inputs and prior_inputs[-1].get('step') == 'worldInventory':
+                protection['reason'] = 'Prior inventory preparation is not repeated.'
+                return
+            source = pilot.current()
+            if not positive_parking_field(source, pilot.session, expected_uid):
+                protection['reason'] = 'No positively recognized same-account living field.'
+                return
+            pilot._owner(source['frameId'], idle=True)
+            park_deadline = min(deadline, monotonic() + 8)
+            protection['status'] = 'observing'
+            save()
+            dispatch('observe', source, {}, observation_deadline=park_deadline)
+            source = pilot.current()
+            require_fresh_source(source, pilot.session, clock_ms())
+            if (pilot.stopped() or monotonic() >= park_deadline
+                    or not positive_parking_field(source, pilot.session, expected_uid)):
+                raise RouteError('Refreshed field or original clock does not permit an inventory pause.')
+            pilot._owner(source['frameId'], idle=True)
+            protection.update(status='pausing', sourceFrameId=source['frameId'])
+            save()
+            result = dispatch('questStep', source, dict(step='worldInventory'), observation_deadline=park_deadline)
+            terminal = pilot.current()
+            require_fresh_source(terminal, pilot.session, clock_ms())
+            if (not isinstance(result, dict) or result.get('pausedInventory') is not True
+                    or not source_account_matches(terminal, expected_uid) or not pilot.inventory_ready(terminal)):
+                raise RouteError('Exit protection has no fresh verified inventory terminal.')
+            pilot._owner(terminal['frameId'], idle=True)
+            protection.update(status='protected', protectionVerified=True, terminalFrameId=terminal['frameId'])
+        except Exception as error:
+            # Protection may fail independently. Never replace the route outcome or replay a request.
+            protection.update(status='pending' if state['pending'] is not None else 'failed', reason=str(error))
+        finally:
+            protection['requestIds'] = [r['request']['id'] for r in state['records'][protection['originalRecordCount']:]]
+            protection['finishedAt'] = int(clock_ms())
 
     try:
         while monotonic() < deadline:
@@ -988,6 +1054,8 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
     except (OSError, ValueError, RuntimeError) as error:
         state.update(status='pending' if state['pending'] is not None else 'stopped', reason=str(error))
     finally:
+        if state['status'] in ('waiting', 'stopped'):
+            protect_failed_exit()
         state['finishedAt'] = int(clock_ms())
         save()
     return state

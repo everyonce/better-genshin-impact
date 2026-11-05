@@ -1232,6 +1232,174 @@ class RouteStartNearTests(unittest.TestCase):
                 route_tool.require_start_near(value, 'route-session', '693306810', self.route['startNear'], self.clock.milliseconds())
 
 
+class ParkingReplayPilot(ReplayPilot):
+    """Exercise the real controller exit path with explicit idle-owner and receipt boundaries."""
+    def __init__(self, clock, script=(), source=None):
+        super().__init__(clock, script, source)
+        self.owner_error = None
+        self.after_observe = None
+        self.observations = 0
+        self.deadlines = []
+
+    def _owner(self, frame=None, *, idle=False):
+        """A fresh owned idle frame is required before any protection request."""
+        if self.owner_error:
+            raise route_tool.RouteError(self.owner_error)
+        if idle and (self.pending is not None or frame != self.source['frameId']):
+            raise route_tool.RouteError('Active request or mismatched frame')
+        return dict(scriptSession=self.session, activeRequestId=None, serviceOwnsPilot=True)
+
+    def execute(self, mission, source, fields, deadline, save_pending):
+        """Use the existing receipt replay and expose only passive source changes."""
+        self.deadlines.append(deadline)
+        outcome = super().execute(mission, source, fields, deadline, save_pending)
+        if mission == 'observe':
+            self.observations += 1
+            if self.after_observe:
+                self.after_observe(self)
+                outcome['observation'] = copy.deepcopy(self.source)
+        return outcome
+
+
+class RouteFailureProtectionTests(unittest.TestCase):
+    """Keep failed/waiting route status while qualifying one bounded inventory park."""
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.clock = ControllerClock()
+        self.progress = Path(self.temp.name) / 'progress.json'
+        self.route = dict(objective='Go to Mondstadt', waypoints=[dict(map='Teyvat', x=-1170, y=2208)])
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def park(self, **changes):
+        """Provide a settled existing worldInventory outcome without a simulated raw-key API."""
+        return dict(mission='questStep', source=controller_scene('inventory'),
+                    result=dict(pausedInventory=True), **changes)
+
+    def run_route(self, pilot, **options):
+        """Execute production controller logic on its original clock."""
+        return route_tool.run_controller(pilot, self.route, self.progress, '693306810',
+            monotonic=self.clock.monotonic, clock_ms=self.clock.milliseconds, emit=lambda _: None, **options)
+
+    def waiting(self, script=()):
+        """A live field with an unapproved objective creates a normal passive waiting outcome."""
+        return ParkingReplayPilot(self.clock, script, controller_scene(objective='Other quest'))
+
+    def test_waiting_field_parks_once_and_keeps_original_outcome(self):
+        pilot = self.waiting([self.park()])
+        report = self.run_route(pilot, deadline_ms=10000)
+        protection = report['exitProtection']
+        self.assertEqual(report['status'], 'waiting')
+        self.assertEqual(report['reason'], protection['originalReason'])
+        self.assertEqual(report['nextWaypointIndex'], 0)
+        self.assertTrue(protection['protectionVerified'])
+        self.assertEqual(protection['originalRecordCount'], 1)
+        self.assertEqual([r['mission'] for r in pilot.calls], ['observe', 'observe', 'questStep'])
+        self.assertEqual(pilot.calls[-1]['step'], 'worldInventory')
+        self.assertEqual(protection['requestIds'], [r['id'] for r in pilot.calls[1:]])
+        self.assertEqual(pilot.deadlines[1], pilot.deadlines[2])
+        self.assertLessEqual(pilot.deadlines[1], pilot.deadlines[0])
+        self.assertLessEqual(pilot.deadlines[1], 108.1)
+        self.assertEqual(read_json(self.progress), report)
+
+    def test_settled_failure_keeps_its_original_receipt_and_reason(self):
+        failed = dict(mission='navigation', status='stopped', result=dict(status='stopped', reason='Obstacle', nextWaypointIndex=0))
+        pilot = ParkingReplayPilot(self.clock, [failed, self.park()], controller_scene(objective='Go to Mondstadt'))
+        report = self.run_route(pilot)
+        self.assertEqual(report['status'], 'stopped')
+        self.assertIn('Mission did not complete', report['reason'])
+        self.assertEqual(report['records'][1]['receipt']['status'], 'stopped')
+        self.assertTrue(report['exitProtection']['protectionVerified'])
+        self.assertEqual([r.get('step') for r in pilot.calls if r['mission'] == 'questStep'], ['worldInventory'])
+
+    def test_stop_pending_unknown_owner_ui_and_elapsed_clock_have_no_exit_input(self):
+        for case in ('stop', 'pending', 'active', 'foreign_owner', 'foreign_uid', 'unknown_ui', 'elapsed'):
+            with self.subTest(case=case):
+                self.progress = Path(self.temp.name) / (case + '.json')
+                pilot = self.waiting()
+                if case == 'active':
+                    pilot.owner_error = 'Active request'
+                if case == 'foreign_owner':
+                    pilot.owner_error = 'Foreign owner'
+                if case == 'foreign_uid':
+                    pilot.source['ocr'][0]['text'] = 'UID: 123456789'
+                if case == 'unknown_ui':
+                    pilot.source['hud']['dialogueReady'] = True
+                def mutate(p):
+                    """Change only the declared failure boundary after its ordinary passive frame."""
+                    if case == 'stop':
+                        p.stop = True
+                    elif case == 'pending':
+                        p.pending = dict(id='unresolved')
+                    elif case == 'elapsed':
+                        self.clock.advance(91)
+                pilot.after_observe = mutate
+                report = self.run_route(pilot)
+                self.assertFalse(report.get('exitProtection', {}).get('protectionVerified', False))
+                self.assertEqual([r['mission'] for r in pilot.calls], ['observe'])
+
+    def test_bad_refreshed_field_or_stop_never_sends_B(self):
+        for case in ('foreign_uid', 'unknown_ui', 'stale', 'stop', 'active', 'budget'):
+            with self.subTest(case=case):
+                self.progress = Path(self.temp.name) / (case + '.json')
+                pilot = self.waiting()
+                def changed(p):
+                    """The one exit refresh may remove authority but cannot renew it artificially."""
+                    if p.observations != 2:
+                        return
+                    if case == 'foreign_uid':
+                        p.source['ocr'][0]['text'] = 'UID: 123456789'
+                    elif case == 'unknown_ui':
+                        p.source['hud']['world'] = False
+                    elif case == 'stale':
+                        p.source['timestamp'] -= 1001
+                    elif case == 'active':
+                        p.owner_error = 'Active request appeared during refresh'
+                    elif case == 'budget':
+                        self.clock.advance(8)
+                        p.source['timestamp'] = self.clock.milliseconds()
+                    else:
+                        p.stop = True
+                pilot.after_observe = changed
+                report = self.run_route(pilot)
+                self.assertEqual(report['status'], 'waiting')
+                self.assertFalse(report['exitProtection']['protectionVerified'])
+                self.assertEqual([r['mission'] for r in pilot.calls], ['observe', 'observe'])
+
+    def test_failed_or_pending_pause_is_never_repeated(self):
+        for pending in (False, True):
+            with self.subTest(pending=pending):
+                self.progress = Path(self.temp.name) / (str(pending) + '.json')
+                item = self.park()
+                item.update(pending=pending, result=dict(pausedInventory=False))
+                pilot = self.waiting([item])
+                report = self.run_route(pilot)
+                self.assertEqual(report['status'], 'waiting')
+                self.assertFalse(report['exitProtection']['protectionVerified'])
+                self.assertEqual(len([r for r in pilot.calls if r['mission'] == 'questStep']), 1)
+                self.assertEqual(report['pending'] is not None, pending)
+
+    def test_previous_inventory_preparation_is_not_retried(self):
+        source = controller_scene(enemies=True)
+        source['hud']['objectives'] = []
+        self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
+        pilot = ParkingReplayPilot(self.clock, [dict(mission='questStep', status='stopped',
+            result=dict(pausedInventory=False))], source)
+        report = self.run_route(pilot, allow_field_combat=True)
+        self.assertEqual(report['status'], 'stopped')
+        self.assertIn('not repeated', report['exitProtection']['reason'])
+        self.assertEqual([r['mission'] for r in pilot.calls], ['observe', 'questStep'])
+
+    def test_arrived_route_has_no_exit_protection_or_extra_request(self):
+        pilot = ParkingReplayPilot(self.clock, [dict(mission='navigation', result=dict(status='arrived', nextWaypointIndex=1))],
+            controller_scene(objective='Go to Mondstadt'))
+        report = self.run_route(pilot)
+        self.assertEqual(report['status'], 'arrived')
+        self.assertNotIn('exitProtection', report)
+        self.assertEqual([r['mission'] for r in pilot.calls], ['observe', 'navigation'])
+
+
 if __name__ == '__main__':
     unittest.main()
 

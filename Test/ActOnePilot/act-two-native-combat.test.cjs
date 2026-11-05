@@ -125,3 +125,42 @@ test('local camera ownership disables the native seek loop and its final camera 
 });
 
 test('ambush post-native targets reuse acquisition vertical bounds only in the verified camp',()=>{const o=frame();o.map={map:'Teyvat',x:-1220,y:2315};o.hud.health={current:2635,max:2635};o.hud.objectives=['Defeat theattacking monsters'];o.hud.enemyBars[0].y=167.5;assert.equal(native.targets(o).length,1);assert.equal(native.encounter(o,1000,'test',()=>true,true),true);o.map.x=-1415;assert.equal(native.targets(o).length,0);o.map.x=-1220;o.hud.objectives=['Other quest'];assert.equal(native.targets(o).length,0);});
+
+// The verified 4015-HP Kaeya baseline opts in only to ordinary single-target combat.
+test('ordinary native combat accepts numeric healthy 4015 Kaeya at the original 85 percent floor',()=>{
+ for(const current of [4015,3413]){
+  const o=frame();o.hud.health={current,max:4015};
+  assert.equal(native.encounter(o,1000,'test',()=>true),true);
+ }
+});
+test('ordinary 4015 entry rejects invalid or insufficient numeric health',()=>{
+ for(const health of [{current:3412,max:4015},{current:0,max:4015},{current:-1,max:4015},
+  {current:4016,max:4015},{current:'4015',max:4015},{current:true,max:4015},
+  {current:NaN,max:4015},{current:Infinity,max:4015},{current:4015,max:'4015'},
+  {current:4015,max:Infinity},{current:4015,max:0},{current:4015,max:2764},{}]){
+  const o=frame();o.hud.health=health;
+  assert.equal(native.encounter(o,1000,'test',()=>true),false,JSON.stringify(health));
+ }
+});
+test('4015 entry retains account session freshness ground and single-target requirements',()=>{
+ const valid=()=>{const o=frame();o.hud.health={current:4015,max:4015};return o;};
+ assert.equal(native.encounter(valid(),1000,'test',()=>false),false);
+ assert.equal(native.encounter(valid(),1000,'foreign',()=>true),false);
+ assert.equal(native.encounter(valid(),2001,'test',()=>true),false);
+ for(const change of [o=>o.hud.groundControls=false,o=>o.hud.climbing=true,
+  o=>o.hud.bigMap=true,o=>o.map.map='Other',o=>o.map.x=-1601,
+  o=>o.hud.enemyBars=[],o=>o.hud.enemyBars.push({...o.hud.enemyBars[0]})]){
+  const o=valid();change(o);assert.equal(native.encounter(o,1000,'test',()=>true),false);
+ }
+});
+test('4015 ordinary admission does not widen legacy group probe or finishing field profiles',()=>{
+ for(const max of [2313,2635,4015]){
+  const o=frame();o.hud.health={current:max,max};o.map.x=-1125;o.map.y=2230;
+  o.hud.objectives=['(0/3)','Quest area reached'];
+  assert.equal(native.encounter(o,1000,'test',()=>true,false),true);
+  assert.equal(native.encounter(o,1000,'test',()=>true,true),max!==4015);
+  assert.equal(native.field(o,1000,'test',()=>true),max!==4015);
+  o.map.x=-1265.917;o.map.y=1928.381;o.hud.enemyBars=[];
+  assert.equal(native.deadlineProbe(o,1000,'test',()=>true),max!==4015);
+ }
+});

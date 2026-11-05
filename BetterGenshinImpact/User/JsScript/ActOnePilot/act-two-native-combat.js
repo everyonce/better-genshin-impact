@@ -38,9 +38,11 @@
   p.FinishDetectConfig.RotateFindEnemyEnabled=false;
   return p;
  }
- function field(o,now,session,original){
+ // Only ordinary single-target entry admits the verified 4015-HP Kaeya baseline.
+ // Group, deadline-probe and receipt-bound finishing paths keep their existing profiles.
+ function field(o,now,session,original,ordinary){
   const h=o&&o.hud,p=o&&o.map,hp=h&&h.health;
-  return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&original(o)&&h&&h.world===true&&h.groundControls===true&&!h.climbing&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.bigMap&&!h.journal&&!h.tutorialStep&&hp&&[2313,2635].includes(hp.max)&&hp.current>=hp.max*0.85&&hp.current<=hp.max&&p&&p.map==='Teyvat'&&p.x>=-1600&&p.x<=-700&&p.y>=1450&&p.y<=2700);
+  return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&original(o)&&h&&h.world===true&&h.groundControls===true&&!h.climbing&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.bigMap&&!h.journal&&!h.tutorialStep&&hp&&Number.isFinite(hp.current)&&Number.isFinite(hp.max)&&([2313,2635].includes(hp.max)||(ordinary===true&&hp.max===4015))&&hp.current>0&&hp.current>=hp.max*0.85&&hp.current<=hp.max&&p&&p.map==='Teyvat'&&p.x>=-1600&&p.x<=-700&&p.y>=1450&&p.y<=2700);
  }
  function deadlineProbe(o,now,session,original){return field(o,now,session,original)&&o.hud.health.current===o.hud.health.max&&(o.hud.enemyBars||[]).length===0&&Math.hypot(o.map.x+1265.917,o.map.y-1928.381)<=8;}
  function targets(o){
@@ -52,7 +54,7 @@
  function thirdCamp(m){return !!m&&Math.hypot(m.x+1220,m.y-2315)<=35;}
  function cyrusArea(m){return !!m&&(Math.hypot(m.x+1125,m.y-2230)<=50||Math.hypot(m.x+1415,m.y-2395)<=40||thirdCamp(m));}
  function encounter(o,now,session,original,group){
-  if(!field(o,now,session,original))return false;
+  if(!field(o,now,session,original,!group))return false;
   const n=targets(o).length,h=o.hud;
   if(!group)return n===1;
   const ambush=thirdCamp(o.map)&&ambushObjective(h.objectives);

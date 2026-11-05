@@ -370,6 +370,38 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual(source.read_bytes(), original)
         boundary.assert_called_once()
 
+    def test_longer_leg_reaches_real_worker_with_bounded_broker_and_cleanup_windows(self):
+        f = Fixture(self.root)
+        original_execute = f.execute
+        argv_and_timeout = []
+        def capture(argv, output, timeout):
+            argv_and_timeout.append((argv, timeout))
+            return original_execute(argv, output, timeout)
+        f.execute = capture
+        def broker(root, argv, work_dir, python_exe, timeout, job_dir, output_limit):
+            self.assertEqual(timeout, 251)  # Integral seconds rounded up, plus the existing 20+80.
+            f.config = launcher.read(argv[-2])
+            worker = f.worker()
+            return dict(returnCode=worker['exitCode'], timedOut=False)
+        args, deps = self.console(f, broker)
+        self.assertEqual(args.deadline_ms, 90000)
+        args.deadline_ms = 150001
+        self.assertEqual(launcher.run(args, expected_owner=f.owner, dependencies=deps)['status'], 'arrived')
+        argv, timeout = argv_and_timeout[0]
+        self.assertEqual(argv[argv.index('--deadline-ms')+1], '150001')
+        self.assertAlmostEqual(timeout, 170.001)
+
+    def test_long_plan_exceeding_the_one_hour_broker_limit_creates_no_snapshot(self):
+        f = Fixture(self.root)
+        broker = mock.Mock()
+        args, deps = self.console(f, broker)
+        args.deadline_ms = 300000
+        args.route = args.route * 12
+        with self.assertRaisesRegex(RuntimeError, 'one-hour'):
+            launcher.run(args, expected_owner=f.owner, dependencies=deps)
+        self.assertFalse((args.progress.parent / (args.progress.stem + '.rdp')).exists())
+        broker.assert_not_called()
+
     def test_console_expected_owner_mismatch_refuses_before_broker(self):
         f = Fixture(self.root)
         boundary = mock.Mock()

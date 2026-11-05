@@ -875,6 +875,43 @@ class SupervisedRouteControllerTests(unittest.TestCase):
         combat_index = next(i for i,r in enumerate(pilot.calls) if r.get('step') == 'actTwoFieldCombat')
         self.assertEqual([r['mission'] for r in pilot.calls[combat_index + 1:]], ['observe', 'navigation'])
 
+    def test_extended_controller_leg_bounds_each_native_request_and_keeps_legacy_limit(self):
+        self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
+        clear = controller_scene(objective='')
+        enemy = controller_scene(objective='', enemies=True)
+        inv = controller_scene('inventory')
+        pause = dict(mission='questStep', source=inv, seconds=6, result=dict(pausedInventory=True))
+        proof = dict(verified=True, kind='inventory', session='route-session')
+        interrupted = dict(mission='navigation', seconds=40, status='failed', source=inv, result=dict(
+            status='stopped', reason='Enemy observed during exploration', nextWaypointIndex=1,
+            pauseVerified=True, pauseProof=proof))
+        combat = dict(mission='questStep', status='stopped', source=inv, seconds=33, result=dict(nativeGroup=False,
+            nativeAttempted=True, nativeReturned=True, beforeFrameId=19, afterFrameId=23,
+            pauseVerified=True, pauseProof=proof, chunks=[{}]))
+        pilot = ReplayPilot(self.clock, [pause, interrupted, dict(mission='questStep', source=enemy, seconds=10,
+            result=dict(worldVisible=True)), pause, combat, self.arrival(2, inv)], source=clear)
+        pilot.archived_frame = mock.Mock()
+        budget = []
+        execute = pilot.execute
+        def bounded(mission, source, fields, deadline, save_pending):
+            budget.append(deadline - self.clock.monotonic())
+            return execute(mission, source, fields, deadline, save_pending)
+        pilot.execute = bounded
+        before = self.clock.monotonic()
+        with mock.patch.object(route_tool, 'field_combat_feedback', return_value=dict(minimumDefeated=1, measuredClear=True)):
+            report = self.run_controller(pilot, allow_field_combat=True, deadline_ms=150000)
+        self.assertEqual((report['status'], report['originalDeadlineMs']), ('arrived', 150000))
+        self.assertGreater(self.clock.monotonic() - before, 90)
+        self.assertLessEqual(max(budget), 90)
+        self.assertEqual([r['deadlineMs'] for r in pilot.calls if r['mission']=='navigation'], [45000,45000])
+        self.assertEqual([r['deadlineMs'] for r in pilot.calls if r.get('step')=='actTwoFieldCombat'], [35000])
+        with self.assertRaises(route_tool.RouteError):
+            self.run_controller(pilot, deadline_ms=300001)
+        with self.assertRaises(route_tool.RouteError):
+            route_tool.run_route(self.progress.parent, self.route, pilot.session, deadline_ms=150000)
+        self.assertEqual(route_tool.run_controller.__kwdefaults__['deadline_ms'], 90000)
+        self.assertEqual(route_tool.run_route.__kwdefaults__['deadline_ms'], 90000)
+
     def test_post_defeat_arrow_requests_only_one_camera_turn_and_rechecks_ground(self):
         self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
         enemy, inv = controller_scene(objective='', enemies=True), controller_scene('inventory')

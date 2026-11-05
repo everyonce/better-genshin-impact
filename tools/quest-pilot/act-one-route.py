@@ -12,7 +12,8 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 APP = Path(os.environ.get('BETTERGI_PILOT_APP_DIR', REPO / 'artifacts/release-r8/BetterGI-English-win-x64'))
 ROOT = APP / 'User/JsScript/ActOnePilot'
-MAX_DEADLINE_MS = 90_000
+MAX_DEADLINE_MS = 90_000  # Legacy route limit and default for both CLI modes.
+MAX_CONTROLLER_DEADLINE_MS = 300_000
 MAX_SEGMENTS = 3
 EXPLORATION_OBJECTIVE = 'Explore for Adventure Rank'
 # Each name resolves to an existing native teleport that verifies its own destination.
@@ -922,7 +923,7 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
     """
     objective, points = validate_route(route)
     pilot.validate_route(route, deadline_ms)
-    if (type(deadline_ms) is not int or not 1000 <= deadline_ms <= MAX_DEADLINE_MS
+    if (type(deadline_ms) is not int or not 1000 <= deadline_ms <= MAX_CONTROLLER_DEADLINE_MS
             or type(max_segments) is not int or not 1 <= max_segments <= MAX_SEGMENTS
             or not isinstance(expected_uid, str) or re.fullmatch(r'[0-9]{9,10}', expected_uid) is None
             or len(continuation_objectives) > 4
@@ -988,7 +989,10 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
                  observation_deadline=None):
         """Keep the original request/receipt result, including a failed native handoff."""
         options = {} if expected_previous is None else dict(expected_previous=expected_previous)
-        active_deadline = deadline if observation_deadline is None else min(deadline, observation_deadline)
+        # More time for the leg permits more settled phases, never a longer single request.
+        active_deadline = min(deadline, monotonic() + MAX_DEADLINE_MS / 1000)
+        if observation_deadline is not None:
+            active_deadline = min(active_deadline, observation_deadline)
         outcome = pilot.execute(mission, source, fields, active_deadline, pending, **options)
         if expected_previous is not None:
             state['continuationSlotMatched'] = outcome.get('predecessorMatched') is True

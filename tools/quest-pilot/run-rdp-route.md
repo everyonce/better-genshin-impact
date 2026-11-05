@@ -10,7 +10,7 @@ python -B tools/quest-pilot/run-rdp-route.py `
   --allow-field-combat
 ```
 
-An optional `teleportTo` field in a route JSON selects `temple-of-the-lion`, `mondstadt-gate`, `mondstadt-city`, or `starfell-lake`. BetterGI opens the map when needed and verifies arrival before walking the waypoints. Travel uses the same route deadline. A route with `startNear` checks its starting position after teleporting.
+An optional `teleportTo` field in a route JSON selects `temple-of-the-lion`, `mondstadt-gate`, `mondstadt-city`, or `starfell-lake`. BetterGI opens the map when needed and verifies arrival before walking the waypoints. Travel uses the same route deadline. Each controller leg defaults to 90 seconds. Set `--deadline-ms 150000` for a 150-second leg, up to 300 seconds. The controller shares this time across teleport, combat, and navigation. Each native request keeps its own limit, and the combined plan must fit the one-hour RDP job including setup and cleanup. A route with `startNear` checks its starting position after teleporting.
 
 The launcher discovers the connected child and verifies the running game against BetterGI’s configured executable, Windows session, window, and process start time. Use `--process-id PID` to select a child when several are connected. It uses Node from the console PATH. Use `--node PATH` to select an installed `node.exe`.
 

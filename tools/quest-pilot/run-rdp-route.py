@@ -416,7 +416,8 @@ def parse_args(argv=None):
     parser.add_argument('--allow-dialogue', action='store_true')
     parser.add_argument('--continue-objective', action='append', default=[])
     parser.add_argument('--stop-file', action='append', type=Path, default=[])
-    parser.add_argument('--deadline-ms', type=int, default=90000)
+    parser.add_argument('--deadline-ms', type=int, default=90000,
+                        help='Per controller leg in milliseconds (1000–300000, default 90000).')
     parser.add_argument('--max-segments', type=int, default=3)
     parser.add_argument('--process-id', type=int, help='Disambiguate an already running child; never starts an application')
     parser.add_argument('--node', type=Path, help='Existing Node executable; defaults to Node on the console PATH')
@@ -447,7 +448,7 @@ def leg_bytes(leg):
     return json.dumps(leg, ensure_ascii=False, separators=(',', ':'), allow_nan=False).encode('utf-8')
 
 
-def snapshot_routes(sources, output, route_cli):
+def snapshot_routes(sources, output, route_cli, *, broker_leg_limit=20):
     """Validate every input and the total leg count before creating evidence or starting the broker."""
     routes, originals, files = [], [], []
     for source_number, source in enumerate(sources, 1):
@@ -471,6 +472,7 @@ def snapshot_routes(sources, output, route_cli):
                 record.update(sourceSnapshot=str(saved), firstWaypoint=index * 4)
             files.append((path, payload))
             routes.append(record)
+    require(len(routes) <= broker_leg_limit, 'Combined route deadlines exceed the one-hour RDP command limit.')
     output.mkdir(parents=True)
     for path, data in files:
         path.write_bytes(data)
@@ -506,7 +508,7 @@ def verify_split_routes(config):
 def run(args, *, expected_owner=None, dependencies=None):
     """Console API also used by an opt-in caller retaining its original authenticated owner pair."""
     rdp, _, route_cli = helpers() if dependencies is None else dependencies
-    require(1 <= len(args.route) <= 20 and 1000 <= args.deadline_ms <= route_cli.MAX_DEADLINE_MS
+    require(1 <= len(args.route) <= 20 and 1000 <= args.deadline_ms <= route_cli.MAX_CONTROLLER_DEADLINE_MS
             and 1 <= args.max_segments <= route_cli.MAX_SEGMENTS and re.fullmatch(r'[0-9]{9,10}', args.expected_uid),
             'Use one to twenty routes, the canonical finite limits, and an explicit numeric account.')
     progress = args.progress.resolve()
@@ -518,7 +520,11 @@ def run(args, *, expected_owner=None, dependencies=None):
     require(node and Path(node).is_file() and Path(node).name.lower() == 'node.exe',
             'Provide an installed node.exe with --node.')
     output = progress.parent / (progress.stem + '.rdp')
-    routes, originals = snapshot_routes(args.route, output, route_cli)
+    # Round up for the broker's integral timeout and retain the worker's existing cleanup allowances.
+    leg_seconds = (args.deadline_ms + 999) // 1000 + 20
+    setup_and_cleanup_seconds = 80
+    broker_leg_limit = (3600 - setup_and_cleanup_seconds) // leg_seconds
+    routes, originals = snapshot_routes(args.route, output, route_cli, broker_leg_limit=broker_leg_limit)
     config = dict(version=1, launchId=uuid.uuid4().hex, owner=owner, output=str(output), progress=str(progress),
                   routes=routes, splitRoutes=originals, expectedUid=args.expected_uid, node=str(Path(node).resolve()),
                   allowFieldCombat=args.allow_field_combat, allowDialogue=args.allow_dialogue,
@@ -533,7 +539,7 @@ def run(args, *, expected_owner=None, dependencies=None):
     report = dict(status='failed', exitCode=2, progress=str(progress), workerResult=str(output / 'worker-result.json'),
                   launcherResult=str(output / 'launcher-result.json'), pilotRetired=False, owner=owner)
     try:
-        budget = 80 + len(routes) * (args.deadline_ms // 1000 + 20)
+        budget = setup_and_cleanup_seconds + len(routes) * leg_seconds
         broker = rdp.run_command(owner['root'], argv, str(REPO), sys.executable, budget, str(output / 'jobs'), 1024 * 1024)
         save(output / 'broker-result.json', broker)
         worker = read(output / 'worker-result.json')

@@ -1,0 +1,16 @@
+{
+  "objective": "Explore for Adventure Rank",
+  "startNear": {
+    "map": "Teyvat",
+    "x": -882.1455078125,
+    "y": 2262.399658203125,
+    "radius": 6
+  },
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -911.3125,
+      "y": 2240.5625
+    }
+  ]
+}

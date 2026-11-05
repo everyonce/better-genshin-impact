@@ -1,0 +1,17 @@
+{
+  "objective": "Explore for Adventure Rank",
+  "startNear": {
+    "map": "Teyvat",
+    "x": -911.3125,
+    "y": 2240.5625,
+    "radius": 6
+  },
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -913.51,
+      "y": 2232.67
+    }
+  ],
+  "talkTo": "Katheryne"
+}

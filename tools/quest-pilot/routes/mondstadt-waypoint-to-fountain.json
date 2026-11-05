@@ -1,0 +1,19 @@
+{
+  "objective": "Explore for Adventure Rank",
+  "teleportTo": "mondstadt-city",
+  "startNear": {
+    "map": "Teyvat",
+    "x": -867.6884765625,
+    "y": 2281.365966796875,
+    "radius": 10
+  },
+  "sourceSha256": "f6c3c2e3c989ff83331fd9e9c038ae85591745f8c4d78fdfbafc342df3b4786e",
+  "provenance": "Teleport and walking points from the packaged Mondstadt Adventurers Guild path.",
+  "waypoints": [
+    {
+      "map": "Teyvat",
+      "x": -882.1455078125,
+      "y": 2262.399658203125
+    }
+  ]
+}

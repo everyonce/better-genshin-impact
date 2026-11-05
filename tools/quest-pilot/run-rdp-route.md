@@ -49,6 +49,18 @@ To close an already-open named dialogue menu, set `"resumeNamedDialogue": true` 
 
 The included `routes/mondstadt-city-to-katheryne.json` follows BetterGI's packaged city path to the guild counter. Run it with `--deadline-ms 150000 --save-encounter-frames` to allow time for travel and retain the greeting and farewell captures.
 
+To run the four-leg Mondstadt circuit, enter your game UID when prompted. The route teleports to the city waypoint, walks past the fountain, speaks to Katheryne, and returns to the guild street.
+
+```powershell
+python -B tools/quest-pilot/run-rdp-route.py `
+  --route tools/quest-pilot/routes/mondstadt-waypoint-to-fountain.json `
+  --route tools/quest-pilot/routes/mondstadt-fountain-to-guild-street.json `
+  --route tools/quest-pilot/routes/mondstadt-guild-street-to-katheryne.json `
+  --route tools/quest-pilot/routes/mondstadt-katheryne-to-guild-street.json `
+  --gpu-adviser --continuous --allow-dialogue --deadline-ms 180000 `
+  --progress "artifacts/mondstadt-guild-$(Get-Date -Format yyyyMMdd-HHmmss).json" --expected-uid (Read-Host "Genshin UID")
+```
+
 For model comparisons, pass `--save-encounter-frames` to the public launcher. During each leg, the worker watches that leg's progress for settled combat and named NPC requests. It retains original PNG/JSON pairs for combat before and after frames, verified Character EXP rewards, and named NPC selection, greeting and return to the world. The limit is 16 unique frames and 32 MiB of paired files across the whole launch. The capture uses disk files only.
 
 Open `encounter-evidence.json` beside `worker-result.json` to find frame paths, roles, session and frame IDs, request IDs, and SHA-256 digests of both files and their immutable native receipt. A sample can support several roles. The worker verifies the receipt, capture stamp, screenshot path and PNG integrity before publishing each pair. Expired, mismatched and over-budget frames are listed under `issues` (up to 16 diagnostic entries). The canonical progress and exit code continue to describe the gameplay result, including failed legs. Run `python -B tools/quest-pilot/test_encounter_evidence.py -v` for the capture regressions.

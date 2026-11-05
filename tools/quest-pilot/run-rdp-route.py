@@ -30,6 +30,9 @@ def load(name, path):
     return module
 
 
+FILE_PROTOCOL = load('_rdp_route_files', Path(__file__).with_name('act-one-command.py'))
+
+
 def helpers():
     """Reuse the established authenticated transport, broker, and route implementation."""
     folder = REPO / 'tools/rdp-automation'
@@ -50,7 +53,7 @@ def save(path, value):
     path = Path(path)
     temporary = path.with_name(path.name + '.tmp')
     temporary.write_text(json.dumps(value, indent=2, allow_nan=False), encoding='utf-8')
-    os.replace(temporary, path)
+    FILE_PROTOCOL.replace_pending(temporary, path)
 
 
 def same_owner(actual, expected):
@@ -316,8 +319,7 @@ def run_worker(config, *, control, rdp, execute=execute_route, game_probe=foregr
         if config.get('saveEncounterFrames'):
             try:
                 evidence = load('_rdp_encounter_evidence', Path(__file__).with_name('encounter_evidence.py'))
-                command = load('_rdp_encounter_command', Path(__file__).with_name('act-one-command.py'))
-                archive = evidence.EncounterArchive(pilot, output, command, save)
+                archive = evidence.EncounterArchive(pilot, output, FILE_PROTOCOL, save)
                 state['encounterEvidence'] = archive.summary
             except Exception as exc:
                 state['encounterEvidence'] = dict(error=str(exc))

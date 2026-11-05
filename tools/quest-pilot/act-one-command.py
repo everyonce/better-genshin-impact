@@ -47,6 +47,11 @@ def validate_navigation_plan(route, deadline_ms):
 def atomic(path, value, *, before_replace=None):
     pending = path.with_suffix('.pending.json')
     pending.write_text(json.dumps(value), encoding='utf-8')
+    replace_pending(pending, path, before_replace=before_replace)
+
+
+def replace_pending(pending, path, *, before_replace=None):
+    """Publish existing bytes after a brief Windows file-sharing conflict."""
     # Retry only the same atomic replacement; never rebuild or resubmit a request.
     deadline = time.monotonic() + 1.0
     retry_error = None

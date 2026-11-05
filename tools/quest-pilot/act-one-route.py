@@ -33,10 +33,23 @@ def read(path):
     return json.loads(path.read_text(encoding='utf-8-sig'))
 
 
+def load_command(app):
+    """Load the command protocol with the pinned application directory."""
+    script = Path(__file__).with_name('act-one-command.py')
+    spec = importlib.util.spec_from_file_location('_route_guarded_command', script)
+    command = importlib.util.module_from_spec(spec)
+    command._VERIFIED_APP_DIRECTORY = str(app)
+    exec(compile(script.read_bytes(), str(script), 'exec'), command.__dict__)
+    return command
+
+
+FILE_PROTOCOL = load_command(APP)
+
+
 def atomic(path, value):
     pending = path.with_suffix('.pending.json')
     pending.write_text(json.dumps(value, separators=(',', ':')), encoding='utf-8')
-    os.replace(pending, path)
+    FILE_PROTOCOL.replace_pending(pending, path)
 
 
 def ensure_no_outstanding_request(root):
@@ -208,11 +221,7 @@ class GuardedPilot:
 
     def __init__(self, app, session, process_id, windows_session_id, stop_paths=()):
         """Pin the already-running native lifetime before acquiring a local lease."""
-        script = Path(__file__).with_name('act-one-command.py')
-        spec = importlib.util.spec_from_file_location('_route_guarded_command', script)
-        self.command = importlib.util.module_from_spec(spec)
-        self.command._VERIFIED_APP_DIRECTORY = str(app)
-        exec(compile(script.read_bytes(), str(script), 'exec'), self.command.__dict__)
+        self.command = load_command(app)
         self.root = Path(app).resolve() / 'User/JsScript/ActOnePilot'
         self.session, self.pid, self.wts = session, process_id, windows_session_id
         self.stop_paths = tuple(Path(p) for p in stop_paths)

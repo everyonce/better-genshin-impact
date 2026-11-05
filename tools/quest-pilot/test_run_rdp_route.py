@@ -119,6 +119,31 @@ class LauncherTests(unittest.TestCase):
     def tearDown(self):
         self.temporary.cleanup()
 
+    def test_progress_writers_retry_same_bytes_while_reader_holds_destination(self):
+        """A transient Windows reader must not abort a completed gameplay action."""
+        route = load(Path(__file__).with_name('act-one-route.py'), '_test_route_files')
+        real_replace = os.replace
+        for writer in (route.atomic, launcher.save):
+            with self.subTest(writer=writer):
+                path = self.root / 'progress.json'
+                path.write_text('{"status":"old"}', encoding='utf-8')
+                attempts = []
+
+                def busy_once(source, target):
+                    attempts.append((source, target, source.read_bytes()))
+                    if len(attempts) == 1:
+                        self.assertEqual(launcher.read(target)['status'], 'old')
+                        error = PermissionError('destination temporarily in use')
+                        error.winerror = 5
+                        raise error
+                    return real_replace(source, target)
+
+                with mock.patch.object(os, 'replace', side_effect=busy_once):
+                    writer(path, {'status': 'arrived'})
+                self.assertEqual(len(attempts), 2)
+                self.assertEqual(attempts[0], attempts[1])
+                self.assertEqual(launcher.read(path), {'status': 'arrived'})
+
     def test_single_leg_owns_start_stop_and_keeps_exact_progress(self):
         f = Fixture(self.root)
         result = f.worker()

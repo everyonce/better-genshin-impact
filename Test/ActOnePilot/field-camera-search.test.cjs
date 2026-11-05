@@ -10,13 +10,28 @@ const id = 'mission-' + '9'.repeat(32);
 const uid = { text: 'UID: 693306810', x: 1710, y: 1050 };
 function rect(x, y, width, height, area) { return {x, y, width, height, area}; }
 
-// OpenCvSharp external contours of the RGB [245,75,82]..[255,98,110] mask in actual 57x49 field crops.
+// OpenCvSharp external contours from the warning-color mask in 57x49 field captures.
 const cases = [
     {frame:25, c:{x:1391.5,y:513.5,width:42,height:8}, shapes:[rect(7,20,42,8,280.5)], side:null},
     {frame:33, c:{x:1431.5,y:659.5,width:15,height:11}, shapes:[rect(20,19,15,9,64.5),rect(22,10,27,27,168)], side:'right'},
     {frame:34, c:{x:1440.5,y:637,width:15,height:10}, shapes:[rect(20,19,15,10,67),rect(23,11,27,27,169.5)], side:'right'},
+    {frame:76, c:{x:1451,y:428.5,width:14,height:9}, shapes:[rect(21,19,14,9,58.5),rect(25,10,26,27,153)], side:'right'},
     {frame:35, c:{x:1767,y:479.5,width:16,height:3}, shapes:[rect(20,22,16,3,24)], side:null},
 ];
+test('sunlit camp and shadow warning pixels both pass the native mask', () => {
+    const ctx=vm.createContext({});
+    vm.runInContext(script,ctx);
+    class Scalar extends Array {}
+    function matches(pixel) {
+        const mat={inRange:(low,high)=>pixel.every((v,i)=>low[i]<=v && v<=high[i])};
+        return ctx.actOneWarningPinkMask(mat,{Scalar});
+    }
+    // BGR samples from the red warning ring in the saved camp/courtyard captures.
+    assert.equal(matches([104,103,255]),true);
+    assert.equal(matches([99,88,255]),true);
+    assert.equal(matches([94,158,126]),false);
+    assert.equal(matches([20,18,235]),false);
+});
 function mirror(value) {
     return {...value, c:{...value.c,x:1920-value.c.x},shapes:value.shapes.map(s=>({...s,x:57-s.x-s.width}))};
 }

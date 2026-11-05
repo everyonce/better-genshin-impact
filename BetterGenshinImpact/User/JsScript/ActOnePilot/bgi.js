@@ -278,6 +278,10 @@ function actOneRequestsGroundObservation(request,inventoryUiOnly,protecting,fram
         request.mission==='questStep'&&request.step==='actTwoFieldCombat'&&
             (protecting||request.entryScene==='world'&&Number.isInteger(request.expectedFrameId)&&frame===request.expectedFrameId+1));
 }
+// The warning-ring pink is slightly brighter on sunlit ground than in shadow (native BGR).
+function actOneWarningPinkMask(mat,C){
+    return mat.inRange(new C.Scalar(82,75,245),new C.Scalar(114,110,255));
+}
 // A warning arrow has an outer pink chevron and a separate diamond on the screen's warning ring.
 function actOneWarningArrow(candidate,shapes){
     var c=candidate;
@@ -3279,7 +3283,7 @@ function createActOneAdapter(sessionId,options) {
         var crop=null,mask=null,C=OpenCvSharp.OpenCvSharp;
         try{
             crop=img.deriveCrop(Math.round(c.x)-28,Math.round(c.y)-24,57,49);
-            mask=crop.srcMat.inRange(new C.Scalar(82,75,245),new C.Scalar(110,98,255));
+            mask=actOneWarningPinkMask(crop.srcMat,C);
             var contours=mask.findContoursAsArray(C.RetrievalModes.External,C.ContourApproximationModes.ApproxSimple);
             var count=contours.length===undefined?contours.Length:contours.length,shapes=[];
             if(!Number.isInteger(count)||count>24)return null;

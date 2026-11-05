@@ -83,24 +83,29 @@ function actTwoIndoorSafe(o,now,session){
     var hint=hp&&hp.current===4015&&hp.max===4015&&(h.objectives||[]).slice(0,2).join('').replace(/[^A-Za-z]/g,'')==='SolvethemysteryGotoKaeyaattheKnightsofFavoniusHQforahint';
     return !!(o&&o.session===session&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&actTwoOriginalAccount(o.ocr)&&h&&h.groundControls&&!h.climbing&&!h.auto&&!h.dialogueReady&&!h.choice&&!h.journal&&!h.bigMap&&!(h.enemyBars||[]).length&&(original||hint));
 }
-// A scaled read can include the UID prefix while full-screen OCR bounds only its digits.
-// Collapse exactly one labelled/bare pair within the fixed UID crop and keep the original labelled row.
+// Collapse two readings of the same printed UID only when their boxes agree in the fixed HUD crop.
 function actOneCanonicalUidRows(rows) {
     var ids=(rows||[]).filter(function(r){return r&&typeof r.text==='string'&&r.x>1600&&r.y>1020&&/^(?:UID)?[: ]*[0-9]{9,10}$/.test(String(r.text||'').trim());});
     if(ids.length!==2)return rows;
     var bare=ids.find(function(r){return /^[0-9]{9,10}$/.test(r.text.trim());});
     var named=ids.find(function(r){return /^UID[: ]+[0-9]{9,10}$/.test(r.text.trim());});
-    if(!bare||!named||named.text.trim().replace(/^UID[: ]+/,'')!==bare.text.trim())return rows;
     function inCrop(r){
         return [r.x,r.y,r.width,r.height].every(Number.isFinite)&&r.width>=60&&r.height>=6&&r.x>=1680&&r.y>=1040&&
             r.x+r.width<=1870&&r.y+r.height<=1080;
     }
-    if(!inCrop(bare)||!inCrop(named))return rows;
-    var prefix=bare.x-named.x,overlap=Math.min(bare.y+bare.height,named.y+named.height)-Math.max(bare.y,named.y);
-    if(prefix<15||prefix>72||Math.abs(bare.x+bare.width-named.x-named.width)>5||
-        overlap<0.75*Math.min(bare.height,named.height)||
-        Math.abs(bare.y+bare.height/2-named.y-named.height/2)>8)return rows;
-    return rows.filter(function(r){return r!==bare;});
+    if(!ids.every(inCrop))return rows;
+    var a=ids[0],b=ids[1],overlap=Math.min(a.y+a.height,b.y+b.height)-Math.max(a.y,b.y);
+    if(Math.abs(a.x+a.width-b.x-b.width)>5||overlap<0.75*Math.min(a.height,b.height)||
+        Math.abs(a.y+a.height/2-b.y-b.height/2)>8)return rows;
+    if(bare&&named&&named.text.trim().replace(/^UID[: ]+/,'')===bare.text.trim()&&
+        bare.x-named.x>=15&&bare.x-named.x<=72)return rows.filter(r=>r!==bare);
+    // The scaled crop may also print the prefix and omit its padding. Require both printed
+    // labels, the same complete digits, nearly identical edges and the two distinct OCR heights.
+    var labels=ids.map(r=>/^UID: *([0-9]{9,10})$/.exec(r.text.trim()));
+    if(!labels[0]||!labels[1]||labels[0][1]!==labels[1][1]||
+        Math.abs(a.x-b.x)>5||Math.min(a.height,b.height)>18||Math.max(a.height,b.height)<1.5*Math.min(a.height,b.height))return rows;
+    var shorter=a.height<b.height?a:b;
+    return rows.filter(r=>r!==shorter);
 }
 function actTwoOriginalAccount(rows) {
     var identities=(actOneCanonicalUidRows(rows)||[]).filter(function(r){return r.x>1600&&r.y>1020&&/^(?:UID)?[: ]*\d{9,10}(?:C?ape)?$/.test(String(r.text||'').trim());});

@@ -690,21 +690,26 @@ def source_account_matches(source, expected_uid):
                 matches.append(row)
     if len(matches) != 2:
         return len(matches) == 1
-    # Old native captures may retain the labelled and bare readings of the same printed digits.
+    # Old native captures may retain a full-screen row and the enlarged crop of the same digits.
     bare = next((r for r in matches if re.fullmatch(r'[0-9]{9,10}', r['text'].strip())), None)
     named = next((r for r in matches if re.fullmatch(r'UID[: ]+[0-9]{9,10}', r['text'].strip())), None)
-    if not bare or not named:
-        return False
     for r in matches:
         if (not all(type(r.get(k)) in (int, float) and math.isfinite(r[k]) for k in ('x','y','width','height'))
                 or r['width'] < 60 or r['height'] < 6 or r['x'] < 1680 or r['y'] < 1040
                 or r['x'] + r['width'] > 1870 or r['y'] + r['height'] > 1080):
             return False
-    overlap = min(bare['y']+bare['height'], named['y']+named['height']) - max(bare['y'], named['y'])
-    return (15 <= bare['x'] - named['x'] <= 72
-            and abs(bare['x']+bare['width'] - named['x']-named['width']) <= 5
-            and overlap >= .75 * min(bare['height'], named['height'])
-            and abs(bare['y']+bare['height']/2 - named['y']-named['height']/2) <= 8)
+    a, b = matches
+    small, large = sorted((a['height'], b['height']))
+    overlap = min(a['y']+a['height'], b['y']+b['height']) - max(a['y'], b['y'])
+    if (abs(a['x']+a['width'] - b['x']-b['width']) > 5 or overlap < .75 * small
+            or abs(a['y']+a['height']/2 - b['y']-b['height']/2) > 8):
+        return False
+    if bare and named:
+        return 15 <= bare['x'] - named['x'] <= 72
+    # Identical digits were verified above. Two prefixed reads may differ only in colon padding.
+    return (all(re.fullmatch(r'UID: *[0-9]{9,10}', r['text'].strip()) for r in matches)
+            and abs(a['x']-b['x']) <= 5
+            and small <= 18 and large >= 1.5 * small)
 
 
 def regional_map_ready(source):

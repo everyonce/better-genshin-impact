@@ -538,6 +538,20 @@ class SupervisedRouteControllerTests(unittest.TestCase):
             self.assertFalse(matches(pair), pair)
         self.assertFalse(matches([bare,named], '987654321'))
 
+    def test_same_printed_prefixed_uid_on_two_ocr_scales(self):
+        # Stationary city frame 36, with dummy digits and original OCR boxes.
+        full = dict(text='UID: 123456789', x=1682, y=1050, width=181, height=27)
+        crop = dict(text='UID:123456789', x=1680+1/3, y=1052+1/3, width=180+1/3, height=12+2/3)
+        def matches(rows):
+            return route_tool.source_account_matches(dict(ocr=rows), '123456789')
+        self.assertTrue(matches([full,crop]))
+        self.assertTrue(matches([crop,full]))
+        self.assertTrue(matches([full,dict(crop,text=full['text'])]))
+        for other in (dict(crop,text='UID:123456780'),dict(crop,x=1691,width=170),
+                      dict(crop,y=1067),dict(crop,height=25),dict(crop,x=1679)):
+            self.assertFalse(matches([full,other]))
+        self.assertFalse(matches([full,crop,dict(full)]))
+
     def test_uid_expected_plus_conflicting_or_duplicate_is_ambiguous(self):
         for index, text in enumerate(['UID: 111111111', '693306810']):
             self.progress = Path(self.temp.name) / ('uid-' + str(index) + '.json')

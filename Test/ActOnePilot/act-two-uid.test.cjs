@@ -29,3 +29,20 @@ test('guild frame 6 full-screen digits and scaled UID form one native OCR row',(
  }
  assert.equal(bgi.originalAccount(original([bare,{text:'UID:1123456789',x:1680,y:1024}])),false);
 });
+
+test('overlapping printed UID labels at full and crop scales can differ in colon padding',()=>{
+ const vm=require('node:vm'),ctx=vm.createContext({});
+ vm.runInContext(fs.readFileSync(require.resolve('../../BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js'),'utf8'),ctx);
+ const full={text:'UID: 123456789',x:1682,y:1050,width:181,height:27};
+ const crop={text:'UID:123456789',x:1680+1/3,y:1052+1/3,width:180+1/3,height:12+2/3};
+ const raw={...crop,x:(crop.x-1680)*3,y:(crop.y-1040)*3,width:crop.width*3,height:crop.height*3};
+ assert.deepEqual(Array.from(ctx.actOneMergeControlCropRows([full],[raw],1680,1040)),[full]);
+ assert.deepEqual(Array.from(ctx.actOneCanonicalUidRows([crop,full])),[full]);
+ assert.deepEqual(Array.from(ctx.actOneMergeControlCropRows([full],[{...raw,text:full.text}],1680,1040)),[full]);
+ assert.deepEqual(Array.from(ctx.actOneCanonicalUidRows([full,{...crop,text:full.text}])),[full]);
+ for(const other of [{...crop,text:'UID:123456780'},{...crop,x:1691,width:170},
+         {...crop,y:1067},{...crop,height:25},{...crop,x:1679},full]){
+   assert.deepEqual(Array.from(ctx.actOneCanonicalUidRows([full,other])),[full,other]);
+ }
+ assert.equal(ctx.actOneCanonicalUidRows([full,crop,{...full}]).length,3);
+});

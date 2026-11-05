@@ -4651,12 +4651,13 @@ function createActOneAdapter(sessionId,options) {
                     // The engine took this request's first new frame. Revalidate it before any input.
                     result.entryScene='world';result.entryFrameId=initial.frameId;
                     var admitted=native.worldEntry(initial,request,Date.now(),original,towerCandidate);
-                    if(!admitted&&tower&&initial.frameId===request.expectedFrameId+1&&tower.base(initial,towerContext)&&tower.party(initial,'Kaeya')){
+                    if(!admitted&&tower&&initial.frameId===request.expectedFrameId+1&&tower.base(initial,towerContext)){
                         // The level-one archer's red rail can disappear while its projectile hits Kaeya.
                         // Stay at the accepted location and require a new positive scan before any input.
                         for(var retry=0;retry<4&&!admitted;retry++){
                             await sleep(150);current=await observeTower();
-                            if(!tower.base(current,towerContext)||!tower.party(current,'Kaeya')||!tower.samePose(initial,current))break;
+                            if(!tower.base(current,towerContext)||!tower.samePose(initial,current)||
+                               current.hud.health.max!==initial.hud.health.max)break;
                             admitted=native.worldEntry(current,request,Date.now(),original,towerCandidate,initial);
                         }
                     }

@@ -218,9 +218,10 @@
    let repeated=false;
    for(let probe=0;probe<(api.aimed?4:1);probe++){
     await fresh(probe?150:100);
-    if(!base(current,api)||!party(current,startAvatar)||initial.hud.health.max!==current.hud.health.max||!samePose(initial,current))break;
+    if(!base(current,api)||initial.hud.health.max!==current.hud.health.max||!samePose(initial,current))break;
+    if(!party(current,startAvatar))continue;
     repeated=candidate(current,api)&&scan(current,'threat',1)&&associated(bar(initial),bar(current),40);
-    if(repeated||bar(current))break;
+    if(repeated||bar(current)&&!associated(bar(initial),bar(current),40))break;
    }
    if(!repeated)throw Error('Tower hostile did not repeat on the independent ground scan');
    const anchor=current;

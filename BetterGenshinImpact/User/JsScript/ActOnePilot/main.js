@@ -27,7 +27,7 @@ eval(file.readTextSync('bgi.js'));
         var now=Date.now();if(!force&&now-lastHeartbeat<1000)return;
         if (!override || override==='idle') openGpuAdviser(now);
         var state=runner?runner.getState():{state:'starting',frameId:0,activeRequestId:null};
-        var value={version:1,fieldCombatWorldEntry:true,processId:Number(genshin.betterGiProcessId),windowsSessionId:Number(genshin.windowsSessionId),remoteDesktop:genshin.isRemoteDesktopSession===true,session:session,
+        var value={version:1,continuousGroundNavigation:true,fieldCombatWorldEntry:true,processId:Number(genshin.betterGiProcessId),windowsSessionId:Number(genshin.windowsSessionId),remoteDesktop:genshin.isRemoteDesktopSession===true,session:session,
             state:override||(safetyFault?'faulted':state.state),heartbeatAt:now,frameId:state.frameId,activeRequestId:state.activeRequestId,error:failure||safetyFault};
         value.gpuAdviserFrameStream=!!gpuAdviserIdentity;
         if(gpuAdviserError)value.gpuAdviserError=gpuAdviserError;

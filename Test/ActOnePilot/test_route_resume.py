@@ -1107,6 +1107,44 @@ class SupervisedRouteControllerTests(unittest.TestCase):
                 self.assertEqual(report['groundRefreshCheckpoint']['nextWaypointIndex'],1)
             self.assertEqual(report['status'],'arrived' if scenario=='fresh' else 'stopped',report.get('reason'))
 
+    def test_continuous_navigation_uses_normal_waypoints_and_requires_the_independent_terminal_scene(self):
+        self.route['objective']=route_tool.EXPLORATION_OBJECTIVE
+        for case in ('world','park','foreign','unsupported'):
+            self.progress=Path(self.temp.name)/('continuous-'+case+'.json')
+            clear=controller_scene(objective='')
+            inv=controller_scene('inventory')
+            final=copy.deepcopy(clear)
+            final['map'].update(self.points[-1])
+            if case=='foreign':
+                final['ocr'][0]['text']='UID: 123456789'
+            nav=self.arrival(3,final if case in ('world','foreign') else inv)
+            nav['frames']=5
+            if case=='park':
+                nav['result'].update(pauseVerified=True,pauseProof=dict(verified=True,session='route-session',kind='inventory'))
+            steps=[dict(mission='questStep',source=inv,result=dict(pausedInventory=True)),nav] if case=='unsupported' else [nav]
+            pilot=ReplayPilot(self.clock,steps,source=clear)
+            pilot.supports_continuous_navigation=lambda _:case!='unsupported'
+            native=pilot.execute
+            def measured(mission,source,fields,deadline,pending):
+                out=native(mission,source,fields,deadline,pending)
+                if mission=='navigation' and case in ('world','foreign'):
+                    observed=out['observation'];record_ground_scan(observed);f=observed['frameId']
+                    out['receipt']['details']['result']['worldArrival']=dict(session=pilot.session,arrivalFrameId=f-2,
+                        confirmedFrameId=f-1,waypoint=self.points[-1])
+                return out
+            pilot.execute=measured
+            result=self.run_controller(pilot,continuous_ground='park' if case=='park' else 'world')
+            inputs=[r for r in pilot.calls if r['mission']!='observe']
+            if case=='unsupported':
+                self.assertEqual([r['mission'] for r in inputs],['questStep','navigation'])
+                self.assertNotIn('groundHandoff',inputs[-1])
+            else:
+                self.assertEqual([r['mission'] for r in inputs],['navigation'])
+                self.assertEqual(inputs[0]['groundHandoff'],'park' if case=='park' else 'world')
+                self.assertEqual(inputs[0]['waypoints'],self.points)
+            self.assertEqual(result['status'],'stopped' if case=='foreign' else 'arrived',result.get('reason'))
+            self.assertEqual('worldArrival' in result,case=='world')
+
     def test_exploration_pack_requires_matching_counts_without_a_candidate_list_and_opt_in(self):
         now = self.clock.milliseconds()
         base = controller_scene(objective='', enemies=True)

@@ -202,6 +202,16 @@ var ActOneMission = (function () {
     }
     async function runNavigation(request, observation, api, observe, protectedLisa) {
         var exploring=request&&request.objective==='Explore for Adventure Rank';
+        // This predicate is called only by the native adapter on independently captured entry/arrival frames.
+        function continuousGround(frame,now) {
+            var h=frame&&frame.hud, hp=h&&h.health, p=frame&&frame.map;
+            return !!(frame && frame.session===request.session && frame.frameId>request.expectedFrameId && p &&
+                p.map==='Teyvat' && Number.isFinite(p.x) && Number.isFinite(p.y) && !frame.mapPositionInherited &&
+                h && h.world===true && h.groundControls===true && !h.climbing && !h.swimming && !h.auto &&
+                !h.loading && !h.unknownHud && !h.lowHealth && !h.journal && !h.bigMap && !h.dialogueReady &&
+                !h.choice && !h.tutorialStep && validHealth(hp) && hp.current/hp.max>=.85 &&
+                namedDialogueAccount(frame,request.expectedUid) && !groundScanStopReason(frame,now));
+        }
         // Exploration is an explicitly requested, bounded errand. Ambient NPC
         // labels (or an independently tracked quest) are not its objective.
         function navigationObjective(o){return exploring||hasObjective(o,request.objective);}
@@ -212,7 +222,8 @@ var ActOneMission = (function () {
                 !Array.isArray(request.waypoints)||request.waypoints.length<1||request.waypoints.length>4||
                 typeof api.runActTwoNavigationWithPause!=='function')
                 return {status:'stopped',reason:'Finite Act II navigation and pause wrapper required'};
-            return api.runActTwoNavigationWithPause(observation,observe,function(field){return runNavigation(request,field,api,observe,true);});
+            return api.runActTwoNavigationWithPause(observation,observe,function(field){return runNavigation(request,field,api,observe,true);},
+                request.groundHandoff ? continuousGround : null);
         }
         var lisaObjective=request&&request.objective==='Meet Lisa at the temple';
         if(lisaObjective&&!protectedLisa) {

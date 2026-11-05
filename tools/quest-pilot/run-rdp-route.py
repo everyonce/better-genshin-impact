@@ -121,7 +121,7 @@ def group_template(token):
              jsScriptSettingsObject=dict(enableInput=True, autoEnterGame=False))])
 
 
-def route_argv(config, session, route, progress, previous_progress=None):
+def route_argv(config, session, route, progress, previous_progress=None, *, continuous_ground=None):
     """Forward the original route and explicit controller options, without translating gameplay policy."""
     child = config['owner']['child']
     argv = [sys.executable, '-B', str(Path(__file__).with_name('act-one-route.py')), route,
@@ -139,7 +139,25 @@ def route_argv(config, session, route, progress, previous_progress=None):
     if previous_progress is not None:
         # The canonical controller validates this optional shortcut and otherwise bootstraps normally.
         argv.extend(['--continue-from-progress', str(previous_progress)])
+    if continuous_ground:
+        argv.extend(['--continuous-ground',continuous_ground])
     return argv
+
+
+def continuous_mode(config, index, current):
+    """Keep the world open only across two consecutive ordinary exploration legs of this owned pilot."""
+    def ordinary(route):
+        return route.get('objective')=='Explore for Adventure Rank' and not route.get('talkTo') and not route.get('resumeNamedDialogue')
+    if not config.get('continuous') or not ordinary(current):
+        return None
+    if index+1<len(config['routes']):
+        following=config['routes'][index+1]
+        data=Path(following['path']).read_bytes()
+        require(hashlib.sha256(data).hexdigest()==following['sha256'],'Successor route snapshot changed before world handoff.')
+        next_route=json.loads(data.decode('utf-8-sig'))
+        if ordinary(next_route) and not next_route.get('teleportTo'):
+            return 'world'
+    return 'park'
 
 
 def execute_route(argv, output, timeout, *, on_progress=None):
@@ -483,7 +501,8 @@ def run_worker(config, *, control, rdp, execute=execute_route, game_probe=foregr
             leg = dict(route=route, progress=str(leg_progress), status='running')
             state['legs'].append(leg)
             record()
-            argv = route_argv(config, session, str(route_path), str(leg_progress), previous_progress)
+            mode = continuous_mode(config,index,read(route_path)) if config.get('continuous') else None
+            argv = route_argv(config, session, str(route_path), str(leg_progress), previous_progress, continuous_ground=mode)
             leg['command'] = argv
             if adviser:
                 adviser.check_alive()
@@ -577,6 +596,7 @@ def parse_args(argv=None):
     parser.add_argument('--expected-uid', required=True)
     parser.add_argument('--allow-field-combat', action='store_true')
     parser.add_argument('--gpu-adviser', action='store_true', help='Run one local Open P2P GPU adviser during the owned route.')
+    parser.add_argument('--continuous', action='store_true', help='Allow verified world handoffs between ordinary ground exploration legs.')
     parser.add_argument('--save-encounter-frames', action='store_true',
                         help='Retain a bounded set of native combat and named NPC capture pairs for replay.')
     parser.add_argument('--allow-dialogue', action='store_true')
@@ -695,7 +715,7 @@ def run(args, *, expected_owner=None, dependencies=None):
     config = dict(version=1, launchId=uuid.uuid4().hex, owner=owner, output=str(output), progress=str(progress),
                   routes=routes, splitRoutes=originals, expectedUid=args.expected_uid, node=str(Path(node).resolve()),
                   allowFieldCombat=args.allow_field_combat, allowDialogue=args.allow_dialogue,
-                  saveEncounterFrames=args.save_encounter_frames, gpuAdviser=use_gpu,
+                  saveEncounterFrames=args.save_encounter_frames, gpuAdviser=use_gpu, continuous=getattr(args,'continuous',False),
                   deadlineMs=args.deadline_ms, maxSegments=args.max_segments, continueObjectives=args.continue_objective,
                   stopFiles=[str(p.resolve()) for p in [progress.parent / 'STOP', progress.with_suffix('.STOP'),
                              output / 'STOP', app / 'User/JsScript/ActOnePilot/STOP', *args.stop_file]])

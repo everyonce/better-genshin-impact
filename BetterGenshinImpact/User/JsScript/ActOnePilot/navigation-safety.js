@@ -16,7 +16,7 @@
   }
   return null;
  }
- function plan(p,r,w,now){return !!(p&&p.reviewed===true&&!p.usedAt&&p.requestId===r.id&&p.session===r.session&&p.frameId===r.expectedFrameId&&p.witnessFrameId===w.frameId&&w.frameId<p.frameId&&now>=p.createdAt&&now-p.createdAt<=120000&&p.route&&p.route.objective===r.objective&&JSON.stringify(p.route.waypoints)===JSON.stringify(r.waypoints)&&!inspect(w,p.route,now,r.session));}
+ function plan(p,r,w,now){return !!(p&&p.reviewed===true&&!p.usedAt&&p.requestId===r.id&&p.session===r.session&&p.frameId===r.expectedFrameId&&p.witnessFrameId===w.frameId&&(r.groundHandoff?w.frameId===p.frameId:w.frameId<p.frameId)&&now>=p.createdAt&&now-p.createdAt<=120000&&p.route&&p.route.objective===r.objective&&JSON.stringify(p.route.waypoints)===JSON.stringify(r.waypoints)&&!inspect(w,p.route,now,r.session));}
  function arrival(p,w,current,movements){
   if(!p||!p.route.escape)return null;
   const e=p.route.escape;

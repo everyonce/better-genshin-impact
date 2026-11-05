@@ -102,6 +102,13 @@ var ActOnePilot = (function () {
         }
         if (r.mission === 'navigation') {
             allowed.push('waypoints', 'deadlineMs', 'objective');
+            if (r.groundHandoff !== undefined) {
+                if (!['world','park'].includes(r.groundHandoff) || r.requireMeasuredGround!==true ||
+                    r.objective!=='Explore for Adventure Rank' || r.talkTo!==undefined || typeof r.expectedUid!=='string' ||
+                    !/^[0-9]{9,10}$/.test(r.expectedUid) || !Array.isArray(r.waypoints) || r.waypoints.length>4 ||
+                    !integer(r.deadlineMs,1000,45000)) return 'Invalid continuous ground navigation';
+                allowed.push('groundHandoff','expectedUid');
+            }
             if (r.requireMeasuredGround !== undefined) {
                 if (r.requireMeasuredGround !== true || r.objective !== 'Explore for Adventure Rank')
                     return 'Measured ground is available only for explicit exploration';

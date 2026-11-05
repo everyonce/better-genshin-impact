@@ -196,6 +196,21 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual(marker.read_bytes(),b'older-session')
         self.assertFalse((f.output/'gpu-adviser').exists())
 
+    def test_continuous_chain_keeps_only_ordinary_adjacent_legs_in_the_world(self):
+        f=Fixture(self.root,4)
+        f.config['continuous']=True
+        for i,item in enumerate(f.config['routes']):
+            path=Path(item['path']);route=launcher.read(path)
+            route['objective']='Explore for Adventure Rank'
+            if i==2:route['teleportTo']='mondstadt-city'
+            if i==3:route['talkTo']='Cyrus'
+            path.write_text(json.dumps(route));item['sha256']=hashlib.sha256(path.read_bytes()).hexdigest()
+        result=f.worker()
+        self.assertEqual(result['status'],'arrived',result)
+        modes=[argv[argv.index('--continuous-ground')+1] if '--continuous-ground' in argv else None for argv in f.calls]
+        self.assertEqual(modes,['world','park','park',None])
+        self.assertEqual(f.commands,['startPilot','stopPilot'])
+
     def test_forced_adviser_retirement_closes_its_job_and_cannot_certify_arrival(self):
         f = Fixture(self.root)
         with self.gpu_fixture(f) as (_,process,job):

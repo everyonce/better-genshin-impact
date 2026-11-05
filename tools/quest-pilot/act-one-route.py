@@ -298,6 +298,13 @@ class GuardedPilot:
             raise RouteError('Field-combat capability belongs to another process.')
         return heartbeat.get('fieldCombatWorldEntry') is True
 
+    def supports_continuous_navigation(self, source):
+        """Capability is tied to the idle pilot owning the exact current observation."""
+        heartbeat = self.command.require_live_controller(self.root, self.session, source['frameId'], self.wts)
+        if heartbeat['processId'] != self.pid:
+            raise RouteError('Continuous navigation capability belongs to another process.')
+        return heartbeat.get('continuousGroundNavigation') is True
+
     def _cancel_owned(self):
         """Cancel only this exact published request; an unknown/foreign request is never stopped."""
         if self.cancelled or self.pending is None:
@@ -446,7 +453,9 @@ class GuardedPilot:
     def _prepare_exploration(self, request):
         """Use the existing native safety inspector and exact request-bound sidecar."""
         witness = None
-        for frame in range(request['expectedFrameId'] - 1, max(0, request['expectedFrameId'] - 150), -1):
+        frames = ([request['expectedFrameId']] if request.get('groundHandoff') else
+                  range(request['expectedFrameId'] - 1, max(0, request['expectedFrameId'] - 150), -1))
+        for frame in frames:
             path = self.command.observation_path(self.root, self.session, frame)
             if path.exists():
                 value = read(path)
@@ -525,6 +534,12 @@ class GuardedPilot:
                 raise RouteError('Invalid named NPC request.')
         if mission == 'navigation' and fields.get('objective') == EXPLORATION_OBJECTIVE:
             expected_fields['navigation'].add('requireMeasuredGround')
+            if 'groundHandoff' in fields:
+                if (fields['groundHandoff'] not in ('world','park') or 'talkTo' in fields
+                        or not continuous_ground_ready(source,self.session,fields.get('expectedUid'),int(time.time()*1000))
+                        or not self.supports_continuous_navigation(source)):
+                    raise RouteError('Continuous navigation requires a supported same-account measured field.')
+                expected_fields['navigation'].update(('groundHandoff','expectedUid'))
             if fields.get('requireMeasuredGround', True) is not True:
                 raise RouteError('Exploration requires a measured ground scan.')
             fields = dict(fields, requireMeasuredGround=True)
@@ -576,7 +591,7 @@ class GuardedPilot:
         request = dict(id='mission-' + uuid.uuid4().hex, session=self.session,
             expectedFrameId=source['frameId'], createdAt=int(time.time() * 1000), mission=mission, **fields)
         if mission == 'navigation' and fields['objective'] == EXPLORATION_OBJECTIVE:
-            if not self.inventory_ready(source):
+            if not fields.get('groundHandoff') and not self.inventory_ready(source):
                 raise RouteError('Exploration requires the existing native inventory entry.')
             self._prepare_exploration(request)
 
@@ -994,9 +1009,16 @@ def positive_parking_field(source, session, expected_uid):
             and all(type(position.get(k)) in (int, float) and math.isfinite(position[k]) for k in ('x', 'y')))
 
 
+def continuous_ground_ready(source, session, uid, now):
+    """World handoff uses the current measured clear capture and the navigation health floor."""
+    return (isinstance(uid,str) and re.fullmatch(r'[0-9]{9,10}',uid) is not None
+            and positive_parking_field(source,session,uid) and ground_scan_is_clear(source,now)
+            and not source['hud'].get('lowHealth') and source['hud']['health']['current']/source['hud']['health']['max']>=.85)
+
+
 def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=False, allow_field_combat=False,
                    continuation_objectives=(), max_segments=MAX_SEGMENTS, deadline_ms=MAX_DEADLINE_MS,
-                   continue_from_progress=None,
+                   continue_from_progress=None, continuous_ground=None,
                    monotonic=time.monotonic, clock_ms=lambda: int(time.time() * 1000), emit=print):
     """Continue only settled missions; retain exact route progress through combat and dialogue.
 
@@ -1320,7 +1342,7 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
             if (continuation is not None and state.get('continuationSlotMatched') is True
                     and pilot.continuation_unchanged(continuation)
                     and source_account_matches(source, expected_uid) and pilot.inventory_ready(source)):
-                inventory_navigation = EXPLORATION_OBJECTIVE
+                inventory_navigation = None if continuous_ground in ('world','park') and not talk_to else EXPLORATION_OBJECTIVE
                 state['continuedFromProgress'] = dict(path=str(continue_from_progress),
                     **{key: continuation[key] for key in ('requestId', 'sourceFrameId', 'pauseFrameId', 'terminalFrameId')})
             # Native travel ends in inventory. Open it once for a fresh field measurement before
@@ -1578,7 +1600,11 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
                 raise RouteError('No further native combat handoff is authorized.')
             if remaining < reserve + 1000:
                 raise RouteError('Insufficient original deadline for navigation and its native handoff.')
-            if (not paused_navigation and (value == EXPLORATION_OBJECTIVE or talk_to and
+            supports_ground = getattr(pilot,'supports_continuous_navigation',None)
+            direct_ground = (continuous_ground in ('world','park') and not paused_navigation and not talk_to
+                             and value==EXPLORATION_OBJECTIVE and continuous_ground_ready(source,pilot.session,expected_uid,clock_ms())
+                             and supports_ground and supports_ground(source))
+            if (not paused_navigation and not direct_ground and (value == EXPLORATION_OBJECTIVE or talk_to and
                     pilot.quest_navigation_from_inventory(value, points[state['nextWaypointIndex']:]))):
                 if remaining < 20000:
                     raise RouteError('Insufficient original deadline for inventory preparation and navigation.')
@@ -1591,6 +1617,8 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
             start = state['nextWaypointIndex']
             suffix = points[state['nextWaypointIndex']:]
             fields = dict(objective=value, waypoints=suffix, deadlineMs=min(45000, remaining - reserve))
+            if direct_ground:
+                fields.update(groundHandoff=continuous_ground,expectedUid=expected_uid)
             if talk_to:
                 # Every resumed suffix still ends at the original named waypoint.
                 fields.update(talkTo=talk_to, expectedUid=expected_uid)
@@ -1599,6 +1627,22 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
             state['navigationRequests'] += 1
             result = dispatch('navigation', source, fields, allow_deadline_checkpoint=True)
             terminal = state['records'][-1]
+            if direct_ground and terminal['receipt']['status']=='completed':
+                proof = result.get('worldArrival') if isinstance(result,dict) else None
+                if proof is not None:
+                    last=suffix[-1]
+                    field=terminal['observation']
+                    if (result.get('status')!='arrived' or result.get('nextWaypointIndex')!=len(suffix)
+                            or continuous_ground!='world' or not isinstance(proof,dict) or proof.get('session')!=pilot.session
+                            or proof.get('waypoint')!=last or type(proof.get('arrivalFrameId')) is not int
+                            or type(proof.get('confirmedFrameId')) is not int or not terminal['request']['expectedFrameId']
+                            < proof['arrivalFrameId'] < proof['confirmedFrameId'] < field['frameId']
+                            or not continuous_ground_ready(field,pilot.session,expected_uid,clock_ms())
+                            or math.hypot(field['map']['x']-last['x'],field['map']['y']-last['y'])>2):
+                        raise RouteError('Independent terminal capture did not verify the continuous world arrival.')
+                    state['worldArrival']=dict(proof, terminalFrameId=field['frameId'])
+                elif not protected_inventory(result):
+                    raise RouteError('Continuous navigation must end on a verified field arrival or protected inventory.')
             if terminal['receipt']['status'] != 'completed':
                 if threat_checkpoint(result, terminal['request'], terminal['receipt']):
                     # Inspect the actual encounter. Dispatch already preserved its native route cursor.
@@ -1668,6 +1712,7 @@ def main():
     parser.add_argument('--progress', type=Path, help='New progress JSON; an existing or pending run is never replayed')
     parser.add_argument('--continue-from-progress', type=Path,
                         help='Reuse an exact completed exploration pause on the same pilot; otherwise refresh the field normally')
+    parser.add_argument('--continuous-ground', choices=('world','park'), help=argparse.SUPPRESS)
     parser.add_argument('--allow-field-combat', action='store_true',
                         help='Engage up to three measured enemies during exploration and resume from fresh field evidence')
     parser.add_argument('--allow-dialogue', action='store_true', help='Permit the existing bounded recognized-dialogue mission')
@@ -1690,7 +1735,7 @@ def main():
                 report = run_controller(pilot, read(args.route), args.progress, args.expected_uid,
                     allow_dialogue=args.allow_dialogue, allow_field_combat=args.allow_field_combat,
                     continuation_objectives=args.continue_objective,
-                    continue_from_progress=args.continue_from_progress,
+                    continue_from_progress=args.continue_from_progress, continuous_ground=args.continuous_ground,
                     max_segments=args.max_segments, deadline_ms=args.deadline_ms)
             finally:
                 pilot.close()

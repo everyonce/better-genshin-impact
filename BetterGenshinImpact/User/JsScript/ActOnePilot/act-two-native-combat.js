@@ -70,23 +70,85 @@
   if(pack===true)bars.sort((a,b)=>b.height-a.height||Math.abs(a.x-960)-Math.abs(b.x-960)||b.y-a.y||a.x-b.x);
   return bars[0];
  }
+ // Empty-bar recovery is stationary and requires the same measured field pose.
+ function sameFieldPose(o,anchor){
+  const a=anchor&&anchor.map,b=o&&o.map;
+  return !!(a&&b&&a.map==='Teyvat'&&b.map===a.map&&[a.x,a.y,a.cameraAngle,b.x,b.y,b.cameraAngle].every(Number.isFinite)&&Math.hypot(a.x-b.x,a.y-b.y)<=.35&&Math.abs((a.cameraAngle-b.cameraAngle+540)%360-180)<=3);
+ }
+ function emptyField(o,now,session,original){
+  const h=o&&o.hud;
+  return !!(field(o,now,session,original,true)&&Array.isArray(h.enemyBars)&&h.enemyBars.length===0&&Array.isArray(h.objectives)&&h.objectives.every(t=>typeof t==='string'&&!t.trim()));
+ }
+ // The request shares two passive captures across all approach/rotation phases.
+ async function reacquireFieldTarget(current,api){
+  if(api.eligible(current)||!api.pack||!api.reacquisition||!api.emptyField(current))return current;
+  const anchor=current;
+  while(api.reacquisition.remaining>0){
+   api.checkStop();if(api.now()+150>=api.deadline)return current;
+   const before=current,startedAt=api.now();api.reacquisition.remaining--;
+   await api.sleep(150);api.checkStop();current=await api.observe();
+   api.reacquisition.frames.push({beforeFrameId:before.frameId,afterFrameId:current&&current.frameId,startedAt,finishedAt:api.now()});
+   api.checkStop();
+   if(api.now()>=api.deadline||!current||current.session!==anchor.session||!Number.isInteger(current.frameId)||current.frameId<=before.frameId||!Number.isFinite(current.timestamp)||current.timestamp<=before.timestamp||!sameFieldPose(current,anchor))throw new Error('Stationary field reacquisition changed source, pose or deadline');
+   if(api.eligible(current)||!api.emptyField(current))return current;
+  }
+  return current;
+ }
+ // Retain newly visible, independently located reward text without a kill claim.
+ function rewardFeedback(before,after){
+  const rows=o=>(o&&o.ocr||[]).filter(r=>/Character EXP|Mora/.test(r.text)&&r.x<650&&r.y>300&&r.y<850);
+  const prior=new Set(rows(before).map(r=>r.text));
+  return rows(after).filter(r=>!prior.has(r.text)).map(r=>({...r}));
+ }
+ // A single in-world request owns at most three rotations and one 15-second window.
+ async function fieldSequence(initial,api){
+  const started=api.now(),deadline=started+15000,turns=[];
+  let current=initial,reason='rotation_limit',error=null;
+  const scope={...api,pack:true,deadline,origin:initial.map,approachBudget:{turns:0,steps:0},reacquisition:{remaining:2,frames:[]},
+   checkStop(){api.checkStop();if(api.now()>=deadline)throw new Error('Field sequence deadline reached');}};
+  try{
+   for(let index=0;index<3;index++){
+    scope.checkStop();current=await reacquireFieldTarget(current,scope);
+    if(!api.eligible(current)){reason='encounter_or_health_guard';break;}
+    if(deadline-api.now()<4500){reason='native_drain_headroom';break;}
+    current=await approachFieldTarget(current,scope);scope.checkStop();
+    if(!api.eligible(current)){reason='encounter_or_health_guard';break;}
+    if(deadline-api.now()<4500){reason='native_drain_headroom';break;}
+    const before=current,turn={actionId:api.actionId(index),beforeFrameId:before.frameId,beforeHealth:before.hud.health,beforeBars:targets(before),startedAt:api.now(),nativeAttempted:true,nativeReturned:false};turns.push(turn);
+    try{Object.assign(turn,await api.run(before,index));}catch(e){turn.error=String(e&&e.message||e);throw e;}finally{turn.finishedAt=api.now();}
+    await api.sleep(150);current=await api.observe();
+    if(!current||current.session!==before.session||!Number.isInteger(current.frameId)||current.frameId<=before.frameId)throw new Error('Field rotation needs a new observation');
+    turn.afterFrameId=current.frameId;turn.afterHealth=current.hud&&current.hud.health;turn.afterBars=targets(current);
+    turn.visibleRewardRows=api.fieldReady(current)?rewardFeedback(before,current):[];
+    turn.assessment=assessProgress(before,current);
+    // A returned rotation remains evidence even if this next guard or STOP fails.
+    scope.checkStop();
+    if(!api.fieldReady(current)){reason='encounter_or_health_guard';break;}
+   }
+  }catch(e){error=String(e&&e.message||e);reason=error;}
+  return {current,turns,reason,error,startedAt:started,finishedAt:api.now(),deadline,reacquisition:scope.reacquisition,approachBudget:scope.approachBudget,
+   nativeReturned:turns.length>0&&turns.every(t=>t.nativeReturned===true)};
+ }
  // Face the measured field target and approach in short steps. Rendered bar height and screen
  // position set the walking budget; the remaining red width measures health, never range.
  async function approachFieldTarget(initial,api){
-  let current=initial,turns=0,steps=0;
-  const started=api.now(),origin=initial.map;
+  let current=initial,turns=api.approachBudget?api.approachBudget.turns:0,steps=api.approachBudget?api.approachBudget.steps:0;
+  const started=api.now(),origin=api.origin||initial.map;
+  if(api.pack)api={...api,deadline:Math.min(api.deadline||Infinity,started+8500)};
   for(;;){
    api.checkStop();
+   if(api.pack)current=await reacquireFieldTarget(current,api);
    if(!api.eligible(current))throw new Error('Field target or grounded health changed during approach');
    if(Math.hypot(current.map.x-origin.x,current.map.y-origin.y)>12)throw new Error('Field combat approach exceeded its travel budget');
    const bar=fieldTarget(current,api.pack),dx=api.cameraDelta([bar]);
    if(dx===0&&(bar.height>=8||bar.y>=620||steps>=4))return current;
    if(api.now()-started>=8500)throw new Error('Field combat approach time expired');
+   if(api.pack&&api.now()+600>=api.deadline)throw new Error('Field combat approach lacks input headroom');
    if(dx!==0){
     if(turns>=4)throw new Error('Field combat target stayed outside the central view');
-    await api.turn(dx,current);turns++;
+    await api.turn(dx,current);turns++;if(api.approachBudget)api.approachBudget.turns=turns;
    }else{
-    await api.forward(current);steps++;
+    await api.forward(current);steps++;if(api.approachBudget)api.approachBudget.steps=steps;
    }
    await api.sleep(200);
    const next=await api.observe();
@@ -172,6 +234,6 @@
   if(p.shieldProbe===true){if(p.shieldReviewed!==true||p.nativeAvatar!=='Kaeya'||p.enemyLevel!==13)throw new Error('Reviewed Kaeya shield probe required');return {strategy:'English Whopperflower Shield Probe',seconds:2,deadlineMs:3000,sampleAfterMs:750,minimumHealth:.85};}
   return {strategy:p.nativeAvatar==='Lumina'?'English Ley Line Anemo':'English Ley Line Defense',seconds:6,deadlineMs:8000,sampleAfterMs:2500,minimumHealth:.5};
  }
- root.ActTwoNativeCombat={leyLineProfile,strategy,groupStrategy,ambushStrategy,entrySettled,pauseSeed,targetingParam,deadlineProbe,field,targets,fieldTarget,approachFieldTarget,encounter,finish,chunk,assessProgress,progress,sequence};
+ root.ActTwoNativeCombat={leyLineProfile,strategy,groupStrategy,ambushStrategy,entrySettled,pauseSeed,targetingParam,deadlineProbe,field,targets,fieldTarget,sameFieldPose,emptyField,reacquireFieldTarget,fieldSequence,approachFieldTarget,encounter,finish,chunk,assessProgress,progress,sequence};
  if(typeof module!=='undefined'&&module.exports)module.exports=root.ActTwoNativeCombat;
 })(typeof globalThis!=='undefined'?globalThis:this);

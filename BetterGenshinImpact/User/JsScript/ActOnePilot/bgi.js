@@ -3995,7 +3995,7 @@ function createActOneAdapter(sessionId,options) {
                     moveMouseBy(alignDx,0);await sleep(180);current=acquire();result.alignedAcquisition=current;
                     if(!eligible(current))throw new Error('Fresh encounter required after camera alignment');
                 }
-                if(!group&&!finishing&&!probing){
+                if(!group&&!finishing&&!probing&&!pack){
                     result.approach=[];
                     current=await native.approachFieldTarget(current,{
                         now:Date.now,checkStop:checkStop,eligible:eligible,pack:pack,cameraDelta:acquisition.cameraDelta,sleep:sleep,observe:observe,
@@ -4012,12 +4012,13 @@ function createActOneAdapter(sessionId,options) {
                    !acquisition.stationaryReady(current.acquisition?current.hud.enemyBars:native.targets(current)))throw new Error('Centered or close verified enemy required for stationary combat');
                 checkStop();ready();
                 if(finishing){permit.usedAt=Date.now();var saved=JSON.stringify(permit);if(!file.writeTextSync('act-two-native-finish-request.json',saved)||file.readTextSync('act-two-native-finish-request.json')!==saved)throw new Error('Finishing permission consumption failed');result.finishing=true;}
-                result.beforeFrameId=current.frameId;result.beforeHealth=current.hud.health;result.beforeBars=current.acquisition?acquisition.framingTargets(current.hud.enemyBars):native.targets(current);result.nativeAttempted=true;
+                if(!pack){result.beforeFrameId=current.frameId;result.beforeHealth=current.hud.health;result.beforeBars=current.acquisition?acquisition.framingTargets(current.hud.enemyBars):native.targets(current);result.nativeAttempted=true;}
                 async function runChunk(o,index){
                     var rotation=probing?'凯亚 '+Array(200).fill('wait(0.05)').join(', '):group&&!finishing?(acquisition.ambushObjective(o.hud.objectives)?native.ambushStrategy:native.groupStrategy):native.strategy;
                     var defensive=group&&!finishing&&acquisition.ambushObjective(o.hud.objectives);
                     if(defensive&&!acquisition.stationaryReady(o.acquisition?o.hud.enemyBars:native.targets(o)))throw new Error('Centered or close verified enemy required for stationary combat');
                     var event={type:'actTwoNativeCombat',engine:defensive?'AutoFightTask':'RunCombatScript',strategy:defensive?'English Cyrus Defense':rotation,chunkIndex:index,frameId:o.frameId,startedAt:Date.now()};events.push(event);
+                    if(pack){event.actionId=request.id+':rotation:'+index;result.nativeAttempted=true;if(result.beforeFrameId===undefined){result.beforeFrameId=o.frameId;result.beforeHealth=o.hud.health;result.beforeBars=native.targets(o);}}
                     try{return await native.chunk({
                         createCancellation:function(){return dispatcher.GetLinkedCancellationTokenSource();},
                         armDeadline:function(cts,ms){cts.CancelAfter(ms);},
@@ -4031,7 +4032,23 @@ function createActOneAdapter(sessionId,options) {
                     }:null});}
                     finally{event.finishedAt=Date.now();result.nativeInvocationMs=(result.nativeInvocationMs||0)+event.finishedAt-event.startedAt;}
                 }
-                if(group&&!finishing&&!ambushWitness){
+                if(pack){
+                    result.approach=[];
+                    var fieldBatch=await native.fieldSequence(current,{
+                        now:Date.now,checkStop:checkStop,eligible:eligible,sleep:sleep,observe:observe,run:runChunk,
+                        actionId:function(index){return request.id+':rotation:'+index;},
+                        fieldReady:function(o){return native.field(o,Date.now(),request.session,original,true);},
+                        emptyField:function(o){return native.emptyField(o,Date.now(),request.session,original);},
+                        cameraDelta:acquisition.cameraDelta,
+                        turn:async function(dx,o){checkStop();ready();result.approach.push({action:'turn',dx:dx,frameId:o.frameId});moveMouseBy(dx,0);},
+                        forward:async function(o){checkStop();ready();result.approach.push({action:'forward',ms:400,frameId:o.frameId});await boundedKey('VK_W',400,o.frameId);}
+                    });
+                    current=fieldBatch.current;result.chunks=fieldBatch.turns;result.nativeReturned=fieldBatch.nativeReturned;
+                    result.completedRotations=fieldBatch.turns.filter(function(t){return t.nativeReturned===true;}).length;
+                    result.sequenceStartedAt=fieldBatch.startedAt;result.sequenceDeadline=fieldBatch.deadline;result.sequenceFinishedAt=fieldBatch.finishedAt;
+                    result.reacquisition=fieldBatch.reacquisition;result.approachBudget=fieldBatch.approachBudget;
+                    result.reason=fieldBatch.reason;if(fieldBatch.error)error=fieldBatch.error;
+                }else if(group&&!finishing&&!ambushWitness){
                     var batch=await native.sequence(current,{now:Date.now,sleep:sleep,eligible:eligible,run:runChunk,observe:observe});
                     current=batch.current;result.chunks=batch.turns;result.nativeReturned=batch.turns.every(function(t){return t.nativeReturned;});result.nativeMs=batch.turns.reduce(function(n,t){return n+t.nativeMs;},0);result.reason=batch.reason;
                 }else if(ambushWitness){

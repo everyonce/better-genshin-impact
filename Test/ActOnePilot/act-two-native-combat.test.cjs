@@ -268,22 +268,83 @@ test('new named quest step keeps existing strict request schema and mission dele
  assert.equal(result.bounded,true);assert.deepEqual(calls,[[source,observe]]);
 });
 // Execute the real adapter method with inert native execution and pause boundaries.
-async function packAdapter(step,count){
+async function packAdapter(step,count,options={}){
  const path=require('node:path'),vm=require('node:vm'),dir=path.resolve(__dirname,'../../BetterGenshinImpact/User/JsScript/ActOnePilot');
  const bgi=fs.readFileSync(path.join(dir,'bgi.js'),'utf8');const start=bgi.indexOf('runActTwoNativeCombat: async function('),end=bgi.indexOf('\n        runActTwoPauseProbe:',start);
  const member=bgi.slice(start,end).trim().replace(/,$/,'');let time=1000,id=1;const calls=[];
  const initial={session:'test',frameId:1,timestamp:1000,map:null,hud:{world:false,dialogueReady:false,choice:false,journal:false,bigMap:false,climbing:false,auto:false},ocr:[
   {text:'Weapons',x:136,y:28,width:122,height:40},{text:'Weapons 13/2000',x:1602,y:34,width:199,height:27},{text:"Traveler's Handy Sword",x:1331,y:125,width:417,height:45},{text:'UID: 693306810',x:1680,y:1050,width:181,height:27}]};
- const box={request:{step,session:'test'},Date:{now:()=>time},file:{readTextSync:n=>fs.readFileSync(path.join(dir,n),'utf8')},events:[],lastObservation:initial,
+ const box={request:{id:'pack-test',step,session:'test'},Date:{now:()=>time},file:{readTextSync:n=>fs.readFileSync(path.join(dir,n),'utf8')},events:[],lastObservation:initial,
   actTwoOriginalAccount:rows=>rows.some(r=>r.text==='UID: 693306810'),checkStop(){},ready(){},release(){calls.push('release');},dispose(){},
   boundedKey:async k=>calls.push(k),sleep:async ms=>{time+=ms;},keyUp(){},leftButtonUp(){},rightButtonUp(){},moveMouseBy(){calls.push('turn');},
-  dispatcher:{GetLinkedCancellationTokenSource:()=>({Token:{},CancelAfter(){},Cancel(){},Dispose(){}}),RunCombatScript:async()=>calls.push('native')},
+  dispatcher:{GetLinkedCancellationTokenSource:()=>({Token:{},CancelAfter(){},Cancel(){},Dispose(){}}),RunCombatScript:async()=>{calls.push('native');if(options.failAt===calls.filter(x=>x==='native').length)throw Error('native rejected');}},
   loadLocalPause:()=>({}),finishWithLocalPause:async(_p,_a,_i,_o,_f,result,error)=>{calls.push('protect');return {...result,pauseVerified:true,error};}};
  const adapter=vm.runInNewContext('({'+member+'})',box);const observe=async()=>{const o=packFrame(count);o.timestamp=time;o.frameId=++id;o.ocr=initial.ocr.slice(-1);box.lastObservation=o;return o;};
  return {result:await adapter.runActTwoNativeCombat(initial,observe),calls};
 }
-test('actual adapter new step runs one ordinary rotation and protects while old step refuses two bars',async()=>{
- const pack=await packAdapter('actTwoFieldCombat',2);assert.equal(pack.result.nativeGroup,false);assert.equal(pack.result.nativeAttempted,true);assert.equal(pack.result.nativeReturned,true);assert.equal(pack.result.damageConfirmed,false);assert.equal(pack.result.defeatConfirmed,false);assert.equal(pack.calls.filter(x=>x==='native').length,1);assert.equal(pack.calls.at(-1),'protect');
+test('actual adapter new step runs a bounded sequence and protects while old step refuses two bars',async()=>{
+ const pack=await packAdapter('actTwoFieldCombat',2);assert.equal(pack.result.nativeGroup,false);assert.equal(pack.result.nativeAttempted,true);assert.equal(pack.result.nativeReturned,true);assert.equal(pack.result.damageConfirmed,false);assert.equal(pack.result.defeatConfirmed,false);assert.equal(pack.calls.filter(x=>x==='native').length,3);assert.equal(pack.result.completedRotations,3);assert.deepEqual(Array.from(pack.result.chunks,t=>t.actionId),['pack-test:rotation:0','pack-test:rotation:1','pack-test:rotation:2']);assert.equal(pack.calls.filter(x=>x==='protect').length,1);assert.equal(pack.calls.at(-1),'protect');
  const legacy=await packAdapter('actTwoNativeCombat',2);assert.equal(legacy.result.nativeAttempted,false);assert.equal(legacy.calls.includes('native'),false);assert.equal(legacy.calls.at(-1),'protect');
  const four=await packAdapter('actTwoFieldCombat',4);assert.equal(four.result.nativeAttempted,false);assert.equal(four.calls.includes('native'),false);assert.equal(four.calls.at(-1),'protect');
+});
+// Deterministic in-world sequence fixture; native inputs and capture latency are inert.
+function sequenceHarness(options={}){
+ let clock=1000,id=10,runs=0,observations=0;const actions=[];const initial=packFrame();
+ const fieldReady=o=>native.field(o,clock,'test',()=>true,true);
+ const api={now:()=>clock,checkStop(){if(options.stop&&options.stop(runs,observations))throw Error('STOP');},
+  actionId:i=>'request:rotation:'+i,eligible:o=>native.encounter(o,clock,'test',()=>true,false,true),fieldReady,
+  emptyField:o=>native.emptyField(o,clock,'test',()=>true),cameraDelta:()=>0,
+  turn:async()=>actions.push('turn'),forward:async()=>{actions.push('forward');clock+=400;},
+  sleep:async ms=>{clock+=ms;},observe:async()=>{observations++;clock+=options.captureMs||25;const o=packFrame();o.frameId=++id;o.timestamp=clock;if(options.observation)options.observation(o,runs,observations);return o;},
+  run:async(o,index)=>{runs++;actions.push('rotation');clock+=options.nativeMs||2000;if(options.failAt===runs)throw Error('native failure');return {nativeReturned:true,nativeMs:options.nativeMs||2000};}};
+ return {initial,api,actions,get runs(){return runs;},get observations(){return observations;}};
+}
+test('field sequence records three distinct rotation joins and new visible reward rows',async()=>{
+ const h=sequenceHarness({observation(o,n){if(n===1)o.ocr.push({text:'Mora 16',x:100,y:500,width:100,height:25});}});
+ const r=await native.fieldSequence(h.initial,h.api);assert.equal(r.turns.length,3);assert.equal(r.nativeReturned,true);assert.equal(r.reason,'rotation_limit');
+ assert.deepEqual(r.turns.map(t=>t.actionId),['request:rotation:0','request:rotation:1','request:rotation:2']);
+ for(const t of r.turns){assert.ok(t.afterFrameId>t.beforeFrameId);assert.equal(t.nativeReturned,true);assert.ok(t.finishedAt>=t.startedAt);}
+ assert.equal(r.turns[0].visibleRewardRows[0].text,'Mora 16');assert.equal(r.turns[0].assessment.evidence,'new_reward');assert.ok(r.finishedAt-r.startedAt<15000);
+});
+test('later target loss preserves prior returned rotation and uses only two passive captures',async()=>{
+ const h=sequenceHarness({observation:o=>o.hud.enemyBars=[]});const r=await native.fieldSequence(h.initial,h.api);
+ assert.equal(h.runs,1);assert.equal(r.turns.length,1);assert.equal(r.turns[0].nativeReturned,true);assert.equal(r.nativeReturned,true);assert.equal(r.reason,'encounter_or_health_guard');
+ assert.equal(r.reacquisition.frames.length,2);assert.equal(r.reacquisition.remaining,0);assert.deepEqual(h.actions,['rotation']);
+});
+test('later unhealthy evidence stops immediately without passive retry and retains completed evidence',async()=>{
+ const h=sequenceHarness({observation:o=>o.hud.health.current=2000});const r=await native.fieldSequence(h.initial,h.api);
+ assert.equal(h.runs,1);assert.equal(r.turns[0].afterHealth.current,2000);assert.equal(r.reason,'encounter_or_health_guard');assert.equal(r.reacquisition.frames.length,0);
+});
+test('a failed later native attempt cannot erase the first rotation or report all returned',async()=>{
+ const h=sequenceHarness({failAt:2});const r=await native.fieldSequence(h.initial,h.api);
+ assert.equal(r.turns.length,2);assert.equal(r.turns[0].nativeReturned,true);assert.equal(r.turns[1].nativeReturned,false);assert.equal(r.turns[1].error,'native failure');assert.equal(r.nativeReturned,false);assert.equal(r.error,'native failure');
+});
+test('original sequence deadline reserves native headroom and STOP prevents another rotation',async()=>{
+ const h=sequenceHarness({nativeMs:4000,captureMs:1500});const r=await native.fieldSequence(h.initial,h.api);
+ assert.equal(h.runs,2);assert.equal(r.reason,'native_drain_headroom');assert.equal(r.deadline-r.startedAt,15000);
+ const stop=sequenceHarness({stop:(runs,observations)=>runs===1&&observations===1});const s=await native.fieldSequence(stop.initial,stop.api);
+ assert.equal(stop.runs,1);assert.equal(s.turns[0].nativeReturned,true);assert.equal(s.error,'STOP');
+});
+test('stationary empty-bar recovery requires the same fresh pose and never moves on empty input',async()=>{
+ const h=sequenceHarness(),o=packFrame();o.hud.enemyBars=[];const api={...h.api,pack:true,deadline:9500,reacquisition:{remaining:2,frames:[]}};
+ const returned=await native.reacquireFieldTarget(o,api);assert.equal(returned.hud.enemyBars.length,2);assert.equal(api.reacquisition.remaining,1);assert.deepEqual(h.actions,[]);
+ for(const change of [x=>x.map.x+=.36,x=>x.map.cameraAngle+=4,x=>x.session='foreign',x=>x.frameId=10,x=>x.timestamp=1000]){
+  const q=sequenceHarness({observation:change}),empty=packFrame();empty.hud.enemyBars=[];
+  await assert.rejects(native.reacquireFieldTarget(empty,{...q.api,pack:true,deadline:9500,reacquisition:{remaining:2,frames:[]}}),/changed source, pose or deadline/);assert.deepEqual(q.actions,[]);
+ }
+});
+test('empty-bar retries share one request budget and do not renew the original deadline',async()=>{
+ const h=sequenceHarness({observation(o,_runs,n){if([1,3,5].includes(n))o.hud.enemyBars=[];}});const r=await native.fieldSequence(h.initial,h.api);
+ assert.equal(h.runs,3);assert.equal(r.reacquisition.frames.length,2);assert.equal(r.reacquisition.remaining,0);assert.equal(r.deadline-r.startedAt,15000);
+ const q=sequenceHarness(),empty=packFrame();empty.hud.enemyBars=[];
+ assert.equal(await native.reacquireFieldTarget(empty,{...q.api,pack:true,deadline:1100,reacquisition:{remaining:2,frames:[]}}),empty);assert.equal(q.observations,0);
+});
+test('pack sequence shares movement budget and origin across all rotation approaches',async()=>{
+ const h=sequenceHarness({observation:o=>o.hud.enemyBars.forEach(b=>b.height=4)});h.initial.hud.enemyBars.forEach(b=>b.height=4);
+ const r=await native.fieldSequence(h.initial,h.api);assert.equal(h.actions.filter(x=>x==='forward').length,4);assert.equal(r.approachBudget.steps,4);assert.equal(h.runs,3);
+ const outside=sequenceHarness({observation:o=>o.map.x+=13});const s=await native.fieldSequence(outside.initial,outside.api);
+ assert.equal(outside.runs,1);assert.match(s.error,/travel budget/);assert.equal(s.turns[0].nativeReturned,true);
+});
+test('actual adapter preserves first success and a later failed rotation then protects once',async()=>{
+ const r=await packAdapter('actTwoFieldCombat',2,{failAt:2});assert.equal(r.result.completedRotations,1);assert.equal(r.result.nativeReturned,false);assert.equal(r.result.chunks.length,2);assert.equal(r.result.chunks[0].nativeReturned,true);assert.equal(r.result.chunks[1].nativeReturned,false);assert.equal(r.result.chunks[1].afterFrameId,undefined);assert.match(r.result.reason,/native rejected/);assert.equal(r.calls.filter(x=>x==='protect').length,1);assert.equal(r.calls.filter(x=>x==='VK_ESCAPE').length,1);
 });

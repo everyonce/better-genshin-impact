@@ -106,6 +106,33 @@ test('only a measured same-account native forward uses a smaller model hold; eve
     }
 });
 
+test('after a streamed W, navigation measures actual hold progress and rechecks the next ground image',async()=>{
+    for(const threat of [false,true]){
+        let id=2,now=8000,y=2536,moves=0,admissions=0;
+        function current(state){
+            const f=frame(id,now,y,state);
+            f.ocr=[{text:'UID: 693306810',x:1702,y:1046}];
+            return f;
+        }
+        const api={now:()=>now,checkStop(){},sleep:async ms=>{now+=ms;},
+            gpuAdviserUid:'693306810',setGpuAdviserWaypoint(){},gpuAdviserStopped(){},
+            gpuAdvisedForwardMs:(f,point,ms,stream)=>{assert.equal(stream.frame,f);assert.equal(stream.target,point);
+                assert.equal(ms,800);admissions++;return ms;},
+            forward:async(ms,stream)=>{assert.equal(ms,800);stream.guard();moves++;now+=77;return 75;},
+            rotate:()=>assert.fail('unnecessary turn'),jumpRecovery:()=>assert.fail('false stall after short pulse'),
+            runActTwoNavigationWithPause:(_o,_see,body)=>body(current('clear'))};
+        const result=await mission.runNavigation(request,current('clear'),api,async()=>{
+            id++;
+            y=moves<4?y+.1:2552;
+            return current(threat?'threat':'clear');
+        });
+        assert.equal(result.status,threat?'stopped':'arrived');
+        assert.equal(moves,threat?1:4);assert.equal(admissions,moves);
+        assert.equal(result.inputMs,moves*75);
+        if(threat)assert.match(result.reason,/Enemy observed/);
+    }
+});
+
 test('pipe and public frame sequences are separate; wrong identity, stale or replayed frames leave the native owner in control', () => {
     const fs = require('node:fs'), vm = require('node:vm');
     const filename = require.resolve('../../BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js');

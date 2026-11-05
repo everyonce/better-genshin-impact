@@ -89,6 +89,12 @@ async function observeStep(step, missionName='questStep', options={}) {
   if(options.adviser){
     // In-memory same-user mailboxes for the real adapter. Normal script reads use the existing fixture boundary.
     const read=context.file.readTextSync,write=context.file.writeTextSync,files=options.adviser.files;
+    if(options.adviser.clock){
+      const clock=options.adviser.clock;
+      context.keyDown=k=>clock.inputs.push([k,'down',now]);
+      context.keyUp=k=>clock.inputs.push([k,'up',now]);
+      context.sleep=async ms=>{now+=ms;clock.tick(now,files,context);};
+    }
     context.file.readTextSync=p=>p.endsWith('quest-adviser-latest.json')?(files.latest||'null'):read(p);
     context.file.writeTextSync=(p,data)=>{
       if(p.endsWith('quest-adviser-context.json'))files.context=JSON.parse(data);
@@ -432,5 +438,74 @@ test('measured navigation prearms its first capture and preserves it only for th
     const mailbox={};
     await observeStep(undefined,'navigation',{...groundOptions(),request:{...req,...change},
       adviser:{identity,files:mailbox,inspect:()=>assert.equal(mailbox.context,undefined)}});
+  }
+});
+
+test('the in-flight GPU pulse releases or renews only the existing native W',async()=>{
+  const identity={session:'test',processId:1234,windowsSessionId:7,gameProcessId:5432,expectedUid:'123456789'};
+  const target={map:'Teyvat',x:25,y:10},req={id:'pulse-test',objective:'Explore for Adventure Rank',requireMeasuredGround:true,waypoints:[target]};
+  for(const scenario of ['takeover','renew','abstain','duplicate','epoch','invalid','continuous','stop','focus','preselected','preexpiry','preempted','expired-ground']){
+    const files={},inputs=[],base=2000000,epoch='a'.repeat(32),clock={inputs,tick};
+    function offer(now,fields={}){
+      const dt=now-base;
+      files.latest=JSON.stringify({...identity,protocolVersion:1,type:'steeringSuggestion',sourceEpoch:epoch,frameId:100+dt,
+        capturedAtUnixMs:now-8,publishedAtUnixMs:now-1,validUntilUnixMs:now+150,context:files.context,
+        steering:{forward:true,holdMs:50},...fields});
+    }
+    function tick(now,mail,host){
+      const dt=now-base;
+      if(scenario==='abstain'){offer(now,{steering:{forward:false,holdMs:0}});return;}
+      if(scenario==='invalid'){
+        if(dt===25)offer(now,{capturedAtUnixMs:base});
+        if(dt===50)offer(now,{session:'foreign'});
+        if(dt===75)offer(now,{context:{...mail.context,requestId:'previous'}});
+        if(dt===100)offer(now,{validUntilUnixMs:now});
+        return;
+      }
+      if(['preempted','preexpiry','expired-ground'].includes(scenario))return;
+      if(dt===25||scenario==='continuous'||scenario==='renew'&&dt===50)offer(now);
+      if(scenario==='duplicate'&&dt===50)offer(now,{frameId:125});
+      if(scenario==='epoch'&&dt===50)offer(now,{sourceEpoch:'b'.repeat(32)});
+      if(dt===50&&scenario==='stop'){
+        host.file.isExists=p=>p==='stop.json';
+        host.file.readTextSync=p=>JSON.stringify({session:'test',createdAt:base+50});
+      }
+      if(dt===50&&scenario==='focus')host.genshin.isGameForeground=false;
+    }
+    await observeStep(undefined,'navigation',{...groundOptions(),request:req,adviser:{identity,files,clock,inspect:async(api,o)=>{
+      const stream={frame:o,target,nativeMs:800,routeDeadline:base+800,guard:()=>{if(scenario==='expired-ground')throw Error('expired');}};
+      const first=['preselected','preexpiry'].includes(scenario);
+      if(first)offer(base,{capturedAtUnixMs:base,publishedAtUnixMs:base});
+      const ms=api.gpuAdvisedForwardMs(o,target,800,stream);
+      if(scenario==='preexpiry')await api.sleep(150);
+      if(scenario==='preempted')stream.routeDeadline=base+85;
+      if(scenario==='expired-ground'){
+        await assert.rejects(api.forward(ms,stream),/expired/);assert.equal(inputs.length,0);return;
+      }
+      const interrupt=['stop','focus'].includes(scenario);
+      if(interrupt)await assert.rejects(api.forward(ms,stream),/Stop requested|focus/);
+      else await api.forward(ms,stream);
+      const key=api.events().find(e=>e.type==='key'),r=key.gpuSteering;
+      const elapsed=inputs[1][2]-inputs[0][2];
+      assert.deepEqual(inputs.map(a=>a.slice(0,2)),[['VK_W','down'],['VK_W','up']],scenario);
+      assert.equal(r.keyUpAtUnixMs-r.keyDownAtUnixMs,elapsed);
+      assert.equal(r.nativeDeadlineUnixMs,stream.routeDeadline);assert.equal(r.requestId,req.id);assert.equal(r.frameId,o.frameId);
+      assert.equal(key.finishedAt,r.keyUpAtUnixMs);assert.equal(r.actualHoldMs,elapsed);
+      assert.equal(key.durationMs,r.appliedDeadlineUnixMs-r.keyDownAtUnixMs);
+      const expected={takeover:75,renew:100,abstain:800,duplicate:75,epoch:75,invalid:800,continuous:800,stop:50,focus:50,preselected:75,preexpiry:650,preempted:85};
+      assert.equal(elapsed,expected[scenario],scenario);
+      const count={takeover:1,renew:2,abstain:0,duplicate:1,epoch:1,invalid:0,continuous:30,stop:1,focus:1,preselected:2,preexpiry:0,preempted:0};
+      assert.equal(r.pulses.length,count[scenario],scenario);
+      assert.equal(new Set(r.pulses.map(p=>p.pipeFrameId)).size,r.pulses.length);
+      for(const p of r.pulses){
+        assert.equal(p.sourceEpoch,epoch);assert.ok(p.capturedAtUnixMs<=p.publishedAtUnixMs&&p.publishedAtUnixMs<=p.decidedAtUnixMs);
+        assert.ok(p.horizonUnixMs<=r.nativeDeadlineUnixMs);
+      }
+      if(scenario==='epoch')assert.equal(r.withheldPolls.source_changed,1);
+      if(scenario==='abstain')assert.ok(r.withheldPolls.no_forward_agreement>1);
+      if(interrupt)assert.equal(r.reason,'interrupted');
+      if(scenario==='preexpiry')assert.equal(api.events().find(e=>e.type==='gpuSteeringDecision').reason,'expired_before_key_down');
+      if(!interrupt)assert.equal(r.reason,r.keyUpAtUnixMs===stream.routeDeadline?'native_deadline':'model_pulse_expired');
+    }}});
   }
 });

@@ -560,13 +560,19 @@ var ActOneMission = (function () {
                 if(exploring&&typeof api.releaseClimb==='function'&&current.hud.groundControls&&!current.hud.climbing&&request.deadlineMs-(api.now()-began)<held+6500) return stop('Navigation stopped before movement to reserve incidental-climb recovery time');
                 if(lisaUnsafe(current)) return stop(lisaUnsafeReason(current));
                 // The GPU may shorten this particular approved forward hold. Rotation, recovery and other input remain native.
+                var stream=null;
                 if (useAdviser && stalled===0 && current.session===request.session &&
                     current.hud.groundControls===true && !current.hud.climbing && !current.mapPositionInherited &&
                     !current.hud.interact && !current.hud.loading && !current.hud.unknownHud && !current.hud.swimming &&
                     !current.hud.choice && !current.hud.dialogueReady && !current.hud.tutorialStep && !current.hud.auto &&
                     !current.hud.bigMap && !current.hud.journal && !namedFinal && !markerApproach &&
                     namedDialogueAccount(current,api.gpuAdviserUid) && groundScanStopReason(current,api.now())===null) {
-                    held=api.gpuAdvisedForwardMs(current,target,held);
+                    stream={frame:current,target:target,nativeMs:held,routeDeadline:began+request.deadlineMs,
+                        guard:function(){
+                            if(groundScanStopReason(current,api.now()) || api.now()>=began+request.deadlineMs)
+                                throw new Error('Measured navigation frame expired before forward');
+                        }};
+                    held=api.gpuAdvisedForwardMs(current,target,held,stream);
                     var adviceScan=groundScanStopReason(current,api.now());
                     if (adviceScan) {
                         adviceScan=await refreshExpiredGround(adviceScan,target);
@@ -577,7 +583,12 @@ var ActOneMission = (function () {
                         return stop('Measured navigation frame expired before forward');
                 }
                 afterForward = { x: current.map.x, y: current.map.y, minProgress: travelHeld === null ? 0.5 : Math.min(0.5, held / 1000), groundWitness: current.hud.groundControls&&!current.hud.climbing?current:null, groundWitnessAt: request.requireMeasuredGround?scanCheckedAt:null };
-                var inputStarted = api.now(); await api.forward(held); totalInputMs += api.now() - inputStarted; movements++;
+                var inputStarted=api.now(),actualHeld=await api.forward(held,stream);
+                if(stream && Number.isFinite(actualHeld)){
+                    afterForward.minProgress=Math.min(0.5,actualHeld/1000);
+                    totalInputMs+=actualHeld;
+                } else totalInputMs+=api.now()-inputStarted;
+                movements++;
                 await api.sleep(150); current = await observe();
             }
         }

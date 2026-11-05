@@ -2355,6 +2355,50 @@ function createActOneAdapter(sessionId,options) {
         try { if (!file.writeTextSync('quest-adviser-context.json',JSON.stringify(adviserContext))) adviserContext=null; }
         catch (_) { adviserContext=null; }
     }
+    // Only the native navigation owner reads model output. The frame-pipe producer never holds a key.
+    function readSteering(frame,target,nativeMs) {
+        var suggestion=null,result='unavailable';
+        try {
+            if (adviserTarget && target.x===adviserTarget.x && target.y===adviserTarget.y && target.map===adviserTarget.map &&
+                adviserContext && lastObservation && lastObservation.frameId===frame.frameId) {
+                suggestion=JSON.parse(file.readTextSync('quest-adviser-latest.json'));
+                result=actOneGpuSteeringDecision(suggestion,adviserContext,adviser,frame,Date.now(),nativeMs,
+                    suggestion&&suggestion.sourceEpoch===lastAdviserEpoch?lastAdvisedFrame:0);
+            }
+        } catch (_) {}
+        return {suggestion:suggestion,result:result};
+    }
+    // Each accepted image can sponsor one pulse. Independent native and pipe frame sequences stay explicit in the receipt.
+    function recordPulse(s,now,horizon) {
+        lastAdviserEpoch=s.sourceEpoch;lastAdvisedFrame=s.frameId;
+        return {sourceEpoch:s.sourceEpoch,pipeFrameId:s.frameId,capturedAtUnixMs:s.capturedAtUnixMs,
+            publishedAtUnixMs:s.publishedAtUnixMs,validUntilUnixMs:s.validUntilUnixMs,decidedAtUnixMs:now,holdMs:s.steering.holdMs,horizonUnixMs:horizon};
+    }
+    function pollHeldForward(stream,receipt,deadline) {
+        var before=Date.now(),stamp=stream.frame.hud.captureStamp;
+        if (before-stamp.capturedAt>1000) return deadline;
+        var sample=readSteering(stream.frame,stream.target,stream.nativeMs),s=sample.suggestion,now=Date.now();
+        receipt.polls++;
+        var reason=null,previous=receipt.pulses[receipt.pulses.length-1];
+        if (!stream.sourceEpoch && (typeof sample.result==='number'||sample.result==='no_forward_agreement'))
+            stream.sourceEpoch=s.sourceEpoch;
+        if (typeof sample.result!=='number') reason=sample.result;
+        else if (now>=deadline || now>=s.validUntilUnixMs || now-stamp.capturedAt>1000) reason='expired';
+        else if (s.capturedAtUnixMs<=receipt.keyDownAtUnixMs) reason='before_key_down';
+        else if (s.sourceEpoch!==stream.sourceEpoch) reason='source_changed';
+        else if (previous && (s.frameId<=previous.pipeFrameId || s.capturedAtUnixMs<=previous.capturedAtUnixMs))
+            reason='expired_or_replayed';
+        var horizon=reason?deadline:Math.min(receipt.nativeDeadlineUnixMs,now+s.steering.holdMs);
+        // Without a prior pulse, only a genuinely earlier release changes native behavior. Once selected,
+        // newer forward images may renew the current pulse, up to the original native deadline.
+        if (!reason && (previous ? horizon<=deadline : horizon>=deadline)) reason='unchanged_horizon';
+        if (reason){
+            receipt.withheldPolls[reason]=(receipt.withheldPolls[reason]||0)+1;
+            return deadline;
+        }
+        receipt.pulses.push(recordPulse(s,now,horizon));
+        return horizon;
+    }
     var pauseProtectionActive=false,pauseProtectionObserver=null,pauseProtectionKeys=Object.create(null),pauseProtectionLastInputFrame=-1,pauseProtectionLastStatusAt=-Infinity;
     function loadLocalPause(){
         var protector=eval(file.readTextSync('local-pause.js')+'\nActOneLocalPause;');
@@ -2816,7 +2860,16 @@ function createActOneAdapter(sessionId,options) {
         if (genshin.isRemoteDesktopSession !== true || !Number.isInteger(expectedSession) || expectedSession <= 1 || Number(genshin.windowsSessionId) !== expectedSession) throw new Error('The pinned verified RDP child session above Windows session 1 is required');
     }
     function ready() { if(actTwoShieldDeadlineReached(request,Date.now())){release();var deadlineError=new Error('Whole shield request deadline reached; all further input blocked');deadlineError.code='PAUSE_PROTECTION_EXHAUSTED';throw deadlineError;}sessionReady(); if (genshin.isGameForeground !== true) throw new Error('Game lost foreground focus'); }
-    function release() { if (held) { var k = held; keyUp(k); held = null; } }
+    var heldSteeringReceipt=null;
+    function release() {
+        if (held) {
+            var k=held;
+            if(heldSteeringReceipt)heldSteeringReceipt.keyUpStartedAtUnixMs=Date.now();
+            keyUp(k); held=null;
+            if(heldSteeringReceipt)heldSteeringReceipt.keyUpAtUnixMs=Date.now();
+            heldSteeringReceipt=null;
+        }
+    }
     function checkStop() {
         if(heartbeat)heartbeat(false);
         ready();
@@ -3313,7 +3366,7 @@ function createActOneAdapter(sessionId,options) {
         if(!fedKaeya) return feedTarget?'feedKaeya':null;
         return null;
     }
-    async function boundedKey(key, ms, frameId, sourceGuard) {
+    async function boundedKey(key, ms, frameId, sourceGuard, stream) {
         // A failed earlier key-up must be retried before a new key can replace
         // the held-key record, including during failure cleanup.
         checkStop(); release();
@@ -3324,13 +3377,44 @@ function createActOneAdapter(sessionId,options) {
         if(Number.isInteger(frameId)&&frameId>=0)event.frameId=frameId;
         try {
             keyDown(key);
-            var deadline = Date.now() + ms;
+            var down=Date.now(), deadline=down+ms,receipt=null;
+            if (stream) {
+                var baseline=Math.min(down+stream.nativeMs,stream.routeDeadline);
+                receipt=event.gpuSteering={requestId:request.id,frameId:frameId,keyDownAtUnixMs:down,
+                    nativeMs:stream.nativeMs,initialMs:ms,nativeDeadlineUnixMs:baseline,polls:0,withheldPolls:{},pulses:[]};
+                heldSteeringReceipt=receipt;
+                deadline=Math.min(deadline,baseline);
+                if(stream.entryPulse && down>=stream.entryPulse.validUntilUnixMs){
+                    // STOP/focus checks or the native key dispatch may outlive the original model image.
+                    stream.entryDecision.status='rejected';
+                    stream.entryDecision.reason='expired_before_key_down';
+                    stream.entryDecision.holdMs=stream.nativeMs;
+                    event.durationMs=stream.nativeMs;
+                    deadline=baseline;
+                } else if(stream.entryPulse){
+                    stream.entryPulse.horizonUnixMs=deadline;
+                    receipt.pulses.push(stream.entryPulse);
+                }
+            }
             while (true) {
                 var remaining = deadline - Date.now();
                 if (remaining <= 0) break;
-                await sleep(Math.min(50, remaining)); checkStop();
+                await sleep(Math.min(stream?25:50,remaining)); checkStop();
+                if(receipt && Date.now()<deadline)deadline=pollHeldForward(stream,receipt,deadline);
             }
-        } finally { release(); event.finishedAt = Date.now(); }
+            if(receipt)receipt.reason=deadline<receipt.nativeDeadlineUnixMs?'model_pulse_expired':'native_deadline';
+        } catch (e) {
+            if(receipt)receipt.reason='interrupted';
+            throw e;
+        } finally {
+            release(); event.finishedAt=Date.now();
+            if(receipt){
+                receipt.appliedDeadlineUnixMs=deadline;
+                receipt.actualHoldMs=receipt.keyUpAtUnixMs-down;
+                event.durationMs=Math.max(0,deadline-down);
+            }
+        }
+        if(receipt)return receipt.actualHoldMs;
     }
     // Restrict the warning-color measurement to the one ambiguous field component.
     function readHostileDirection(img,c){
@@ -3946,25 +4030,22 @@ function createActOneAdapter(sessionId,options) {
             adviserContext=null;
             if (!target) try { file.writeTextSync('quest-adviser-context.json','null'); } catch (_) {}
         },
-        gpuAdvisedForwardMs: function (frame,target,nativeMs) {
+        gpuAdvisedForwardMs: function (frame,target,nativeMs,stream) {
             if (!adviser) return nativeMs;
-            var now=Date.now(), suggestion=null, result='unavailable';
-            try {
-                if (adviserTarget && target.x===adviserTarget.x && target.y===adviserTarget.y && target.map===adviserTarget.map &&
-                    adviserContext && lastObservation && lastObservation.frameId===frame.frameId) {
-                    suggestion=JSON.parse(file.readTextSync('quest-adviser-latest.json'));
-                    result=actOneGpuSteeringDecision(suggestion,adviserContext,adviser,frame,Date.now(),nativeMs,
-                        suggestion&&suggestion.sourceEpoch===lastAdviserEpoch?lastAdvisedFrame:0);
-                }
-            } catch (_) {}
-            var accepted=typeof result==='number';
-            if (accepted) { lastAdviserEpoch=suggestion.sourceEpoch; lastAdvisedFrame=suggestion.frameId; }
+            var now=Date.now(),sample=readSteering(frame,target,nativeMs),suggestion=sample.suggestion,result=sample.result;
+            var accepted=typeof result==='number',decidedAt=Date.now();
+            if(stream && (accepted || result==='no_forward_agreement'))stream.sourceEpoch=suggestion.sourceEpoch;
+            if(accepted){
+                var pulse=recordPulse(suggestion,decidedAt,null);
+                if(stream)stream.entryPulse=pulse;
+            }
             events.push({type:'gpuSteeringDecision',frameId:frame.frameId,pipeFrameId:suggestion&&suggestion.frameId,
                 status:accepted?'accepted':'rejected',reason:accepted?'measured_native_forward_agrees':result,
                 sourceEpoch:suggestion&&suggestion.sourceEpoch,nativeMs:nativeMs,holdMs:accepted?result:nativeMs,startedAt:now,
                 // The matching VK_W receipt supplies the actual software input time.
                 capturedAtUnixMs:accepted?suggestion.capturedAtUnixMs:undefined,
-                publishedAtUnixMs:accepted?suggestion.publishedAtUnixMs:undefined,decidedAtUnixMs:Date.now()});
+                publishedAtUnixMs:accepted?suggestion.publishedAtUnixMs:undefined,decidedAtUnixMs:decidedAt});
+            if(stream && accepted)stream.entryDecision=events[events.length-1];
             return accepted?result:nativeMs;
         },
         setHeartbeat: function (callback) {heartbeat=callback;},
@@ -9572,7 +9653,7 @@ function createActOneAdapter(sessionId,options) {
             if(sourceGuard)sourceGuard();
             events.push({ type: 'rotate', dx: dx, frameId:lastObservation&&lastObservation.frameId, startedAt: Date.now() }); moveMouseBy(dx, 0);
         },
-        forward: async function (ms) {
+        forward: async function (ms,stream) {
             if (!Number.isInteger(ms) || ms < 1 || ms > 800) throw new Error('Invalid movement duration');
             if(lisaNavigationRequest()){
                 checkStop();if(!lisaNavigationInputReady(lastObservation))throw new Error('Fresh protected Lisa navigation field required before forward input');
@@ -9583,7 +9664,7 @@ function createActOneAdapter(sessionId,options) {
                     await boundedKey('VK_SHIFT',80,lastObservation.frameId);
                 }
             }
-            return boundedKey('VK_W', ms,lastObservation&&lastObservation.frameId);
+            return boundedKey('VK_W', ms,lastObservation&&lastObservation.frameId,stream&&stream.guard,stream);
         },
         descendClimb: function (ms) { if (!Number.isInteger(ms) || ms < 1 || ms > 800) throw new Error('Invalid climb descent duration'); return boundedKey('VK_S', ms); },
         pinObservation: function (session, frame) {

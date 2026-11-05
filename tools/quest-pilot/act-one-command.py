@@ -614,7 +614,7 @@ def main(*, before_request_write=None):
         time.sleep(.2)
         try:
             receipt = read(request_receipt_path(ROOT, request['session'], request['id']))
-        except (FileNotFoundError, json.JSONDecodeError):
+        except (FileNotFoundError, PermissionError, json.JSONDecodeError):
             continue
         if not isinstance(receipt, dict):
             raise SystemExit('Request-specific receipt is not an object; inspect status. No retry was sent.')
@@ -627,6 +627,8 @@ def main(*, before_request_write=None):
             try:
                 mission_observation = read(observation_path(ROOT, request['session'], receipt.get('frameId')))
                 latest = read(ROOT / 'observation.json')
+            except PermissionError:
+                continue
             except (FileNotFoundError, json.JSONDecodeError, RuntimeError) as exc:
                 raise SystemExit(f'Request receipt lacks a readable immutable observation; inspect status. No retry was sent. ({exc})') from exc
             try:

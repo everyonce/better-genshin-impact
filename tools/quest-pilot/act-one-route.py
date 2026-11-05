@@ -137,7 +137,7 @@ def wait_for_terminal(root, request, wait_seconds, *, monotonic=time.monotonic, 
     while monotonic() < end:
         try:
             receipt = read(root / 'receipt.json')
-        except (FileNotFoundError, json.JSONDecodeError):
+        except (FileNotFoundError, PermissionError, json.JSONDecodeError):
             receipt = None
         if isinstance(receipt, dict) and receipt.get('id') == request['id']:
             if receipt.get('session') != request['session'] or receipt.get('mission') != 'navigation':
@@ -632,14 +632,19 @@ class GuardedPilot:
             path = self.command.request_receipt_path(self.root, self.session, request['id'])
             try:
                 receipt = read(path)
-            except (FileNotFoundError, json.JSONDecodeError):
+            except (FileNotFoundError, PermissionError, json.JSONDecodeError):
                 receipt = None
             if receipt is not None:
                 if (not isinstance(receipt, dict) or receipt.get('id') != request['id']
                         or receipt.get('session') != self.session or receipt.get('mission') != mission):
                     raise RouteError('Request-specific receipt identity differs.')
                 if receipt.get('status') not in ('started', 'running'):
-                    observed = read(self.command.observation_path(self.root, self.session, receipt.get('frameId')))
+                    try:
+                        observed = read(self.command.observation_path(self.root, self.session, receipt.get('frameId')))
+                    except PermissionError:
+                        # Windows may still hold the capture during publication. Keep this request and deadline.
+                        time.sleep(.1)
+                        continue
                     frame = self.command.validate_terminal_receipt(request, receipt, observed)
                     # Passive observations have no pending input to settle. Confirm the idle frame
                     # across polls while its ground scan is still fresh enough for the next decision.

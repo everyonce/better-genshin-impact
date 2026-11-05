@@ -1638,6 +1638,23 @@ class GuardedPilotProtocolTests(unittest.TestCase):
                 request = read_json(self.root / 'request.json'); request['id'] = 'mission-' + 'f' * 32
                 (self.root / 'request.json').write_text(json.dumps(request), encoding='utf-8')
 
+    def test_sharing_collision_polls_the_same_submitted_receipt(self):
+        original = route_tool.read
+        seen = []
+        def sharing_once(path):
+            if path.parent.parent.name == 'receipts':
+                seen.append(path)
+                if len(seen) == 1:
+                    raise PermissionError('native writer still owns this file')
+            return original(path)
+        saved = []
+        with mock.patch.object(route_tool, 'read', side_effect=sharing_once):
+            result = self.pilot.execute('observe', self.source, {}, self.clock.monotonic() + 5, saved.append)
+        self.assertEqual(len(saved),1)
+        self.assertGreaterEqual(len(seen),2)
+        self.assertEqual(len(set(seen)),1)
+        self.assertEqual(result['receipt']['id'],saved[0]['id'])
+
     def test_real_atomic_terminal_and_quiescence_retire_before_next_request(self):
         saved = []
         started = self.clock.monotonic()

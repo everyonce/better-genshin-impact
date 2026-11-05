@@ -54,8 +54,21 @@ test('recorded 600 ms Mondstadt stride is progress while a long 2 m slide remain
 test('runtime checks and persists the attempt before unpause, then records outcome',()=>{
  const fs=require('fs'),source=fs.readFileSync('BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js','utf8');
  const block=source.slice(source.indexOf('runActTwoField: async'),source.indexOf('runActTwoWindriseSlime: async'));
- assert.ok(block.indexOf('progress.rejection')<block.indexOf("await boundedKey('VK_ESCAPE'"));
- assert.ok(block.indexOf('progress.begin')<block.indexOf("await boundedKey('VK_ESCAPE'"));
- assert.ok(block.includes('progress.finish(progressHistory,request.id,lastObservation,events)'));
- assert.ok(block.includes("throw Error('Progress history persistence failed')"));
+ const unpause=block.indexOf("await boundedKey('VK_ESCAPE'");
+ for(const guarded of ['progress.rejection','progress.begin']){
+  const position=block.indexOf(guarded);assert.ok(position>=0&&position<unpause);
+ }
+ // Run the actual terminal storage block with its real progress helper and an in-memory file.
+ const save=block.split('\n').find(line=>line.trimStart().startsWith('function saveProgress()'));
+ const finish=block.split('\n').find(line=>line.trimStart().startsWith('if(progressHistory){try{progressHistory=progress.finish('));
+ assert.ok(save&&finish);
+ const finalize=new Function('progress','progressHistory','request','lastObservation','events','file',
+     'let error=null,result=null;\n'+save+'\n'+finish+'\nreturn error;');
+ const bytes=new Map(),file={writeTextSync:(path,text)=>{bytes.set(path,text);return true;},readTextSync:path=>bytes.get(path)};
+ const pending=g.begin({version:1,entries:[]},p,mid,'attempt');
+ assert.equal(finalize(g,pending,{id:'attempt'},end,[{type:'key',key:'VK_W'}],file),null);
+ const saved=JSON.parse(bytes.get('field-progress-history.json')).entries[0];
+ assert.equal(saved.actualMovementInputs,1);
+ assert.equal(saved.movementEvidenceSource,'owned-controller-input-events');
+ assert.match(finalize(g,pending,{id:'attempt'},end,[],{writeTextSync:()=>false}),/Progress history persistence failed/);
 });

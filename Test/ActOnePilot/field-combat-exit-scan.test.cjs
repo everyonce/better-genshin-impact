@@ -26,11 +26,16 @@ test('field combat uses a full-width scan on direct entry and final protection',
 
 test('native heartbeat advertises direct world entry for the running script session', () => {
   const script=fs.readFileSync(path.resolve(__dirname, '../../BetterGenshinImpact/User/JsScript/ActOnePilot/main.js'),'utf8');
-  const source=script.slice(script.indexOf('    function heartbeat('),script.indexOf('    function checkStartupStop('));
+  // Run the real optional adviser discovery and the heartbeat together, as main.js does.
+  const start=script.indexOf('    var gpuAdviserIdentity='),end=script.indexOf('    function checkStartupStop(',start);
+  assert.ok(start>=0&&end>start);
+  const source=script.slice(start,end);
   let status;
   const context={session:'current-session',lastHeartbeat:0,runner:{getState:()=>({state:'idle',frameId:7,activeRequestId:null})},
       genshin:{betterGiProcessId:123,windowsSessionId:3,isRemoteDesktopSession:true},safetyFault:null,failure:null,
-      file:{writeTextSync:(_path,content)=>{status=JSON.parse(content);return true;}}};
+      file:{isExists:p=>{assert.equal(p,'gpu-adviser-config.json');return false;},
+            writeTextSync:(_path,content)=>{status=JSON.parse(content);return true;}}};
   vm.runInNewContext(source+';heartbeat(true)',context);
   assert.equal(status.session,'current-session');assert.equal(status.frameId,7);assert.equal(status.fieldCombatWorldEntry,true);
+  assert.equal(status.gpuAdviserFrameStream,false);assert.equal(status.gpuAdviserError,undefined);
 });

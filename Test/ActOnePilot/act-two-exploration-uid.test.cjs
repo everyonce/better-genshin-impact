@@ -1,8 +1,15 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const bgi=require('../../BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js');
 const source=fs.readFileSync(path.resolve(__dirname,'../../BetterGenshinImpact/User/JsScript/ActOnePilot/bgi.js'),'utf8');
-const body=source.slice(source.indexOf("                if(request&&(request.mission==='navigation'&&['Explore for Adventure Rank'"),source.indexOf('                // The positively anchored Statue scope'));
-const run=new Function('request','rows','actTwoOriginalAccount','actOneMergeControlCropRows','scaledRows','img','const inventoryUiPauseUidCrop=false;'+body+'return rows;');
+// Exercise the complete UID branch, including the real inventory-pause admission calculation.
+const start=source.indexOf('                var inventoryUiPauseUidCrop=');
+const end=source.indexOf('                var statueCropAnchors=',start);
+assert.ok(start>=0&&end>start);
+const captureUid=new Function('request','rows','actTwoOriginalAccount','actOneMergeControlCropRows','scaledRows','img',
+ 'inventoryUiOnly','inventoryUiPauseBefore','inventoryUiPauseAttempted','inventoryUiPauseUidCropAttempted',
+ source.slice(start,end)+'return rows;');
+// Navigation and map requests execute outside the inventory-only pause capture.
+function run(...args){return captureUid(...args,false,null,false,false);}
 test('Map recovery crops only the UID band to exclude the overlapping right-hand region label',()=>{
  const rows=[{text:'UID: 693306810pa Go',x:1678,y:1048,width:242,height:29}],calls=[];
  const result=run({mission:'questStep',step:'actTwoCityTeleport'},rows,bgi.originalAccount,bgi.mergeControlCropRows,(img,x,y,w,h)=>{calls.push({x,y,w,h});return [{text:'693306810',x:40,y:12,width:140,height:24}];},'same-image');

@@ -159,6 +159,18 @@ class EncounterEvidenceTests(unittest.TestCase):
                 self.assertLessEqual(archive.summary['bytes'], archive.summary['maxBytes'])
                 self.assertEqual(len(list((output/'encounters'/'new-owned').iterdir())), 2)
 
+    def test_aimed_release_keeps_first_sight_and_each_actual_shot(self):
+        archive = load(Path(launcher.__file__).with_name('encounter_evidence.py'), '_tower_archive')
+        req = dict(id='r',mission='questStep')
+        aim = dict(samples=[dict(frameId=2),dict(frameId=3)],shots=[dict(frameId=3)])
+        chunk = dict(actionId='r:rotation:0',nativeReturned=True,beforeFrameId=1,afterFrameId=4,aim=aim)
+        receipt = dict(details=dict(result=dict(nativeAttempted=True,chunks=[chunk])))
+        rows = list(archive._selected(req,receipt,[]))
+        self.assertIn(('rotation-0-bow-sight',2),rows)
+        self.assertIn(('rotation-0-bow-release-1',3),rows)
+        chunk['nativeReturned'] = False
+        self.assertEqual(list(archive._selected(req,receipt,[])),[])
+
     def test_public_cli_flag(self):
         args = ['--route','city.json','--progress','route.json','--expected-uid','123456789']
         self.assertFalse(launcher.parse_args(args).save_encounter_frames)

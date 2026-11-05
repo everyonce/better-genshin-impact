@@ -632,6 +632,45 @@ class LauncherTests(unittest.TestCase):
         boundary.assert_not_called()
         self.assertFalse((args.progress.parent/(args.progress.stem+'.rdp')).exists())
 
+    def test_recovered_defeat_uses_only_original_pending_points_and_verified_game(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            f = Fixture(Path(temporary), count=1)
+            session, uid = 'owned-session', '123456789'
+            rid = 'mission-' + 'a'*32
+            witness = dict(requestId=rid, minimumDefeated=1, measuredClear=True, pauseSourceFrameId=7, rewardFrameId=6)
+            point = dict(map='Teyvat', x=-1190, y=2200)
+            first = dict(objective='Explore for Adventure Rank', teleportTo='mondstadt-gate', waypoints=[point,dict(point,x=-1188)])
+            path = f.output/'route-001.json'
+            path.write_text(json.dumps(first),encoding='utf-8')
+            record = dict(path=str(path),sha256=hashlib.sha256(path.read_bytes()).hexdigest())
+            launcher.save(f.output/'launch.json',dict(expectedUid=uid,routes=[record]))
+            launcher.save(f.output/'worker-result.json',dict(status='failed',legs=[{}]))
+            req = dict(step='actTwoFieldCombat',id=rid,session=session)
+            receipt = dict(id=rid,session=session)
+            leg = dict(status='waiting',session=session,nextWaypointIndex=1,route=first,records=[dict(request=req,receipt=receipt)])
+            legdir = f.output/'leg-001';legdir.mkdir(exist_ok=True)
+            launcher.save(legdir/'progress.json',leg)
+            native = f.pilot/'receipts'/session;native.mkdir(parents=True)
+            launcher.save(native/(rid+'.json'),receipt)
+            frames = f.pilot/'observations'/session;frames.mkdir(parents=True)
+            launcher.save(frames/'frame-0007.json',dict(map=point))
+            pin = dict(session=session,owner=f.owner,game=f.game)
+            api = SimpleNamespace(EXPLORATION_OBJECTIVE=first['objective'],field_combat_feedback=mock.Mock(return_value=witness),
+                                  validate_route=mock.Mock())
+            with mock.patch.object(launcher,'load',return_value=SimpleNamespace(terminal_run=lambda _:pin)):
+                recovered, tail, proof, owner = launcher.resume_defeated_route(f.output,uid,api)
+                self.assertEqual((recovered['waypoints'],tail),([first['waypoints'][1]],[]))
+                self.assertNotIn('teleportTo',recovered)
+                self.assertEqual(recovered['startNear'],dict(point,radius=4))
+                self.assertEqual((proof['rewardFrameId'],owner['game']),(6,f.game))
+                api.field_combat_feedback.return_value = None
+                with self.assertRaisesRegex(RuntimeError,'experience award'):
+                    launcher.resume_defeated_route(f.output,uid,api)
+                api.field_combat_feedback.return_value = witness
+                path.write_text('{}',encoding='utf-8')
+                with self.assertRaisesRegex(RuntimeError,'snapshot changed'):
+                    launcher.resume_defeated_route(f.output,uid,api)
+
     def test_console_copies_original_bytes_and_joins_worker_retirement(self):
         f = Fixture(self.root)
         source = Path(f.config['routes'][0]['path'])

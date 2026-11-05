@@ -78,6 +78,12 @@ def _selected(request, receipt, rewards):
             for role, key in [('before', 'beforeFrameId'), ('after', 'afterFrameId')]:
                 if chunk.get(key) is not None:
                     yield f'rotation-{i}-{role}', chunk[key]
+            aim = chunk.get('aim') or {}
+            samples, shots = aim.get('samples') or [], aim.get('shots') or []
+            if samples and shots:
+                yield f'rotation-{i}-bow-sight', samples[0]['frameId']
+                for n, shot in enumerate(shots[:3]):
+                    yield f'rotation-{i}-bow-release-{n+1}', shot['frameId']
 
 
 class EncounterArchive:

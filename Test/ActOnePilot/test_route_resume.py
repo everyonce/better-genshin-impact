@@ -1055,6 +1055,14 @@ class SupervisedRouteControllerTests(unittest.TestCase):
                 self.assertIsNone(route_tool.field_combat_feedback(record, '693306810', frames.__getitem__))
 
     def test_verified_combat_reward_resumes_suffix_in_the_existing_inventory(self):
+        self.assertNotIn('towerHandoff', self.verified_reward_handoff())
+
+    def test_verified_tower_defeat_continues_when_amber_is_still_active(self):
+        report = self.verified_reward_handoff(dict(assessment='defeat', restored=False))
+        self.assertFalse(report['towerHandoff']['kaeyaRestored'])
+        self.assertEqual(report['towerHandoff']['rewardFrameId'], 23)
+
+    def verified_reward_handoff(self, tower=None):
         self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE
         clear, enemy, inv = controller_scene(objective=''), controller_scene(objective='', enemies=True), controller_scene('inventory')
         pause = dict(mission='questStep', source=inv, result=dict(pausedInventory=True))
@@ -1064,6 +1072,8 @@ class SupervisedRouteControllerTests(unittest.TestCase):
         action = dict(mission='questStep', status='stopped', source=inv, result=dict(nativeGroup=False,
             nativeAttempted=True, nativeReturned=True, beforeFrameId=19, afterFrameId=23,
             pauseVerified=True, pauseProof=proof, chunks=[{}]))
+        if tower is not None:
+            action['result']['gateTower'] = tower
         pilot = ReplayPilot(self.clock, [pause, interruption, dict(mission='questStep', source=enemy,
             result=dict(worldVisible=True)), pause, action, self.arrival(2, inv)], source=clear)
         pilot.archived_frame = mock.Mock()
@@ -1076,6 +1086,7 @@ class SupervisedRouteControllerTests(unittest.TestCase):
                          [self.points, self.points[1:]])
         combat_index = next(i for i,r in enumerate(pilot.calls) if r.get('step') == 'actTwoFieldCombat')
         self.assertEqual([r['mission'] for r in pilot.calls[combat_index + 1:]], ['observe', 'navigation'])
+        return report
 
     def test_extended_controller_leg_bounds_each_native_request_and_keeps_legacy_limit(self):
         self.route['objective'] = route_tool.EXPLORATION_OBJECTIVE

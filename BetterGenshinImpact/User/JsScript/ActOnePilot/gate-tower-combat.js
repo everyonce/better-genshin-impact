@@ -33,8 +33,10 @@
   if(row(o,'Amber',1640,1810,330,410)!==1||row(o,'Kaeya',1640,1810,420,480)!==1)return false;
   if(active==='Kaeya')return o.hud.health.max===4015&&k3===0&&(k2===1||k2===0&&
    row(o,'Amber',1683,1700,340,352)===1&&row(o,'Kaeya',1658,1678,443,456)===1);
-  return o.hud.health.max!==4015&&k2===0&&(k3===1||k3===0&&o.hud.health.max===1809&&
-   row(o,'Amber',1656,1674,350,363)===1&&row(o,'Kaeya',1686,1705,428,442)===1);
+  const amberLayout=o.hud.health.max===1809&&row(o,'Amber',1656,1674,350,363)===1&&row(o,'Kaeya',1686,1705,428,442)===1;
+  // After a defeat even the dim active key can become legible. The active name's
+  // left shift, the benched name's right shift and Amber's actual HP distinguish her.
+  return o.hud.health.max!==4015&&(k2===0&&k3===1||amberLayout&&(k2===0&&k3===0||k2===1&&k3===1));
  }
  function bar(o){
   const bars=o&&o.hud&&o.hud.enemyBars,visible=Array.isArray(bars)&&bars.length===1&&bars[0];

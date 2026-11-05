@@ -213,6 +213,14 @@ test('unhelpful turn, changed target, conflicting identity or a lost second sigh
  }
 });
 
+
+test('the post-defeat roster can expose both slot keys while Amber remains selected',()=>{
+ const o=structuredClone(amber1);
+ o.hud.health={current:1793,max:1809};o.ocr.push({text:'2',x:1858,y:353},{text:'3',x:1854,y:445});
+ assert.equal(tower.party(o,'Amber'),true);assert.equal(tower.party(o,'Kaeya'),false);
+ o.ocr.find(r=>r.text==='Amber').x+=25;assert.equal(tower.party(o,'Amber'),false);
+});
+
 test('aimed bow tracks the head below a wounded HP rail independent of the remaining fill',()=>{
  const frame=structuredClone(missBefore);
  frame.hud.bowAimBars=[{left:927,y:485,width:13,height:4}];

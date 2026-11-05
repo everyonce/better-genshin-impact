@@ -22,14 +22,23 @@ async function observeStep(step, missionName='questStep', options={}) {
     RecognitionObject:{Ocr:(x=0,y=0,w=1920,h=1080)=>({x,y,w,h})},
     ImageRegion:class{
       constructor(mat){this.mat=mat;this.width=1920;this.height=1080;}
-      findMulti(){const rows=this.mat&&this.mat.healthCrop?[row(options.health||'626/1427',30,25,150,30)]:[];rows.count=rows.length;return rows;}
+      findMulti(){const rows=this.mat&&this.mat.levelCrop?(options.railSample?.labels||[]).map(r=>({...r})):this.mat&&this.mat.healthCrop?[row(options.health||'626/1427',30,25,150,30)]:[];rows.count=rows.length;return rows;}
       dispose(){}
     },
     OpenCvSharp:{OpenCvSharp:{
       Size:class{constructor(w,h){this.width=w;this.height=h;}},
       Scalar:class{constructor(a,b,c){this.values=[a,b,c];}},
+      ColorConversionCodes:{BGR2GRAY:6},
+      Mat:class{inRange(lo,hi){assert.equal(lo.values[0],20);assert.equal(hi.values[0],255);return this;}
+        findContoursAsArray(){assert.equal(this.combined,true);return options.railSample?.contours||[];}
+        dispose(){}},
       RetrievalModes:{External:0},ContourApproximationModes:{ApproxSimple:0},
-      Cv2:{boundingRect:c=>c,contourArea:c=>options.area===undefined?c.area===undefined?Math.max(0,((c.width||c.Width)-1)*((c.height||c.Height)-1)):c.area:options.area,
+      Cv2:{subtract:options.railSample?(outside,center,out)=>{
+          const r=options.railSample.red,cx=r.x+r.width,cy=Math.round(r.y+r.height/2),gap=Math.ceil(r.height/2)+3;
+          assert.deepEqual([center.x,center.y,center.w,center.h],[cx,cy-1,155,3]);
+          assert.equal(outside.x,cx);assert.equal(Math.abs(outside.y-center.y),gap);out.offset=outside.y-center.y;
+        }:undefined,bitwiseAnd:options.railSample?(up,down,out)=>{assert(up.offset<0&&down.offset>0);out.combined=true;}:undefined,
+        boundingRect:c=>c,contourArea:c=>options.area===undefined?c.area===undefined?Math.max(0,((c.width||c.Width)-1)*((c.height||c.Height)-1)):c.area:options.area,
         countNonZero:mask=>mask.pixelCount!==undefined?mask.pixelCount:mask.flameCount===undefined?(options.redPixels??100):mask.flameCount}
     }},
     captureGameRegion:()=>({width:1920,height:1080,srcMat:{},
@@ -50,8 +59,8 @@ async function observeStep(step, missionName='questStep', options={}) {
           return {pixelCount,flameCount:w===25&&h===10?(options.flameCounts?.[y]??0):undefined,findContoursAsArray:()=>{
             if(sample&&x===sample.x&&y===sample.y+sample.coreStartRow&&w===sample.width&&h===sample.coreRows)
               return options.coreContours??[{x:0,y:0,width:w,height:h,area:sample.coreArea}];
-            if(options.trailSample){
-              const {red,gold}=options.trailSample;
+            if(options.trailSample||options.railSample){
+              const {red,gold}=options.trailSample||options.railSample;
               if(pixelPass&&(x===350&&y===100||x===0&&y===30))return [{...red,x:red.x-x,y:red.y-y}];
               const rgb=[255,209,126],bgr=[rgb[2],rgb[1],rgb[0]];
               if(bgr.every((v,i)=>v>=low.values[i]&&v<=high.values[i])&&gold&&
@@ -63,7 +72,8 @@ async function observeStep(step, missionName='questStep', options={}) {
             return x===350&&y===100&&pixelPass?(sample?[{x:sample.x-x,y:sample.y-y,width:sample.width,height:sample.height,area:sample.outerArea}]:[bar]):[];
           },dispose(){}};
         },
-        resize:()=>({healthCrop:x===900&&y===990})
+        cvtColor:()=>({x,y,w,h,dispose(){}}),
+        resize:()=>({healthCrop:x===900&&y===990,levelCrop:w===130&&h===24})
       },dispose(){}}),dispose(){}}),
     sleep:async()=>{},click:()=>{},log:{info(){}}
   };
@@ -310,4 +320,28 @@ test('a distant or missing trail and a stale, failed, foreign or absent rotation
   assert.deepEqual((await damageRead(sample,event)).bars,[]);
  }
  assert.deepEqual((await damageRead(sample,returnedHit,'actTwoNativeCombat')).bars,[]);
+});
+
+// Temple frame 65 replay. Red and rail geometry come from the original capture;
+// the local label is the installed V6 model's result on the exact 3x OpenCV crop.
+const rail65={red:{x:1428,y:536,width:3,height:6,area:5},
+ contours:[{x:1,y:0,width:90,height:3,area:164.5}],
+ labels:[row('Lv.6',58,-0,174,72)]};
+test('fresh depleted rail and centered exact level identify a live target for route observation and combat entry',async()=>{
+ for(const mission of ['observe','questStep']){
+  const x=await observeStep(mission==='questStep'?'actTwoFieldCombat':undefined,mission,{...groundOptions(),railSample:rail65});
+  assert.equal(x.bars.length,1);const b=x.bars[0];assert.equal(b.width,90);assert.equal(b.x,1477);
+  assert.equal(b.rectangularity,164.5/178);assert.equal(b.depletedRail.remainingRed.width,3);assert.equal(b.depletedRail.level.text,'Lv.6');
+  if(mission==='observe')assert.equal(x.observation.hud.enemyBarObservation.state,'threat');
+ }
+});
+test('depleted rail needs three contrast rows and an exact same-image centered level',async()=>{
+ for(const sample of [{...rail65,labels:[]},{...rail65,labels:[row('Ly.6',58,0,174,72)]},
+    {...rail65,labels:[row('Lv.6',155,0,174,72)]},{...rail65,labels:[...rail65.labels,...rail65.labels]},
+    {...rail65,contours:[]},{...rail65,contours:[{x:1,y:0,width:90,height:3,area:22.5}]},
+    {...rail65,contours:[{x:10,y:0,width:90,height:3,area:170}]},
+    {...rail65,contours:[{x:1,y:1,width:90,height:2,area:86}]}]){
+  const x=await measure({railSample:sample});assert.equal(x.bars.length,0);
+  assert.equal(x.observation.hud.enemyBarObservation.state,'ambiguous');
+ }
 });

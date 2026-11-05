@@ -219,6 +219,7 @@
   const unknown=reason=>({status:'target_association_unknown',reason,evidence:null});
   if(b.some(bar=>bar.damageTrail))return {status:'visible_enemy_damage',evidence:'post_hit_damage_trail'};
   if(a.some(bar=>bar.damageTrail))return unknown('A gold damage trail cannot establish prior red health width');
+  if(a.concat(b).some(bar=>bar.depletedRail))return unknown('A depleted target rail measures the track, not the red health fill');
   if(a.length!==1||b.length!==1)return unknown('Target count changed or is ambiguous');
   const am=before.map,bm=after.map;
   if(!am||!bm||am.map!==bm.map||![am.x,am.y,am.cameraAngle,bm.x,bm.y,bm.cameraAngle].every(Number.isFinite)||Math.hypot(am.x-bm.x,am.y-bm.y)>1||Math.abs((am.cameraAngle-bm.cameraAngle+540)%360-180)>3)return unknown('Camera or player position changed');

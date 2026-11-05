@@ -3413,6 +3413,52 @@ function createActOneAdapter(sessionId,options) {
                 return found;
             } finally {dispose(mask);dispose(region);}
         }
+        // Reacquire a survivor from this image alone. Its narrow red tip must meet a long,
+        // dark health rail and the separately recognized level label above that exact rail.
+        function readDepletedRail(red) {
+            var cv=OpenCvSharp.OpenCvSharp;
+            if(typeof cv.Cv2.subtract!=='function'||typeof cv.Cv2.bitwiseAnd!=='function')return null;
+            var x=red.x+red.width/2,cy=Math.round(red.y),gap=Math.ceil(red.height/2)+3;
+            var allocated=[];
+            function keep(value){allocated.push(value);return value;}
+            function grayRow(y){
+                var crop=keep(img.deriveCrop(x,y,155,3));
+                return keep(crop.srcMat.cvtColor(cv.ColorConversionCodes.BGR2GRAY,0));
+            }
+            try {
+                var middle=grayRow(cy-1),up=grayRow(cy-1-gap),down=grayRow(cy-1+gap);
+                var upperDiff=keep(new cv.Mat()),lowerDiff=keep(new cv.Mat());
+                cv.Cv2.subtract(up,middle,upperDiff);cv.Cv2.subtract(down,middle,lowerDiff);
+                var lo=new cv.Scalar(20,20,20),hi=new cv.Scalar(255,255,255);
+                var upper=keep(upperDiff.inRange(lo,hi)),lower=keep(lowerDiff.inRange(lo,hi)),both=keep(new cv.Mat());
+                cv.Cv2.bitwiseAnd(upper,lower,both);
+                var shapes=both.findContoursAsArray(cv.RetrievalModes.External,cv.ContourApproximationModes.ApproxSimple);
+                var count=shapes&&(shapes.length===undefined?shapes.Length:shapes.length);
+                if(!Number.isInteger(count)||count<1||count>32)return null;
+                var rail=null;
+                for(var si=0;si<count;si++){
+                    var b=cv.Cv2.boundingRect(shapes[si]),dx=Number(b.x===undefined?b.X:b.x),dy=Number(b.y===undefined?b.Y:b.y);
+                    var w=Number(b.width===undefined?b.Width:b.width),h=Number(b.height===undefined?b.Height:b.height);
+                    if(![dx,dy,w,h].every(Number.isInteger)||dx<0||dx>3||dy!==0||w<44||w>145||h!==3)continue;
+                    var ratio=Number(cv.Cv2.contourArea(shapes[si],false))/((w-1)*(h-1));
+                    if(!Number.isFinite(ratio)||ratio<.85||ratio>1.05)continue;
+                    if(rail)return null;
+                    rail={x:x+dx+w/2,y:cy+.5,width:w,height:h,rectangularity:ratio};
+                }
+                if(!rail)return null;
+                // Use the normal scaled OCR model. Reject ambiguous text, including incomplete Lv. prefixes.
+                var ox=Math.round(red.x)-4,oy=cy-28,levelRows=scaledRows(img,ox,oy,130,24).map(function(r){
+                    return {text:r.text,x:ox+r.x/3,y:oy+r.y/3,width:r.width/3,height:r.height/3};
+                }).filter(function(r){
+                    var bottom=r.y+r.height;
+                    return /^Lv[.,]?\s*[1-9][0-9]?$/i.test(String(r.text).trim())&&r.width>=19&&r.width<=95&&r.height>=7&&r.height<=30&&
+                        Math.abs(r.x+r.width/2-rail.x)<=Math.max(8,rail.width*.12)&&bottom>=cy-12&&bottom<=cy+2;
+                });
+                if(levelRows.length!==1)return null;
+                rail.depletedRail={remainingRed:red,level:levelRows[0]};
+                return rail;
+            } finally {for(var ai=allocated.length-1;ai>=0;ai--)dispose(allocated[ai]);}
+        }
         // Count the orange body immediately above or below a possible flame tip.
         function flamePixels(x,y) {
             var patch=null,color=null;
@@ -3544,6 +3590,20 @@ function createActOneAdapter(sessionId,options) {
                                 var old=outdoor.indexOf(red);
                                 if(old>=0)outdoor[old]=trail;else outdoor.push(trail);
                             }
+                        }
+                    }
+                }
+                if(groundObservation===true||request&&request.mission==='questStep'&&request.step==='actTwoFieldCombat'){
+                    // Cap the extra work on busy images. Ordinary navigation still treats unread tips as ambiguous.
+                    var railTips=candidates.filter(function(c){return c.x>=350&&c.x<=1600&&c.y>=200&&c.y<=850&&c.width>=2&&c.width<16&&c.height>=4&&c.height<=12&&c.rectangularity>=.25;});
+                    if(railTips.length<=3)for(var ri=0;ri<railTips.length;ri++){
+                        var tip=railTips[ri];
+                        if(outdoor.some(function(b){return b.damageTrail&&b.damageTrail.remainingRed===tip;}))continue;
+                        var verifiedRail=readDepletedRail(tip);
+                        if(verifiedRail){
+                            var tipIndex=outdoor.indexOf(tip);
+                            if(tipIndex>=0)outdoor[tipIndex]=verifiedRail;else outdoor.push(verifiedRail);
+                            if(groundObservation===true&&enemyBarDiagnostic.fieldCandidates.indexOf(tip)<0)enemyBarDiagnostic.fieldCandidates.push(tip);
                         }
                     }
                 }

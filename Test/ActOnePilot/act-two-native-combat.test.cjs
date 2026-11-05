@@ -349,6 +349,14 @@ test('actual adapter preserves first success and a later failed rotation then pr
  const r=await packAdapter('actTwoFieldCombat',2,{failAt:2});assert.equal(r.result.completedRotations,1);assert.equal(r.result.nativeReturned,false);assert.equal(r.result.chunks.length,2);assert.equal(r.result.chunks[0].nativeReturned,true);assert.equal(r.result.chunks[1].nativeReturned,false);assert.equal(r.result.chunks[1].afterFrameId,undefined);assert.match(r.result.reason,/native rejected/);assert.equal(r.calls.filter(x=>x==='protect').length,1);assert.equal(r.calls.filter(x=>x==='VK_ESCAPE').length,1);
 });
 
+test('a fresh dark track supplies aim geometry without a claim about damaged or remaining health',()=>{
+ const state=packFrame();state.hud.enemyBars=[{x:1477,y:539.5,width:90,height:3,rectangularity:164.5/178,
+  depletedRail:{remainingRed:{x:1429.5,y:539,width:3,height:6,rectangularity:.5},level:{text:'Lv.6'}}}];
+ assert.equal(native.encounter(state,state.timestamp,state.session,()=>true,false,true),true);
+ assert.equal(native.assessProgress(packFrame(),state).evidence,null);
+ assert.equal(native.assessProgress(state,packFrame()).evidence,null);
+});
+
 test('centered recent damage continues to a finishing rotation without walking or comparing gold as remaining HP',async()=>{
  const gold={x:1025,y:568.5,width:62,height:5,rectangularity:1,damageTrail:{actionId:'request:rotation:1',
   remainingRed:{x:991,y:569,width:4,height:8,rectangularity:8/21}}};

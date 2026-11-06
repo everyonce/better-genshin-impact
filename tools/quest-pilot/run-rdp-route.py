@@ -369,11 +369,26 @@ def settle_retired_route(pilot, owner, game, current, new_output):
             'Previous game or retired native session changed.')
     leg = read(previous/('leg-%03d' % len(worker['legs']))/'progress.json')
     req = leg.get('pending')
-    require(isinstance(req,dict) and leg.get('session') == req.get('session') == worker['session']
-            and read(pilot/'request.json') == req, 'The retained route does not own the current request.')
-    receipt = read(FILE_PROTOCOL.request_receipt_path(pilot,req['session'],req['id']))
+    require(isinstance(req,dict) and leg.get('session') == req.get('session') == worker['session'],
+            'The retained request has a different session.')
+    slot = read(pilot/'request.json')
+    pending_receipt = FILE_PROTOCOL.request_receipt_path(pilot,req['session'],req['id'])
+    staged = pilot/'request.pending.json'
+    archived_staged = previous/'unpublished-request.json'
+    unpublished = slot != req
+    if unpublished:
+        last = leg['records'][-1]
+        stage_source = archived_staged if archived_staged.exists() else staged
+        require(slot == last['request'] and slot.get('session') == req['session'] and not pending_receipt.exists()
+                and stage_source.is_file() and read(stage_source) == req,
+                'The current slot and retained staging file do not prove nonpublication.')
+        receipt = read(FILE_PROTOCOL.request_receipt_path(pilot,slot['session'],slot['id']))
+        require(receipt == last['receipt'] and receipt['frameId'] == req['expectedFrameId'],
+                'The settled predecessor frame changed.')
+    else:
+        receipt = read(pending_receipt)
     observed = read(FILE_PROTOCOL.observation_path(pilot,req['session'],receipt['frameId']))
-    frame = FILE_PROTOCOL.validate_terminal_receipt(req,receipt,observed)
+    frame = FILE_PROTOCOL.validate_terminal_receipt(slot,receipt,observed)
     heartbeat = read(pilot/'controller-status.json')
     require(heartbeat.get('session') == req['session'] and heartbeat.get('activeRequestId') in (None,'')
             and heartbeat.get('frameId',0) >= frame and heartbeat.get('state') in ('faulted','stopped','idle'),
@@ -389,13 +404,17 @@ def settle_retired_route(pilot, owner, game, current, new_output):
             and re.fullmatch('[0-9a-f]{32}',lock.get('controllerId','')) and not retired_launcher.exists(),
             'Previous canonical lease differs from the retired session.')
     require(launcher_lock.read_bytes() == launcher_bytes, 'The launcher lease changed during reconciliation.')
+    if unpublished and stage_source == staged:
+        require(read(staged) == req and read(pilot/'request.json') == slot and not pending_receipt.exists(),
+                'The staged request changed before archival.')
+        staged.rename(archived_staged)
     if lock_source == route_lock:
         require(route_lock.read_bytes() == route_bytes, 'Canonical lease changed during reconciliation.')
         route_lock.rename(retired_route)
     require(not route_lock.exists() and launcher_lock.read_bytes() == launcher_bytes,
             'A new owner appeared during reconciliation.')
     launcher_lock.rename(retired_launcher)
-    return dict(sourceRun=str(previous), requestId=req['id'], frameId=frame, terminalStatus=receipt['status'])
+    return dict(sourceRun=str(previous), requestId=req['id'], frameId=frame, terminalStatus='unpublished' if unpublished else receipt['status'])
 
 
 def run_worker(config, *, control, rdp, execute=execute_route, game_probe=foreground_game,

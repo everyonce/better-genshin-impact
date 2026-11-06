@@ -58,6 +58,22 @@ class TeleportRouteTests(unittest.TestCase):
         self.assertGreater(seen[1],seen[0])
         self.assertEqual(calls.count('actTwoWorldMap'),1)
 
+    def test_expired_unpublished_inventory_exit_refreshes_and_publishes_once(self):
+        from unittest.mock import patch
+        execute=ReplayPilot.execute
+        expired=[]
+        def delayed(pilot,mission,source,fields,*args,**kwargs):
+            if fields.get('step')=='worldInventoryClose' and not expired:
+                expired.append(source['frameId'])
+                raise route_tool.ExpiredInputSource('expired before rename')
+            return execute(pilot,mission,source,fields,*args,**kwargs)
+        with patch.object(ReplayPilot,'execute',delayed):
+            report,calls=self.run_route(self.map_screen,[self.landed('actTwoLionTeleport'),self.step(self.field),
+                dict(mission='navigation',source=self.field,result=dict(status='arrived',nextWaypointIndex=1))])
+        self.assertEqual(report['status'],'arrived',report.get('reason'))
+        self.assertEqual(calls.count('worldInventoryClose'),1)
+        self.assertGreater(next(r['request']['expectedFrameId'] for r in report['records'] if r['request'].get('step')=='worldInventoryClose'),expired[0])
+
     def test_open_map_requires_no_extra_menu_transitions(self):
         report, calls = self.run_route(self.map_screen, [self.landed('actTwoLionTeleport'), self.step(self.field),
             dict(mission='navigation', source=self.field, result=dict(status='arrived', nextWaypointIndex=1))])

@@ -1655,6 +1655,15 @@ class GuardedPilotProtocolTests(unittest.TestCase):
         self.assertEqual(len(set(seen)),1)
         self.assertEqual(result['receipt']['id'],saved[0]['id'])
 
+    def test_expired_pre_replace_guard_retires_only_an_unpublished_request(self):
+        saved=[]
+        with mock.patch.object(self.pilot,'_admit',side_effect=[None,route_tool.ExpiredInputSource('expired')]):
+            with self.assertRaises(route_tool.ExpiredInputSource):
+                self.pilot.execute('observe',self.source,{},self.clock.monotonic()+5,saved.append)
+        self.assertEqual(len(saved),2);self.assertIsNone(saved[-1]);self.assertIsNone(self.pilot.pending)
+        self.assertFalse((self.root/'request.json').exists())
+        self.assertFalse((self.root/'request.pending.json').exists())
+
     def test_real_atomic_terminal_and_quiescence_retire_before_next_request(self):
         saved = []
         started = self.clock.monotonic()

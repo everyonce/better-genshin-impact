@@ -667,6 +667,20 @@ class LauncherTests(unittest.TestCase):
             self.assertTrue((old/'retired-launcher.lease').exists())
             self.assertFalse(lease.exists() or canonical.exists())
 
+            # A pre-rename refusal leaves the predecessor in the slot and the new bytes in staging.
+            (old/'retired-controller.lease').rename(canonical)
+            (old/'retired-launcher.lease').rename(lease)
+            unsent=dict(req,id='mission-'+'b'*32,expectedFrameId=6)
+            prior=dict(request=req,receipt=dict(receipt,status='failed'))
+            launcher.save(old/'leg-001/progress.json',dict(session=sid,pending=unsent,records=[prior]))
+            with self.assertRaisesRegex(RuntimeError,'nonpublication'):
+                launcher.settle_retired_route(f.pilot,f.owner,f.game,current,f.output)
+            launcher.save(f.pilot/'request.pending.json',unsent)
+            proof=launcher.settle_retired_route(f.pilot,f.owner,f.game,current,f.output)
+            self.assertEqual(proof['terminalStatus'],'unpublished')
+            self.assertEqual(launcher.read(old/'unpublished-request.json'),unsent)
+            self.assertEqual(launcher.read(f.pilot/'request.json'),req)
+
     def test_archived_defeat_requires_actual_capture_pairs_bound_to_the_same_native_receipt(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp).resolve()

@@ -32,6 +32,10 @@ class RouteError(RuntimeError):
     """The on-disk route protocol is missing or ambiguous; stop rather than retry."""
 
 
+class ExpiredInputSource(RouteError):
+    """A valid observation exceeded its input age limit before publication."""
+
+
 class InventoryEntryUnavailable(RouteError):
     """The required inventory was not established before publishing input."""
 
@@ -639,7 +643,19 @@ class GuardedPilot:
         save_pending(request)
         # Retain uncertainty even if a filesystem error follows the actual rename.
         self.pending = request
-        self.command.atomic(request_path, request, before_replace=before_replace)
+        try:
+            self.command.atomic(request_path, request, before_replace=before_replace)
+        except ExpiredInputSource:
+            # The pre-rename guard can expire after writing the staging file. Only a matching
+            # unrenamed file, intact predecessor and absent native receipt establish nonpublication.
+            staged = request_path.with_suffix('.pending.json')
+            slot = request_path.read_bytes() if request_path.exists() else None
+            if (slot == previous and staged.is_file() and read(staged) == request
+                    and not self.command.request_receipt_path(self.root,self.session,request['id']).exists()):
+                staged.unlink()
+                self.pending = None
+                save_pending(None)
+            raise
         while time.monotonic() < deadline:
             if self.stopped():
                 self._cancel_owned()
@@ -694,6 +710,8 @@ class GuardedPilot:
 def require_fresh_source(source, session, now_ms):
     """Use the normal pilot's original 1000 ms publication clock, never a refreshed timestamp."""
     stamp = source.get('timestamp')
+    if source.get('session') == session and type(stamp) in (int,float) and math.isfinite(stamp) and now_ms-stamp > 1000:
+        raise ExpiredInputSource('Fresh same-session native source is required.')
     if (source.get('session') != session or type(source.get('frameId')) is not int or source['frameId'] < 1
             or type(stamp) not in (int, float) or not math.isfinite(stamp) or not 0 <= now_ms - stamp <= 1000
             or not isinstance(source.get('hud'), dict) or not isinstance(source.get('ocr'), list)):
@@ -1213,7 +1231,21 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
         active_deadline = min(deadline, monotonic() + MAX_DEADLINE_MS / 1000)
         if observation_deadline is not None:
             active_deadline = min(active_deadline, observation_deadline)
-        outcome = pilot.execute(mission, source, fields, active_deadline, pending, **options)
+        try:
+            outcome = pilot.execute(mission, source, fields, active_deadline, pending, **options)
+        except (ExpiredInputSource, InventoryEntryUnavailable):
+            # Refresh only an unsubmitted inventory operation. Preserve the original command
+            # deadline and rerun its native screen validation on the newly acquired frame.
+            if (state['pending'] is not None or expected_previous is not None or mission != 'questStep'
+                    or fields.get('step') not in ('worldInventoryClose','actTwoWorldMap','actTwoStarfellInventoryTeleport')
+                    or monotonic() >= active_deadline):
+                raise
+            dispatch('observe',pilot.current(),{},observation_deadline=active_deadline)
+            source = pilot.current()
+            require_fresh_source(source,pilot.session,clock_ms())
+            if not source_account_matches(source,expected_uid):
+                raise RouteError('Refreshed inventory belongs to another account.')
+            outcome = pilot.execute(mission,source,fields,active_deadline,pending,**options)
         if expected_previous is not None:
             state['continuationSlotMatched'] = outcome.get('predecessorMatched') is True
         request, receipt, observed = outcome['request'], outcome['receipt'], outcome['observation']

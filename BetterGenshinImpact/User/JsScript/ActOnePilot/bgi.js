@@ -4619,6 +4619,8 @@ function createActOneAdapter(sessionId,options) {
             var tower=pack?eval(file.readTextSync('gate-tower-combat.js')+'\nGateTowerCombat;'):null;
             var towerContext={now:Date.now,session:request.session,original:original,aimed:true};
             function towerCandidate(o){return !!tower&&tower.candidate(o,towerContext);}
+            function closeKaeyaTargets(o){return tower?tower.closeTargets(o,towerContext,'Kaeya'):[];}
+            function campEntry(o){return towerCandidate(o)||closeKaeyaTargets(o).length>0||tower&&tower.closeTargets(o,towerContext,'Amber').length>0;}
             function towerBars(o){var b=tower&&tower.bar(o);return b?[b]:[];}
             async function observeTower(){towerGroundRequested=true;try{return await observe();}finally{towerGroundRequested=false;}}
             var acquisition=eval(file.readTextSync('act-two-combat-acquisition.js')+'\nActTwoCombatAcquisition;'),ambushWitness=null,defenseParam=null,acquisitionImage=null,acquisitionImageAt=null;
@@ -4632,7 +4634,7 @@ function createActOneAdapter(sessionId,options) {
                 if(ambushWitness)defenseParam=native.targetingParam(new AutoFightParam('English Cyrus Defense'),true);
             }
             function original(o){return actTwoOriginalAccount(o.ocr||[]);}
-            function eligible(o){if(towerCandidate(o))return true;if(o&&o.acquisition)return acquisition.eligible(o,initial,ambushWitness,Date.now());if(probing)return native.deadlineProbe(o,Date.now(),request.session,original);return finishing?native.finish(o,witness,prior,permit,request,Date.now(),original):native.encounter(o,Date.now(),request.session,original,group,pack);}
+            function eligible(o){if(towerCandidate(o)||closeKaeyaTargets(o).length)return true;if(o&&o.acquisition)return acquisition.eligible(o,initial,ambushWitness,Date.now());if(probing)return native.deadlineProbe(o,Date.now(),request.session,original);return finishing?native.finish(o,witness,prior,permit,request,Date.now(),original):native.encounter(o,Date.now(),request.session,original,group,pack);}
             function acquire(){
                 checkStop();ready();var capturedAt=Date.now(),img=captureGameRegion();
                 try{
@@ -4650,19 +4652,32 @@ function createActOneAdapter(sessionId,options) {
                 if(worldEntry){
                     // The engine took this request's first new frame. Revalidate it before any input.
                     result.entryScene='world';result.entryFrameId=initial.frameId;
-                    var admitted=native.worldEntry(initial,request,Date.now(),original,towerCandidate);
-                    if(!admitted&&tower&&initial.frameId===request.expectedFrameId+1&&tower.base(initial,towerContext)){
+                    var admitted=native.worldEntry(initial,request,Date.now(),original,campEntry);
+                    if(!admitted&&tower&&initial.frameId===request.expectedFrameId+1&&tower.base(initial,towerContext,.6)){
                         // The level-one archer's red rail can disappear while its projectile hits Kaeya.
                         // Stay at the accepted location and require a new positive scan before any input.
                         for(var retry=0;retry<4&&!admitted;retry++){
                             await sleep(150);current=await observeTower();
-                            if(!tower.base(current,towerContext)||!tower.samePose(initial,current)||
+                            if(!tower.base(current,towerContext,.6)||!tower.samePose(initial,current)||
                                current.hud.health.max!==initial.hud.health.max)break;
-                            admitted=native.worldEntry(current,request,Date.now(),original,towerCandidate,initial);
+                            admitted=native.worldEntry(current,request,Date.now(),original,campEntry,initial);
                         }
                     }
                     if(!admitted)throw new Error('Direct field entry requires a fresh measured original-account pack');
                     result.entryFrameId=current.frameId;
+                    if(tower.closeTargets(current,towerContext,'Amber').length){
+                        var switchedFrom=current;
+                        result.closePartySwitch={from:'Amber',to:'Kaeya',frameId:current.frameId};
+                        await boundedKey('VK_3',60,current.frameId);
+                        for(var confirm=0;confirm<6;confirm++){
+                            await sleep(confirm?120:350);current=await observeTower();
+                            if(!current.map||Math.hypot(current.map.x-switchedFrom.map.x,current.map.y-switchedFrom.map.y)>3)break;
+                            if(tower.party(current,'Kaeya')&&eligible(current)){
+                                result.closePartySwitch.confirmedFrameId=current.frameId;break;
+                            }
+                        }
+                        if(!result.closePartySwitch.confirmedFrameId)throw Error('Could not confirm Kaeya and the close camp encounter');
+                    }
                 }else{
                     await boundedKey('VK_ESCAPE',60,initial.frameId);
                     if(ambushWitness){await sleep(550);current=acquire();result.acquisition=current;}
@@ -4719,7 +4734,8 @@ function createActOneAdapter(sessionId,options) {
                     result.approach=[];
                     var fieldBatch=await native.fieldSequence(current,{
                         encounterDeadline:Number.isInteger(request.deadlineMs)?request.createdAt+request.deadlineMs:undefined,
-                        now:Date.now,checkStop:checkStop,eligible:eligible,sleep:sleep,observe:observe,run:runChunk,
+                        now:Date.now,checkStop:checkStop,eligible:eligible,sleep:sleep,
+                        observe:tower.firingLane(current.map)?observeTower:observe,run:runChunk,closeTargets:closeKaeyaTargets,
                         actionId:function(index){return request.id+':rotation:'+index;},
                         towerCandidate:towerCandidate,
                         runTower:function(o,index,deadline){return tower.run(o,index,{now:Date.now,session:request.session,original:original,aimed:true,

@@ -13,7 +13,7 @@
   return !!(p&&p.map==='Teyvat'&&(firingLane(p)||Math.hypot(p.x+1186.1875,p.y-2206.267578125)<=5.5)&&
    Number.isFinite(p.cameraAngle));
  }
- function base(o,api){
+ function base(o,api,minimum=.90){
   const h=o&&o.hud,p=h&&h.health,s=h&&h.captureStamp,now=api.now();
   return !!(pose(o)&&!o.fastSample&&!o.mapPositionInherited&&o.session===api.session&&api.original(o)&&
    Number.isInteger(o.frameId)&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&
@@ -21,7 +21,7 @@
    s.capturedAt<=o.timestamp&&now-s.capturedAt<=2000&&h.world===true&&h.groundControls===true&&h.climbing===false&&
    !h.auto&&!h.loading&&!h.swimming&&!h.interact&&!h.choice&&!h.journal&&!h.bigMap&&!h.lowHealth&&!h.unknownHud&&
    !h.dialogueReady&&!h.tutorialStep&&Array.isArray(h.objectives)&&h.objectives.every(t=>typeof t==='string'&&!t.trim())&&
-   p&&Number.isInteger(p.current)&&Number.isInteger(p.max)&&p.max>0&&p.current>=p.max*.90&&p.current<=p.max);
+   p&&Number.isInteger(p.current)&&Number.isInteger(p.max)&&p.max>0&&p.current>=p.max*minimum&&p.current<=p.max);
  }
  function row(o,text,x1,x2,y1,y2){
   return (o.ocr||[]).filter(r=>String(r.text).trim()===text&&r.x>=x1&&r.x<=x2&&r.y>=y1&&r.y<=y2).length;
@@ -57,6 +57,16 @@
    s.session===o.session&&s.frameId===o.frameId&&s.capturedAt===h.captureStamp.capturedAt&&
    s.candidateCount===count&&s.acceptedCount===count&&Array.isArray(d.fieldCandidates)&&d.fieldCandidates.length===count&&
    Array.isArray(h.enemyBars)&&h.enemyBars.length===count);
+ }
+ // A club hilichurl in melee range has a much taller/larger rail than the archer on this platform.
+ // Only a measured field scan at the surveyed camp can authorize the defensive party switch.
+ function closeTargets(o,api,avatar){
+  if(!base(o,api,avatar==='Amber' ? .6 : .8)||!firingLane(o.map)||!party(o,avatar))return [];
+  const h=o.hud,scan=h.enemyBarObservation,diag=h.enemyBarDiagnostic,bars=h.enemyBars;
+  if(!scan||!diag||diag.overloaded||scan.state!=='threat'||scan.frameId!==o.frameId||scan.session!==o.session||
+     scan.capturedAt!==h.captureStamp.capturedAt||!Array.isArray(bars)||scan.acceptedCount!==bars.length||bars.length>4)return [];
+  return bars.filter(b=>b&&b.x>=100&&b.x<=1810&&b.y>=25&&b.y<=875&&b.width>=85&&b.width<=300&&
+   b.height>=7&&b.height<=22&&b.width/b.height>=4&&b.rectangularity>=.8&&b.rectangularity<=1.05);
  }
  function candidate(o,api){
   if(!base(o,api)||!party(o,'Kaeya')&&!party(o,'Amber'))return false;
@@ -300,6 +310,6 @@
   }
   return {current,turns,result};
  }
- root.GateTowerCombat={candidate,base,party,bar,scan,samePose,aligned,aimMode,aimTarget,aimedVolley,feedback,run};
+ root.GateTowerCombat={candidate,firingLane,closeTargets,base,party,bar,scan,samePose,aligned,aimMode,aimTarget,aimedVolley,feedback,run};
  if(typeof module!=='undefined'&&module.exports)module.exports=root.GateTowerCombat;
 })(typeof globalThis!=='undefined'?globalThis:this);

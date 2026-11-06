@@ -222,6 +222,16 @@ test('the post-defeat roster can expose both slot keys while Amber remains selec
 });
 
 
+test('close level-one club enemies at the tower take priority over the elevated bow target',()=>{
+ const o=structuredClone(missBefore);o.map={map:'Teyvat',x:-1180.0566,y:2192.5068,cameraAngle:295.5};
+ o.hud.health={current:1776,max:1809};
+ o.hud.enemyBars=[{x:1599,y:209,width:188,height:14,rectangularity:.970},{x:1568.5,y:264,width:111,height:10,rectangularity:.963}];
+ o.hud.enemyBarObservation.acceptedCount=2;o.hud.enemyBarObservation.candidateCount=11;
+ assert.equal(tower.closeTargets(o,ctx(o),'Amber').length,2);assert.equal(tower.candidate(o,{...ctx(o),aimed:true}),false);
+ assert.equal(tower.closeTargets(missBefore,ctx(missBefore),'Amber').length,0);
+ o.hud.enemyBarObservation.state='ambiguous';assert.equal(tower.closeTargets(o,ctx(o),'Amber').length,0);
+});
+
 test('recorded tower defeat takes three two-axis sight corrections and one charged release',async()=>{
  // R77 native captures 12–17. Times are milliseconds from the selected Amber ground frame.
  // Each row keeps the measured red rail and sight HUD, including the actual post-defeat transition.

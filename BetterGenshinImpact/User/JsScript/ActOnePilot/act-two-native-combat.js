@@ -131,14 +131,17 @@
     scope.checkStop();current=await reacquireFieldTarget(current,scope);
     if(!api.eligible(current)){reason='encounter_or_health_guard';break;}
     if(deadline-api.now()<4500){reason='native_drain_headroom';break;}
-    current=await approachFieldTarget(current,scope);scope.checkStop();
+    const close=api.closeTargets?api.closeTargets(current):[];
+    if(!close.length)current=await approachFieldTarget(current,scope);scope.checkStop();
     if(!api.eligible(current)){reason='encounter_or_health_guard';break;}
     if(deadline-api.now()<4500){reason='native_drain_headroom';break;}
-    if(api.towerCandidate&&api.towerCandidate(current)){
+    if(!close.length&&api.towerCandidate&&api.towerCandidate(current)){
+     // A separate ranged receipt keeps the archer's EXP distinct from the nearby melee defeats.
+     if(turns.length){reason='tower_ready_after_melee';break;}
      const ranged=await api.runTower(current,index,deadline);turns.push(...ranged.turns);current=ranged.current;
      towerResult=ranged.result;error=towerResult.error||null;reason=error||'Gate tower shot: '+towerResult.assessment;break;
     }
-    const before=current,turn={actionId:api.actionId(index),beforeFrameId:before.frameId,beforeHealth:before.hud.health,beforeBars:targets(before),startedAt:api.now(),nativeAttempted:true,nativeReturned:false};turns.push(turn);
+    const before=current,turn={actionId:api.actionId(index),beforeFrameId:before.frameId,beforeHealth:before.hud.health,beforeBars:close.length?close:targets(before),startedAt:api.now(),nativeAttempted:true,nativeReturned:false};turns.push(turn);
     try{Object.assign(turn,await api.run(before,index));}catch(e){turn.error=String(e&&e.message||e);throw e;}finally{turn.finishedAt=api.now();}
     await api.sleep(150);current=await api.observe();
     if(!current||current.session!==before.session||!Number.isInteger(current.frameId)||current.frameId<=before.frameId)throw new Error('Field rotation needs a new observation');

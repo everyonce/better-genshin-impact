@@ -4653,12 +4653,12 @@ function createActOneAdapter(sessionId,options) {
                     // The engine took this request's first new frame. Revalidate it before any input.
                     result.entryScene='world';result.entryFrameId=initial.frameId;
                     var admitted=native.worldEntry(initial,request,Date.now(),original,campEntry);
-                    if(!admitted&&tower&&initial.frameId===request.expectedFrameId+1&&tower.base(initial,towerContext,.6)){
+                    if(!admitted&&tower&&initial.frameId===request.expectedFrameId+1&&tower.base(initial,towerContext,.6,9)){
                         // The level-one archer's red rail can disappear while its projectile hits Kaeya.
                         // Stay at the accepted location and require a new positive scan before any input.
                         for(var retry=0;retry<4&&!admitted;retry++){
                             await sleep(150);current=await observeTower();
-                            if(!tower.base(current,towerContext,.6)||!tower.samePose(initial,current)||
+                            if(!tower.base(current,towerContext,.6,9)||Math.hypot(current.map.x-initial.map.x,current.map.y-initial.map.y)>3||
                                current.hud.health.max!==initial.hud.health.max)break;
                             admitted=native.worldEntry(current,request,Date.now(),original,campEntry,initial);
                         }
@@ -4672,7 +4672,7 @@ function createActOneAdapter(sessionId,options) {
                         for(var confirm=0;confirm<6;confirm++){
                             await sleep(confirm?120:350);current=await observeTower();
                             if(!current.map||Math.hypot(current.map.x-switchedFrom.map.x,current.map.y-switchedFrom.map.y)>3)break;
-                            if(tower.party(current,'Kaeya')&&eligible(current)){
+                            if(closeKaeyaTargets(current).length||tower.party(current,'Kaeya')&&eligible(current)){
                                 result.closePartySwitch.confirmedFrameId=current.frameId;break;
                             }
                         }
@@ -4735,7 +4735,7 @@ function createActOneAdapter(sessionId,options) {
                     var fieldBatch=await native.fieldSequence(current,{
                         encounterDeadline:Number.isInteger(request.deadlineMs)?request.createdAt+request.deadlineMs:undefined,
                         now:Date.now,checkStop:checkStop,eligible:eligible,sleep:sleep,
-                        observe:tower.firingLane(current.map)?observeTower:observe,run:runChunk,closeTargets:closeKaeyaTargets,
+                        observe:tower.firingLane(current.map,9)?observeTower:observe,run:runChunk,closeTargets:closeKaeyaTargets,
                         actionId:function(index){return request.id+':rotation:'+index;},
                         towerCandidate:towerCandidate,
                         runTower:function(o,index,deadline){return tower.run(o,index,{now:Date.now,session:request.session,original:original,aimed:true,

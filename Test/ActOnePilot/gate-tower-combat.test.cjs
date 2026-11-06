@@ -228,6 +228,11 @@ test('close level-one club enemies at the tower take priority over the elevated 
  o.hud.enemyBars=[{x:1599,y:209,width:188,height:14,rectangularity:.970},{x:1568.5,y:264,width:111,height:10,rectangularity:.963}];
  o.hud.enemyBarObservation.acceptedCount=2;o.hud.enemyBarObservation.candidateCount=11;
  assert.equal(tower.closeTargets(o,ctx(o),'Amber').length,2);assert.equal(tower.candidate(o,{...ctx(o),aimed:true}),false);
+ const occluded=structuredClone(o);occluded.hud.health.current=1500;
+ occluded.ocr=occluded.ocr.filter(r=>!['Amber','Kaeya','2','3','R'].includes(r.text)).concat(
+  [{text:'Kaeya',x:1688,y:433},{text:'3',x:1856,y:445},{text:'R',x:1584,y:1020}]);
+ assert.equal(tower.party(occluded,'Amber'),false);assert.equal(tower.closeTargets(occluded,ctx(occluded),'Amber').length,2);
+ occluded.ocr=occluded.ocr.filter(r=>r.text!=='R');assert.equal(tower.closeTargets(occluded,ctx(occluded),'Amber').length,0);
  assert.equal(tower.closeTargets(missBefore,ctx(missBefore),'Amber').length,0);
  o.hud.enemyBarObservation.state='ambiguous';assert.equal(tower.closeTargets(o,ctx(o),'Amber').length,0);
 });

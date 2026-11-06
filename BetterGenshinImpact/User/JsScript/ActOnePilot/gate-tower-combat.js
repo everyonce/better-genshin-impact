@@ -2,20 +2,20 @@
  'use strict';
  // Only the surveyed Mondstadt platform has a verified elevated target and clear firing lane.
  // Both ends of the firing lane were measured in live captures of the same elevated platform.
- function firingLane(p){
+ function firingLane(p,radius=3.5){
   if(!p||p.map!=='Teyvat')return false;
   const dx=-1186.1875+1181.3418,dy=2206.2676-2194.7031;
   const t=Math.max(0,Math.min(1,((p.x+1181.3418)*dx+(p.y-2194.7031)*dy)/(dx*dx+dy*dy)));
-  return Math.hypot(p.x+1181.3418-t*dx,p.y-2194.7031-t*dy)<=3.5;
+  return Math.hypot(p.x+1181.3418-t*dx,p.y-2194.7031-t*dy)<=radius;
  }
- function pose(o){
+ function pose(o,radius=3.5){
   const p=o&&o.map;
-  return !!(p&&p.map==='Teyvat'&&(firingLane(p)||Math.hypot(p.x+1186.1875,p.y-2206.267578125)<=5.5)&&
+  return !!(p&&p.map==='Teyvat'&&(firingLane(p,radius)||Math.hypot(p.x+1186.1875,p.y-2206.267578125)<=5.5)&&
    Number.isFinite(p.cameraAngle));
  }
- function base(o,api,minimum=.90){
+ function base(o,api,minimum=api.aimed ? .75 : .9,radius=3.5){
   const h=o&&o.hud,p=h&&h.health,s=h&&h.captureStamp,now=api.now();
-  return !!(pose(o)&&!o.fastSample&&!o.mapPositionInherited&&o.session===api.session&&api.original(o)&&
+  return !!(pose(o,radius)&&!o.fastSample&&!o.mapPositionInherited&&o.session===api.session&&api.original(o)&&
    Number.isInteger(o.frameId)&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&
    s&&s.session===o.session&&s.frameId===o.frameId&&s.source==='game-capture-start'&&Number.isInteger(s.capturedAt)&&
    s.capturedAt<=o.timestamp&&now-s.capturedAt<=2000&&h.world===true&&h.groundControls===true&&h.climbing===false&&
@@ -61,7 +61,15 @@
  // A club hilichurl in melee range has a much taller/larger rail than the archer on this platform.
  // Only a measured field scan at the surveyed camp can authorize the defensive party switch.
  function closeTargets(o,api,avatar){
-  if(!base(o,api,avatar==='Amber' ? .6 : .8)||!firingLane(o.map)||!party(o,avatar))return [];
+  if(!base(o,api,avatar==='Amber' ? .6 : .8,9))return [];
+  const hp=o.hud.health, bowControl=row(o,'R',1550,1625,995,1055)===1;
+  // A club can cover one roster name. The bow HUD with Amber's numeric HP and
+  // visible slot 3 still identifies the safe switch; Kaeya has his own HP and roster layout.
+  const defensiveBow=avatar==='Amber'&&hp.max===1809&&bowControl&&row(o,'3',1840,1900,420,480)===1&&
+   (row(o,'Amber',1648,1678,339,367)===1||row(o,'Kaeya',1680,1710,423,448)===1);
+  const activeSword=avatar==='Kaeya'&&hp.max===4015&&!bowControl&&
+   (row(o,'Kaeya',1650,1682,435,464)===1||row(o,'Amber',1680,1710,335,358)===1&&row(o,'2',1840,1900,330,410)===1);
+  if(!party(o,avatar)&&!defensiveBow&&!activeSword)return [];
   const h=o.hud,scan=h.enemyBarObservation,diag=h.enemyBarDiagnostic,bars=h.enemyBars;
   if(!scan||!diag||diag.overloaded||scan.state!=='threat'||scan.frameId!==o.frameId||scan.session!==o.session||
      scan.capturedAt!==h.captureStamp.capturedAt||!Array.isArray(bars)||scan.acceptedCount!==bars.length||bars.length>4)return [];

@@ -32,6 +32,10 @@ class RouteError(RuntimeError):
     """The on-disk route protocol is missing or ambiguous; stop rather than retry."""
 
 
+class InventoryEntryUnavailable(RouteError):
+    """The required inventory was not established before publishing input."""
+
+
 def read(path):
     return json.loads(path.read_text(encoding='utf-8-sig'))
 
@@ -334,12 +338,22 @@ class GuardedPilot:
 
     def inventory_ready(self, source, *, at_ms=None):
         """Reuse the installed, input-free inventory predicate before native navigation."""
+        now = int(time.time()*1000) if at_ms is None else at_ms
+        stamp = source.get('timestamp')
+        if type(stamp) not in (int,float) or not 0 <= now-stamp <= 1000:
+            return False
+        document = json.dumps(source)
+        cached = getattr(self,'inventory_gate_cache',None)
+        if cached and cached[0] == document:
+            return cached[1]
         check = self.command.subprocess.run(['node', '-e',
             "const g=require(process.argv[1]),o=JSON.parse(process.argv[2]);process.exit(g.worldInventoryClosePermission(o,Number(process.argv[3]),process.argv[4])?0:2);",
-            str(self.root / 'world-inventory.js'), json.dumps(source),
-            str(int(time.time() * 1000) if at_ms is None else at_ms), self.session],
+            str(self.root / 'world-inventory.js'), document, str(now), self.session],
             capture_output=True, text=True, encoding='utf-8', timeout=5)
-        return check.returncode == 0
+        allowed = check.returncode == 0
+        if check.returncode in (0,2):
+            self.inventory_gate_cache = (document,allowed)
+        return allowed
 
     def exploration_continuation(self, progress_path, expected_uid, now_ms):
         """Join one completed route to its still-current slot and original pause evidence.
@@ -573,7 +587,7 @@ class GuardedPilot:
             elif step in ('worldInventoryClose', 'actTwoNativeCombat', 'actTwoFieldCombat', 'actTwoWorldMap',
                           'actTwoStarfellInventoryTeleport'):
                 if not self.inventory_ready(source):
-                    raise RouteError('A recognized inventory is required for this native step.')
+                    raise InventoryEntryUnavailable('A recognized inventory is required for this native step.')
             elif step in ('actTwoFaceFieldEnemy', 'actTwoFaceRemainingEnemy'):
                 if field_direction_side(source) is None:
                     raise RouteError('A measured single hostile direction arrow is required.')
@@ -1363,6 +1377,18 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
             raise RouteError('The current travel screen does not show the expected account.')
         return source
 
+    def dispatch_inventory_travel(source, step):
+        """A cold OCR/Node start may expire an inventory frame before any native command was submitted."""
+        for probe in range(2):
+            try:
+                if not pilot.inventory_ready(source):
+                    raise InventoryEntryUnavailable('Travel requires a recognized inventory.')
+                return dispatch('questStep',source,dict(step=step))
+            except InventoryEntryUnavailable:
+                if probe or state['pending'] is not None:
+                    raise
+                source = travel_source()
+
     def teleport_before_route():
         """Travel once, then release the verified arrival inventory for normal route decisions."""
         source = travel_source()
@@ -1370,17 +1396,16 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
             dispatch('questStep', source, dict(step='worldInventory'))
             source = travel_source()
         step = ROUTE_TELEPORT_STEPS[destination]
-        if not regional_map_ready(source):
-            if not pilot.inventory_ready(source):
-                raise RouteError('Teleport requires the world, inventory or regional map.')
-            if destination == 'starfell-lake':
-                step = 'actTwoStarfellInventoryTeleport'
-            else:
-                dispatch('questStep', source, dict(step='actTwoWorldMap'))
+        if not regional_map_ready(source) and destination == 'starfell-lake':
+            step = 'actTwoStarfellInventoryTeleport'
+            result = dispatch_inventory_travel(source,step)
+        else:
+            if not regional_map_ready(source):
+                dispatch_inventory_travel(source,'actTwoWorldMap')
                 source = travel_source()
                 if not regional_map_ready(source):
                     raise RouteError('The native regional map did not open.')
-        result = dispatch('questStep', source, dict(step=step))
+            result = dispatch('questStep', source, dict(step=step))
         if (not protected_inventory(result) or result.get('step') != step
                 or result.get('teleportAttempted') is not True or result.get('destinationReached') is not True):
             raise RouteError('Native teleport did not confirm the requested destination and inventory.')

@@ -42,6 +42,22 @@ class TeleportRouteTests(unittest.TestCase):
         self.assertEqual(report['teleportArrival']['destination'], 'temple-of-the-lion')
         self.assertEqual(calls, ['worldInventory', 'actTwoWorldMap', 'actTwoLionTeleport', 'worldInventoryClose', 'navigation'])
 
+    def test_expired_inventory_before_publication_recaptures_without_replaying_map_input(self):
+        original = ReplayPilot.inventory_ready
+        seen = []
+        def cold(pilot,source,*args,**kwargs):
+            seen.append(source['frameId'])
+            if len(seen) == 1:
+                return False
+            return original(pilot,source,*args,**kwargs)
+        from unittest.mock import patch
+        with patch.object(ReplayPilot,'inventory_ready',cold):
+            result,calls = self.run_route(self.inventory,[self.step(self.map_screen),self.landed('actTwoLionTeleport'),
+                self.step(self.field),dict(mission='navigation',source=self.field,result=dict(status='arrived',nextWaypointIndex=1))])
+        self.assertEqual(result['status'],'arrived',result.get('reason'))
+        self.assertGreater(seen[1],seen[0])
+        self.assertEqual(calls.count('actTwoWorldMap'),1)
+
     def test_open_map_requires_no_extra_menu_transitions(self):
         report, calls = self.run_route(self.map_screen, [self.landed('actTwoLionTeleport'), self.step(self.field),
             dict(mission='navigation', source=self.field, result=dict(status='arrived', nextWaypointIndex=1))])

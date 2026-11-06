@@ -28,9 +28,15 @@
  }
  // The active slot's key is dim. If full OCR misses a benched key as well, the two named
  // rows must independently match the measured active/benched layout of this English party.
- function party(o,active){
+ function party(o,active,allowBowHud=false){
   const k2=row(o,'2',1840,1900,330,410),k3=row(o,'3',1840,1900,420,480);
-  if(row(o,'Amber',1640,1810,330,410)!==1||row(o,'Kaeya',1640,1810,420,480)!==1)return false;
+  const amber=row(o,'Amber',1640,1810,330,410),kaeya=row(o,'Kaeya',1640,1810,420,480);
+  if(amber!==1||kaeya!==1){
+   // After selecting slot 2, the new 1809-HP bow user exposes R and a live benched slot 3.
+   // Daylight combat can hide both name glyphs; contradicting visible rows still veto this identity.
+   return allowBowHud&&active==='Amber'&&o.hud.health.max===1809&&k2===0&&k3===1&&row(o,'R',1550,1625,995,1055)===1&&
+    (amber===0||row(o,'Amber',1648,1678,339,367)===1)&&(kaeya===0||row(o,'Kaeya',1680,1710,423,448)===1);
+  }
   if(active==='Kaeya')return o.hud.health.max===4015&&k3===0&&(k2===1||k2===0&&
    row(o,'Amber',1683,1700,340,352)===1&&row(o,'Kaeya',1658,1678,443,456)===1);
   const amberLayout=o.hud.health.max===1809&&row(o,'Amber',1656,1674,350,363)===1&&row(o,'Kaeya',1686,1705,428,442)===1;
@@ -71,7 +77,8 @@
   const priorApi={...api,now:()=>request.createdAt};
   return !!(prior&&prior.session===request.session&&prior.frameId===request.expectedFrameId&&
    current.frameId>prior.frameId&&current.frameId<=prior.frameId+5&&current.hud.captureStamp.capturedAt>=request.createdAt&&
-   (closeTargets(prior,priorApi,'Amber').length||bowGround(prior,priorApi)&&prior.hud.health.current<prior.hud.health.max*.9)&&bowGround(current,api)&&
+   (closeTargets(prior,priorApi,'Amber').length||bowGround(prior,priorApi)&&prior.hud.health.current<prior.hud.health.max*.9&&
+    !candidate(prior,priorApi)&&!candidate(current,api))&&bowGround(current,api)&&
    Math.hypot(current.map.x-prior.map.x,current.map.y-prior.map.y)<=3);
  }
  function closeTargets(o,api,avatar){
@@ -89,7 +96,7 @@
    b.height>=7&&b.height<=22&&b.width/b.height>=4&&b.rectangularity>=.8&&b.rectangularity<=1.05);
  }
  function candidate(o,api){
-  if(!base(o,api)||!party(o,'Kaeya')&&!party(o,'Amber'))return false;
+  if(!base(o,api)||!party(o,'Kaeya')&&!party(o,'Amber',api.aimed))return false;
   const b=bar(o),yaw=(o.map.cameraAngle-292.5+540)%360-180;
   if(api.aimed&&b&&firingLane(o.map,9)&&Math.abs(yaw)<=38&&b.y<=265)return true;
   if(!b||Math.hypot(o.map.x+1186.1875,o.map.y-2206.267578125)>3||yaw< -19||yaw>12)return false;
@@ -139,7 +146,7 @@
  }
  // Different character models can shift the camera slightly on a switch. Impact uses the same Amber pose.
  function feedback(before,after,api,id){
-  if(!base(after,api)||!party(after,'Amber')||Math.hypot(before.map.x-after.map.x,before.map.y-after.map.y)>1.25||before.hud.health.max!==after.hud.health.max)return 'unconfirmed';
+  if(!base(after,api)||!party(after,'Amber',api.aimed)||Math.hypot(before.map.x-after.map.x,before.map.y-after.map.y)>1.25||before.hud.health.max!==after.hud.health.max)return 'unconfirmed';
   if(scan(after,'clear',0)&&api.rewards(before,after).some(r=>/^(?:Obtained\s+)?Character EXP\s*(?:[×x+·]\s*)?[1-9][0-9]{0,4}$/i.test(r.text.trim())))return 'defeat';
   if(!recoilPose(before,after))return 'unconfirmed';
   if(scan(after,'threat',1)&&recoilDamage(before,after,id))return 'damage';
@@ -187,7 +194,7 @@
     const sight=aimMode(frame),target=aimTarget(frame,full);
     const entry={frameId:frame.frameId,sight:sight,hp:hp.current,target:target};trace.samples.push(entry);
     if(!sight){
-     if(base(frame,api)&&party(frame,'Amber')&&target&&groundRetries++<2){
+     if(base(frame,api,.7,9)&&party(frame,'Amber',true)&&target&&groundRetries++<2){
       // Enemy attacks can knock Amber out of aiming. Re-enter only from her actual ground HUD.
       await api.key('VK_R',frame);since=api.now();lastMove=null;await sample(300);continue;
      }
@@ -232,6 +239,7 @@
  async function run(initial,index,api){
   const result={assessment:'unconfirmed',restored:false,switched:false},turns=[];
   let current=initial,restoreActiveAmber=false;
+  function selected(o,avatar){return party(o,avatar,api.aimed===true);}
   async function fresh(delay){
    api.checkStop();const earliest=api.now();await api.sleep(delay);const next=await api.observe(),s=next&&next.hud&&next.hud.captureStamp;
    if(!s||s.source!=='game-capture-start'||s.session!==initial.session||s.frameId!==next.frameId||next.session!==initial.session||
@@ -244,14 +252,14 @@
   try{
    budget(7000);
    if(!candidate(current,api))throw Error('Healthy recognized party member and one surveyed tower target required');
-   const startAvatar=party(current,'Kaeya')?'Kaeya':'Amber';result.startedAs=startAvatar;
+   const startAvatar=selected(current,'Kaeya')?'Kaeya':'Amber';result.startedAs=startAvatar;
    // The red rail vanishes briefly during the enemy's attack. Reacquire the same
    // hostile at the same pose before switching; an empty capture never permits a shot.
    let repeated=false;
    for(let probe=0;probe<(api.aimed?4:1);probe++){
     await fresh(probe?150:100);
     if(!base(current,api)||initial.hud.health.max!==current.hud.health.max||!samePose(initial,current))break;
-    if(!party(current,startAvatar))continue;
+    if(!selected(current,startAvatar))continue;
     repeated=candidate(current,api)&&scan(current,'threat',1)&&associated(bar(initial),bar(current),40);
     if(repeated||bar(current)&&!associated(bar(initial),bar(current),40))break;
    }
@@ -259,8 +267,8 @@
    const anchor=current;
    if(startAvatar==='Kaeya'){
     await api.key('VK_2',current);result.switched=true;
-    for(let probe=0;probe<3;probe++){await fresh(probe?150:400);if(base(current,api)&&party(current,'Amber'))break;}
-    if(base(current,api)&&party(current,'Amber')&&row(current,'3',1840,1900,420,480)===0){
+    for(let probe=0;probe<3;probe++){await fresh(probe?150:400);if(base(current,api)&&selected(current,'Amber'))break;}
+    if(base(current,api)&&selected(current,'Amber')&&row(current,'3',1840,1900,420,480)===0){
      // Repeat the geometric fallback after the switch animation on a second real capture.
      const selected=current;await fresh(120);
      if(!samePose(selected,current)||!scan(selected,'threat',1)||!associated(bar(selected),bar(current),18))
@@ -269,9 +277,9 @@
    }else{restoreActiveAmber=true;}
    budget(5200);
    if(api.aimed){
-    for(let probe=0;probe<3&&!bar(current)&&base(current,api)&&party(current,'Amber')&&samePose(anchor,current);probe++)await fresh(140);
+    for(let probe=0;probe<3&&!bar(current)&&base(current,api)&&selected(current,'Amber')&&samePose(anchor,current);probe++)await fresh(140);
    }
-   if(!base(current,api)||!party(current,'Amber')||!samePose(anchor,current)||!scan(current,'threat',1)||!associated(bar(anchor),bar(current),60))
+   if(!base(current,api)||!selected(current,'Amber')||!samePose(anchor,current)||!scan(current,'threat',1)||!associated(bar(anchor),bar(current),60))
     throw Error('Healthy active Amber and the same elevated hostile required');
    if(!api.aimed&&!aligned(current)){
     result.alignment=[];
@@ -285,7 +293,7 @@
      const command=Math.max(-16,Math.min(16,error)),trace={beforeFrameId:before.frameId,yawError:e.yaw,leftError:e.x,requestedDegrees:-command};
      result.alignment.push(trace);trace.dx=await api.turn(command,before);
      await fresh(260);trace.afterFrameId=current.frameId;
-     if(!candidate(current,api)||!party(current,'Amber')||current.hud.health.max!==before.hud.health.max||
+     if(!candidate(current,api)||!selected(current,'Amber')||current.hud.health.max!==before.hud.health.max||
         !scan(current,'threat',1)||!sameTurningTarget(before,current))
       throw Error('Fresh healthy Amber and continuous tower target required after camera turn');
      const seen=firingError(current);trace.observedYawError=seen.yaw;trace.observedLeftError=seen.x;
@@ -294,7 +302,7 @@
     }
     if(!aligned(current))throw Error('Tower target stayed outside the verified firing projection');
     const alignedFrame=current;await fresh(120);
-    if(!candidate(current,api)||!party(current,'Amber')||!scan(current,'threat',1)||!samePose(alignedFrame,current)||
+    if(!candidate(current,api)||!selected(current,'Amber')||!scan(current,'threat',1)||!samePose(alignedFrame,current)||
        !associated(bar(alignedFrame),bar(current),25)||!aligned(current)||current.hud.health.max!==alignedFrame.hud.health.max)
      throw Error('Calibrated tower firing alignment did not repeat on a new capture');
     budget(5200);
@@ -319,13 +327,13 @@
     // healthy named party member is visible again; never send a roster key on an ambiguous frame.
     for(let probe=0;probe<3;probe++){
      await fresh(probe?150:100);
-     if(!base(current,api)||party(current,'Amber')||party(current,'Kaeya'))break;
+     if(!base(current,api)||selected(current,'Amber')||selected(current,'Kaeya'))break;
     }
-    if(base(current,api)&&party(current,'Amber')){
+    if(base(current,api)&&selected(current,'Amber')){
      await api.key('VK_3',current);
-     for(let probe=0;probe<3;probe++){await fresh(probe?150:400);if(base(current,api)&&party(current,'Kaeya'))break;}
+     for(let probe=0;probe<3;probe++){await fresh(probe?150:400);if(base(current,api)&&selected(current,'Kaeya'))break;}
     }
-    result.restored=base(current,api)&&party(current,'Kaeya');
+    result.restored=base(current,api)&&selected(current,'Kaeya');
    }catch(e){result.error=result.error||String(e&&e.message||e);}}
   }
   return {current,turns,result};

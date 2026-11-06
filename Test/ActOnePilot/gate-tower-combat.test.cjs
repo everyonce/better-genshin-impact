@@ -231,10 +231,18 @@ test('close level-one club enemies at the tower take priority over the elevated 
  const occluded=structuredClone(o);occluded.hud.health.current=1500;
  occluded.ocr=occluded.ocr.filter(r=>!['Amber','Kaeya','2','3','R'].includes(r.text)).concat(
   [{text:'Kaeya',x:1688,y:433},{text:'3',x:1856,y:445},{text:'R',x:1584,y:1020}]);
- assert.equal(tower.party(occluded,'Amber'),false);assert.equal(tower.closeTargets(occluded,ctx(occluded),'Amber').length,2);
+ assert.equal(tower.party(occluded,'Amber',true),true);assert.equal(tower.closeTargets(occluded,ctx(occluded),'Amber').length,2);
  occluded.ocr=occluded.ocr.filter(r=>r.text!=='R');assert.equal(tower.closeTargets(occluded,ctx(occluded),'Amber').length,0);
  assert.equal(tower.closeTargets(missBefore,ctx(missBefore),'Amber').length,0);
  o.hud.enemyBarObservation.state='ambiguous';assert.equal(tower.closeTargets(o,ctx(o),'Amber').length,0);
+});
+
+test('the actual post-switch bow HUD identifies Amber when daylight obscures both names',()=>{
+ const o=structuredClone(missBefore);
+ o.hud.health={current:1415,max:1809};o.ocr=[{text:'3',x:1856,y:445},{text:'R',x:1588,y:1024}];
+ assert.equal(tower.party(o,'Amber',true),true);assert.equal(tower.party(o,'Kaeya'),false);
+ o.ocr.push({text:'Kaeya',x:1660,y:450});assert.equal(tower.party(o,'Amber',true),false);
+ o.ocr.pop();o.hud.health.max=4015;assert.equal(tower.party(o,'Amber',true),false);
 });
 
 test('recorded tower defeat takes three two-axis sight corrections and one charged release',async()=>{

@@ -70,8 +70,8 @@
  function defensiveEntry(prior,current,request,api){
   const priorApi={...api,now:()=>request.createdAt};
   return !!(prior&&prior.session===request.session&&prior.frameId===request.expectedFrameId&&
-   current.frameId===prior.frameId+1&&current.hud.captureStamp.capturedAt>=request.createdAt&&
-   closeTargets(prior,priorApi,'Amber').length&&bowGround(current,api)&&
+   current.frameId>prior.frameId&&current.frameId<=prior.frameId+5&&current.hud.captureStamp.capturedAt>=request.createdAt&&
+   (closeTargets(prior,priorApi,'Amber').length||bowGround(prior,priorApi)&&prior.hud.health.current<prior.hud.health.max*.9)&&bowGround(current,api)&&
    Math.hypot(current.map.x-prior.map.x,current.map.y-prior.map.y)<=3);
  }
  function closeTargets(o,api,avatar){

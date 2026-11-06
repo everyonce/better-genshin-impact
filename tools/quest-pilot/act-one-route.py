@@ -947,9 +947,11 @@ def route_phase(source, expected_uid, objectives, *, allow_dialogue, journal_res
         defensive_switch = (hp['max'] == 1809 and math.hypot(position['x']+1181.34,position['y']-2194.70) <= 12
                             and any(row['text'].strip() == 'R' and 1550 <= row.get('x',0) <= 1625
                                     and 995 <= row.get('y',0) <= 1055 for row in rows)
-                            and any(b.get('width',0) >= 85 and b.get('height',0) >= 7 for b in bars if isinstance(b,dict)))
+                            and (any(row['text'].strip() == '3' and row.get('x',0)>1840 and 420<=row.get('y',0)<=480 for row in rows)
+                                 or any(row['text'].strip() == 'Kaeya' and row.get('x',0)>1650 for row in rows)))
         if (allow_field_combat and not any(text.strip() for text in visible_objectives)
-                and (hp['current'] >= hp['max'] * .85 or defensive_switch) and ground_scan_has_combat_pack(source, now_ms)):
+                and (defensive_switch and hp['current'] < hp['max']*.9
+                     or (hp['current'] >= hp['max']*.85 or defensive_switch) and ground_scan_has_combat_pack(source, now_ms))):
             return 'fieldCombat', None
         if bars or any(re.fullmatch(r'Defeatallopponents[0-9]+/[0-9]+', re.sub(r'\s', '', x)) for x in visible_objectives):
             return 'wait', 'Exploration requires zero visible threat'
@@ -1727,6 +1729,12 @@ def run_controller(pilot, route, progress_path, expected_uid, *, allow_dialogue=
                 if fields['deadlineMs'] < 6000:
                     raise RouteError('Insufficient route time for another field encounter.')
                 rotation = dispatch('questStep', combat_source, fields)
+                if (isinstance(rotation,dict) and rotation.get('partyPrepared') is True and protected_inventory(rotation)
+                        and not rotation.get('nativeAttempted') and rotation.get('closePartySwitch',{}).get('selectedFrameId')):
+                    state['gatePartyPrepared'] = state['records'][-1]['request']['id']
+                    inspect_after_encounter = True
+                    save()
+                    continue
                 if not returned_rotation(rotation):
                     raise RouteError('Native field rotation and its inventory pause were not established.')
                 state['fieldRotations'] += 1

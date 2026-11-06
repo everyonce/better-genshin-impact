@@ -4653,7 +4653,7 @@ function createActOneAdapter(sessionId,options) {
                     // The engine took this request's first new frame. Revalidate it before any input.
                     result.entryScene='world';result.entryFrameId=initial.frameId;
                     var defensiveEntry=false;
-                    if(tower&&tower.bowGround(initial,towerContext)){
+                    if(tower&&tower.base(initial,towerContext,.6,9)&&initial.hud.health.max===1809){
                         var acceptedFrame=JSON.parse(file.readTextSync('observations/'+request.session+'/frame-'+String(request.expectedFrameId).padStart(4,'0')+'.json'));
                         defensiveEntry=tower.defensiveEntry(acceptedFrame,initial,request,towerContext);
                     }
@@ -4665,7 +4665,8 @@ function createActOneAdapter(sessionId,options) {
                             await sleep(150);current=await observeTower();
                             if(!tower.base(current,towerContext,.6,9)||Math.hypot(current.map.x-initial.map.x,current.map.y-initial.map.y)>3||
                                current.hud.health.max!==initial.hud.health.max)break;
-                            admitted=native.worldEntry(current,request,Date.now(),original,campEntry,initial);
+                            defensiveEntry=!!acceptedFrame&&tower.defensiveEntry(acceptedFrame,current,request,towerContext);
+                            admitted=defensiveEntry||native.worldEntry(current,request,Date.now(),original,campEntry,initial);
                         }
                     }
                     if(!admitted)throw new Error('Direct field entry requires a fresh measured original-account pack');
@@ -4677,11 +4678,20 @@ function createActOneAdapter(sessionId,options) {
                         for(var confirm=0;confirm<6;confirm++){
                             await sleep(confirm?120:350);current=await observeTower();
                             if(!current.map||Math.hypot(current.map.x-switchedFrom.map.x,current.map.y-switchedFrom.map.y)>3)break;
+                            if(tower.base(current,towerContext,.65,9)&&current.hud.health.max===4015)
+                                result.closePartySwitch.selectedFrameId=current.frameId;
                             if(closeKaeyaTargets(current).length||tower.party(current,'Kaeya')&&eligible(current)){
                                 result.closePartySwitch.confirmedFrameId=current.frameId;break;
                             }
                         }
-                        if(!result.closePartySwitch.confirmedFrameId)throw Error('Could not confirm Kaeya and the close camp encounter');
+                        if(!result.closePartySwitch.confirmedFrameId){
+                            if(!result.closePartySwitch.selectedFrameId||!tower.base(current,towerContext,.65,9)||current.hud.health.max!==4015)
+                                throw Error('Could not confirm the defensive party switch to Kaeya');
+                            // Changing party does not count as an attack or defeat. Return a verified pause
+                            // for the ordinary controller to reassess the field with the selected swordsman.
+                            result.partyPrepared=true;result.status='completed';result.reason='Kaeya selected, recheck the field';
+                            return await finishWithLocalPause(loadLocalPause(),this,initial,observe,initial.frameId,result,null);
+                        }
                     }
                 }else{
                     await boundedKey('VK_ESCAPE',60,initial.frameId);

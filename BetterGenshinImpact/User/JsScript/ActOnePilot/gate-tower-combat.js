@@ -13,7 +13,7 @@
   return !!(p&&p.map==='Teyvat'&&(firingLane(p,radius)||Math.hypot(p.x+1186.1875,p.y-2206.267578125)<=5.5)&&
    Number.isFinite(p.cameraAngle));
  }
- function base(o,api,minimum=api.aimed ? .75 : .9,radius=3.5){
+ function base(o,api,minimum=api.aimed ? .70 : .9,radius=api.aimed ? 9 : 3.5){
   const h=o&&o.hud,p=h&&h.health,s=h&&h.captureStamp,now=api.now();
   return !!(pose(o,radius)&&!o.fastSample&&!o.mapPositionInherited&&o.session===api.session&&api.original(o)&&
    Number.isInteger(o.frameId)&&Number.isFinite(o.timestamp)&&now>=o.timestamp&&now-o.timestamp<=1000&&
@@ -60,15 +60,27 @@
  }
  // A club hilichurl in melee range has a much taller/larger rail than the archer on this platform.
  // Only a measured field scan at the surveyed camp can authorize the defensive party switch.
+ function bowGround(o,api){
+  return base(o,api,.6,9)&&o.hud.health.max===1809&&row(o,'R',1550,1625,995,1055)===1&&
+   (row(o,'3',1840,1900,420,480)===1||row(o,'Kaeya',1680,1710,423,448)===1||party(o,'Amber'));
+ }
+ // A nearby enemy and its bar can vanish behind Amber between accepting the route request
+ // and the engine's first capture. The defensive key needs the actual original sighting
+ // and the same live bow user. A subsequent attack still needs Kaeya and a new target.
+ function defensiveEntry(prior,current,request,api){
+  const priorApi={...api,now:()=>request.createdAt};
+  return !!(prior&&prior.session===request.session&&prior.frameId===request.expectedFrameId&&
+   current.frameId===prior.frameId+1&&current.hud.captureStamp.capturedAt>=request.createdAt&&
+   closeTargets(prior,priorApi,'Amber').length&&bowGround(current,api)&&
+   Math.hypot(current.map.x-prior.map.x,current.map.y-prior.map.y)<=3);
+ }
  function closeTargets(o,api,avatar){
   if(!base(o,api,avatar==='Amber' ? .6 : .8,9))return [];
   const hp=o.hud.health, bowControl=row(o,'R',1550,1625,995,1055)===1;
   // A club can cover one roster name. The bow HUD with Amber's numeric HP and
   // visible slot 3 still identifies the safe switch; Kaeya has his own HP and roster layout.
-  const defensiveBow=avatar==='Amber'&&hp.max===1809&&bowControl&&row(o,'3',1840,1900,420,480)===1&&
-   (row(o,'Amber',1648,1678,339,367)===1||row(o,'Kaeya',1680,1710,423,448)===1);
-  const activeSword=avatar==='Kaeya'&&hp.max===4015&&!bowControl&&
-   (row(o,'Kaeya',1650,1682,435,464)===1||row(o,'Amber',1680,1710,335,358)===1&&row(o,'2',1840,1900,330,410)===1);
+  const defensiveBow=avatar==='Amber'&&bowGround(o,api);
+  const activeSword=avatar==='Kaeya'&&hp.max===4015&&!bowControl;
   if(!party(o,avatar)&&!defensiveBow&&!activeSword)return [];
   const h=o.hud,scan=h.enemyBarObservation,diag=h.enemyBarDiagnostic,bars=h.enemyBars;
   if(!scan||!diag||diag.overloaded||scan.state!=='threat'||scan.frameId!==o.frameId||scan.session!==o.session||
@@ -79,7 +91,7 @@
  function candidate(o,api){
   if(!base(o,api)||!party(o,'Kaeya')&&!party(o,'Amber'))return false;
   const b=bar(o),yaw=(o.map.cameraAngle-292.5+540)%360-180;
-  if(api.aimed&&b&&firingLane(o.map)&&Math.abs(yaw)<=38&&b.y<=265)return true;
+  if(api.aimed&&b&&firingLane(o.map,9)&&Math.abs(yaw)<=38&&b.y<=265)return true;
   if(!b||Math.hypot(o.map.x+1186.1875,o.map.y-2206.267578125)>3||yaw< -19||yaw>12)return false;
   // The post-hit 278-degree view still presents the same high platform to the right.
   return yaw>=-12&&b.x<=1150||Math.abs(b.x-(1036-7*yaw))<=90;
@@ -101,7 +113,7 @@
   return Math.abs(a.height-b.height)<=3&&travel>=-22&&travel<=Math.abs(yaw)*25+28;
  }
  function samePose(a,b){
-  return pose(a)&&pose(b)&&Math.hypot(a.map.x-b.map.x,a.map.y-b.map.y)<=1.25&&
+  return pose(a,9)&&pose(b,9)&&Math.hypot(a.map.x-b.map.x,a.map.y-b.map.y)<=1.25&&
    Math.abs((a.map.cameraAngle-b.map.cameraAngle+540)%360-180)<=4;
  }
  function associated(a,b,limit){
@@ -111,7 +123,7 @@
  // Credit moving-screen damage only when its red edge follows that turn AND the gold fill
  // touches it and reconstructs the former bar length on the very same native shot.
  function recoilPose(before,after){
-  return pose(before)&&pose(after)&&Math.hypot(before.map.x-after.map.x,before.map.y-after.map.y)<=1.25&&
+  return pose(before,9)&&pose(after,9)&&Math.hypot(before.map.x-after.map.x,before.map.y-after.map.y)<=1.25&&
    Math.abs((after.map.cameraAngle-before.map.cameraAngle+540)%360-180)<=18;
  }
  function recoilDamage(before,after,id){
@@ -318,6 +330,6 @@
   }
   return {current,turns,result};
  }
- root.GateTowerCombat={candidate,firingLane,closeTargets,base,party,bar,scan,samePose,aligned,aimMode,aimTarget,aimedVolley,feedback,run};
+ root.GateTowerCombat={candidate,firingLane,bowGround,defensiveEntry,closeTargets,base,party,bar,scan,samePose,aligned,aimMode,aimTarget,aimedVolley,feedback,run};
  if(typeof module!=='undefined'&&module.exports)module.exports=root.GateTowerCombat;
 })(typeof globalThis!=='undefined'?globalThis:this);
